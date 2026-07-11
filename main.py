@@ -876,6 +876,17 @@ def get_claims_for_user(db: Session, current_user: models.User):
             .all()
         )
 
+    if current_user.role == "CategoryManager":
+        if not current_user.category_code:
+            return []
+        return (
+            db.query(models.ClaimHeader)
+            .join(models.Sale, models.ClaimHeader.sale_id == models.Sale.id)
+            .join(models.Category, models.Sale.category_id == models.Category.id)
+            .filter(models.Category.code == current_user.category_code)
+            .all()
+        )
+
     return []
 
 
@@ -1246,7 +1257,7 @@ def update_sale(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    if current_user.role != "Admin":
+    if current_user.role not in ("Admin", "MISExecutive"):
         raise HTTPException(status_code=403, detail="You are not allowed to edit sales")
 
     db_sale = db.query(models.Sale).filter(models.Sale.id == sale_id).first()
