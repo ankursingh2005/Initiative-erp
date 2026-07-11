@@ -1,0 +1,2229 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#000000" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <title>Initiative ERP - Dashboard</title>
+  <style>
+    :root {
+      --navy: #1a3c6e;
+      --navy-dark: #14305a;
+      --green: #2e7d32;
+      --bg: #f4f6f8;
+      --card: #ffffff;
+      --text: #23384d;
+      --muted: #6b7a90;
+      --border: #e6ebf1;
+      --danger: #c0392b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header {
+      background: linear-gradient(90deg, #181818 0%, #000000 100%);
+      color: white;
+      padding: 18px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.12);
+    }
+    .brand { font-size: 20px; font-weight: bold; }
+    .badge {
+      display: inline-block;
+      margin-left: 10px;
+      background: rgba(255,255,255,0.16);
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.4px;
+    }
+    .logout-btn {
+      background: white;
+      color: #111111;
+      border: none;
+      padding: 8px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .logout-btn:hover { background: #f0f3f7; }
+    .header-actions { display: flex; align-items: center; }
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(11, 22, 39, 0.55);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      z-index: 9999;
+    }
+    .modal-backdrop.show { display: flex; }
+    .modal {
+      width: min(92vw, 420px);
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.28);
+      border: 1px solid var(--border);
+      padding: 22px;
+    }
+    .modal h3 { margin: 0 0 8px; font-size: 20px; color: var(--text); }
+    .modal p { margin: 0 0 18px; color: var(--muted); line-height: 1.5; }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+    .modal-actions button { width: auto; min-width: 92px; }
+    .modal-cancel { background: #e9eef5; color: var(--text); }
+    .modal-cancel:hover { background: #dfe7f2; }
+    .modal-confirm { background: var(--danger); }
+    .modal-confirm:hover { background: #a93226; }
+    .content { max-width: 1200px; margin: 24px auto; padding: 0 20px 40px; }
+    .hero {
+      background: linear-gradient(120deg, #050505 0%, #111111 46%, #ff7a18 100%);
+      padding: 24px;
+      border-radius: 14px;
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+      margin-bottom: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.45);
+    }
+    .hero h2 {
+      margin: 0 0 8px;
+      font-size: 24px;
+      color: #ffffff;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+    }
+    .hero p {
+      margin: 0;
+      color: #fff3e8;
+    }
+
+    /* Section headers styled similar to the welcome hero */
+    .section-hero-card {
+      border: 1px solid #d5dbe6;
+      overflow: hidden;
+    }
+
+    .section-hero-title {
+      margin: -20px -20px 12px;
+      padding: 14px 16px;
+      background: linear-gradient(120deg, #050505 0%, #111111 46%, #ff7a18 100%);
+      color: #ffffff;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.35);
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+      font-size: 20px;
+      font-weight: 800;
+    }
+
+    .section-hero-subtitle {
+      margin-top: 2px;
+      margin-bottom: 12px;
+      color: #394250;
+      font-weight: 600;
+    }
+    .grid { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 20px; }
+    .card {
+      background: var(--card);
+      padding: 20px;
+      border-radius: 14px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+      border: 1px solid var(--border);
+    }
+    .card h3 { margin-top: 0; margin-bottom: 12px; font-size: 18px; }
+    .row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+    .field { margin-bottom: 10px; }
+    label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+    input, select, button {
+      width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); font-size: 14px;
+    }
+    button {
+      background: var(--navy); color: white; border: none; cursor: pointer; font-weight: 600;
+    }
+    button:hover { background: var(--navy-dark); }
+    .muted { color: var(--muted); font-size: 13px; }
+    .empty { color: var(--muted); text-align: center; padding: 16px 0; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); font-size: 14px; }
+    th { color: var(--muted); font-weight: 600; }
+    .link-btn { display: inline-block; margin-top: 10px; color: var(--navy); font-weight: 600; text-decoration: none; }
+    .link-btn:hover { text-decoration: underline; }
+    .msg { min-height: 20px; margin-top: 8px; font-size: 13px; color: var(--danger); }
+    .success { color: var(--green); }
+    .pill {
+      display: inline-block;
+      margin-top: 8px;
+      padding: 4px 10px;
+      background: linear-gradient(90deg, #ffe7cf 0%, #ffbf8b 100%);
+      color: #3f1d00;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid rgba(255, 255, 255, 0.7);
+    }
+    .scheme-list { margin: 0; padding-left: 18px; color: var(--muted); }
+    .scheme-list li { margin-bottom: 6px; }
+    .table-wrap { overflow-x: auto; }
+    .wide-table { min-width: 1300px; }
+    #entryGrid { grid-template-columns: 1fr; }
+    #scopeGrid { grid-template-columns: 1fr; }
+    #schemeGrid { grid-template-columns: 1fr; }
+    .scheme-toolbar { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+    .scheme-table-wrap { overflow-x: auto; margin-top: 12px; }
+    .scheme-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .scheme-actions button { width: auto; padding: 8px 12px; }
+    .export-panel {
+      display: grid;
+      grid-template-columns: minmax(180px, 260px) 1fr;
+      gap: 12px;
+      align-items: end;
+      margin-bottom: 12px;
+      padding: 12px;
+      border: 1px solid #dbe5f4;
+      border-radius: 10px;
+      background: #f8fbff;
+    }
+    .export-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-start;
+    }
+    .export-actions button {
+      width: auto;
+      padding: 9px 12px;
+      border-radius: 8px;
+      background: linear-gradient(90deg, #1d1d1d 0%, #000000 100%) !important;
+      color: #ffffff !important;
+    }
+
+    .export-actions button:hover {
+      background: linear-gradient(90deg, #2a2a2a 0%, #0a0a0a 100%) !important;
+    }
+
+    .interval-toolbar {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr 0.9fr auto;
+      gap: 10px;
+      align-items: end;
+      margin-bottom: 12px;
+      padding: 12px;
+      border: 1px solid #dbe5f4;
+      border-radius: 10px;
+      background: #f8fbff;
+    }
+
+    .interval-toolbar button {
+      width: auto;
+      padding: 10px 14px;
+      background: linear-gradient(90deg, #1d1d1d 0%, #000000 100%);
+    }
+
+    .interval-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(120px, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .interval-stat {
+      border: 1px solid #dce6f5;
+      border-radius: 10px;
+      padding: 10px;
+      background: #ffffff;
+    }
+
+    .interval-stat-label {
+      font-size: 11px;
+      color: #6b7a90;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      margin-bottom: 4px;
+    }
+
+    .interval-stat-value {
+      font-size: 18px;
+      font-weight: 700;
+      color: #1f2d3f;
+      word-break: break-word;
+    }
+
+    .interval-layout {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 12px;
+    }
+
+    .interval-panel {
+      border: 1px solid #dce6f5;
+      border-radius: 10px;
+      background: #ffffff;
+      padding: 10px;
+    }
+
+    .interval-panel h4 {
+      margin: 0 0 8px;
+      font-size: 14px;
+      color: #2d3f5e;
+    }
+
+    .interval-scroll {
+      overflow-x: auto;
+    }
+
+    .interval-scroll table {
+      min-width: 680px;
+    }
+
+    .sources-list {
+      margin: 0;
+      padding-left: 16px;
+      color: #41506a;
+      font-size: 13px;
+    }
+
+    .sources-list li {
+      margin-bottom: 6px;
+    }
+
+    .records-panel {
+      margin-top: 12px;
+      border: 1px solid #dce6f5;
+      border-radius: 10px;
+      background: #ffffff;
+      padding: 10px;
+    }
+
+    .records-panel h4 {
+      margin: 0 0 8px;
+      font-size: 14px;
+      color: #2d3f5e;
+    }
+
+    .records-scroll {
+      overflow-x: auto;
+    }
+
+    .records-scroll table {
+      min-width: 1200px;
+    }
+
+    /* Sales form visual refresh */
+    #saleForm {
+      margin-top: 14px;
+      padding: 16px;
+      border: 1px solid #d9e3f2;
+      border-radius: 12px;
+      background: linear-gradient(180deg, #fbfdff 0%, #f4f8ff 100%);
+    }
+    #saleForm .form-columns {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      align-items: start;
+    }
+    #saleForm .form-column {
+      border: 1px dashed #d3def0;
+      border-radius: 10px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.66);
+    }
+    #saleForm .row { gap: 16px; }
+    #saleForm .field { margin-bottom: 12px; }
+    #saleForm label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.7px;
+      text-transform: uppercase;
+      color: #3a567d;
+      margin-bottom: 7px;
+    }
+    #saleForm input,
+    #saleForm select {
+      border: 1px solid #c8d6ec;
+      background: #ffffff;
+      border-radius: 10px;
+      padding: 11px 12px;
+      transition: all 0.2s ease;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.85), 0 1px 2px rgba(22,48,90,0.05);
+    }
+    #saleForm input:hover,
+    #saleForm select:hover {
+      border-color: #9fb6da;
+      box-shadow: 0 2px 8px rgba(31,70,130,0.08);
+    }
+    #saleForm input:focus,
+    #saleForm select:focus {
+      outline: none;
+      border-color: #3f6fb0;
+      box-shadow: 0 0 0 3px rgba(63,111,176,0.18);
+      transform: translateY(-1px);
+    }
+    #saleForm button {
+      margin-top: 4px;
+      border-radius: 10px;
+      padding: 12px 14px;
+      background: linear-gradient(90deg, #1d1d1d 0%, #000000 100%);
+      box-shadow: 0 6px 16px rgba(0,0,0,0.35);
+    }
+    #saleForm button:hover {
+      background: linear-gradient(90deg, #2a2a2a 0%, #0a0a0a 100%);
+    }
+
+    #saleForm button,
+    #schemeForm button[type="submit"] {
+      background: linear-gradient(90deg, #1d1d1d 0%, #000000 100%) !important;
+      color: #ffffff !important;
+      border: 1px solid #3a3a3a !important;
+    }
+
+    #saleForm button:hover,
+    #schemeForm button[type="submit"]:hover {
+      background: linear-gradient(90deg, #2a2a2a 0%, #0a0a0a 100%) !important;
+    }
+
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: 1fr; }
+      .row { grid-template-columns: 1fr; }
+      #saleForm .form-columns { grid-template-columns: 1fr; }
+      .interval-toolbar { grid-template-columns: 1fr; }
+      .interval-summary-grid { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+      .interval-layout { grid-template-columns: 1fr; }
+    }
+
+    .modal-backdrop {
+      background: rgba(11, 22, 39, 0.55);
+    }
+
+    .save-success-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(8, 16, 30, 0.4);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      padding: 20px;
+    }
+
+    .save-success-backdrop.show {
+      display: flex;
+    }
+
+    .save-success-modal {
+      width: min(90vw, 360px);
+      background: #ffffff;
+      border-radius: 14px;
+      border: 1px solid #d8e2f1;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.22);
+      padding: 22px;
+      text-align: center;
+      animation: successPopIn 220ms ease-out;
+    }
+
+    .save-success-spinner {
+      width: 48px;
+      height: 48px;
+      margin: 0 auto 12px;
+      border: 4px solid #dce8fa;
+      border-top-color: #1a3c6e;
+      border-radius: 50%;
+      animation: spin 900ms linear infinite;
+    }
+
+    .save-success-title {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 800;
+      color: #1f2d3f;
+      letter-spacing: 0.2px;
+    }
+
+    .save-success-subtitle {
+      margin: 6px 0 0;
+      font-size: 13px;
+      color: #5f6f86;
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes successPopIn {
+      from {
+        opacity: 0;
+        transform: translateY(8px) scale(0.96);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">Initiative ERP <span class="badge" id="roleBadge"></span></div>
+    <div class="header-actions">
+      <button class="logout-btn" onclick="openLogoutModal()">Logout</button>
+    </div>
+  </header>
+
+  <div id="logoutModal" class="modal-backdrop" aria-hidden="true" onclick="if (event.target === this) closeLogoutModal()">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="logoutTitle">
+      <h3 id="logoutTitle">Logout system?</h3>
+      <p>This will clear your session and return you to the login page.</p>
+      <div class="modal-actions">
+        <button type="button" class="modal-cancel" onclick="closeLogoutModal()">Cancel</button>
+        <button type="button" class="modal-confirm" onclick="confirmLogout()">Logout</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="saveSuccessModal" class="save-success-backdrop" aria-hidden="true" onclick="if (event.target === this) hideSaveSuccessPopup()">
+    <div class="save-success-modal" role="status" aria-live="polite">
+      <div class="save-success-spinner" aria-hidden="true"></div>
+      <h3 id="saveSuccessTitle" class="save-success-title">Successfully Saved</h3>
+      <p class="save-success-subtitle">Sale entry has been recorded.</p>
+    </div>
+  </div>
+
+  <div class="content">
+    <div class="hero">
+      <h2>Welcome, <span id="userName"></span></h2>
+      <p id="scopeText"></p>
+      <span class="pill" id="accessPill">Branch-based ERP workspace</span>
+    </div>
+
+    <div class="grid" id="entryGrid">
+      <div class="card section-hero-card" id="quickSalesCard">
+        <h3 class="section-hero-title">Quick Sales Entry</h3>
+        <p class="muted section-hero-subtitle">Record sales and let the scheme engine evaluate eligible rewards automatically.</p>
+        <form id="saleForm">
+          <div class="form-columns">
+            <div class="form-column">
+              <div class="field">
+                <label>Branch</label>
+                <select id="storeSelect"></select>
+              </div>
+              <div class="field">
+                <label>Invoice Date</label>
+                <input id="invoiceDate" type="date" required />
+              </div>
+              <div class="field">
+                <label>Invoice No</label>
+                <input id="invoiceNo" required />
+              </div>
+              <div class="field">
+                <label>Category</label>
+                <select id="categorySelect"></select>
+              </div>
+              <div class="field">
+                <label>Sub Category</label>
+                <select id="subcategorySelect"></select>
+              </div>
+              <div class="field">
+                <label>Brand</label>
+                <select id="brandSelect"></select>
+              </div>
+              <div class="field">
+                <label>Product</label>
+                <input id="productName" placeholder="Enter product name and details" required />
+              </div>
+              <div class="field">
+                <label>Quantity</label>
+                <input id="quantity" type="number" min="1" required />
+              </div>
+              <div class="field">
+                <label>Invoice Value</label>
+                <input id="invoiceValue" type="text" inputmode="decimal" placeholder="0 or 0.00" required />
+              </div>
+            </div>
+            <div class="form-column">
+              <div class="field">
+                <label>IMEI No</label>
+                <input id="imei" />
+              </div>
+              <div class="field">
+                <label>Serial No</label>
+                <input id="serialNo" />
+              </div>
+              <div class="field">
+                <label>Model No</label>
+                <input id="modelNo" />
+              </div>
+              <div class="field">
+                <label>Customer Name</label>
+                <input id="customerName" />
+              </div>
+              <div class="field">
+                <label>Sales Executive</label>
+                <input id="salesExecutive" />
+              </div>
+              <div class="field">
+                <label>Schemes</label>
+                <select id="schemesSelect">
+                  <option value="UPI OFFER">UPI OFFER</option>
+                  <option value="CARD OFFER">CARD OFFER</option>
+                  <option value="BACKEND SUPPORT">BACKEND SUPPORT</option>
+                  <option value="FESTIVAL OFFER">FESTIVAL OFFER</option>
+                  <option value="MONTHLY OFFER">MONTHLY OFFER</option>
+                  <option value="OTHER">OTHER</option>
+                </select>
+              </div>
+              <div class="field" id="schemesOtherField" style="display:none;">
+                <label>Other Scheme (details)</label>
+                <input id="schemesOther" placeholder="Write anything" />
+              </div>
+              <div class="field">
+                <label>Scheme Match</label>
+                <select id="schemeMatch">
+                  <option value="Yes">Yes</option>
+                  <option value="No">No</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div class="field" id="schemeMatchOtherField" style="display:none;">
+                <label>Other (details)</label>
+                <input id="schemeMatchOther" placeholder="Write anything" />
+              </div>
+              <div class="field">
+                <label>Scheme Amount</label>
+                <input id="schemeAmount" type="text" inputmode="decimal" placeholder="0 or 0.00" />
+              </div>
+              <div class="field">
+                <label>Claim</label>
+                <select id="claimStatus">
+                  <option value="Automatic Claim">Automatic Claim</option>
+                  <option value="Mannual Claim">Mannual Claim</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div class="field" id="claimStatusOtherField" style="display:none;">
+                <label>Other Claims (details)</label>
+                <input id="claimStatusOther" placeholder="Write anything" />
+              </div>
+              <div class="field">
+                <label>Claim Status</label>
+                <select id="claimOverallStatus">
+                  <option value="Pending">Pending</option>
+                  <option value="Settled">Settled</option>
+                </select>
+              </div>
+              <div class="field" id="settledDateField" style="display:none;">
+                <label>Settled Date</label>
+                <input id="settledDate" type="date" />
+              </div>
+            </div>
+          </div>
+          <button type="submit">Save Sale</button>
+          <button id="cancelEditBtn" type="button" style="display:none; margin-top:8px; background:#6b7a90;" onclick="cancelSaleEdit()">Cancel Edit</button>
+          <div id="saleMsg" class="msg"></div>
+        </form>
+      </div>
+    </div>
+
+    <div class="grid" id="scopeGrid" style="margin-top:20px;">
+      <div class="card section-hero-card" id="salesScopeCard">
+        <h3 class="section-hero-title">Sales in your scope</h3>
+        <div id="exportPanel" class="export-panel" style="display:none;">
+          <div class="field" style="margin:0;">
+            <label>Export Category</label>
+            <select id="exportCategoryFilter">
+              <option value="ALL">All Categories</option>
+              <option value="HE">HE</option>
+              <option value="HA">HA</option>
+              <option value="IT">IT</option>
+              <option value="MOBILE">Mobile / Handset</option>
+            </select>
+          </div>
+          <div class="export-actions">
+            <button type="button" onclick="downloadSalesExcel()">Download Excel</button>
+            <button type="button" onclick="downloadSalesPdf()">Download PDF</button>
+            <button type="button" onclick="downloadSalesJpg()">Download JPG</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table id="salesTable" class="wide-table">
+            <thead>
+              <tr>
+                <th>Branch</th>
+                <th>Invoice Date</th>
+                <th>Invoice No</th>
+                <th>Category</th>
+                <th>Sub Category</th>
+                <th>Brand</th>
+                <th>Product</th>
+                <th>Quantity</th>
+                <th>Invoice Value</th>
+                <th>IMEI No</th>
+                <th>Serial No</th>
+                <th>Model No</th>
+                <th>Customer Name</th>
+                <th>Sales Executive</th>
+                <th>Schemes</th>
+                <th>Scheme Match</th>
+                <th>Scheme Amount</th>
+                <th>Claim</th>
+                <th>Claim Status</th>
+                <th>Settled Date</th>
+                <th>Action</th>
+                <th>Edit</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card section-hero-card" id="claimsScopeCard">
+        <h3 class="section-hero-title">Claims in your scope</h3>
+        <table id="claimsTable">
+          <thead>
+            <tr>
+              <th>Invoice Date</th>
+              <th>Invoice No</th>
+              <th>Schemes</th>
+              <th>Scheme Amount</th>
+              <th>Claim Status</th>
+              <th>Settled Date</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card section-hero-card" id="intervalUploadCard" style="display:none; margin-top:20px;">
+      <h3 class="section-hero-title">Interval Sales Analytics Upload</h3>
+      <p class="muted section-hero-subtitle">Upload Excel, CSV, PDF, or JPG data in Date/Vch/Account/Item format and track daily, weekly, monthly, or custom interval performance.</p>
+
+      <form id="intervalUploadForm" class="interval-toolbar">
+        <div class="field" style="margin:0;">
+          <label>Upload File</label>
+          <input id="intervalFile" type="file" accept=".xlsx,.xls,.csv,.pdf,.jpg,.jpeg,.png" required />
+        </div>
+        <div class="field" style="margin:0;">
+          <label>Interval Type</label>
+          <select id="intervalGranularity">
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+            <option value="custom">Custom Range</option>
+          </select>
+        </div>
+        <div class="field" style="margin:0;">
+          <label>Start Date</label>
+          <input id="intervalStartDate" type="date" />
+        </div>
+        <div class="field" style="margin:0;">
+          <label>End Date</label>
+          <input id="intervalEndDate" type="date" />
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button id="intervalUploadBtn" type="submit">Upload & Process</button>
+          <button id="intervalRefreshBtn" type="button" style="background:#41506a;">Refresh</button>
+        </div>
+      </form>
+      <div id="intervalUploadMsg" class="msg"></div>
+
+      <div id="intervalSummaryGrid" class="interval-summary-grid"></div>
+
+      <div class="interval-layout">
+        <div class="interval-panel">
+          <h4>Interval Trend</h4>
+          <div class="interval-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Period</th>
+                  <th>Qty</th>
+                  <th>Sales Amt.</th>
+                  <th>Cost Amt.</th>
+                  <th>Profit/Loss</th>
+                  <th>Profit %</th>
+                </tr>
+              </thead>
+              <tbody id="intervalSeriesBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="interval-panel">
+          <h4>Top Items</h4>
+          <table>
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Qty</th>
+                <th>Sales Amt.</th>
+                <th>Profit/Loss</th>
+              </tr>
+            </thead>
+            <tbody id="intervalTopItemsBody"></tbody>
+          </table>
+
+          <h4 style="margin-top:14px;">Recent Sources</h4>
+          <ul id="intervalSources" class="sources-list"></ul>
+        </div>
+      </div>
+
+      <div class="records-panel">
+        <h4>Uploaded Rows in Dashboard</h4>
+        <div class="records-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Vch No.</th>
+                <th>Account</th>
+                <th>Item</th>
+                <th>Qty</th>
+                <th>Unit</th>
+                <th>Sales Amt.</th>
+                <th>Cost Amt.</th>
+                <th>Profit/Loss</th>
+                <th>Profit %</th>
+                <th>Source File</th>
+              </tr>
+            </thead>
+            <tbody id="intervalRecordsBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="card section-hero-card" id="schemeAdminCard" style="display:none; margin-top:20px;">
+      <h3 class="section-hero-title">Scheme Maintenance</h3>
+      <p class="muted section-hero-subtitle">Maintain retail schemes for percentage, fixed, and target-based rewards.</p>
+      <form id="schemeForm">
+        <div class="scheme-toolbar">
+          <div class="field">
+            <label>Scheme Code</label>
+            <input id="schemeCode" required placeholder="SCH-RET-001" />
+          </div>
+          <div class="field">
+            <label>Scheme Name</label>
+            <input id="schemeName" required placeholder="Summer Retail Offer" />
+          </div>
+          <div class="field">
+            <label>Offer Type</label>
+            <select id="schemeOfferType">
+              <option value="BACKEND SUPPORT">Backend Support</option>
+              <option value="UPI OFFER">UPI Offer</option>
+              <option value="CARD OFFER">Card Offer</option>
+              <option value="FESTIVAL OFFER">Festival Offer</option>
+              <option value="MONTHLY OFFER">Monthly Offer</option>
+              <option value="OTHER">Other</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Reward Type</label>
+            <select id="schemeRewardType">
+              <option value="Fixed">Fixed</option>
+              <option value="Percentage">Percentage</option>
+              <option value="Target Based">Target Based</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Reward Value</label>
+            <input id="schemeRewardValue" type="number" min="0" step="0.01" required placeholder="500 or 2" />
+          </div>
+          <div class="field" id="schemeTargetQtyField" style="display:none;">
+            <label>Target Quantity</label>
+            <input id="schemeTargetQty" type="number" min="1" step="1" placeholder="50" />
+          </div>
+          <div class="field">
+            <label>Category</label>
+            <select id="schemeCategory"></select>
+          </div>
+          <div class="field">
+            <label>Sub Category</label>
+            <select id="schemeSubCategory"></select>
+          </div>
+          <div class="field">
+            <label>Brand</label>
+            <select id="schemeBrand"></select>
+          </div>
+          <div class="field">
+            <label>Start Date</label>
+            <input id="schemeStartDate" type="date" required />
+          </div>
+          <div class="field">
+            <label>End Date</label>
+            <input id="schemeEndDate" type="date" required />
+          </div>
+          <div class="field">
+            <label>Status</label>
+            <select id="schemeStatus">
+              <option value="Active">Active</option>
+              <option value="Paused">Paused</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label>Remarks</label>
+            <input id="schemeRemarks" placeholder="Optional notes" />
+          </div>
+        </div>
+        <button type="submit">Save Scheme</button>
+        <div id="schemeMsg" class="msg"></div>
+      </form>
+
+      <div class="scheme-table-wrap">
+        <table id="schemeTable" class="wide-table">
+          <thead>
+            <tr>
+              <th>Code</th><th>Name</th><th>Offer</th><th>Type</th><th>Value</th><th>Target</th><th>Status</th><th>Dates</th><th>Action</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card" id="adminLinks" style="display:none; margin-top:20px;">
+      <h3>Admin Tools</h3>
+      <p>Admin users can open the full API docs to review schemes, brands, stores, claims and users.</p>
+      <a class="link-btn" href="docs" target="_blank">Open API docs</a>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.3/dist/jspdf.plugin.autotable.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
+  <script>
+    function appUrl(path) {
+      const currentPath = window.location.pathname;
+      const appBasePath = currentPath === '/erp' || currentPath.startsWith('/erp/') ? '/erp' : '';
+      if (!path) {
+        return appBasePath || '/';
+      }
+      if (/^https?:\/\//i.test(path)) {
+        return path;
+      }
+      return path.startsWith('/') ? `${appBasePath}${path}` : `${appBasePath}/${path}`;
+    }
+
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register(appUrl('/sw.js')).catch(() => {});
+      });
+    }
+  </script>
+
+  <script>
+    const token = localStorage.getItem('token');
+    const role = localStorage.getItem('role');
+    const username = localStorage.getItem('username');
+
+    if (!token) {
+      window.location.href = appUrl('/login');
+    }
+
+    let currentUser = null;
+    let stores = [];
+    let brands = [];
+    let categories = [];
+    let subcategories = [];
+    let products = [];
+    let schemes = [];
+    let scopedSales = [];
+    let editingSaleId = null;
+    let allowDashboardExit = false;
+    let saveSuccessTimeout = null;
+
+    function normalizeRoleName(value) {
+      const raw = String(value || '').trim().toLowerCase();
+      const roleMap = {
+        admin: 'Admin',
+        storemanager: 'StoreManager',
+        brandmanager: 'BrandManager',
+        brandpartner: 'BrandPartner',
+        accounts: 'Accounts',
+        misexecutive: 'MISExecutive',
+        categorymanager: 'CategoryManager'
+      };
+      return roleMap[raw] || String(value || '').trim();
+    }
+
+    function getEffectiveRole() {
+      return normalizeRoleName(currentUser?.role || role || '');
+    }
+
+    function hasRole(...rolesToMatch) {
+      const effectiveRole = getEffectiveRole();
+      return rolesToMatch.some(item => normalizeRoleName(item) === effectiveRole);
+    }
+
+    const MOBILE_CATEGORY_NAMES = ['mobiles / handset', 'mobile / handset', 'mobile', 'handset'];
+    const MOBILE_BRANDS = [
+      'Apple',
+      'Samsung',
+      'Vivo',
+      'iQOO',
+      'Realme',
+      'Oppo',
+      'Motorola',
+      'Nothing',
+      'Google Pixel'
+    ];
+
+    document.getElementById('roleBadge').textContent = normalizeRoleName(role) || '';
+    document.getElementById('userName').textContent = username || '';
+
+    const scopeMessages = {
+      Admin: 'You can see and manage everything across all branches and brands.',
+      StoreManager: 'You can only work with your assigned branch and its sales.',
+      BrandManager: 'You can manage sales and claims for your assigned brand(s).',
+      BrandPartner: 'You can review brand-linked sales and claims for your assigned brand(s).',
+      Accounts: 'You can review claims for reconciliation and payment processing.',
+      MISExecutive: 'You can review sales and claims across branches for MIS reporting.'
+    };
+    document.getElementById('scopeText').textContent = scopeMessages[normalizeRoleName(role)] || '';
+
+    if (normalizeRoleName(role) === 'Admin') {
+      document.getElementById('adminLinks').style.display = 'block';
+    }
+
+    history.pushState({ dashboard: true }, '', window.location.href);
+    window.addEventListener('popstate', () => {
+      if (allowDashboardExit) {
+        return;
+      }
+      history.pushState({ dashboard: true }, '', window.location.href);
+      openLogoutModal();
+    });
+
+    function openLogoutModal() {
+      document.getElementById('logoutModal').classList.add('show');
+      document.getElementById('logoutModal').setAttribute('aria-hidden', 'false');
+    }
+
+    function closeLogoutModal() {
+      document.getElementById('logoutModal').classList.remove('show');
+      document.getElementById('logoutModal').setAttribute('aria-hidden', 'true');
+    }
+
+    function showSaveSuccessPopup(message) {
+      const modal = document.getElementById('saveSuccessModal');
+      const title = document.getElementById('saveSuccessTitle');
+      title.textContent = message || 'Successfully Saved';
+      modal.classList.add('show');
+      modal.setAttribute('aria-hidden', 'false');
+
+      if (saveSuccessTimeout) {
+        clearTimeout(saveSuccessTimeout);
+      }
+
+      saveSuccessTimeout = window.setTimeout(() => {
+        hideSaveSuccessPopup();
+      }, 1600);
+    }
+
+    function hideSaveSuccessPopup() {
+      const modal = document.getElementById('saveSuccessModal');
+      modal.classList.remove('show');
+      modal.setAttribute('aria-hidden', 'true');
+      if (saveSuccessTimeout) {
+        clearTimeout(saveSuccessTimeout);
+        saveSuccessTimeout = null;
+      }
+    }
+
+    function confirmLogout() {
+      closeLogoutModal();
+      allowDashboardExit = true;
+      logout();
+    }
+
+    function logout() {
+      localStorage.clear();
+      window.location.href = appUrl('/login');
+    }
+
+    async function authFetch(url, options = {}) {
+      const response = await fetch(appUrl(url), {
+        ...options,
+        headers: {
+          ...(options.headers || {}),
+          Authorization: 'Bearer ' + token
+        }
+      });
+      if (response.status === 401) {
+        logout();
+        return null;
+      }
+      return response;
+    }
+
+    function fillSelect(select, items, valueKey, labelKey, selectedValue = null) {
+      select.innerHTML = items.map(item => `<option value="${item[valueKey]}"${selectedValue != null && String(item[valueKey]) === String(selectedValue) ? ' selected' : ''}>${item[labelKey]}</option>`).join('');
+    }
+
+    function fillSelectWithPlaceholder(select, items, valueKey, labelKey, placeholder) {
+      if (!items.length) {
+        select.innerHTML = `<option value="">${placeholder}</option>`;
+        return;
+      }
+      fillSelect(select, items, valueKey, labelKey, items[0][valueKey]);
+    }
+
+    function isMobileCategorySelected() {
+      const categorySelect = document.getElementById('categorySelect');
+      const selectedOption = categorySelect.selectedOptions[0];
+      const categoryName = (selectedOption?.textContent || '').toLowerCase();
+      return MOBILE_CATEGORY_NAMES.some(name => categoryName.includes(name));
+    }
+
+    function applyCategoryFieldVisibility() {
+      const isMobile = isMobileCategorySelected();
+
+      const subcategoryField = document.getElementById('subcategorySelect').closest('.field');
+      const imeiField = document.getElementById('imei').closest('.field');
+      const serialField = document.getElementById('serialNo').closest('.field');
+      const modelField = document.getElementById('modelNo').closest('.field');
+
+      subcategoryField.style.display = isMobile ? 'none' : '';
+      imeiField.style.display = isMobile ? '' : 'none';
+      serialField.style.display = isMobile ? 'none' : '';
+      modelField.style.display = isMobile ? 'none' : '';
+
+      if (isMobile) {
+        document.getElementById('serialNo').value = '';
+        document.getElementById('modelNo').value = '';
+      } else {
+        document.getElementById('imei').value = '';
+      }
+    }
+
+    function applySchemeMatchVisibility() {
+      const schemeMatch = document.getElementById('schemeMatch').value;
+      const schemeMatchOtherField = document.getElementById('schemeMatchOtherField');
+      const schemeMatchOther = document.getElementById('schemeMatchOther');
+
+      schemeMatchOtherField.style.display = schemeMatch === 'Other' ? '' : 'none';
+      if (schemeMatch !== 'Other') {
+        schemeMatchOther.value = '';
+      }
+    }
+
+    function applySchemesVisibility() {
+      const selectedScheme = document.getElementById('schemesSelect').value;
+      const schemesOtherField = document.getElementById('schemesOtherField');
+      const schemesOther = document.getElementById('schemesOther');
+
+      schemesOtherField.style.display = selectedScheme === 'OTHER' ? '' : 'none';
+      if (selectedScheme !== 'OTHER') {
+        schemesOther.value = '';
+      }
+    }
+
+    function applyClaimStatusVisibility() {
+      const claimStatus = document.getElementById('claimStatus').value;
+      const claimStatusOtherField = document.getElementById('claimStatusOtherField');
+      const claimStatusOther = document.getElementById('claimStatusOther');
+      const claimOverallStatus = document.getElementById('claimOverallStatus').value;
+      const settledDateField = document.getElementById('settledDateField');
+      const settledDate = document.getElementById('settledDate');
+
+      claimStatusOtherField.style.display = claimStatus === 'Other' ? '' : 'none';
+      if (claimStatus !== 'Other') {
+        claimStatusOther.value = '';
+      }
+
+      settledDateField.style.display = claimOverallStatus === 'Settled' ? '' : 'none';
+      if (claimOverallStatus !== 'Settled') {
+        settledDate.value = '';
+      }
+    }
+
+    function applySchemeRewardVisibility() {
+      const rewardType = document.getElementById('schemeRewardType').value;
+      const targetQtyField = document.getElementById('schemeTargetQtyField');
+      targetQtyField.style.display = rewardType === 'Target Based' ? '' : 'none';
+      if (rewardType !== 'Target Based') {
+        document.getElementById('schemeTargetQty').value = '';
+      }
+    }
+
+    function isSchemeMobileCategorySelected() {
+      const categorySelect = document.getElementById('schemeCategory');
+      const selectedOption = categorySelect.selectedOptions[0];
+      const categoryName = (selectedOption?.textContent || '').toLowerCase();
+      return MOBILE_CATEGORY_NAMES.some(name => categoryName.includes(name));
+    }
+
+    function applySchemeCategoryVisibility() {
+      const subcategoryField = document.getElementById('schemeSubCategory').closest('.field');
+      const brandField = document.getElementById('schemeBrand').closest('.field');
+      const isMobile = isSchemeMobileCategorySelected();
+
+      subcategoryField.style.display = isMobile ? 'none' : '';
+      brandField.style.display = '';
+    }
+
+    async function updateSubcategoryOptions() {
+      const categoryId = Number(document.getElementById('categorySelect').value || 0);
+      const subcategorySelect = document.getElementById('subcategorySelect');
+      const brandSelect = document.getElementById('brandSelect');
+
+      if (!categoryId) {
+        fillSelectWithPlaceholder(subcategorySelect, [], 'id', 'name', 'Select category first');
+        fillSelectWithPlaceholder(brandSelect, [], 'id', 'name', 'Select sub category first');
+        return;
+      }
+
+      const isMobile = isMobileCategorySelected();
+      if (isMobile) {
+        fillSelectWithPlaceholder(subcategorySelect, [], 'id', 'name', 'Not required for Mobile / Handset');
+        await updateBrandOptions();
+        applyCategoryFieldVisibility();
+        return;
+      }
+
+      const subcategoriesRes = await authFetch(`/subcategories?category_id=${categoryId}`);
+      if (!subcategoriesRes) return;
+      const filteredSubcategories = await subcategoriesRes.json();
+      fillSelectWithPlaceholder(subcategorySelect, filteredSubcategories, 'id', 'name', 'No subcategories found');
+      await updateBrandOptions();
+      applyCategoryFieldVisibility();
+    }
+
+    async function updateBrandOptions() {
+      const categoryId = Number(document.getElementById('categorySelect').value || 0);
+      const subcategoryId = Number(document.getElementById('subcategorySelect').value || 0);
+      const brandSelect = document.getElementById('brandSelect');
+
+      if (isMobileCategorySelected()) {
+        const brandsRes = await authFetch(`/brands?category_id=${categoryId}`);
+        if (!brandsRes) return;
+        const allMobileBrands = await brandsRes.json();
+        const nameMap = new Map(allMobileBrands.map(item => [item.name.toLowerCase(), item]));
+        const filteredMobileBrands = MOBILE_BRANDS
+          .map(name => nameMap.get(name.toLowerCase()))
+          .filter(Boolean);
+
+        fillSelectWithPlaceholder(brandSelect, filteredMobileBrands, 'id', 'name', 'No mobile brands found');
+        return;
+      }
+
+      if (!subcategoryId) {
+        fillSelectWithPlaceholder(brandSelect, [], 'id', 'name', 'Select sub category first');
+        return;
+      }
+
+      const brandsRes = await authFetch(`/brands?subcategory_id=${subcategoryId}`);
+      if (!brandsRes) return;
+      const filteredBrands = await brandsRes.json();
+      fillSelectWithPlaceholder(brandSelect, filteredBrands, 'id', 'name', 'No brands found');
+    }
+
+    function buildBranchLabel(item) {
+      const code = item.code ? `${item.code}` : 'BR000';
+      const name = item.name ? ` - ${item.name}` : '';
+      return `${code}${name}`;
+    }
+
+    function normalizeMoney(value) {
+      const num = Number(value || 0);
+      return Math.round((num + Number.EPSILON) * 100) / 100;
+    }
+
+    function formatMoney(value) {
+      const normalized = normalizeMoney(value);
+      if (Number.isInteger(normalized)) {
+        return String(normalized);
+      }
+      return normalized.toFixed(2);
+    }
+
+    function exactOrFormattedMoney(exactValue, numericValue) {
+      const text = String(exactValue ?? '').trim();
+      if (text) {
+        return text;
+      }
+      return formatMoney(numericValue);
+    }
+
+    function parseAmountExact(rawValue, fieldLabel, { required = false } = {}) {
+      const text = String(rawValue ?? '').trim();
+      if (!text) {
+        if (required) {
+          throw new Error(`${fieldLabel} is required.`);
+        }
+        return { exact: '', numeric: 0 };
+      }
+
+      if (!/^\d+(\.\d{1,2})?$/.test(text)) {
+        throw new Error(`${fieldLabel} must be a valid amount (example: 45600 or 45600.50).`);
+      }
+
+      return { exact: text, numeric: normalizeMoney(text) };
+    }
+
+    function canDeleteSales() {
+      return hasRole('Admin');
+    }
+
+    function canEditSales() {
+      return hasRole('Admin');
+    }
+
+    function normalizeCategoryCode(code) {
+      const raw = String(code || '').trim().toUpperCase();
+      if (raw === 'MOBILE' || raw === 'MOBILES' || raw === 'HANDSET' || raw === 'MH') {
+        return 'MH';
+      }
+      if (raw === 'HE' || raw === 'HA' || raw === 'IT') {
+        return raw;
+      }
+      return raw;
+    }
+
+    function getCategoryCodeById(categoryId) {
+      const category = categories.find(item => Number(item.id) === Number(categoryId));
+      return normalizeCategoryCode(category?.code || '');
+    }
+
+    function getSelectedExportCategoryFilter() {
+      const select = document.getElementById('exportCategoryFilter');
+      return (select && select.value) ? select.value : 'ALL';
+    }
+
+    function getExportFilteredSales() {
+      const categoryFilter = getSelectedExportCategoryFilter();
+      if (categoryFilter === 'ALL') {
+        return scopedSales;
+      }
+
+      return scopedSales.filter(sale => {
+        const categoryCode = getCategoryCodeById(sale.category_id);
+        const selectedCode = normalizeCategoryCode(categoryFilter);
+        return categoryCode === selectedCode;
+      });
+    }
+
+    function getExportData() {
+      const storesById = new Map(stores.map(item => [item.id, buildBranchLabel(item)]));
+      const categoriesById = new Map(categories.map(item => [item.id, item.name]));
+      const subcategoriesById = new Map(subcategories.map(item => [item.id, item.name]));
+      const brandsById = new Map(brands.map(item => [item.id, item.name]));
+
+      const headers = [
+        'Branch',
+        'Invoice Date',
+        'Invoice No',
+        'Category',
+        'Sub Category',
+        'Brand',
+        'Product',
+        'Quantity',
+        'Invoice Value',
+        'IMEI No',
+        'Serial No',
+        'Model No',
+        'Customer Name',
+        'Sales Executive',
+        'Schemes',
+        'Scheme Match',
+        'Scheme Amount',
+        'Claim',
+        'Claim Status',
+        'Settled Date'
+      ];
+
+      const rows = getExportFilteredSales().map(s => [
+        storesById.get(s.store_id) || '',
+        s.invoice_date || '',
+        s.invoice_no || '',
+        categoriesById.get(s.category_id) || '',
+        subcategoriesById.get(s.subcategory_id) || '',
+        brandsById.get(s.brand_id) || '',
+        s.product_name || '',
+        s.quantity || 0,
+        exactOrFormattedMoney(s.sale_value_exact, s.sale_value),
+        s.imei || '',
+        s.serial_no || '',
+        s.model_no || '',
+        s.customer_name || '',
+        s.sales_executive || '',
+        s.schemes_other || s.schemes || '',
+        s.scheme_match_other || s.scheme_match || '',
+        exactOrFormattedMoney(s.scheme_amount_exact, s.scheme_amount),
+        s.claim_status_other || s.claim_status || '',
+        s.claim_overall_status || '',
+        s.settled_date || ''
+      ]);
+
+      return { headers, rows };
+    }
+
+    function csvEscapeCell(value) {
+      const text = String(value ?? '');
+      if (text.includes(',') || text.includes('"') || text.includes('\n')) {
+        return `"${text.replace(/"/g, '""')}"`;
+      }
+      return text;
+    }
+
+    function buildExportFilename(ext) {
+      const categoryFilter = getSelectedExportCategoryFilter();
+      const stamp = new Date().toISOString().slice(0, 10);
+      return `sales_${categoryFilter.toLowerCase()}_${stamp}.${ext}`;
+    }
+
+    function exportFilterValueFromCategoryCode(categoryCode) {
+      const code = normalizeCategoryCode(categoryCode);
+      if (code === 'MH') {
+        return 'MOBILE';
+      }
+      if (['HE', 'HA', 'IT'].includes(code)) {
+        return code;
+      }
+      return 'ALL';
+    }
+
+    function exportFilterLabelFromCategoryCode(categoryCode) {
+      const value = exportFilterValueFromCategoryCode(categoryCode);
+      const labels = {
+        HE: 'HE',
+        HA: 'HA',
+        IT: 'IT',
+        MOBILE: 'Mobile / Handset',
+        ALL: 'All Categories'
+      };
+      return labels[value] || 'All Categories';
+    }
+
+    function downloadBlob(content, type, filename) {
+      const blob = new Blob([content], { type });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function downloadSalesExcel() {
+      const { headers, rows } = getExportData();
+      if (!rows.length) {
+        alert('No data available for the selected category.');
+        return;
+      }
+
+      const csvLines = [headers.map(csvEscapeCell).join(',')];
+      rows.forEach(row => csvLines.push(row.map(csvEscapeCell).join(',')));
+      downloadBlob(`\uFEFF${csvLines.join('\n')}`, 'text/csv;charset=utf-8;', buildExportFilename('csv'));
+    }
+
+    function downloadSalesPdf() {
+      const { headers, rows } = getExportData();
+      if (!rows.length) {
+        alert('No data available for the selected category.');
+        return;
+      }
+
+      if (!window.jspdf || !window.jspdf.jsPDF) {
+        alert('PDF exporter is not available right now.');
+        return;
+      }
+
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation: 'landscape' });
+      doc.setFontSize(12);
+      doc.text('Initiative Dashboard Sales Export', 14, 12);
+      doc.setFontSize(9);
+      doc.text(`Category Filter: ${getSelectedExportCategoryFilter()}`, 14, 18);
+      doc.autoTable({
+        head: [headers],
+        body: rows,
+        startY: 22,
+        styles: { fontSize: 7, cellPadding: 1.4 },
+        headStyles: { fillColor: [26, 60, 110] },
+      });
+      doc.save(buildExportFilename('pdf'));
+    }
+
+    async function downloadSalesJpg() {
+      const { headers, rows } = getExportData();
+      if (!rows.length) {
+        alert('No data available for the selected category.');
+        return;
+      }
+
+      if (!window.html2canvas) {
+        alert('JPG exporter is not available right now.');
+        return;
+      }
+
+      const wrapper = document.createElement('div');
+      wrapper.style.position = 'fixed';
+      wrapper.style.left = '-10000px';
+      wrapper.style.top = '0';
+      wrapper.style.background = '#fff';
+      wrapper.style.padding = '16px';
+      wrapper.style.width = '1600px';
+      wrapper.innerHTML = `
+        <h3 style="margin:0 0 8px;font-family:Arial,sans-serif;color:#111111;">Initiative Dashboard Sales Export</h3>
+        <div style="margin:0 0 12px;font-family:Arial,sans-serif;color:#444444;font-size:12px;">Category Filter: ${getSelectedExportCategoryFilter()}</div>
+        <table style="border-collapse:collapse;width:100%;font-family:Arial,sans-serif;font-size:12px;">
+          <thead>
+            <tr>${headers.map(h => `<th style="border:1px solid #c8c8c8;padding:6px;background:#ececec;color:#111111;text-align:left;">${h}</th>`).join('')}</tr>
+          </thead>
+          <tbody>
+            ${rows.map(row => `<tr>${row.map(cell => `<td style="border:1px solid #d3d3d3;padding:6px;color:#1a1a1a;">${cell}</td>`).join('')}</tr>`).join('')}
+          </tbody>
+        </table>
+      `;
+
+      document.body.appendChild(wrapper);
+      const canvas = await window.html2canvas(wrapper, { scale: 2, backgroundColor: '#ffffff' });
+      wrapper.remove();
+
+      const link = document.createElement('a');
+      link.href = canvas.toDataURL('image/jpeg', 0.95);
+      link.download = buildExportFilename('jpg');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    }
+
+    function formatAmount(value) {
+      const num = Number(value || 0);
+      return num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function renderIntervalSummary(summary = {}) {
+      const totals = summary.totals || {};
+      const summaryGrid = document.getElementById('intervalSummaryGrid');
+      if (!summaryGrid) return;
+
+      summaryGrid.innerHTML = `
+        <div class="interval-stat"><div class="interval-stat-label">Records</div><div class="interval-stat-value">${totals.records || 0}</div></div>
+        <div class="interval-stat"><div class="interval-stat-label">Qty</div><div class="interval-stat-value">${formatAmount(totals.qty || 0)}</div></div>
+        <div class="interval-stat"><div class="interval-stat-label">Sales Amt.</div><div class="interval-stat-value">${formatAmount(totals.sales_amt || 0)}</div></div>
+        <div class="interval-stat"><div class="interval-stat-label">Cost Amt.</div><div class="interval-stat-value">${formatAmount(totals.cost_amt || 0)}</div></div>
+        <div class="interval-stat"><div class="interval-stat-label">Profit/Loss</div><div class="interval-stat-value">${formatAmount(totals.profit_loss || 0)}</div></div>
+        <div class="interval-stat"><div class="interval-stat-label">Profit %</div><div class="interval-stat-value">${formatAmount(totals.profit_percent || 0)}%</div></div>
+      `;
+
+      const seriesBody = document.getElementById('intervalSeriesBody');
+      const series = summary.series || [];
+      seriesBody.innerHTML = series.map(item => `
+        <tr>
+          <td>${item.label || ''}</td>
+          <td>${formatAmount(item.qty || 0)}</td>
+          <td>${formatAmount(item.sales_amt || 0)}</td>
+          <td>${formatAmount(item.cost_amt || 0)}</td>
+          <td>${formatAmount(item.profit_loss || 0)}</td>
+          <td>${formatAmount(item.profit_percent || 0)}%</td>
+        </tr>
+      `).join('') || '<tr><td colspan="6" class="empty">No interval data found for selected filter</td></tr>';
+
+      const topItemsBody = document.getElementById('intervalTopItemsBody');
+      const topItems = summary.top_items || [];
+      topItemsBody.innerHTML = topItems.map(item => `
+        <tr>
+          <td>${item.item || ''}</td>
+          <td>${formatAmount(item.qty || 0)}</td>
+          <td>${formatAmount(item.sales_amt || 0)}</td>
+          <td>${formatAmount(item.profit_loss || 0)}</td>
+        </tr>
+      `).join('') || '<tr><td colspan="4" class="empty">No item level data</td></tr>';
+
+      const sourcesList = document.getElementById('intervalSources');
+      const sources = summary.sources || [];
+      sourcesList.innerHTML = sources.map(source => `<li>${source.file || 'Unknown file'} (${source.rows || 0} rows)</li>`).join('') || '<li>No upload history yet</li>';
+    }
+
+    function renderIntervalRecords(records = []) {
+      const body = document.getElementById('intervalRecordsBody');
+      if (!body) return;
+
+      body.innerHTML = records.map(record => `
+        <tr>
+          <td>${record.sale_date || ''}</td>
+          <td>${record.vch_no || ''}</td>
+          <td>${record.account || ''}</td>
+          <td>${record.item || ''}</td>
+          <td>${formatAmount(record.qty || 0)}</td>
+          <td>${record.unit || ''}</td>
+          <td>${formatAmount(record.sales_amt || 0)}</td>
+          <td>${formatAmount(record.cost_amt || 0)}</td>
+          <td>${formatAmount(record.profit_loss || 0)}</td>
+          <td>${formatAmount(record.profit_percent || 0)}%</td>
+          <td>${record.source_file || ''}</td>
+        </tr>
+      `).join('') || '<tr><td colspan="11" class="empty">No uploaded rows yet</td></tr>';
+    }
+
+    async function loadIntervalSalesSummary() {
+      const intervalSelect = document.getElementById('intervalGranularity');
+      const startDate = document.getElementById('intervalStartDate').value;
+      const endDate = document.getElementById('intervalEndDate').value;
+      const params = new URLSearchParams();
+      params.set('interval', intervalSelect.value);
+      if (startDate) params.set('start_date', startDate);
+      if (endDate) params.set('end_date', endDate);
+
+      const response = await authFetch(`/admin/interval-sales/summary?${params.toString()}`);
+      if (!response) return;
+
+      const message = document.getElementById('intervalUploadMsg');
+      const summaryGrid = document.getElementById('intervalSummaryGrid');
+      const seriesBody = document.getElementById('intervalSeriesBody');
+      const topItemsBody = document.getElementById('intervalTopItemsBody');
+      const sourcesList = document.getElementById('intervalSources');
+
+      if (summaryGrid) summaryGrid.innerHTML = '<div class="empty" style="grid-column:1/-1;">Loading interval summary...</div>';
+      if (seriesBody) seriesBody.innerHTML = '<tr><td colspan="6" class="empty">Loading interval data...</td></tr>';
+      if (topItemsBody) topItemsBody.innerHTML = '<tr><td colspan="4" class="empty">Loading top items...</td></tr>';
+      if (sourcesList) sourcesList.innerHTML = '<li>Loading sources...</li>';
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        message.textContent = payload.detail || 'Unable to load interval summary.';
+        message.className = 'msg';
+        return;
+      }
+
+      const summary = await response.json();
+      message.textContent = '';
+      renderIntervalSummary(summary);
+    }
+
+    async function loadIntervalSalesRecords() {
+      const intervalSelect = document.getElementById('intervalGranularity');
+      const startDate = document.getElementById('intervalStartDate').value;
+      const endDate = document.getElementById('intervalEndDate').value;
+      const params = new URLSearchParams();
+      params.set('limit', '500');
+      if (startDate) params.set('start_date', startDate);
+      if (endDate) params.set('end_date', endDate);
+
+      const response = await authFetch(`/admin/interval-sales/records?${params.toString()}`);
+      if (!response) return;
+
+      const body = document.getElementById('intervalRecordsBody');
+      if (body) {
+        body.innerHTML = '<tr><td colspan="11" class="empty">Loading uploaded rows...</td></tr>';
+      }
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        if (body) {
+          body.innerHTML = `<tr><td colspan="11" class="empty">${payload.detail || 'Unable to load uploaded rows.'}</td></tr>`;
+        }
+        return;
+      }
+
+      const records = await response.json();
+      renderIntervalRecords(records);
+    }
+
+    async function uploadIntervalSales(event) {
+      event.preventDefault();
+      const message = document.getElementById('intervalUploadMsg');
+      const fileInput = document.getElementById('intervalFile');
+      const uploadBtn = document.getElementById('intervalUploadBtn');
+      const refreshBtn = document.getElementById('intervalRefreshBtn');
+
+      if (!fileInput.files.length) {
+        message.className = 'msg';
+        message.textContent = 'Choose a file before upload.';
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('file', fileInput.files[0]);
+
+      uploadBtn.disabled = true;
+      refreshBtn.disabled = true;
+      fileInput.disabled = true;
+      message.className = 'msg';
+      message.textContent = 'Uploading and processing file. Please wait...';
+
+      try {
+        const response = await authFetch('/admin/interval-sales/upload', {
+          method: 'POST',
+          body: formData,
+        });
+        if (!response) return;
+
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          message.className = 'msg';
+          message.textContent = payload.detail || 'Upload failed. Please check file format.';
+          return;
+        }
+
+        message.className = 'msg success';
+        message.textContent = `Uploaded ${payload.file_name || 'file'}: inserted ${payload.inserted || 0}, skipped ${payload.skipped || 0}.`;
+        fileInput.value = '';
+        await loadIntervalSalesSummary();
+        await loadIntervalSalesRecords();
+      } finally {
+        uploadBtn.disabled = false;
+        refreshBtn.disabled = false;
+        fileInput.disabled = false;
+      }
+    }
+
+    function schemeOfferLabel(value) {
+      const labels = {
+        'Backend': 'Backend Support',
+        'UPI': 'UPI Offer',
+        'CARD': 'Card Offer',
+        'FESTIVAL': 'Festival Offer',
+        'MONTHLY': 'Monthly Offer',
+        'OTH': 'Other'
+      };
+      return labels[value] || value || '';
+    }
+
+    function schemeTypeLabel(value) {
+      return value || '';
+    }
+
+    function renderSchemesTable() {
+      const tbody = document.querySelector('#schemeTable tbody');
+      if (!tbody) return;
+
+      if (!schemes.length) {
+        tbody.innerHTML = '<tr><td colspan="9" class="empty">No schemes found</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = schemes.map(scheme => {
+        const target = scheme.reward_type === 'Slab' ? (scheme.min_qty || '') : '';
+        const rewardValue = scheme.reward_value != null ? scheme.reward_value : '';
+        const dateRange = `${scheme.start_date || ''} to ${scheme.end_date || ''}`;
+        const actionButton = scheme.status === 'Active'
+          ? `<button type="button" onclick="pauseScheme(${scheme.id})">Pause</button>`
+          : `<button type="button" onclick="activateScheme(${scheme.id})">Activate</button>`;
+        return `
+          <tr>
+            <td>${scheme.scheme_code || ''}</td>
+            <td>${scheme.scheme_name || ''}</td>
+            <td>${schemeOfferLabel(scheme.offer_type)}</td>
+            <td>${schemeTypeLabel(scheme.reward_type)}</td>
+            <td>${rewardValue}</td>
+            <td>${target}</td>
+            <td>${scheme.status || ''}</td>
+            <td>${dateRange}</td>
+            <td><div class="scheme-actions">${actionButton}</div></td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function pauseScheme(schemeId) {
+      const response = await authFetch(`/schemes/${schemeId}/pause`, { method: 'PUT' });
+      if (!response) return;
+      await loadSchemes();
+    }
+
+    async function activateScheme(schemeId) {
+      const response = await authFetch(`/schemes/${schemeId}/activate`, { method: 'PUT' });
+      if (!response) return;
+      await loadSchemes();
+    }
+
+    async function loadSchemes() {
+      const schemesRes = await authFetch('/schemes');
+      if (schemesRes) {
+        schemes = await schemesRes.json();
+        renderSchemesTable();
+      }
+    }
+
+    async function loadInitialData() {
+      const meRes = await authFetch('/me');
+      if (!meRes) return;
+      currentUser = await meRes.json();
+      const effectiveRole = getEffectiveRole();
+      document.getElementById('roleBadge').textContent = effectiveRole;
+      document.getElementById('scopeText').textContent = scopeMessages[effectiveRole] || '';
+
+      if (effectiveRole === 'Admin') {
+        document.getElementById('adminLinks').style.display = 'block';
+      }
+
+      const storesRes = await authFetch('/stores');
+      const categoriesRes = await authFetch('/categories');
+      const subcategoriesRes = await authFetch('/subcategories');
+      const brandsRes = await authFetch('/brands');
+      const productsRes = await authFetch('/products');
+      const schemesRes = await authFetch('/schemes');
+
+      if (storesRes) stores = await storesRes.json();
+      if (categoriesRes) categories = await categoriesRes.json();
+      if (subcategoriesRes) subcategories = await subcategoriesRes.json();
+      if (brandsRes) brands = await brandsRes.json();
+      if (productsRes) products = await productsRes.json();
+      if (schemesRes) schemes = await schemesRes.json();
+
+      const storeSelect = document.getElementById('storeSelect');
+      const categorySelect = document.getElementById('categorySelect');
+      const subcategorySelect = document.getElementById('subcategorySelect');
+      const brandSelect = document.getElementById('brandSelect');
+      const schemeCategory = document.getElementById('schemeCategory');
+      const schemeSubCategory = document.getElementById('schemeSubCategory');
+      const schemeBrand = document.getElementById('schemeBrand');
+
+      storeSelect.innerHTML = stores.map(item => `<option value="${item.id}"${String(item.id) === String(currentUser.store_id || (stores[0] && stores[0].id)) ? ' selected' : ''}>${buildBranchLabel(item)}</option>`).join('');
+      fillSelectWithPlaceholder(categorySelect, categories, 'id', 'name', 'No categories found');
+      fillSelectWithPlaceholder(subcategorySelect, [], 'id', 'name', 'Select category first');
+      fillSelectWithPlaceholder(brandSelect, [], 'id', 'name', 'Select sub category first');
+      fillSelectWithPlaceholder(schemeCategory, categories, 'id', 'name', 'All categories');
+      fillSelectWithPlaceholder(schemeSubCategory, [], 'id', 'name', 'All sub categories');
+      fillSelectWithPlaceholder(schemeBrand, brands, 'id', 'name', 'All brands');
+
+      categorySelect.addEventListener('change', updateSubcategoryOptions);
+      subcategorySelect.addEventListener('change', updateBrandOptions);
+      document.getElementById('schemesSelect').addEventListener('change', applySchemesVisibility);
+      document.getElementById('schemeMatch').addEventListener('change', applySchemeMatchVisibility);
+      document.getElementById('claimStatus').addEventListener('change', applyClaimStatusVisibility);
+      document.getElementById('claimOverallStatus').addEventListener('change', applyClaimStatusVisibility);
+      document.getElementById('schemeRewardType').addEventListener('change', applySchemeRewardVisibility);
+      document.getElementById('schemeCategory').addEventListener('change', async () => {
+        const selectedCategoryId = Number(document.getElementById('schemeCategory').value || 0);
+        const isMobile = isSchemeMobileCategorySelected();
+
+        if (!selectedCategoryId) {
+          fillSelectWithPlaceholder(schemeSubCategory, [], 'id', 'name', 'All sub categories');
+          fillSelectWithPlaceholder(schemeBrand, brands, 'id', 'name', 'All brands');
+          applySchemeCategoryVisibility();
+          return;
+        }
+
+        if (isMobile) {
+          fillSelectWithPlaceholder(schemeSubCategory, [], 'id', 'name', 'Not required for Mobile / Handset');
+          const schemeBrandsRes = await authFetch(`/brands?category_id=${selectedCategoryId}`);
+          const mobileBrands = schemeBrandsRes ? await schemeBrandsRes.json() : [];
+          const nameMap = new Map(mobileBrands.map(item => [item.name.toLowerCase(), item]));
+          const filteredMobileBrands = MOBILE_BRANDS
+            .map(name => nameMap.get(name.toLowerCase()))
+            .filter(Boolean);
+          fillSelectWithPlaceholder(schemeBrand, filteredMobileBrands, 'id', 'name', 'No mobile brands found');
+          applySchemeCategoryVisibility();
+          return;
+        }
+
+        const schemeSubRes = await authFetch(`/subcategories?category_id=${selectedCategoryId}`);
+        const schemeSubs = schemeSubRes ? await schemeSubRes.json() : [];
+        fillSelectWithPlaceholder(schemeSubCategory, schemeSubs, 'id', 'name', 'All sub categories');
+        const filteredBrands = brands.filter(item => !item.subcategory_id || schemeSubs.some(sub => sub.id === item.subcategory_id));
+        fillSelectWithPlaceholder(schemeBrand, filteredBrands, 'id', 'name', 'All brands');
+        applySchemeCategoryVisibility();
+      });
+      document.getElementById('schemeSubCategory').addEventListener('change', () => {
+        const selectedSubId = Number(document.getElementById('schemeSubCategory').value || 0);
+        const filteredBrands = selectedSubId ? brands.filter(item => item.subcategory_id === selectedSubId) : brands;
+        fillSelectWithPlaceholder(schemeBrand, filteredBrands, 'id', 'name', 'All brands');
+      });
+
+      if (document.getElementById('schemeAdminCard')) {
+        document.getElementById('schemeAdminCard').style.display = hasRole('Admin') ? 'block' : 'none';
+      }
+      if (document.getElementById('exportPanel')) {
+        const exportPanel = document.getElementById('exportPanel');
+        const exportCategoryFilter = document.getElementById('exportCategoryFilter');
+        const canUseExport = hasRole('Admin', 'Accounts', 'CategoryManager', 'MISExecutive');
+        exportPanel.style.display = canUseExport ? '' : 'none';
+
+        if (hasRole('CategoryManager')) {
+          const ownCategoryValue = exportFilterValueFromCategoryCode(currentUser.category_code);
+          const ownCategoryLabel = exportFilterLabelFromCategoryCode(currentUser.category_code);
+          exportCategoryFilter.innerHTML = `<option value="${ownCategoryValue}">${ownCategoryLabel}</option>`;
+          exportCategoryFilter.value = ownCategoryValue;
+          exportCategoryFilter.disabled = true;
+        } else {
+          exportCategoryFilter.disabled = false;
+        }
+
+        const refreshScopeByCategory = () => {
+          renderScopeTables();
+        };
+        exportCategoryFilter.addEventListener('change', refreshScopeByCategory);
+        exportCategoryFilter.addEventListener('input', refreshScopeByCategory);
+      }
+      if (document.getElementById('claimsScopeCard')) {
+        document.getElementById('claimsScopeCard').style.display = 'block';
+      }
+
+      const intervalUploadCard = document.getElementById('intervalUploadCard');
+      if (intervalUploadCard) {
+        const canViewInterval = hasRole('Admin', 'Accounts', 'MISExecutive');
+        intervalUploadCard.style.display = canViewInterval ? 'block' : 'none';
+
+        if (canViewInterval) {
+          const intervalUploadForm = document.getElementById('intervalUploadForm');
+          const intervalRefreshBtn = document.getElementById('intervalRefreshBtn');
+          const intervalUploadBtn = document.getElementById('intervalUploadBtn');
+          const intervalFile = document.getElementById('intervalFile');
+
+          if (!intervalUploadForm.dataset.bound) {
+            intervalUploadForm.addEventListener('submit', uploadIntervalSales);
+            intervalRefreshBtn.addEventListener('click', loadIntervalSalesSummary);
+            document.getElementById('intervalGranularity').addEventListener('change', loadIntervalSalesSummary);
+            document.getElementById('intervalStartDate').addEventListener('change', loadIntervalSalesSummary);
+            document.getElementById('intervalEndDate').addEventListener('change', loadIntervalSalesSummary);
+            intervalUploadForm.dataset.bound = 'true';
+          }
+
+          if (!hasRole('Admin')) {
+            intervalUploadBtn.disabled = true;
+            intervalFile.disabled = true;
+            intervalFile.removeAttribute('required');
+            document.getElementById('intervalUploadMsg').textContent = 'Upload is enabled for Admin role. You can still view analytics.';
+          }
+
+          await loadIntervalSalesSummary();
+          await loadIntervalSalesRecords();
+        }
+      }
+
+      if (hasRole('CategoryManager')) {
+        const userCategoryCode = String(currentUser.category_code || '').toUpperCase();
+        const ownCategory = categories.find(item => String(item.code || '').toUpperCase() === userCategoryCode);
+        if (ownCategory) {
+          categorySelect.innerHTML = `<option value="${ownCategory.id}">${ownCategory.name}</option>`;
+          categorySelect.value = String(ownCategory.id);
+          categorySelect.disabled = true;
+        }
+      }
+
+      await updateSubcategoryOptions();
+      applyCategoryFieldVisibility();
+      applySchemesVisibility();
+      applySchemeMatchVisibility();
+      applyClaimStatusVisibility();
+      applySchemeRewardVisibility();
+      applySchemeCategoryVisibility();
+
+      if (hasRole('StoreManager')) {
+        storeSelect.value = currentUser.store_id || '';
+        storeSelect.disabled = true;
+      }
+
+      if (hasRole('Accounts', 'MISExecutive')) {
+        document.getElementById('saleForm').querySelector('button').disabled = true;
+        document.getElementById('saleMsg').textContent = 'Accounts and MIS Executive users can view scope data but cannot enter sales.';
+      }
+
+      document.getElementById('invoiceDate').valueAsDate = new Date();
+      renderSchemesTable();
+      await loadData();
+    }
+
+    async function loadData() {
+      const salesRes = await authFetch('/my-scope/sales');
+
+      if (!salesRes) return;
+
+      const sales = await salesRes.json();
+      scopedSales = sales;
+
+      renderScopeTables();
+    }
+
+    function renderScopeTables() {
+      const salesBody = document.querySelector('#salesTable tbody');
+      const claimsBody = document.querySelector('#claimsTable tbody');
+
+      const filteredSales = getExportFilteredSales();
+
+      const storesById = new Map(stores.map(item => [item.id, buildBranchLabel(item)]));
+      const categoriesById = new Map(categories.map(item => [item.id, item.name]));
+      const subcategoriesById = new Map(subcategories.map(item => [item.id, item.name]));
+      const brandsById = new Map(brands.map(item => [item.id, item.name]));
+
+      salesBody.innerHTML = filteredSales.map(s => `
+        <tr>
+          <td>${storesById.get(s.store_id) || ''}</td>
+          <td>${s.invoice_date || ''}</td>
+          <td>${s.invoice_no || ''}</td>
+          <td>${categoriesById.get(s.category_id) || ''}</td>
+          <td>${subcategoriesById.get(s.subcategory_id) || ''}</td>
+          <td>${brandsById.get(s.brand_id) || ''}</td>
+          <td>${s.product_name || ''}</td>
+          <td>${s.quantity || 0}</td>
+          <td>${exactOrFormattedMoney(s.sale_value_exact, s.sale_value)}</td>
+          <td>${s.imei || ''}</td>
+          <td>${s.serial_no || ''}</td>
+          <td>${s.model_no || ''}</td>
+          <td>${s.customer_name || ''}</td>
+          <td>${s.sales_executive || ''}</td>
+          <td>${s.schemes_other || s.schemes || ''}</td>
+          <td>${s.scheme_match_other || s.scheme_match || ''}</td>
+          <td>${exactOrFormattedMoney(s.scheme_amount_exact, s.scheme_amount)}</td>
+          <td>${s.claim_status_other || s.claim_status || ''}</td>
+          <td>${s.claim_overall_status || ''}</td>
+          <td>${s.settled_date || ''}</td>
+          <td>${canDeleteSales() ? `<button type="button" onclick="deleteSale(${s.id})" style="width:auto; padding:6px 10px; background:#c0392b;">Delete</button>` : '-'}</td>
+          <td>${canEditSales() ? `<button type="button" onclick="startSaleEdit(${s.id})" style="width:auto; padding:6px 10px; background:#111111;">Edit</button>` : '-'}</td>
+        </tr>
+      `).join('') || '<tr><td colspan="22" class="empty">No sales in your scope yet</td></tr>';
+
+      const claimRows = filteredSales.filter(s => s.claim_status || s.claim_status_other || s.scheme_amount);
+      claimsBody.innerHTML = claimRows.map(s => `
+        <tr>
+          <td>${s.invoice_date || ''}</td>
+          <td>${s.invoice_no || ''}</td>
+          <td>${s.schemes_other || s.schemes || ''}</td>
+          <td>${exactOrFormattedMoney(s.scheme_amount_exact, s.scheme_amount)}</td>
+          <td>${s.claim_status_other || s.claim_status || ''}</td>
+          <td>${s.claim_overall_status || ''}</td>
+          <td>${s.settled_date || ''}</td>
+        </tr>
+      `).join('') || '<tr><td colspan="7" class="empty">No claims in your scope yet</td></tr>';
+    }
+
+    async function deleteSale(saleId) {
+      const ok = window.confirm('Delete this sale record?');
+      if (!ok) return;
+
+      const response = await authFetch(`/sales/${saleId}`, { method: 'DELETE' });
+      if (!response) return;
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        document.getElementById('saleMsg').textContent = payload.detail || 'Unable to delete sale.';
+        return;
+      }
+
+      document.getElementById('saleMsg').textContent = 'Sale deleted successfully.';
+      document.getElementById('saleMsg').className = 'msg success';
+      await loadData();
+    }
+
+    async function startSaleEdit(saleId) {
+      const sale = scopedSales.find(item => Number(item.id) === Number(saleId));
+      if (!sale) {
+        return;
+      }
+
+      editingSaleId = sale.id;
+      const form = document.getElementById('saleForm');
+      const submitBtn = form.querySelector('button[type="submit"]');
+      const cancelBtn = document.getElementById('cancelEditBtn');
+
+      document.getElementById('invoiceNo').value = sale.invoice_no || '';
+      document.getElementById('invoiceDate').value = sale.invoice_date || '';
+      document.getElementById('storeSelect').value = String(sale.store_id || '');
+
+      document.getElementById('categorySelect').value = String(sale.category_id || '');
+      await updateSubcategoryOptions();
+
+      if (!isMobileCategorySelected()) {
+        document.getElementById('subcategorySelect').value = String(sale.subcategory_id || '');
+        await updateBrandOptions();
+      }
+
+      document.getElementById('brandSelect').value = String(sale.brand_id || '');
+      document.getElementById('productName').value = sale.product_name || '';
+      document.getElementById('quantity').value = sale.quantity || 1;
+      document.getElementById('invoiceValue').value = exactOrFormattedMoney(sale.sale_value_exact, sale.sale_value);
+      document.getElementById('imei').value = sale.imei || '';
+      document.getElementById('serialNo').value = sale.serial_no || '';
+      document.getElementById('modelNo').value = sale.model_no || '';
+      document.getElementById('customerName').value = sale.customer_name || '';
+      document.getElementById('salesExecutive').value = sale.sales_executive || '';
+      document.getElementById('schemesSelect').value = sale.schemes || 'UPI OFFER';
+      document.getElementById('schemesOther').value = sale.schemes_other || '';
+      document.getElementById('schemeMatch').value = sale.scheme_match || 'Yes';
+      document.getElementById('schemeMatchOther').value = sale.scheme_match_other || '';
+      document.getElementById('schemeAmount').value = exactOrFormattedMoney(sale.scheme_amount_exact, sale.scheme_amount);
+      document.getElementById('claimStatus').value = sale.claim_status || 'Automatic Claim';
+      document.getElementById('claimStatusOther').value = sale.claim_status_other || '';
+      document.getElementById('claimOverallStatus').value = sale.claim_overall_status || 'Pending';
+      document.getElementById('settledDate').value = sale.settled_date || '';
+
+      applyCategoryFieldVisibility();
+      applySchemesVisibility();
+      applySchemeMatchVisibility();
+      applyClaimStatusVisibility();
+
+      submitBtn.textContent = 'Update Sale';
+      cancelBtn.style.display = '';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function cancelSaleEdit() {
+      editingSaleId = null;
+      const form = document.getElementById('saleForm');
+      const submitBtn = form.querySelector('button[type="submit"]');
+      const cancelBtn = document.getElementById('cancelEditBtn');
+      form.reset();
+      submitBtn.textContent = 'Save Sale';
+      cancelBtn.style.display = 'none';
+      document.getElementById('invoiceDate').valueAsDate = new Date();
+      updateSubcategoryOptions();
+      applyCategoryFieldVisibility();
+      applySchemesVisibility();
+      applySchemeMatchVisibility();
+      applyClaimStatusVisibility();
+    }
+
+    document.getElementById('saleForm').addEventListener('submit', async function (event) {
+      event.preventDefault();
+      const saleMsg = document.getElementById('saleMsg');
+      saleMsg.className = 'msg';
+      saleMsg.textContent = '';
+
+      let invoiceAmount;
+      let schemeAmount;
+      try {
+        invoiceAmount = parseAmountExact(document.getElementById('invoiceValue').value, 'Invoice Value', { required: true });
+        schemeAmount = parseAmountExact(document.getElementById('schemeAmount').value, 'Scheme Amount');
+      } catch (e) {
+        saleMsg.textContent = e.message || 'Please enter valid amounts.';
+        return;
+      }
+
+      const payload = {
+        invoice_no: document.getElementById('invoiceNo').value,
+        invoice_date: document.getElementById('invoiceDate').value,
+        store_id: Number(document.getElementById('storeSelect').value),
+        category_id: Number(document.getElementById('categorySelect').value),
+        subcategory_id: isMobileCategorySelected() ? null : (Number(document.getElementById('subcategorySelect').value) || null),
+        brand_id: Number(document.getElementById('brandSelect').value),
+        product_id: null,
+        imei: isMobileCategorySelected() ? (document.getElementById('imei').value || null) : null,
+        serial_no: isMobileCategorySelected() ? null : (document.getElementById('serialNo').value || null),
+        model_no: isMobileCategorySelected() ? null : (document.getElementById('modelNo').value || null),
+        customer_name: document.getElementById('customerName').value || null,
+        product_name: document.getElementById('productName').value.trim(),
+        quantity: Number(document.getElementById('quantity').value),
+        sale_value: invoiceAmount.numeric,
+        sale_value_exact: invoiceAmount.exact,
+        schemes: document.getElementById('schemesSelect').value,
+        schemes_other: document.getElementById('schemesSelect').value === 'OTHER'
+          ? (document.getElementById('schemesOther').value.trim() || null)
+          : null,
+        scheme_match: document.getElementById('schemeMatch').value,
+        scheme_match_other: document.getElementById('schemeMatch').value === 'Other'
+          ? (document.getElementById('schemeMatchOther').value.trim() || null)
+          : null,
+        scheme_amount: schemeAmount.numeric,
+        scheme_amount_exact: schemeAmount.exact,
+        claim_status: document.getElementById('claimStatus').value,
+        claim_status_other: document.getElementById('claimStatus').value === 'Other'
+          ? (document.getElementById('claimStatusOther').value.trim() || null)
+          : null,
+        claim_overall_status: document.getElementById('claimOverallStatus').value,
+        settled_date: document.getElementById('claimOverallStatus').value === 'Settled'
+          ? document.getElementById('settledDate').value
+          : null,
+        sales_executive: document.getElementById('salesExecutive').value || null,
+        sale_date: document.getElementById('invoiceDate').value
+      };
+
+      if (!payload.product_name) {
+        saleMsg.textContent = 'Please enter product name/details.';
+        return;
+      }
+
+      const isEditing = editingSaleId != null;
+      const response = await authFetch(isEditing ? `/sales/${editingSaleId}` : '/sales', {
+        method: isEditing ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response) return;
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        saleMsg.textContent = data.detail || 'Unable to save sale';
+        return;
+      }
+      saleMsg.classList.add('success');
+      saleMsg.textContent = isEditing ? 'Sale updated successfully.' : 'Sale saved successfully and schemes were evaluated.';
+      showSaveSuccessPopup(isEditing ? 'Successfully Updated' : 'Successfully Saved');
+      this.reset();
+      editingSaleId = null;
+      this.querySelector('button[type="submit"]').textContent = 'Save Sale';
+      document.getElementById('cancelEditBtn').style.display = 'none';
+      document.getElementById('invoiceDate').valueAsDate = new Date();
+      await updateSubcategoryOptions();
+      applyCategoryFieldVisibility();
+      applySchemesVisibility();
+      applySchemeMatchVisibility();
+      applyClaimStatusVisibility();
+      await loadData();
+    });
+
+    document.getElementById('schemeForm').addEventListener('submit', async function (event) {
+      event.preventDefault();
+      const schemeMsg = document.getElementById('schemeMsg');
+      schemeMsg.className = 'msg';
+      schemeMsg.textContent = '';
+
+      const rewardType = document.getElementById('schemeRewardType').value;
+      const rewardValue = Number(document.getElementById('schemeRewardValue').value || 0);
+      const targetQty = Number(document.getElementById('schemeTargetQty').value || 0);
+
+      const payload = {
+        scheme_code: document.getElementById('schemeCode').value,
+        scheme_name: document.getElementById('schemeName').value,
+        brand_id: Number(document.getElementById('schemeBrand').value) || null,
+        category_id: Number(document.getElementById('schemeCategory').value) || null,
+        subcategory_id: Number(document.getElementById('schemeSubCategory').value) || null,
+        product_id: null,
+        variant_id: null,
+        offer_type: document.getElementById('schemeOfferType').value,
+        offer_value: rewardValue,
+        calculation_method: rewardType,
+        start_date: document.getElementById('schemeStartDate').value,
+        end_date: document.getElementById('schemeEndDate').value,
+        min_qty: rewardType === 'Target Based' ? targetQty : 0,
+        max_qty: null,
+        applicable_branch_id: null,
+        applicable_customer: null,
+        applicable_dealer: null,
+        status: document.getElementById('schemeStatus').value,
+        circular_number: null,
+        remarks: document.getElementById('schemeRemarks').value || null,
+        reward_type: rewardType,
+        reward_value: rewardValue,
+        conditions: [],
+        slabs: rewardType === 'Target Based' && targetQty > 0 && rewardValue > 0 ? [{ min_quantity: targetQty, reward_per_unit: rewardValue }] : []
+      };
+
+      const response = await authFetch('/schemes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response) return;
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        schemeMsg.textContent = data.detail || 'Unable to save scheme';
+        return;
+      }
+
+      schemeMsg.classList.add('success');
+      schemeMsg.textContent = 'Scheme saved successfully.';
+      this.reset();
+      applySchemeRewardVisibility();
+      await loadSchemes();
+    });
+
+    loadInitialData();
+  </script>
+</body>
+</html>

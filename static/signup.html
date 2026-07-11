@@ -1,0 +1,422 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#000000" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <title>Initiative ERP - Sign Up</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap');
+
+    :root {
+      --ink: #111111;
+      --ink-soft: #4d4d4d;
+      --line: #d6d6d6;
+      --panel: #ffffff;
+      --accent: #111111;
+      --accent-dark: #000000;
+    }
+
+    html, body { height: 100%; margin: 0; }
+    body {
+      font-family: 'Manrope', sans-serif;
+      background:
+        radial-gradient(circle at 14% 12%, rgba(0, 0, 0, 0.12) 0%, transparent 31%),
+        radial-gradient(circle at 86% 88%, rgba(40, 40, 40, 0.12) 0%, transparent 29%),
+        linear-gradient(135deg, #f2f2f2 0%, #fafafa 56%, #f0f0f0 100%);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+    .card {
+      background: #fff;
+      padding: 30px;
+      width: 100%;
+      max-width: 460px;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      box-shadow: 0 24px 48px rgba(12, 35, 59, 0.14);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      margin-bottom: 8px;
+      transform: translateX(-10px);
+    }
+    .brand-text {
+      text-align: center;
+    }
+    .logo {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      overflow: hidden;
+      background: #ffffff;
+      border: 1px solid #d6d6d6;
+      box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
+    }
+    .logo img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .brand-text h1 {
+      margin: 0;
+      font-size: 42px;
+      line-height: 0.95;
+      font-family: 'Arial Black', Impact, 'Segoe UI Black', sans-serif;
+      font-style: italic;
+      color: #000000;
+      letter-spacing: -1px;
+      font-weight: 900;
+      display: inline-block;
+      transform: skewX(-10deg);
+      text-transform: none;
+    }
+    .brand-text h2 {
+      margin: 2px 0 0;
+      font-size: 19px;
+      color: var(--ink);
+      text-align: center;
+      font-weight: 800;
+    }
+    p { margin-top: 0; text-align: left; color: #5f5f5f; font-size: 13px; }
+    label { display: block; margin-top: 12px; font-size: 13px; color: var(--ink-soft); font-weight: 700; }
+    input, select {
+      width: 100%;
+      padding: 11px 12px;
+      margin-top: 6px;
+      border: 1px solid #c9c9c9;
+      border-radius: 10px;
+      box-sizing: border-box;
+      font-size: 14px;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    input:focus, select:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.12);
+    }
+    button {
+      width: 100%;
+      padding: 11px;
+      margin-top: 16px;
+      background: linear-gradient(120deg, var(--accent) 0%, #2a2a2a 100%);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 15px;
+      font-weight: 700;
+    }
+    button:hover { background: linear-gradient(120deg, var(--accent-dark) 0%, #151515 100%); }
+    .msg { min-height: 20px; margin-top: 10px; color: #c0392b; text-align: center; font-size: 14px; }
+    .mandatory-msg { min-height: 20px; margin-top: 10px; color: #b00020; text-align: center; font-size: 14px; font-weight: 600; }
+    a { display: block; text-align: center; margin-top: 14px; color: #111111; text-decoration: none; font-weight: 600; }
+    a:hover { text-decoration: underline; }
+    .role-box {
+      margin-top: 12px;
+      padding: 12px;
+      border: 1px solid #d0d0d0;
+      border-radius: 8px;
+      background: #f5f5f5;
+    }
+    .helper { margin: 6px 0 0; text-align: left; color: #667; font-size: 12px; }
+    .selected-list {
+      margin: 8px 0 0;
+      padding: 8px 10px;
+      border: 1px dashed #c7c7c7;
+      border-radius: 6px;
+      background: #fff;
+      min-height: 18px;
+      color: #222222;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .success-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(8, 16, 30, 0.42);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      padding: 20px;
+    }
+
+    .success-backdrop.show {
+      display: flex;
+    }
+
+    .success-modal {
+      width: min(90vw, 360px);
+      background: #ffffff;
+      border: 1px solid #d8e2f1;
+      border-radius: 14px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.22);
+      padding: 22px;
+      text-align: center;
+      animation: popIn 220ms ease-out;
+    }
+
+    .success-spinner {
+      width: 48px;
+      height: 48px;
+      margin: 0 auto 12px;
+      border: 4px solid #dce8fa;
+      border-top-color: #111111;
+      border-radius: 50%;
+      animation: spin 900ms linear infinite;
+    }
+
+    .success-title {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 800;
+      color: #1f2d3f;
+    }
+
+    .success-subtitle {
+      margin: 6px 0 0;
+      font-size: 13px;
+      color: #5f6f86;
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes popIn {
+      from {
+        opacity: 0;
+        transform: translateY(8px) scale(0.96);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="signupSuccessModal" class="success-backdrop" aria-hidden="true" onclick="if (event.target === this) hideSignupSuccessPopup()">
+    <div class="success-modal" role="status" aria-live="polite">
+      <div class="success-spinner" aria-hidden="true"></div>
+      <h3 class="success-title">Account Created Successfully</h3>
+      <p class="success-subtitle">Redirecting you to login...</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="brand">
+      <div class="logo"><img src="static/Initiative%20logo.png" alt="Initiative Logo" /></div>
+      <div class="brand-text">
+        <h1>Initiative</h1>
+        <h2>Create Account</h2>
+      </div>
+    </div>
+    <p>Sign up for Initiative ERP</p>
+    <form id="signupForm" novalidate>
+      <label for="username">Username</label>
+      <input id="username" type="text" placeholder="Username" required />
+      <label for="email">Email</label>
+      <input id="email" type="email" placeholder="Email" required />
+      <label for="password">Password</label>
+      <input id="password" type="password" placeholder="Password" required />
+
+      <label for="role">Role</label>
+      <select id="role" onchange="onRoleChange()" required>
+        <option value="">Select role</option>
+        <option value="Admin">Admin</option>
+        <option value="CategoryManager">Category Manager</option>
+        <option value="BrandManager">Brand Manager</option>
+        <option value="BrandPartner">Brand Promotor</option>
+        <option value="Accounts">Accounts</option>
+        <option value="MISExecutive">MIS Executive</option>
+      </select>
+
+      <div id="mandatoryMsg" class="mandatory-msg" style="display:none;"></div>
+
+      <div id="categoryBox" class="role-box" style="display:none;">
+        <label for="categorySelect">Category Manager Category</label>
+        <select id="categorySelect">
+          <option value="HA">HA</option>
+          <option value="HE">HE</option>
+          <option value="IT">IT</option>
+          <option value="MH">Mobile</option>
+        </select>
+        <p class="helper">Choose the category this manager will control.</p>
+      </div>
+
+      <div id="brandBox" style="display:none;">
+        <label for="brandSelect">Assigned Brand(s)</label>
+        <select id="brandSelect" multiple size="4" onchange="updateBrandSummary()"></select>
+        <div id="brandSummary" class="selected-list">No brands selected.</div>
+      </div>
+
+      <button type="submit">Create Account</button>
+      <div id="msg" class="msg"></div>
+    </form>
+    <a href="login">Already have an account? Login</a>
+  </div>
+
+  <script>
+    let signupSuccessTimeout = null;
+
+    function appUrl(path) {
+      const currentPath = window.location.pathname;
+      const appBasePath = currentPath === '/erp' || currentPath.startsWith('/erp/') ? '/erp' : '';
+      if (!path) {
+        return appBasePath || '/';
+      }
+      if (/^https?:\/\//i.test(path)) {
+        return path;
+      }
+      return path.startsWith('/') ? `${appBasePath}${path}` : `${appBasePath}/${path}`;
+    }
+
+    function showSignupSuccessPopup() {
+      const modal = document.getElementById('signupSuccessModal');
+      modal.classList.add('show');
+      modal.setAttribute('aria-hidden', 'false');
+    }
+
+    function hideSignupSuccessPopup() {
+      const modal = document.getElementById('signupSuccessModal');
+      modal.classList.remove('show');
+      modal.setAttribute('aria-hidden', 'true');
+      if (signupSuccessTimeout) {
+        clearTimeout(signupSuccessTimeout);
+        signupSuccessTimeout = null;
+      }
+    }
+
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register(appUrl('/sw.js')).catch(() => {});
+      });
+    }
+
+    async function loadOptions() {
+      const brandSelect = document.getElementById("brandSelect");
+      try {
+        const brands = await (await fetch(appUrl('/brands'))).json();
+        brandSelect.innerHTML = brands.map(b => `<option value="${b.id}">${b.name}</option>`).join("");
+        brandSelect.size = Math.min(Math.max(brands.length, 4), 8);
+        updateBrandSummary();
+      } catch (e) {
+        brandSelect.innerHTML = '<option value="">(none created yet)</option>';
+        updateBrandSummary();
+      }
+    }
+
+    function onRoleChange() {
+      const role = document.getElementById("role").value;
+      document.getElementById("categoryBox").style.display = role === "CategoryManager" ? "block" : "none";
+      document.getElementById("brandBox").style.display = ["BrandManager", "BrandPartner"].includes(role) ? "block" : "none";
+      if (! ["BrandManager", "BrandPartner"].includes(role)) {
+        document.getElementById("brandSummary").textContent = "No brands selected.";
+      }
+    }
+
+    function updateBrandSummary() {
+      const brandSelect = document.getElementById("brandSelect");
+      const selected = Array.from(brandSelect.selectedOptions).map(option => option.textContent.trim()).filter(Boolean);
+      document.getElementById("brandSummary").textContent = selected.length ? `Selected brands: ${selected.join(", ")}` : "No brands selected.";
+    }
+
+    function showMandatoryMessage(message) {
+      const mandatoryMsg = document.getElementById("mandatoryMsg");
+      mandatoryMsg.textContent = message;
+      mandatoryMsg.style.display = "block";
+    }
+
+    function clearMandatoryMessage() {
+      const mandatoryMsg = document.getElementById("mandatoryMsg");
+      mandatoryMsg.textContent = "";
+      mandatoryMsg.style.display = "none";
+    }
+
+    function fieldLabel(name) {
+      return name;
+    }
+
+    async function signup(event) {
+      event.preventDefault();
+      const msg = document.getElementById("msg");
+      msg.textContent = "";
+      const role = document.getElementById("role").value;
+      const username = document.getElementById("username").value.trim();
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+      const missingFields = [];
+
+      if (!username) missingFields.push(fieldLabel("Username"));
+      if (!email) missingFields.push(fieldLabel("Email"));
+      if (!password) missingFields.push(fieldLabel("Password"));
+      if (!role) missingFields.push(fieldLabel("Role"));
+
+      if (role === "CategoryManager") {
+        const categoryCode = document.getElementById("categorySelect").value;
+        if (!categoryCode) missingFields.push(fieldLabel("Category Manager Category"));
+      }
+
+      if (["BrandManager", "BrandPartner"].includes(role)) {
+        const selectedBrands = Array.from(document.getElementById("brandSelect").selectedOptions).filter(option => option.value);
+        if (!selectedBrands.length) missingFields.push(fieldLabel("Assigned Brand(s)"));
+      }
+
+      if (missingFields.length) {
+        showMandatoryMessage(`Please fill: ${missingFields.join(", ")}.`);
+        return;
+      }
+
+      clearMandatoryMessage();
+
+      const payload = {
+        username,
+        email,
+        password,
+        role,
+        store_id: null,
+        category_code: null,
+        brand_ids: []
+      };
+      if (role === "CategoryManager") {
+        payload.category_code = document.getElementById("categorySelect").value || null;
+      }
+      if (["BrandManager", "BrandPartner"].includes(role)) {
+        payload.brand_ids = Array.from(document.getElementById("brandSelect").selectedOptions).map(o => Number(o.value));
+      }
+
+      const response = await fetch(appUrl('/auth/signup'), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        msg.textContent = data.detail || "Signup failed";
+        return;
+      }
+      msg.style.color = "#2e7d32";
+      msg.textContent = "Account created. You can now log in.";
+      showSignupSuccessPopup();
+      signupSuccessTimeout = setTimeout(() => window.location.href = appUrl('/login'), 1300);
+    }
+
+    loadOptions();
+    onRoleChange();
+    document.getElementById("signupForm").addEventListener("submit", signup);
+  </script>
+</body>
+</html>

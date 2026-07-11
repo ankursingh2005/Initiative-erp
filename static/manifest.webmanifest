@@ -1,0 +1,25 @@
+{
+  "name": "Initiative ERP",
+  "short_name": "Initiative ERP",
+  "start_url": "/login",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#eef4fb",
+  "theme_color": "#000000",
+  "description": "Initiative ERP web application for sales and scheme management.",
+  "icons": [
+    {
+      "src": "/static/Initiative%20logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/Initiative%20logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
