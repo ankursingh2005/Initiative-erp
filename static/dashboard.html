@@ -916,7 +916,23 @@
     }
 
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
+      window.addEventListener('load', async () => {
+        // Defensive cleanup: wipe out any previously-installed service worker and
+        // any caches it left behind before registering a fresh one. This prevents
+        // a stale cached page/response (e.g. an old user's role or dropdown data)
+        // from being served after a new login on the same browser/device.
+        try {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(registrations.map(reg => reg.unregister()));
+        } catch (e) {}
+
+        try {
+          if (window.caches && caches.keys) {
+            const cacheNames = await caches.keys();
+            await Promise.all(cacheNames.map(name => caches.delete(name)));
+          }
+        } catch (e) {}
+
         navigator.serviceWorker.register(appUrl('/sw.js')).catch(() => {});
       });
     }
@@ -1055,8 +1071,10 @@
     async function authFetch(url, options = {}) {
       const response = await fetch(appUrl(url), {
         ...options,
+        cache: 'no-store',
         headers: {
           ...(options.headers || {}),
+          'Cache-Control': 'no-cache',
           Authorization: 'Bearer ' + token
         }
       });
