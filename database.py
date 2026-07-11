@@ -1,3 +1,5 @@
+import os
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
@@ -19,11 +21,20 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 # You will NOT need to change any other file when you do this switch.
 # --------------------------------------------------------------------
 
-SQLALCHEMY_DATABASE_URL = "sqlite:///./scheme_erp.db"
+def get_database_url() -> str:
+    database_url = os.getenv("DATABASE_URL", "sqlite:///./scheme_erp.db")
+    if database_url.startswith("postgres://"):
+        database_url = database_url.replace("postgres://", "postgresql://", 1)
+    return database_url
 
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
-)
+
+SQLALCHEMY_DATABASE_URL = get_database_url()
+
+engine_kwargs = {}
+if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
+    engine_kwargs["connect_args"] = {"check_same_thread": False}
+
+engine = create_engine(SQLALCHEMY_DATABASE_URL, **engine_kwargs)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

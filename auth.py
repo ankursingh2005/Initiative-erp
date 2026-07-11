@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timedelta
 import bcrypt
 from jose import JWTError, jwt
@@ -12,7 +13,7 @@ import models
 # IMPORTANT: Before going live, change this to a long random secret.
 # For learning/testing this is fine.
 # --------------------------------------------------------------------
-SECRET_KEY = "CHANGE_THIS_TO_A_LONG_RANDOM_SECRET_BEFORE_GOING_LIVE"
+SECRET_KEY = os.getenv("SECRET_KEY", "CHANGE_THIS_TO_A_LONG_RANDOM_SECRET_BEFORE_GOING_LIVE")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 8  # login stays valid for 8 hours
 

@@ -1,0 +1,15 @@
+[Unit]
+Description=IDSPL FastAPI application
+After=network.target
+
+[Service]
+User=ubuntu
+Group=www-data
+WorkingDirectory=/home/ubuntu/idspl
+EnvironmentFile=/etc/idspl.env
+ExecStart=/home/ubuntu/idspl/.venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

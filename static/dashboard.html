@@ -693,6 +693,8 @@
               <th>Scheme Amount</th>
               <th>Claim Status</th>
               <th>Settled Date</th>
+              <th>Action</th>
+              <th>Edit</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -1986,10 +1988,11 @@
           <td>${s.schemes_other || s.schemes || ''}</td>
           <td>${exactOrFormattedMoney(s.scheme_amount_exact, s.scheme_amount)}</td>
           <td>${s.claim_status_other || s.claim_status || ''}</td>
-          <td>${s.claim_overall_status || ''}</td>
           <td>${s.settled_date || ''}</td>
+          <td>${canDeleteSales() ? `<button type="button" onclick="deleteSale(${s.id})" style="width:auto; padding:6px 10px; background:#c0392b;">Delete</button>` : '-'}</td>
+          <td>${canEditSales() ? `<button type="button" onclick="startSaleEdit(${s.id})" style="width:auto; padding:6px 10px; background:#111111;">Edit</button>` : '-'}</td>
         </tr>
-      `).join('') || '<tr><td colspan="7" class="empty">No claims in your scope yet</td></tr>';
+      `).join('') || '<tr><td colspan="8" class="empty">No claims in your scope yet</td></tr>';
     }
 
     async function deleteSale(saleId) {
