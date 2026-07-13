@@ -77,6 +77,19 @@ Existing data in `scheme_erp.db` is local SQLite data. It is not automatically c
 - Start command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
 - For Railway, add a PostgreSQL service and set `SECRET_KEY` in the project variables.
 
+## Purchase Orders and WhatsApp Alerts
+
+After login, users can choose **Schemes** or **Purchase Orders**. Any logged-in user can submit a stock requisition with branch, division, supplier, delivery address, product/model/serial details, stock balance, sales rate, quantity, and estimated price. Admin and MIS Executive users see every request and can update its status, Busy PO number, order date, and processing notes.
+
+To send an alert to MIS Executive through WhatsApp, configure a WhatsApp Cloud API app and add these Render environment variables to the web service:
+
+- `WHATSAPP_ACCESS_TOKEN` - permanent or system-user access token from Meta
+- `WHATSAPP_PHONE_NUMBER_ID` - the sending WhatsApp Business phone number ID
+- `WHATSAPP_MIS_RECIPIENTS` - comma-separated recipient numbers in international format, for example `919876543210,919812345678`
+- `WHATSAPP_API_VERSION` - optional; defaults to `v23.0`
+
+The PO is saved even when WhatsApp is not configured or its provider rejects a message. WhatsApp Business may require an approved message template for business-initiated alerts outside the customer service window.
+
 ## Oracle Cloud Free Tier
 
 - For Oracle Cloud Free Tier, deploy this app on an Ubuntu VM with `systemd` and `nginx`.

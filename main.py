@@ -10,8 +10,13 @@ from datetime import datetime, date
 from io import BytesIO
 from collections import defaultdict
 import csv
+import json
+import os
 import re
 import importlib
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+from uuid import uuid4
 
 import models
 import schemas
@@ -728,6 +733,18 @@ def dashboard_page():
     return serve_html("static/dashboard.html")
 
 
+@app.get("/home")
+@app.get("/home.html")
+def app_home_page():
+    return serve_html("static/home.html")
+
+
+@app.get("/purchase-orders")
+@app.get("/purchase-orders.html")
+def purchase_orders_page():
+    return serve_html("static/purchase_orders.html")
+
+
 @app.get("/manifest.webmanifest")
 def manifest_file():
     return FileResponse("static/manifest.webmanifest", media_type="application/manifest+json")
@@ -1074,6 +1091,183 @@ def create_store(store: schemas.StoreCreate, db: Session = Depends(get_db)):
 @app.get("/stores", response_model=List[schemas.StoreOut])
 def list_stores(db: Session = Depends(get_db)):
     return db.query(models.Store).order_by(models.Store.code, models.Store.name).all()
+
+
+# ============================================================
+# PURCHASE ORDERS
+# ============================================================
+
+PURCHASE_ORDER_STATUSES = {"Requested", "Under Review", "Ordered", "Cancelled"}
+
+
+def serialize_purchase_order(purchase_order: models.PurchaseOrder, notification_status: Optional[str] = None):
+    return {
+        "id": purchase_order.id,
+        "request_no": purchase_order.request_no,
+        "request_date": purchase_order.request_date,
+        "division": purchase_order.division,
+        "branch_id": purchase_order.branch_id,
+        "brand_name": purchase_order.brand_name,
+        "supplier_name": purchase_order.supplier_name,
+        "supplier_email": purchase_order.supplier_email,
+        "delivery_address": purchase_order.delivery_address,
+        "remarks": purchase_order.remarks,
+        "status": purchase_order.status,
+        "busy_po_number": purchase_order.busy_po_number,
+        "ordered_date": purchase_order.ordered_date,
+        "processing_notes": purchase_order.processing_notes,
+        "submitted_by_user_id": purchase_order.submitted_by_user_id,
+        "submitted_by_username": purchase_order.submitted_by.username if purchase_order.submitted_by else None,
+        "created_date": purchase_order.created_date,
+        "updated_date": purchase_order.updated_date,
+        "items": purchase_order.items,
+        "notification_status": notification_status,
+    }
+
+
+def send_purchase_order_whatsapp_notification(purchase_order: models.PurchaseOrder) -> str:
+    """Send a short MIS alert through WhatsApp Cloud API when configured."""
+    access_token = os.getenv("WHATSAPP_ACCESS_TOKEN")
+    phone_number_id = os.getenv("WHATSAPP_PHONE_NUMBER_ID")
+    recipients = [value.strip() for value in os.getenv("WHATSAPP_MIS_RECIPIENTS", "").split(",") if value.strip()]
+    if not (access_token and phone_number_id and recipients):
+        return "Not sent: WhatsApp notification is not configured."
+
+    requester = purchase_order.submitted_by.username if purchase_order.submitted_by else "Unknown user"
+    message = (
+        f"New PO request {purchase_order.request_no} from {requester}. "
+        f"Branch: {purchase_order.branch_id or 'Not selected'} | "
+        f"Items: {len(purchase_order.items)} | Status: {purchase_order.status}."
+    )
+    api_version = os.getenv("WHATSAPP_API_VERSION", "v23.0")
+    endpoint = f"https://graph.facebook.com/{api_version}/{phone_number_id}/messages"
+    failures = 0
+
+    for recipient in recipients:
+        payload = json.dumps({
+            "messaging_product": "whatsapp",
+            "to": recipient,
+            "type": "text",
+            "text": {"body": message},
+        }).encode("utf-8")
+        request = Request(
+            endpoint,
+            data=payload,
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=10):
+                pass
+        except (HTTPError, URLError, TimeoutError):
+            failures += 1
+
+    if failures:
+        return f"Saved, but WhatsApp delivery failed for {failures} recipient(s)."
+    return f"WhatsApp notification sent to {len(recipients)} MIS recipient(s)."
+
+
+def can_access_purchase_order(current_user: models.User, purchase_order: models.PurchaseOrder) -> bool:
+    return current_user.role in {"Admin", "MISExecutive"} or purchase_order.submitted_by_user_id == current_user.id
+
+
+@app.post("/api/purchase-orders", response_model=schemas.PurchaseOrderOut)
+def create_purchase_order(
+    payload: schemas.PurchaseOrderCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    if not payload.items:
+        raise HTTPException(status_code=400, detail="Add at least one purchase item")
+    if any(not item.product_name.strip() or item.quantity <= 0 for item in payload.items):
+        raise HTTPException(status_code=400, detail="Every item needs a product name and quantity greater than zero")
+
+    purchase_order = models.PurchaseOrder(
+        request_no=f"REQ-{payload.request_date.strftime('%Y%m%d')}-{uuid4().hex[:6].upper()}",
+        request_date=payload.request_date,
+        division=payload.division,
+        branch_id=payload.branch_id,
+        brand_name=payload.brand_name,
+        supplier_name=payload.supplier_name,
+        supplier_email=payload.supplier_email,
+        delivery_address=payload.delivery_address,
+        remarks=payload.remarks,
+        status="Requested",
+        submitted_by_user_id=current_user.id,
+    )
+    purchase_order.items = [models.PurchaseOrderItem(**item.dict()) for item in payload.items]
+    db.add(purchase_order)
+    db.commit()
+    db.refresh(purchase_order)
+    notification_status = send_purchase_order_whatsapp_notification(purchase_order)
+    return serialize_purchase_order(purchase_order, notification_status)
+
+
+@app.get("/api/purchase-orders", response_model=List[schemas.PurchaseOrderOut])
+def list_purchase_orders(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    query = db.query(models.PurchaseOrder)
+    if current_user.role not in {"Admin", "MISExecutive"}:
+        query = query.filter(models.PurchaseOrder.submitted_by_user_id == current_user.id)
+    purchase_orders = query.order_by(models.PurchaseOrder.created_date.desc()).all()
+    return [serialize_purchase_order(item) for item in purchase_orders]
+
+
+@app.get("/api/purchase-orders/{purchase_order_id}", response_model=schemas.PurchaseOrderOut)
+def get_purchase_order(
+    purchase_order_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    purchase_order = db.query(models.PurchaseOrder).filter(models.PurchaseOrder.id == purchase_order_id).first()
+    if not purchase_order:
+        raise HTTPException(status_code=404, detail="Purchase order request not found")
+    if not can_access_purchase_order(current_user, purchase_order):
+        raise HTTPException(status_code=403, detail="You can only view your own purchase requests")
+    return serialize_purchase_order(purchase_order)
+
+
+@app.patch("/api/purchase-orders/{purchase_order_id}/status", response_model=schemas.PurchaseOrderOut)
+def update_purchase_order_status(
+    purchase_order_id: int,
+    payload: schemas.PurchaseOrderStatusUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_roles("Admin", "MISExecutive")),
+):
+    status_value = (payload.status or "").strip()
+    if status_value not in PURCHASE_ORDER_STATUSES:
+        raise HTTPException(status_code=400, detail=f"Status must be one of: {sorted(PURCHASE_ORDER_STATUSES)}")
+
+    purchase_order = db.query(models.PurchaseOrder).filter(models.PurchaseOrder.id == purchase_order_id).first()
+    if not purchase_order:
+        raise HTTPException(status_code=404, detail="Purchase order request not found")
+
+    purchase_order.status = status_value
+    purchase_order.busy_po_number = (payload.busy_po_number or "").strip() or None
+    purchase_order.ordered_date = payload.ordered_date
+    purchase_order.processing_notes = (payload.processing_notes or "").strip() or None
+    db.commit()
+    db.refresh(purchase_order)
+    return serialize_purchase_order(purchase_order)
+
+
+@app.delete("/api/purchase-orders/{purchase_order_id}")
+def delete_purchase_order(
+    purchase_order_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_roles("Admin")),
+):
+    purchase_order = db.query(models.PurchaseOrder).filter(models.PurchaseOrder.id == purchase_order_id).first()
+    if not purchase_order:
+        raise HTTPException(status_code=404, detail="Purchase order request not found")
+    db.delete(purchase_order)
+    db.commit()
+    return {"message": "Purchase order request deleted"}
 
 
 # ============================================================

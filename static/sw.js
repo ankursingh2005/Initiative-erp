@@ -1,9 +1,11 @@
-const CACHE_NAME = 'initiative-erp-v3';
+const CACHE_NAME = 'initiative-erp-v4';
 const CORE_ASSETS = [
   '/login',
   '/signup',
   '/forgot-password',
+  '/home',
   '/dashboard',
+  '/purchase-orders',
   '/manifest.webmanifest',
   '/static/Initiative%20logo.png'
 ];
@@ -48,7 +50,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   const url = new URL(request.url);
-  if (url.pathname.startsWith('/auth/') || url.pathname.startsWith('/my-scope/') || url.pathname.startsWith('/sales') || url.pathname.startsWith('/schemes')) {
+  if (url.pathname.startsWith('/auth/') || url.pathname.startsWith('/my-scope/') || url.pathname.startsWith('/sales') || url.pathname.startsWith('/schemes') || url.pathname.startsWith('/api/purchase-orders')) {
     return;
   }
 

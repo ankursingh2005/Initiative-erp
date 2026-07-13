@@ -285,3 +285,66 @@ class ForgotPasswordRequest(BaseModel):
     email: Optional[str] = None
     new_password: str
     confirm_password: str
+
+
+class PurchaseOrderItemCreate(BaseModel):
+    product_name: str
+    model_no: Optional[str] = None
+    serial_no: Optional[str] = None
+    variant: Optional[str] = None
+    color: Optional[str] = None
+    hsn_code: Optional[str] = None
+    stock_balance: Optional[float] = None
+    rate_of_sale: Optional[float] = None
+    quantity: int
+    unit: str = "Nos"
+    estimated_price: Optional[float] = None
+
+
+class PurchaseOrderCreate(BaseModel):
+    request_date: date
+    division: Optional[str] = None
+    branch_id: Optional[int] = None
+    brand_name: Optional[str] = None
+    supplier_name: Optional[str] = None
+    supplier_email: Optional[str] = None
+    delivery_address: Optional[str] = None
+    remarks: Optional[str] = None
+    items: List[PurchaseOrderItemCreate]
+
+
+class PurchaseOrderStatusUpdate(BaseModel):
+    status: str
+    busy_po_number: Optional[str] = None
+    ordered_date: Optional[date] = None
+    processing_notes: Optional[str] = None
+
+
+class PurchaseOrderItemOut(PurchaseOrderItemCreate):
+    id: int
+
+    class Config:
+        from_attributes = True
+
+
+class PurchaseOrderOut(BaseModel):
+    id: int
+    request_no: str
+    request_date: date
+    division: Optional[str]
+    branch_id: Optional[int]
+    brand_name: Optional[str]
+    supplier_name: Optional[str]
+    supplier_email: Optional[str]
+    delivery_address: Optional[str]
+    remarks: Optional[str]
+    status: str
+    busy_po_number: Optional[str]
+    ordered_date: Optional[date]
+    processing_notes: Optional[str]
+    submitted_by_user_id: int
+    submitted_by_username: Optional[str] = None
+    notification_status: Optional[str] = None
+    created_date: datetime
+    updated_date: datetime
+    items: List[PurchaseOrderItemOut]

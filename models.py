@@ -287,3 +287,50 @@ class UserBrand(Base):
     brand_id = Column(Integer, ForeignKey("brands.id"), nullable=False)
 
     user = relationship("User", back_populates="brands")
+
+
+# ============================================================
+# PURCHASE ORDER REQUESTS
+# ============================================================
+
+class PurchaseOrder(Base):
+    __tablename__ = "purchase_orders"
+    id = Column(Integer, primary_key=True, index=True)
+    request_no = Column(String(50), unique=True, nullable=False, index=True)
+    request_date = Column(Date, nullable=False)
+    division = Column(String(50), nullable=True)
+    branch_id = Column(Integer, ForeignKey("stores.id"), nullable=True)
+    brand_name = Column(String(150), nullable=True)
+    supplier_name = Column(String(200), nullable=True)
+    supplier_email = Column(String(150), nullable=True)
+    delivery_address = Column(String(255), nullable=True)
+    remarks = Column(String(500), nullable=True)
+    status = Column(String(30), nullable=False, default="Requested")
+    busy_po_number = Column(String(80), nullable=True, unique=True)
+    ordered_date = Column(Date, nullable=True)
+    processing_notes = Column(String(500), nullable=True)
+    submitted_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_date = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_date = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    items = relationship("PurchaseOrderItem", back_populates="purchase_order", cascade="all, delete-orphan")
+    submitted_by = relationship("User", foreign_keys=[submitted_by_user_id])
+
+
+class PurchaseOrderItem(Base):
+    __tablename__ = "purchase_order_items"
+    id = Column(Integer, primary_key=True, index=True)
+    purchase_order_id = Column(Integer, ForeignKey("purchase_orders.id"), nullable=False, index=True)
+    product_name = Column(String(200), nullable=False)
+    model_no = Column(String(100), nullable=True)
+    serial_no = Column(String(100), nullable=True)
+    variant = Column(String(100), nullable=True)
+    color = Column(String(80), nullable=True)
+    hsn_code = Column(String(30), nullable=True)
+    stock_balance = Column(Float, nullable=True)
+    rate_of_sale = Column(Float, nullable=True)
+    quantity = Column(Integer, nullable=False)
+    unit = Column(String(30), nullable=False, default="Nos")
+    estimated_price = Column(Float, nullable=True)
+
+    purchase_order = relationship("PurchaseOrder", back_populates="items")
