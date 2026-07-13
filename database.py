@@ -34,7 +34,13 @@ engine_kwargs = {}
 if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
     engine_kwargs["connect_args"] = {"check_same_thread": False}
 
-engine = create_engine(SQLALCHEMY_DATABASE_URL, **engine_kwargs)
+# `pool_pre_ping` reconnects cleanly after a hosted PostgreSQL connection is
+# closed while the Render web service is idle.
+engine = create_engine(
+    SQLALCHEMY_DATABASE_URL,
+    pool_pre_ping=True,
+    **engine_kwargs,
+)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

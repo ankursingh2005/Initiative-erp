@@ -1,9 +1,21 @@
 services:
   - type: web
     name: idspl
-    env: python
+    runtime: python
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: SECRET_KEY
         generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: idspl-postgres
+          property: connectionString
+
+databases:
+  - name: idspl-postgres
+    databaseName: idspl
+    user: idspl
+    # Free Render Postgres databases expire after 30 days. Use a persistent
+    # paid tier for business data.
+    plan: basic-256mb

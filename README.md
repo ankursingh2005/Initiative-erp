@@ -15,7 +15,7 @@ IDSPL is a FastAPI-based ERP application for managing scheme-driven sales, claim
 
 - FastAPI
 - SQLAlchemy
-- SQLite
+- SQLite for local development, PostgreSQL for hosted deployments
 - JWT authentication with bcrypt
 - HTML, CSS, and JavaScript frontend
 
@@ -58,11 +58,23 @@ pip install openpyxl pypdf pillow pytesseract
 
 ## Deploy on Render or Railway
 
-- Use PostgreSQL in production. SQLite is fine locally, but hosted file systems on Render and Railway are not a reliable long-term database store.
-- The app already supports `DATABASE_URL` and `SECRET_KEY` from environment variables.
+Use PostgreSQL in production. SQLite is fine locally, but Render's web-service filesystem is temporary. Data written to SQLite can disappear whenever the service is restarted or redeployed.
+
+The included `render.yaml` creates both the `idspl` web service and the `idspl-postgres` managed PostgreSQL database. Render automatically passes the PostgreSQL connection string to the web service as `DATABASE_URL`. The application creates its tables on first startup, and every user's sales, schemes, accounts, and uploads are then stored in PostgreSQL rather than on one laptop or one temporary Render instance.
+
+To deploy:
+
+1. Push this repository to GitHub.
+2. In Render, choose **New** > **Blueprint** and select the repository. Render will read `render.yaml` and create both services.
+3. Confirm the persistent `basic-256mb` PostgreSQL plan shown by Render, then apply the blueprint and wait for the first deploy to finish. This paid tier is required because Render's free PostgreSQL databases expire after 30 days.
+4. Open the web-service URL and create the initial Admin account. Admin users can see, edit, and delete all sales in the dashboard.
+
+For an existing Render web service, create a Render PostgreSQL database, copy its **Internal Database URL** into the web service's `DATABASE_URL` environment variable, add `psycopg2-binary` through this repository change, and redeploy.
+
+Existing data in `scheme_erp.db` is local SQLite data. It is not automatically copied to PostgreSQL; export/import or migrate it before removing the old database file.
+
 - Install command: `pip install -r requirements.txt`
 - Start command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
-- For Render, this repo includes `render.yaml`.
 - For Railway, add a PostgreSQL service and set `SECRET_KEY` in the project variables.
 
 ## Oracle Cloud Free Tier
