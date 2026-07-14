@@ -1260,7 +1260,7 @@ def update_purchase_order_status(
 def delete_purchase_order(
     purchase_order_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.require_roles("Admin")),
+    current_user: models.User = Depends(auth.require_roles("Admin", "MISExecutive")),
 ):
     purchase_order = db.query(models.PurchaseOrder).filter(models.PurchaseOrder.id == purchase_order_id).first()
     if not purchase_order:
