@@ -4,204 +4,636 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Initiative - Purchase Orders</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <style>
     :root { --ink:#1d2939; --muted:#667085; --line:#d0d5dd; --bg:#f5f7fa; --card:#fff; --brand:#155eef; --accent:#d95f00; --good:#027a48; --danger:#b42318; }
     * { box-sizing:border-box; } body { margin:0; font-family:Arial,sans-serif; background:var(--bg); color:var(--ink); }
     header { background:#111827; color:#fff; padding:13px clamp(16px,3vw,42px); display:flex; gap:16px; align-items:center; justify-content:space-between; }
     .brand { font-weight:700; letter-spacing:0; font-size:16px; } .header-right { display:flex; align-items:center; gap:12px; color:#d0d5dd; font-size:14px; }
-    button { font:inherit; cursor:pointer; border:0; border-radius:6px; font-weight:700; } .btn { padding:10px 14px; background:var(--brand); color:#fff; } .btn:hover { background:#004eeb; } .btn-light { background:#fff; color:#344054; border:1px solid #98a2b3; } .btn-danger { background:var(--danger); color:#fff; }
+    button { font:inherit; cursor:pointer; border:0; border-radius:6px; font-weight:700; } .btn { padding:10px 14px; background:var(--brand); color:#fff; } .btn:hover { background:#004eeb; } .btn-light { background:#fff; color:#344054; border:1px solid #98a2b3; } .btn-danger { background:var(--danger); color:#fff; } .btn-outline { background:#fff; color:var(--brand); border:1px solid var(--brand); padding:8px 12px; font-size:13px; } .btn-good { background:var(--good); color:#fff; }
     main { max-width:1440px; margin:0 auto; padding:26px 22px 48px; } .title-row { display:flex; justify-content:space-between; align-items:flex-end; gap:20px; margin-bottom:22px; }
-    h1 { margin:0; font-size:27px; letter-spacing:0; } .subtitle { margin:6px 0 0; color:var(--muted); } h2 { margin:0; font-size:18px; }
+    h1 { margin:0; font-size:27px; letter-spacing:0; } .subtitle { margin:6px 0 0; color:var(--muted); } h2 { margin:0; font-size:18px; } h3 { margin:0; font-size:15px; }
     .card { background:var(--card); border:1px solid #e4e7ec; border-radius:8px; padding:20px; box-shadow:0 1px 2px rgba(16,24,40,.04); margin-bottom:20px; }
-    .form-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; } .span-2 { grid-column:span 2; } .span-4 { grid-column:span 4; }
-    label { display:block; margin:0 0 6px; font-size:12px; color:var(--muted); font-weight:700; } input, select, textarea { width:100%; min-height:39px; border:1px solid var(--line); border-radius:6px; padding:9px 10px; font:inherit; color:var(--ink); background:#fff; } textarea { min-height:70px; resize:vertical; }
-    .section-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; } .section-head p { margin:4px 0 0; color:var(--muted); font-size:13px; }
+    .form-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; } .span-2 { grid-column:span 2; } .span-3 { grid-column:span 3; }
+    label { display:block; margin:0 0 6px; font-size:12px; color:var(--muted); font-weight:700; } input, select, textarea { width:100%; min-height:39px; border:1px solid var(--line); border-radius:6px; padding:9px 10px; font:inherit; color:var(--ink); background:#fff; } textarea { min-height:70px; resize:vertical; } select:disabled, input:disabled { background:#f2f4f7; color:var(--muted); }
+    .section-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; gap:12px; flex-wrap:wrap; } .section-head p { margin:4px 0 0; color:var(--muted); font-size:13px; }
     .table-wrap { overflow-x:auto; border:1px solid #e4e7ec; border-radius:6px; } table { width:100%; min-width:640px; border-collapse:collapse; } th,td { padding:9px 8px; border-bottom:1px solid #eaecf0; text-align:left; font-size:13px; vertical-align:top; } th { background:#f9fafb; color:#475467; font-size:12px; white-space:nowrap; } td input { min-width:100px; min-height:36px; padding:7px; } td .small { min-width:72px; width:78px; }
     .remove { background:transparent; color:var(--danger); font-size:18px; padding:5px 7px; } .actions { display:flex; justify-content:flex-end; gap:10px; margin-top:16px; } .message { min-height:20px; margin-top:12px; font-size:13px; color:var(--danger); } .message.success { color:var(--good); }
-    .filters { display:flex; gap:10px; align-items:center; } .filters select { width:auto; min-width:150px; }
+    .filters { display:flex; gap:10px; align-items:center; flex-wrap:wrap; } .filters select { width:auto; min-width:150px; }
+    .export-actions { display:flex; gap:8px; }
     .po-list { display:grid; gap:12px; } .po-row { border:1px solid #e4e7ec; border-radius:7px; padding:15px; background:#fff; } .po-top { display:flex; gap:12px; align-items:flex-start; justify-content:space-between; } .po-no { font-weight:700; font-size:15px; } .po-meta { color:var(--muted); margin-top:4px; font-size:13px; } .status { padding:4px 8px; border-radius:999px; font-size:12px; font-weight:700; background:#eff8ff; color:#175cd3; white-space:nowrap; } .status.ordered { background:#ecfdf3; color:#027a48; } .status.cancelled { background:#fef3f2; color:#b42318; }
     .po-items { margin-top:12px; color:#475467; font-size:13px; line-height:1.6; } .po-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; } .po-actions button { padding:7px 10px; font-size:13px; }
-    dialog { width:min(700px,calc(100% - 32px)); border:0; border-radius:8px; padding:0; box-shadow:0 20px 50px rgba(16,24,40,.28); } dialog::backdrop { background:rgba(16,24,40,.55); } .modal { padding:20px; } .modal h2 { margin-bottom:16px; } .modal .form-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    dialog { width:min(880px,calc(100% - 32px)); max-height:90vh; overflow-y:auto; border:0; border-radius:8px; padding:0; box-shadow:0 20px 50px rgba(16,24,40,.28); } dialog::backdrop { background:rgba(16,24,40,.55); } .modal { padding:20px; } .modal h2 { margin-bottom:4px; } .modal .subtitle { margin-bottom:16px; } .modal .form-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .modal .section-block { border-top:1px solid #eaecf0; margin-top:18px; padding-top:18px; }
+    .readonly-summary { background:#f9fafb; border:1px solid #eaecf0; border-radius:6px; padding:10px 12px; font-size:13px; color:#344054; display:flex; gap:18px; flex-wrap:wrap; }
+    .readonly-summary b { color:var(--ink); }
+    .hint { font-size:12px; color:var(--muted); margin:6px 0 0; }
     .hidden { display:none !important; }
-    @media(max-width:850px) { main { padding:20px 14px 38px; } .form-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .span-4 { grid-column:span 2; } .title-row { align-items:flex-start; flex-direction:column; } } @media(max-width:540px) { header { align-items:flex-start; flex-direction:column; } .header-right { width:100%; justify-content:space-between; } .form-grid,.modal .form-grid { grid-template-columns:1fr; } .span-2,.span-4 { grid-column:span 1; } .actions { flex-direction:column; } .actions button { width:100%; } }
+    .chip-list { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0; }
+    .chip { display:inline-flex; align-items:center; gap:6px; background:#eff8ff; color:#175cd3; border-radius:999px; padding:5px 6px 5px 12px; font-size:12.5px; }
+    .chip button { background:transparent; color:#175cd3; font-size:14px; padding:2px 6px; border-radius:50%; line-height:1; }
+    .chip button:hover { background:rgba(21,94,239,.12); }
+    .add-email-row { display:flex; gap:8px; }
+    .add-email-row input { flex:1; }
+    @media(max-width:850px) { main { padding:20px 14px 38px; } .form-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .span-3 { grid-column:span 2; } .title-row { align-items:flex-start; flex-direction:column; } } @media(max-width:540px) { header { align-items:flex-start; flex-direction:column; } .header-right { width:100%; justify-content:space-between; } .form-grid,.modal .form-grid { grid-template-columns:1fr; } .span-2,.span-3 { grid-column:span 1; } .actions { flex-direction:column; } .actions button { width:100%; } .export-actions { width:100%; } .export-actions button { flex:1; } }
+
+    /* ---- Official PO sheet (rendered off-screen, then captured as a real PDF/JPG) ---- */
+    #poPrintHost { position:fixed; top:0; left:-99999px; z-index:-1; background:#fff; }
+    .po-sheet-page { width:850px; font-family:Arial,sans-serif; color:#111; background:#fff; padding:22px; }
+    .po-sheet { border:1.5px solid #111; padding:14px; }
+    .po-sheet .brand-row { text-align:center; }
+    .po-sheet .brand-row .logo { font-size:26px; font-weight:800; font-style:italic; letter-spacing:1px; }
+    .po-sheet .brand-row .tagline { font-size:11px; letter-spacing:2px; color:#444; margin-top:-2px; }
+    .po-sheet .gstin-row { font-size:12.5px; margin:10px 0 4px; }
+    .po-sheet .po-title { text-align:center; font-weight:700; text-decoration:underline; margin:8px 0 2px; }
+    .po-sheet .company-name { text-align:center; font-size:20px; font-weight:700; margin:2px 0; }
+    .po-sheet .company-meta { text-align:center; font-size:12px; color:#333; margin:0 0 10px; }
+    .po-sheet .box { border:1px solid #111; display:flex; }
+    .po-sheet .box > div { padding:8px 10px; font-size:12.5px; line-height:1.5; }
+    .po-sheet .box .left { flex:1.4; border-right:1px solid #111; }
+    .po-sheet .box .right { flex:1; }
+    .po-sheet .box .right div { margin-bottom:2px; }
+    .po-sheet .notice { border:1px solid #111; border-top:0; padding:6px 10px; font-size:12px; font-weight:700; }
+    .po-sheet table.items { width:100%; border-collapse:collapse; font-size:12px; }
+    .po-sheet table.items th, .po-sheet table.items td { border:1px solid #111; padding:5px 6px; text-align:center; }
+    .po-sheet table.items th { background:#f2f2f2; }
+    .po-sheet table.items td:nth-child(2) { text-align:left; }
+    .po-sheet .grand-row td { font-weight:700; }
+    .po-sheet .rupees-row { border:1px solid #111; border-top:0; padding:6px 10px; font-size:12.5px; }
+    .po-sheet .terms { display:flex; border:1px solid #111; border-top:0; font-size:11.5px; }
+    .po-sheet .terms > div { padding:8px 10px; }
+    .po-sheet .terms .left { flex:1.5; border-right:1px solid #111; }
+    .po-sheet .terms .right { flex:1; display:flex; flex-direction:column; justify-content:space-between; }
+    .po-sheet .sign { text-align:right; margin-top:34px; }
   </style>
 </head>
 <body>
   <header><div class="brand">INITIATIVE DATA SYSTEMS (P) LTD.</div><div class="header-right"><span id="userName"></span><button class="btn-light" onclick="go('/home')">Workspace</button><button class="btn-light" onclick="logout()">Log out</button></div></header>
   <main>
-    <div class="title-row"><div><h1>Purchase Order Requests</h1><p class="subtitle">Capture branch requisitions before MIS creates the final PO in Busy.</p></div><div class="filters"><select id="statusFilter" onchange="renderOrders()"><option value="">All statuses</option><option>Requested</option><option>Under Review</option><option>Ordered</option><option>Cancelled</option></select></div></div>
-    <section class="card" id="requisitionCard">
-      <div class="section-head" id="requisitionHeader"><div><h2>New Stock Requisition</h2><p>Enter all required goods before submitting to MIS.</p></div></div>
+    <div class="title-row"><div><h1>Purchase Order Requests</h1><p class="subtitle">Category managers raise stock requests; Admin/MIS verify and finalize with the supplier.</p></div><div class="filters"><select id="statusFilter" onchange="renderOrders()"><option value="">All statuses</option><option>Requested</option><option>Under Review</option><option>Ordered</option><option>Cancelled</option></select></div></div>
+
+    <section class="card hidden" id="requisitionCard">
+      <div class="section-head"><div><h2>Procurement details</h2><p>Division is scoped to your account; pick any brand (or "Others" if it's not listed) and the branch that needs stock.</p></div></div>
+      <div class="form-grid">
+        <div><label for="cmDivision">Division / category</label><select id="cmDivision" disabled><option value="">Loading...</option></select></div>
+        <div><label for="cmBranch">Branch</label><select id="cmBranch"><option value="">Select branch</option></select></div>
+        <div><label for="cmBrand">Brand</label><select id="cmBrand"><option value="">Select brand</option></select></div>
+        <div class="hidden" id="cmBrandOtherWrap"><label for="cmBrandOther">Enter brand name</label><input id="cmBrandOther" placeholder="Brand name" /></div>
+      </div>
+
       <form id="poForm">
-        <div class="form-grid" id="requisitionTopFields">
-          <div><label for="requestDate">Request date</label><input id="requestDate" type="date" required /></div>
-          <div><label for="division">Division / category</label><select id="division"><option value="">Select division</option></select></div>
-          <div><label for="branch">Branch</label><select id="branch"><option value="">Select branch</option></select></div>
-          <div><label for="brand">Brand</label><select id="brand"><option value="">Select brand</option></select></div>
-          <div class="span-2"><label for="supplier">Supplier / distributor</label><input id="supplier" placeholder="Company or distributor name" /></div>
-          <div class="span-2">
-            <label for="supplierEmail">Supplier email</label>
-            <select id="supplierEmail"><option value="">Select brand first</option></select>
-          </div>
-          <div class="span-2 hidden" id="customEmailWrap">
-            <label for="customEmail">Enter supplier email</label>
-            <input id="customEmail" type="email" placeholder="orders@supplier.com" />
-          </div>
-          <div class="span-2">
-            <label for="deliveryAddress">Delivery address</label>
-            <select id="deliveryAddress">
-              <option value="Warehouse, 9-D Singar Nagar, Alambagh, Lucknow - 226005">Warehouse , C-17, Kanpur Road, Rashi Peripherals Ltd, Transport Nagar, Lucknow, U.P 226012</option>
-              <option value="Alambagh Branch, Lucknow"> Alambagh, 9D, Sringar Nagar, Lucknow, UP, 226005</option>
-              <option value="Hazratganj Branch, Lucknow">Hazratganj, 10 A, Ashok Marg, Lucknow, UP, 226001</option>
-              <option value="Vikas Nagar Branch, Lucknow">Vikas Nagar, C-212 Sector-N, Kursi Road, Classy Art Jewellery, Aliganj, Lucknow, UP, 226021</option>
-              <option value="Gomti Nagar Branch, Lucknow"> Gomti Nagar, 1/389, Viram Khand, Lucknow, UP, 226010</option>
-              <option value="Ashiyana Branch, Lucknow">Ashiana, 7 A, Sec J, Lucknow, UP, 226012</option>
-              <option value="__other__">Other (enter manually)</option>
-            </select>
-          </div>
-          <div class="span-2 hidden" id="customAddressWrap">
-            <label for="customAddress">Enter delivery address</label>
-            <input id="customAddress" placeholder="Enter full delivery address" />
-          </div>
-          <div class="span-4"><label for="remarks">Remarks</label><textarea id="remarks" placeholder="Urgency, customer requirement, stock reason, or other notes"></textarea></div>
-        </div>
-        <div class="section-head" style="margin-top:22px"><div><h2>Requested Goods</h2><p>List each product and the quantity needed.</p></div><button class="btn-light" type="button" onclick="addItemRow()">Add item</button></div>
+        <div class="section-head" style="margin-top:22px"><div><h2>Requested Goods</h2><p>List each product and the quantity needed.</p></div><button class="btn-light" type="button" onclick="addItemRow('itemsBody')">Add item</button></div>
         <div class="table-wrap"><table><thead><tr><th>Product name *</th><th>Variant</th><th>Color</th><th>Req. qty *</th><th>Estimated price</th><th></th></tr></thead><tbody id="itemsBody"></tbody></table></div>
         <div class="actions"><button class="btn" type="submit">Submit Purchase Request</button></div><div id="formMessage" class="message"></div>
       </form>
     </section>
-    <section class="card"><div class="section-head"><div><h2 id="listTitle">My Purchase Requests</h2><p id="listHelp">Your submitted requisitions and their current status.</p></div></div><div id="orders" class="po-list"></div></section>
+
+    <section class="card">
+      <div class="section-head">
+        <div><h2 id="listTitle">My Purchase Requests</h2><p id="listHelp">Your submitted requisitions and their current status.</p></div>
+        <div class="export-actions hidden" id="exportActions">
+          <button class="btn-outline" type="button" onclick="exportToExcel()">Export Excel</button>
+          <button class="btn-outline" type="button" onclick="exportToPDF()">Export PDF</button>
+        </div>
+      </div>
+      <div id="orders" class="po-list"></div>
+    </section>
   </main>
-  <dialog id="processDialog"><form class="modal" method="dialog" id="processForm"><h2>Process Purchase Request</h2><input id="processId" type="hidden" /><div class="form-grid"><div><label for="processStatus">Status</label><select id="processStatus"><option>Requested</option><option>Under Review</option><option>Ordered</option><option>Cancelled</option></select></div><div><label for="busyNumber">Busy PO number</label><input id="busyNumber" placeholder="IDS/PO/HA/181" /></div><div><label for="orderedDate">Ordered date</label><input id="orderedDate" type="date" /></div><div class="span-2"><label for="processNotes">MIS processing notes</label><textarea id="processNotes" placeholder="Busy entry, supplier email, or follow-up notes"></textarea></div></div><div class="actions"><button class="btn-light" type="button" onclick="processDialog.close()">Cancel</button><button class="btn" value="default">Save processing</button></div><div id="processMessage" class="message"></div></form></dialog>
+
+  <div id="poPrintHost"></div>
+
+  <dialog id="processDialog">
+    <form class="modal" method="dialog" id="processForm">
+      <h2>Process Purchase Request</h2>
+      <p class="subtitle">Confirm the supplier, adjust items if needed, email the brand, then finalize.</p>
+      <input id="processId" type="hidden" />
+
+      <div class="readonly-summary">
+        <div>Division: <b id="summaryDivision">-</b></div>
+        <div>Branch: <b id="summaryBranch">-</b></div>
+        <div>Brand: <b id="summaryBrand">-</b></div>
+      </div>
+
+      <div class="form-grid" style="margin-top:16px">
+        <div class="span-2"><label for="processSupplier">Supplier / distributor</label><input id="processSupplier" placeholder="Company or distributor name" /></div>
+        <div class="span-2"><label for="processSupplierEmail">Supplier email</label><input id="processSupplierEmail" type="email" placeholder="orders@supplier.com" /></div>
+        <div class="span-2"><label for="processSupplierAddress">Supplier address</label><textarea id="processSupplierAddress" placeholder="Full registered address of the supplier"></textarea></div>
+        <div><label for="processSupplierGstin">Supplier GSTIN / UIN</label><input id="processSupplierGstin" placeholder="09AAACGXXXXX1ZS" /></div>
+        <div class="span-2">
+          <label for="processDeliveryAddress">Delivery address</label>
+          <select id="processDeliveryAddress">
+            <option value="Warehouse, 9-D Singar Nagar, Alambagh, Lucknow - 226005">Warehouse</option>
+            <option value="Alambagh Branch, Lucknow">Alambagh</option>
+            <option value="Hazratganj Branch, Lucknow">Hazratganj</option>
+            <option value="Vikas Nagar Branch, Lucknow">Vikas Nagar</option>
+            <option value="Gomti Nagar Branch, Lucknow">Gomti Nagar</option>
+            <option value="Ashiyana Branch, Lucknow">Ashiyana</option>
+            <option value="__other__">Other (enter manually)</option>
+          </select>
+        </div>
+        <div class="span-2 hidden" id="processCustomAddressWrap">
+          <label for="processCustomAddress">Enter delivery address</label>
+          <input id="processCustomAddress" placeholder="Enter full delivery address" />
+        </div>
+        <div class="span-2"><label for="processRemarks">Remarks</label><textarea id="processRemarks" placeholder="Notes for this order"></textarea></div>
+      </div>
+
+      <div class="section-block">
+        <h3>Brand email book</h3>
+        <p class="hint">Every address here gets the PO in one click. Add more any time — they're saved for next time too.</p>
+        <div class="chip-list" id="brandEmailChips"></div>
+        <div class="add-email-row">
+          <input id="newBrandEmail" type="email" placeholder="Add another email for this brand" />
+          <button class="btn-light" type="button" onclick="addBrandEmail()">Add</button>
+          <button class="btn-good" type="button" onclick="sendPoEmail()">Send PO Email</button>
+        </div>
+        <div id="emailSendMessage" class="message"></div>
+      </div>
+
+      <div class="section-block">
+        <div class="section-head"><div><h3>Requested Goods</h3><p>Edit the product list and add HSN/SAC codes before finalizing.</p></div><button class="btn-light" type="button" onclick="addItemRow('processItemsBody')">Add item</button></div>
+        <div class="table-wrap"><table><thead><tr><th>Product name *</th><th>Variant</th><th>Color</th><th>HSN/SAC</th><th>Req. qty *</th><th>Price</th><th></th></tr></thead><tbody id="processItemsBody"></tbody></table></div>
+      </div>
+
+      <div class="section-block">
+        <h3>Order status</h3>
+        <p class="hint">Set status to "Ordered" and enter the Busy PO number once the order is finalized with the party.</p>
+        <div class="form-grid" style="margin-top:12px">
+          <div><label for="processStatus">Status</label><select id="processStatus"><option>Requested</option><option>Under Review</option><option>Ordered</option><option>Cancelled</option></select></div>
+          <div><label for="busyNumber">Busy PO number</label><input id="busyNumber" placeholder="IDS/PO/HA/181" /></div>
+          <div><label for="orderedDate">Ordered date</label><input id="orderedDate" type="date" /></div>
+        </div>
+      </div>
+
+      <div class="actions"><button class="btn-light" type="button" onclick="processDialog.close()">Cancel</button><button class="btn-outline" type="button" onclick="downloadPurchaseOrder('pdf')">Download PDF</button><button class="btn-outline" type="button" onclick="downloadPurchaseOrder('jpg')">Download JPG</button><button class="btn" value="default">Final Order</button></div>
+      <div id="downloadMessage" class="message"></div>
+      <div id="processMessage" class="message"></div>
+    </form>
+  </dialog>
+
   <script>
     function appUrl(path) { const p = location.pathname; const base = p === '/erp' || p.startsWith('/erp/') ? '/erp' : ''; return `${base}${path}`; }
     const token = localStorage.getItem('token'); const role = localStorage.getItem('role') || ''; const username = localStorage.getItem('username') || '';
     if (!token) location.href = appUrl('/login'); document.getElementById('userName').textContent = username;
 
-    // ---- Roles ----------------------------------------------------------
-    // CategoryManager: can submit requests and see only their own requests.
-    // Admin / MISExecutive: see every request, and can edit (process) or delete any of them.
     const isAdmin = role === 'Admin';
     const isMIS = role === 'MISExecutive';
-    const isProcessor = isAdmin || isMIS; // can view all, edit, delete
+    const isProcessor = isAdmin || isMIS;
     const isCategoryManager = role === 'CategoryManager';
     let orders = []; const processDialog = document.getElementById('processDialog');
-
-    // ---- Per-brand supplier emails ---------------------------------------
-    // At least 5 real contact addresses per brand, plus a manual "Other" option.
-    const SUPPLIER_EMAILS = {
-      'Samsung': ['orders@samsung.com','sales@samsung.com','purchase@samsung.com','support@samsung.com','distributor@samsung.com'],
-      'LG': ['orders@lg.com','sales@lg.com','purchase@lg.com','support@lg.com','distributor@lg.com'],
-      'Haier': ['orders@haier.com','sales@haier.com','purchase@haier.com','support@haier.com','distributor@haier.com'],
-      'Vivo': ['orders@vivo.com','sales@vivo.com','purchase@vivo.com','support@vivo.com','distributor@vivo.com'],
-      'Oppo': ['orders@oppo.com','sales@oppo.com','purchase@oppo.com','support@oppo.com','distributor@oppo.com']
-    };
+    let masterStores = []; let masterCategories = []; let masterBrands = [];
+    let myProfile = null;
+    let currentProcessBrand = '';
 
     function go(path) { location.href = appUrl(path); } function logout() { localStorage.clear(); location.href = appUrl('/login'); }
     function escapeHtml(value) { return String(value ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
     async function api(path, options = {}) { const response = await fetch(appUrl(path), { ...options, headers: { 'Authorization': `Bearer ${token}`, 'Content-Type':'application/json', ...(options.headers || {}) } }); const data = await response.json().catch(() => ({})); if (!response.ok) throw new Error(data.detail || 'Request failed'); return data; }
-    function optionHtml(items, label) { return items.map(x => `<option value="${escapeHtml(label(x))}">${escapeHtml(label(x))}</option>`).join(''); }
+    function optionHtml(items, label, value) { return items.map(x => `<option value="${escapeHtml(value ? value(x) : label(x))}">${escapeHtml(label(x))}</option>`).join(''); }
 
-    async function loadMasters() { try { const [stores,categories,brands] = await Promise.all([api('/stores'),api('/categories'),api('/brands')]); document.getElementById('branch').insertAdjacentHTML('beforeend', optionHtml(stores, x => `${x.code ? x.code + ' - ' : ''}${x.name}`)); document.getElementById('division').insertAdjacentHTML('beforeend', optionHtml(categories, x => `${x.code} - ${x.name}`)); document.getElementById('brand').insertAdjacentHTML('beforeend', optionHtml(brands, x => x.name)); } catch (e) { document.getElementById('formMessage').textContent = 'Could not load branch and brand lists.'; } }
-
-    // ---- Supplier email dropdown driven by the selected brand -------------
-    function refreshSupplierEmailOptions() {
-      const brandName = document.getElementById('brand').value;
-      const select = document.getElementById('supplierEmail');
-      const emails = SUPPLIER_EMAILS[brandName] || [];
-      select.innerHTML = (emails.length ? '<option value="">Select email</option>' : '<option value="">No saved emails for this brand</option>')
-        + emails.map(email => `<option value="${escapeHtml(email)}">${escapeHtml(email)}</option>`).join('')
-        + '<option value="__other__">Other (enter manually)</option>';
-      document.getElementById('customEmailWrap').classList.add('hidden');
-      document.getElementById('customEmail').value = '';
+    // ---- Load master data + my profile, then scope the Category Manager form ---
+    async function loadMasters() {
+      try {
+        const [stores, categories, brands, me] = await Promise.all([api('/stores'), api('/categories'), api('/brands'), api('/api/me')]);
+        masterStores = stores; masterCategories = categories; masterBrands = brands; myProfile = me;
+        document.getElementById('cmBranch').insertAdjacentHTML('beforeend', optionHtml(stores, x => `${x.code ? x.code + ' - ' : ''}${x.name}`));
+        populateScopedDropdowns();
+      } catch (e) { console.warn('Could not load branch/brand master lists', e); }
     }
-    document.getElementById('brand').addEventListener('change', refreshSupplierEmailOptions);
-    document.getElementById('supplierEmail').addEventListener('change', () => {
-      document.getElementById('customEmailWrap').classList.toggle('hidden', document.getElementById('supplierEmail').value !== '__other__');
-    });
-    document.getElementById('deliveryAddress').addEventListener('change', () => {
-      document.getElementById('customAddressWrap').classList.toggle('hidden', document.getElementById('deliveryAddress').value !== '__other__');
+
+    function populateScopedDropdowns() {
+      const divisionSelect = document.getElementById('cmDivision');
+      const brandSelect = document.getElementById('cmBrand');
+      const myCategory = masterCategories.find(c => c.code === myProfile.category_code);
+      if (myCategory) {
+        divisionSelect.innerHTML = `<option value="${escapeHtml(myCategory.code + ' - ' + myCategory.name)}">${escapeHtml(myCategory.code + ' - ' + myCategory.name)}</option>`;
+        divisionSelect.disabled = true;
+      } else if (isProcessor) {
+        // Admin/MIS can create a PO for any division.
+        divisionSelect.innerHTML = '<option value="">Select division</option>' + optionHtml(masterCategories, x => `${x.code} - ${x.name}`);
+        divisionSelect.disabled = false;
+      } else {
+        divisionSelect.innerHTML = '<option value="">No division assigned - contact Admin</option>';
+        divisionSelect.disabled = true;
+      }
+
+      // Brand shows the full list for everyone (same as the Schemes page), plus an Others option for anything not listed.
+      brandSelect.innerHTML = '<option value="">Select brand</option>' + optionHtml(masterBrands, x => x.name) + '<option value="__other__">Others (enter brand name)</option>';
+      brandSelect.disabled = false;
+    }
+    document.getElementById('cmBrand').addEventListener('change', () => {
+      document.getElementById('cmBrandOtherWrap').classList.toggle('hidden', document.getElementById('cmBrand').value !== '__other__');
     });
 
+    // ---- Item rows: shared between the create form and the process dialog --
     function itemInput(name, placeholder, type = 'text', cls = '') { return `<input class="${cls}" data-field="${name}" type="${type}" placeholder="${placeholder}" />`; }
-    function addItemRow() { const row = document.createElement('tr'); row.innerHTML = `<td>${itemInput('product_name','Product name')}</td><td>${itemInput('variant','Variant')}</td><td>${itemInput('color','Color')}</td><td>${itemInput('quantity','1','number','small')}</td><td>${itemInput('estimated_price','0','number','small')}</td><td><button class="remove" type="button" title="Remove item" aria-label="Remove item" onclick="this.closest('tr').remove()">x</button></td>`; document.getElementById('itemsBody').appendChild(row); }
-    function collectItems() { return [...document.querySelectorAll('#itemsBody tr')].map(row => { const result = { unit: 'Nos.' }; row.querySelectorAll('[data-field]').forEach(input => { let value = input.value.trim(); if (['quantity','estimated_price'].includes(input.dataset.field)) value = value === '' ? null : Number(value); result[input.dataset.field] = value; }); return result; }); }
+    function addItemRow(bodyId = 'itemsBody') {
+      const includeHsn = bodyId === 'processItemsBody';
+      const row = document.createElement('tr');
+      row.innerHTML = `<td>${itemInput('product_name','Product name')}</td><td>${itemInput('variant','Variant')}</td><td>${itemInput('color','Color')}</td>`
+        + (includeHsn ? `<td>${itemInput('hsn_code','HSN/SAC','text','small')}</td>` : '')
+        + `<td>${itemInput('quantity','1','number','small')}</td><td>${itemInput('estimated_price','0','number','small')}</td><td><button class="remove" type="button" title="Remove item" aria-label="Remove item" onclick="this.closest('tr').remove()">x</button></td>`;
+      document.getElementById(bodyId).appendChild(row);
+      return row;
+    }
+    function fillItemRow(row, item) {
+      row.querySelector('[data-field="product_name"]').value = item.product_name || '';
+      row.querySelector('[data-field="variant"]').value = item.variant || '';
+      row.querySelector('[data-field="color"]').value = item.color || '';
+      const hsnField = row.querySelector('[data-field="hsn_code"]');
+      if (hsnField) hsnField.value = item.hsn_code || '';
+      row.querySelector('[data-field="quantity"]').value = item.quantity ?? '';
+      row.querySelector('[data-field="estimated_price"]').value = item.estimated_price ?? '';
+    }
+    function collectItems(bodyId = 'itemsBody') {
+      return [...document.querySelectorAll(`#${bodyId} tr`)].map(row => {
+        const result = { unit: 'Nos.' };
+        row.querySelectorAll('[data-field]').forEach(input => {
+          let value = input.value.trim();
+          if (['quantity','estimated_price'].includes(input.dataset.field)) value = value === '' ? null : Number(value);
+          result[input.dataset.field] = value;
+        });
+        return result;
+      });
+    }
 
+    // ---- Create a new request (Category Manager only) -----------------------
     document.getElementById('poForm').addEventListener('submit', async event => {
       event.preventDefault();
       const message = document.getElementById('formMessage'); message.className = 'message';
-      const items = collectItems();
+      const items = collectItems('itemsBody');
       if (!items.length || items.some(item => !item.product_name || !item.quantity || item.quantity < 1)) { message.textContent = 'Add at least one product with quantity greater than zero.'; return; }
 
-      const supplierEmailSelect = document.getElementById('supplierEmail').value;
-      const supplierEmail = supplierEmailSelect === '__other__' ? document.getElementById('customEmail').value.trim() : supplierEmailSelect;
-      const deliveryAddressSelect = document.getElementById('deliveryAddress').value;
-      const deliveryAddress = deliveryAddressSelect === '__other__' ? document.getElementById('customAddress').value.trim() : deliveryAddressSelect;
+      const branchText = document.getElementById('cmBranch').value;
+      const store = masterStores.find(s => `${s.code ? s.code + ' - ' : ''}${s.name}` === branchText);
+      const divisionValue = document.getElementById('cmDivision').value;
+      const brandSelectValue = document.getElementById('cmBrand').value;
+      const brandValue = brandSelectValue === '__other__' ? document.getElementById('cmBrandOther').value.trim() : brandSelectValue;
+      if (brandSelectValue === '__other__' && !brandValue) { message.textContent = 'Enter the brand name.'; return; }
 
-      if (supplierEmailSelect === '__other__' && !supplierEmail) { message.textContent = 'Enter the supplier email.'; return; }
-      if (deliveryAddressSelect === '__other__' && !deliveryAddress) { message.textContent = 'Enter the delivery address.'; return; }
-
-      const payload = { request_date:document.getElementById('requestDate').value, division:document.getElementById('division').value || null, branch_id:null, brand_name:document.getElementById('brand').value || null, supplier_name:document.getElementById('supplier').value || null, supplier_email:supplierEmail || null, delivery_address:deliveryAddress || null, remarks:document.getElementById('remarks').value || null, items };
-      const branchText = document.getElementById('branch').value;
+      const payload = { request_date: new Date().toISOString().slice(0,10), division: divisionValue || null, branch_id: store?.id || null, brand_name: brandValue || null, supplier_name: null, supplier_email: null, delivery_address: null, remarks: null, items };
       try {
-        const stores = await api('/stores');
-        const store = stores.find(item => `${item.code ? item.code + ' - ' : ''}${item.name}` === branchText);
-        payload.branch_id = store?.id || null;
         const data = await api('/api/purchase-orders',{method:'POST',body:JSON.stringify(payload)});
-
         message.className = 'message success';
         message.textContent = `${data.request_no} saved. ${data.notification_status || ''}`;
-
-        event.target.reset();
-        document.getElementById('requestDate').value = new Date().toISOString().slice(0,10);
-        document.getElementById('itemsBody').innerHTML = ''; addItemRow();
-        refreshSupplierEmailOptions();
-        document.getElementById('customAddressWrap').classList.add('hidden');
+        document.getElementById('itemsBody').innerHTML = ''; addItemRow('itemsBody');
+        document.getElementById('cmBrand').value = '';
+        document.getElementById('cmBrandOther').value = '';
+        document.getElementById('cmBrandOtherWrap').classList.add('hidden');
         await loadOrders();
       } catch (e) { message.textContent = e.message; }
     });
 
     function statusClass(status) { return status === 'Ordered' ? 'ordered' : status === 'Cancelled' ? 'cancelled' : ''; }
+
+    function getScopedFilteredOrders() {
+      const filter = document.getElementById('statusFilter').value;
+      const scoped = isProcessor ? orders : orders.filter(order => order.submitted_by_username === username);
+      return scoped.filter(order => !filter || order.status === filter);
+    }
+
     function renderOrders() {
       const target = document.getElementById('orders');
-      const filter = document.getElementById('statusFilter').value;
-      // Category managers only ever see their own requests; Admin/MIS see everything.
-      const scoped = isProcessor ? orders : orders.filter(order => order.submitted_by_username === username);
-      const visible = scoped.filter(order => !filter || order.status === filter);
+      const visible = getScopedFilteredOrders();
       if (!visible.length) { target.innerHTML = '<div class="po-row po-meta">No purchase requests found.</div>'; return; }
       target.innerHTML = visible.map(order => {
         const items = order.items.map(item => `${escapeHtml(item.product_name)}${item.variant ? ` (${escapeHtml(item.variant)})` : ''} x ${item.quantity} ${escapeHtml(item.unit || 'Nos')}`).join('<br>');
         const processorActions = isProcessor ? `<button class="btn-light" onclick="openProcess(${order.id})">Process</button>` : '';
         const deleteAction = isProcessor ? `<button class="btn-danger" onclick="deleteOrder(${order.id})">Delete</button>` : '';
-        return `<article class="po-row"><div class="po-top"><div><div class="po-no">${escapeHtml(order.request_no)} ${order.busy_po_number ? `| Busy: ${escapeHtml(order.busy_po_number)}` : ''}</div><div class="po-meta">${escapeHtml(order.request_date)} | ${escapeHtml(order.brand_name || 'No brand')} | Submitted by ${escapeHtml(order.submitted_by_username || '')}</div></div><span class="status ${statusClass(order.status)}">${escapeHtml(order.status)}</span></div><div class="po-items">${items}</div>${order.processing_notes ? `<div class="po-meta">MIS notes: ${escapeHtml(order.processing_notes)}</div>` : ''}<div class="po-actions">${processorActions}${deleteAction}</div></article>`;
+        return `<article class="po-row"><div class="po-top"><div><div class="po-no">${escapeHtml(order.request_no)} ${order.busy_po_number ? `| Busy: ${escapeHtml(order.busy_po_number)}` : ''}</div><div class="po-meta">${escapeHtml(order.request_date)} | ${escapeHtml(order.division || 'No division')} | ${escapeHtml(order.brand_name || 'No brand yet')} | Submitted by ${escapeHtml(order.submitted_by_username || '')}</div></div><span class="status ${statusClass(order.status)}">${escapeHtml(order.status)}</span></div><div class="po-items">${items}</div>${order.processing_notes ? `<div class="po-meta">MIS notes: ${escapeHtml(order.processing_notes)}</div>` : ''}<div class="po-actions">${processorActions}${deleteAction}</div></article>`;
       }).join('');
     }
 
     async function loadOrders() {
       try {
         orders = await api('/api/purchase-orders');
-        if (isProcessor) { document.getElementById('listTitle').textContent = 'Purchase Order Queue'; document.getElementById('listHelp').textContent = 'All company requests. Update after entering the PO in Busy or emailing the supplier.'; }
-        else { document.getElementById('listTitle').textContent = 'My Purchase Requests'; document.getElementById('listHelp').textContent = 'Requests you have submitted and their current status.'; }
+        if (isProcessor) {
+          document.getElementById('listTitle').textContent = 'Purchase Order Queue';
+          document.getElementById('listHelp').textContent = 'All company requests. Verify details, then update status after entering the PO in Busy or emailing the supplier.';
+          document.getElementById('exportActions').classList.remove('hidden');
+        } else {
+          document.getElementById('listTitle').textContent = 'My Purchase Requests';
+          document.getElementById('listHelp').textContent = 'Requests you have submitted and their current status.';
+        }
         renderOrders();
       } catch (e) { document.getElementById('orders').innerHTML = `<div class="po-row po-meta">${escapeHtml(e.message)}</div>`; }
     }
 
-    function openProcess(id) { const order = orders.find(item => item.id === id); if (!order) return; document.getElementById('processId').value = id; document.getElementById('processStatus').value = order.status; document.getElementById('busyNumber').value = order.busy_po_number || ''; document.getElementById('orderedDate').value = order.ordered_date || ''; document.getElementById('processNotes').value = order.processing_notes || ''; document.getElementById('processMessage').textContent = ''; processDialog.showModal(); }
-    document.getElementById('processForm').addEventListener('submit', async event => { event.preventDefault(); const id = document.getElementById('processId').value; const message = document.getElementById('processMessage'); try { await api(`/api/purchase-orders/${id}/status`, { method:'PATCH', body:JSON.stringify({ status:document.getElementById('processStatus').value, busy_po_number:document.getElementById('busyNumber').value || null, ordered_date:document.getElementById('orderedDate').value || null, processing_notes:document.getElementById('processNotes').value || null }) }); processDialog.close(); await loadOrders(); } catch (e) { message.textContent = e.message; } });
+    document.getElementById('processDeliveryAddress').addEventListener('change', () => {
+      document.getElementById('processCustomAddressWrap').classList.toggle('hidden', document.getElementById('processDeliveryAddress').value !== '__other__');
+    });
+
+    // ---- Brand email book (inside the process dialog) -----------------------
+    async function loadBrandEmailChips() {
+      const wrap = document.getElementById('brandEmailChips');
+      if (!currentProcessBrand) { wrap.innerHTML = '<span class="hint">No brand set on this request yet.</span>'; return; }
+      try {
+        const rows = await api(`/api/brand-emails?brand=${encodeURIComponent(currentProcessBrand)}`);
+        wrap.innerHTML = rows.length
+          ? rows.map(r => `<span class="chip">${escapeHtml(r.email)}<button type="button" title="Remove" onclick="removeBrandEmail(${r.id})">&times;</button></span>`).join('')
+          : '<span class="hint">No emails saved for this brand yet — add one below.</span>';
+      } catch (e) { wrap.innerHTML = `<span class="hint">${escapeHtml(e.message)}</span>`; }
+    }
+    async function addBrandEmail() {
+      const input = document.getElementById('newBrandEmail');
+      const email = input.value.trim();
+      if (!email) return;
+      if (!currentProcessBrand) { document.getElementById('emailSendMessage').textContent = 'This request has no brand set, so there is nowhere to save the email.'; return; }
+      try {
+        await api('/api/brand-emails', { method: 'POST', body: JSON.stringify({ brand_name: currentProcessBrand, email }) });
+        input.value = '';
+        document.getElementById('emailSendMessage').className = 'message';
+        document.getElementById('emailSendMessage').textContent = '';
+        await loadBrandEmailChips();
+      } catch (e) { document.getElementById('emailSendMessage').textContent = e.message; }
+    }
+    async function removeBrandEmail(id) {
+      try { await api(`/api/brand-emails/${id}`, { method: 'DELETE' }); await loadBrandEmailChips(); }
+      catch (e) { document.getElementById('emailSendMessage').textContent = e.message; }
+    }
+    async function sendPoEmail() {
+      const id = document.getElementById('processId').value;
+      const message = document.getElementById('emailSendMessage');
+      message.className = 'message';
+      message.textContent = 'Sending...';
+      try {
+        const result = await api(`/api/purchase-orders/${id}/send-email`, { method: 'POST' });
+        message.className = 'message success';
+        message.textContent = `${result.notification_status} (${result.sent_to.join(', ')})`;
+      } catch (e) { message.textContent = e.message; }
+    }
+
+    // ---- Process dialog: supplier details + item edit + status --------------
+    function openProcess(id) {
+      const order = orders.find(item => item.id === id);
+      if (!order) return;
+      document.getElementById('processId').value = id;
+
+      const store = masterStores.find(s => s.id === order.branch_id);
+      document.getElementById('summaryDivision').textContent = order.division || '-';
+      document.getElementById('summaryBranch').textContent = store ? `${store.code ? store.code + ' - ' : ''}${store.name}` : '-';
+      document.getElementById('summaryBrand').textContent = order.brand_name || '-';
+      currentProcessBrand = order.brand_name || '';
+
+      document.getElementById('processSupplier').value = order.supplier_name || '';
+      document.getElementById('processSupplierEmail').value = order.supplier_email || '';
+      document.getElementById('processSupplierAddress').value = order.supplier_address || '';
+      document.getElementById('processSupplierGstin').value = order.supplier_gstin || '';
+
+      const addressSelect = document.getElementById('processDeliveryAddress');
+      const addressOptionValues = [...addressSelect.options].map(o => o.value);
+      if (order.delivery_address && addressOptionValues.includes(order.delivery_address)) {
+        addressSelect.value = order.delivery_address;
+        document.getElementById('processCustomAddressWrap').classList.add('hidden');
+      } else if (order.delivery_address) {
+        addressSelect.value = '__other__';
+        document.getElementById('processCustomAddressWrap').classList.remove('hidden');
+        document.getElementById('processCustomAddress').value = order.delivery_address;
+      } else {
+        addressSelect.value = 'Warehouse, 9-D Singar Nagar, Alambagh, Lucknow - 226005';
+        document.getElementById('processCustomAddressWrap').classList.add('hidden');
+      }
+      document.getElementById('processRemarks').value = order.remarks || '';
+
+      const processItemsBody = document.getElementById('processItemsBody');
+      processItemsBody.innerHTML = '';
+      (order.items && order.items.length ? order.items : [{}]).forEach(item => fillItemRow(addItemRow('processItemsBody'), item));
+
+      document.getElementById('processStatus').value = order.status;
+      document.getElementById('busyNumber').value = order.busy_po_number || '';
+      document.getElementById('orderedDate').value = order.ordered_date || '';
+      document.getElementById('processMessage').textContent = '';
+      document.getElementById('emailSendMessage').textContent = '';
+      document.getElementById('newBrandEmail').value = '';
+
+      loadBrandEmailChips();
+      processDialog.showModal();
+    }
+
+    document.getElementById('processForm').addEventListener('submit', async event => {
+      event.preventDefault();
+      const id = document.getElementById('processId').value;
+      const message = document.getElementById('processMessage');
+
+      const items = collectItems('processItemsBody');
+      if (!items.length || items.some(item => !item.product_name || !item.quantity || item.quantity < 1)) { message.textContent = 'Add at least one product with quantity greater than zero.'; return; }
+
+      const deliveryAddressSelect = document.getElementById('processDeliveryAddress').value;
+      const deliveryAddress = deliveryAddressSelect === '__other__' ? document.getElementById('processCustomAddress').value.trim() : deliveryAddressSelect;
+      if (deliveryAddressSelect === '__other__' && !deliveryAddress) { message.textContent = 'Enter the delivery address.'; return; }
+
+      try {
+        await api(`/api/purchase-orders/${id}/status`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            status: document.getElementById('processStatus').value,
+            busy_po_number: document.getElementById('busyNumber').value || null,
+            ordered_date: document.getElementById('orderedDate').value || null,
+            processing_notes: null,
+            supplier_name: document.getElementById('processSupplier').value || null,
+            supplier_email: document.getElementById('processSupplierEmail').value || null,
+            supplier_address: document.getElementById('processSupplierAddress').value || null,
+            supplier_gstin: document.getElementById('processSupplierGstin').value || null,
+            delivery_address: deliveryAddress || null,
+            remarks: document.getElementById('processRemarks').value || null,
+            items,
+          }),
+        });
+        processDialog.close();
+        await loadOrders();
+      } catch (e) { message.textContent = e.message; }
+    });
+
     async function deleteOrder(id) { if (!confirm('Delete this purchase request?')) return; try { await api(`/api/purchase-orders/${id}`, {method:'DELETE'}); await loadOrders(); } catch (e) { alert(e.message); } }
 
-    document.getElementById('requestDate').value = new Date().toISOString().slice(0,10);
-    addItemRow(); refreshSupplierEmailOptions(); loadMasters(); loadOrders();
-
-    // Category Manager: only "Requested Goods" (the item table + submit) and
-    // "Purchase Order Queue" are shown. The New Stock Requisition header
-    // fields (division/branch/brand/supplier/delivery address/remarks) are
-    // hidden — request_date still auto-fills above so submission still works.
-    // Admin / MIS Executive see the full form, including those header fields.
-    if (isCategoryManager) {
-      document.getElementById('requisitionHeader').classList.add('hidden');
-      document.getElementById('requisitionTopFields').classList.add('hidden');
+    // ---- Export (Admin / MIS only) ------------------------------------------
+    function exportRows() {
+      return getScopedFilteredOrders().map(order => ({
+        'Request No': order.request_no,
+        'Date': order.request_date,
+        'Division': order.division || '',
+        'Brand': order.brand_name || '',
+        'Supplier': order.supplier_name || '',
+        'Supplier Email': order.supplier_email || '',
+        'Delivery Address': order.delivery_address || '',
+        'Status': order.status,
+        'Busy PO Number': order.busy_po_number || '',
+        'Ordered Date': order.ordered_date || '',
+        'Submitted By': order.submitted_by_username || '',
+        'Items': order.items.map(i => `${i.product_name}${i.variant ? ' ('+i.variant+')' : ''} x ${i.quantity}`).join('; '),
+        'Remarks': order.remarks || '',
+        'MIS Notes': order.processing_notes || '',
+      }));
     }
+
+    function exportToExcel() {
+      if (typeof XLSX === 'undefined') { alert('Excel export library did not load. Check your internet connection and try again.'); return; }
+      const rows = exportRows();
+      if (!rows.length) { alert('No purchase requests to export.'); return; }
+      const worksheet = XLSX.utils.json_to_sheet(rows);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Purchase Orders');
+      XLSX.writeFile(workbook, `purchase-orders-${new Date().toISOString().slice(0,10)}.xlsx`);
+    }
+
+    function exportToPDF() {
+      if (typeof window.jspdf === 'undefined') { alert('PDF export library did not load. Check your internet connection and try again.'); return; }
+      const rows = exportRows();
+      if (!rows.length) { alert('No purchase requests to export.'); return; }
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation: 'landscape' });
+      doc.setFontSize(14);
+      doc.text('Purchase Order Queue', 14, 16);
+      doc.autoTable({
+        startY: 22,
+        styles: { fontSize: 7, cellPadding: 2 },
+        headStyles: { fillColor: [21, 94, 239] },
+        head: [['Request No','Date','Division','Brand','Supplier','Status','Busy PO #','Ordered Date','Submitted By','Items']],
+        body: rows.map(r => [r['Request No'], r['Date'], r['Division'], r['Brand'], r['Supplier'], r['Status'], r['Busy PO Number'], r['Ordered Date'], r['Submitted By'], r['Items']]),
+      });
+      doc.save(`purchase-orders-${new Date().toISOString().slice(0,10)}.pdf`);
+    }
+
+    // ---- Official PO print view (matches the company's Busy PO format) -----
+    const ONES = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
+    const TENS = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+    function twoDigitWords(n) { if (n < 20) return ONES[n]; return (TENS[Math.floor(n/10)] + (n % 10 ? ' ' + ONES[n % 10] : '')).trim(); }
+    function threeDigitWords(n) { let s = ''; if (n >= 100) { s += ONES[Math.floor(n/100)] + ' Hundred '; n %= 100; } s += twoDigitWords(n); return s.trim(); }
+    function numberToWordsIndian(num) {
+      num = Math.round(num || 0);
+      if (num === 0) return 'Zero';
+      const crore = Math.floor(num / 10000000); num %= 10000000;
+      const lakh = Math.floor(num / 100000); num %= 100000;
+      const thousand = Math.floor(num / 1000); num %= 1000;
+      const rest = num;
+      let parts = [];
+      if (crore) parts.push(threeDigitWords(crore) + ' Crore');
+      if (lakh) parts.push(threeDigitWords(lakh) + ' Lakh');
+      if (thousand) parts.push(threeDigitWords(thousand) + ' Thousand');
+      if (rest) parts.push(threeDigitWords(rest));
+      return parts.join(' ').replace(/\s+/g, ' ').trim();
+    }
+
+    function buildPoSheetHtml(order) {
+      const store = masterStores.find(s => s.id === order.branch_id);
+      const deliveryAddressSelect = document.getElementById('processDeliveryAddress').value;
+      const deliveryAddress = deliveryAddressSelect === '__other__' ? document.getElementById('processCustomAddress').value.trim() : deliveryAddressSelect;
+
+      const supplierName = document.getElementById('processSupplier').value || '(Supplier name not set)';
+      const supplierAddress = document.getElementById('processSupplierAddress').value || '';
+      const supplierGstin = document.getElementById('processSupplierGstin').value || '';
+      const orderNo = document.getElementById('busyNumber').value || order.request_no;
+      const orderedDate = document.getElementById('orderedDate').value || order.request_date;
+
+      const items = collectItems('processItemsBody');
+      let grandQty = 0, grandAmount = 0;
+      const rows = items.map((item, i) => {
+        const price = Number(item.estimated_price) || 0;
+        const qty = Number(item.quantity) || 0;
+        const amount = price * qty;
+        grandQty += qty; grandAmount += amount;
+        const desc = `${item.product_name}${item.variant ? ' ' + item.variant : ''}${item.color ? ' ' + item.color : ''}`;
+        return `<tr><td>${i+1}.</td><td style="text-align:left">${escapeHtml(desc)}</td><td>${escapeHtml(item.hsn_code || '')}</td><td>${qty.toFixed(2)}</td><td>${escapeHtml(item.unit || 'Nos.')}</td><td>${price.toFixed(2)}</td><td>${amount.toFixed(2)}</td></tr>`;
+      }).join('');
+
+      return `<div class="po-sheet-page"><div class="po-sheet">
+          <div class="brand-row"><div class="logo">Initiative</div><div class="tagline">Electronics Megastore</div></div>
+          <div class="gstin-row">GSTIN : 09AABCI1559C1ZT</div>
+          <div class="po-title">Purchase Order</div>
+          <div class="company-name">Initiative Data Systems Pvt Ltd</div>
+          <div class="company-meta">9-D Singar Nagar, Alambagh, Lucknow, 226005<br>Tel. : 0522 4000507, 9956099560 &nbsp; email : initiative.lucknow@gmail.com</div>
+          <div class="box">
+            <div class="left"><b>Party Details :</b><br>${escapeHtml(supplierName)}<br>${escapeHtml(supplierAddress).replace(/\n/g,'<br>')}${supplierGstin ? `<br>GSTIN / UIN&nbsp;&nbsp;:&nbsp;${escapeHtml(supplierGstin)}` : ''}</div>
+            <div class="right">
+              <div><b>Order No.</b> &nbsp;: ${escapeHtml(orderNo)}</div>
+              <div><b>Dated</b> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: ${escapeHtml(orderedDate || '')}</div>
+              <div><b>Delivery</b> &nbsp;: ${escapeHtml(deliveryAddress || '')}</div>
+              <div><b>Branch</b> &nbsp;&nbsp;: ${escapeHtml(store ? `${store.code ? store.code + ' - ' : ''}${store.name}` : '-')}</div>
+            </div>
+          </div>
+          <div class="notice">Invoice without P.O. No. will not be accepted.</div>
+          <table class="items">
+            <thead><tr><th>S.N.</th><th>Description of Goods</th><th>HSN/SAC<br>Code</th><th>Qty.</th><th>Unit</th><th>Price</th><th>Amount(&#96;)</th></tr></thead>
+            <tbody>${rows}</tbody>
+            <tr class="grand-row"><td colspan="3">Grand Total</td><td>${grandQty.toFixed(2)}</td><td>Nos.</td><td></td><td>${grandAmount.toFixed(2)}</td></tr>
+          </table>
+          <div class="rupees-row">Rupees ${escapeHtml(numberToWordsIndian(grandAmount))} Only</div>
+          <div class="terms">
+            <div class="left"><u>Terms &amp; Conditions</u>
+              <br>1. Please issue GST invoice mentioning our GSTN &amp; PO number.
+              <br>2. The Material shall be delivered to Shipped to address.
+              <br>3. Delivery must be made within Two Days.
+              <br>4. The items not in comformity with our PO will not be accepted.
+            </div>
+            <div class="right">
+              <div>We are pleased to place the order for the above items.<br>Please mention Purchase Order No. in your Invoice.</div>
+              <div class="sign">For Initiative Data Systems Pvt Ltd<br><br><br>Authorised Signatory</div>
+            </div>
+          </div>
+        </div></div>`;
+    }
+
+    function downloadBlobUrl(url, filename) {
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    }
+
+    // Renders the PO sheet off-screen, rasterizes it with html2canvas, then
+    // produces a real downloadable file — a JPG image, or a PDF with that
+    // image placed on an A4 page. No popup window is used, since pop-ups are
+    // blocked or render blank in some browsers/WebViews.
+    async function downloadPurchaseOrder(format) {
+      const id = document.getElementById('processId').value;
+      const order = orders.find(o => o.id === Number(id));
+      const message = document.getElementById('downloadMessage');
+      message.className = 'message';
+      if (!order) { message.textContent = 'Could not find this request.'; return; }
+      if (typeof html2canvas === 'undefined') { message.textContent = 'Download library did not load. Check your internet connection and try again.'; return; }
+
+      message.textContent = 'Preparing file...';
+      const host = document.getElementById('poPrintHost');
+      host.innerHTML = buildPoSheetHtml(order);
+      const sheetEl = host.querySelector('.po-sheet-page');
+
+      try {
+        // Let the browser lay out the off-screen content before capturing it.
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const canvas = await html2canvas(sheetEl, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+        const orderNo = document.getElementById('busyNumber').value || order.request_no;
+        const fileBase = orderNo.replace(/[^a-zA-Z0-9-_]/g, '_');
+
+        if (format === 'jpg') {
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+          downloadBlobUrl(dataUrl, `${fileBase}.jpg`);
+        } else {
+          const { jsPDF } = window.jspdf;
+          const imgData = canvas.toDataURL('image/jpeg', 0.95);
+          const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+          const pageWidth = pdf.internal.pageSize.getWidth();
+          const pageHeight = pdf.internal.pageSize.getHeight();
+          const imgWidth = pageWidth - 20;
+          const imgHeight = (canvas.height * imgWidth) / canvas.width;
+          const y = imgHeight < pageHeight - 20 ? (pageHeight - imgHeight) / 2 : 10;
+          pdf.addImage(imgData, 'JPEG', 10, y, imgWidth, Math.min(imgHeight, pageHeight - 20));
+          pdf.save(`${fileBase}.pdf`);
+        }
+        message.className = 'message success';
+        message.textContent = 'Downloaded.';
+      } catch (e) {
+        message.textContent = `Could not generate the file: ${e.message}`;
+      } finally {
+        host.innerHTML = '';
+      }
+    }
+
+    // ---- Boot -----------------------------------------------------------
+    if (isCategoryManager || isProcessor) { document.getElementById('requisitionCard').classList.remove('hidden'); }
+    addItemRow('itemsBody'); loadMasters(); loadOrders();
   </script>
 </body>
 </html>

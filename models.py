@@ -303,6 +303,8 @@ class PurchaseOrder(Base):
     brand_name = Column(String(150), nullable=True)
     supplier_name = Column(String(200), nullable=True)
     supplier_email = Column(String(150), nullable=True)
+    supplier_address = Column(String(500), nullable=True)
+    supplier_gstin = Column(String(30), nullable=True)
     delivery_address = Column(String(255), nullable=True)
     remarks = Column(String(500), nullable=True)
     status = Column(String(30), nullable=False, default="Requested")
@@ -334,3 +336,17 @@ class PurchaseOrderItem(Base):
     estimated_price = Column(Float, nullable=True)
 
     purchase_order = relationship("PurchaseOrder", back_populates="items")
+
+
+# ============================================================
+# BRAND SUPPLIER EMAIL BOOK
+# (Pre-fed contact emails per brand so Admin/MIS can send a PO to every
+#  distributor contact for that brand in one click, and add more over time.)
+# ============================================================
+
+class BrandSupplierEmail(Base):
+    __tablename__ = "brand_supplier_emails"
+    id = Column(Integer, primary_key=True, index=True)
+    brand_name = Column(String(150), nullable=False, index=True)
+    email = Column(String(150), nullable=False)
+    created_date = Column(DateTime, default=datetime.utcnow)

@@ -273,6 +273,55 @@ class UserOut(BaseModel):
         from_attributes = True
 
 
+class MyProfileOut(BaseModel):
+    """Returned by GET /api/me. Used by the Purchase Orders page to scope a
+    Category Manager's Division and Brand dropdowns to only what's assigned
+    to their account."""
+    id: int
+    username: str
+    role: str
+    store_id: Optional[int]
+    category_code: Optional[str]
+    brand_ids: List[int] = []
+
+
+class UserAdminOut(BaseModel):
+    id: int
+    username: str
+    email: str
+    full_name: Optional[str]
+    role: str
+    store_id: Optional[int]
+    category_code: Optional[str]
+    brand_ids: List[int] = []
+    status: str
+
+
+class UserAssignmentUpdate(BaseModel):
+    """Admin-only: assign/correct which store, category, and brands a user
+    (typically a CategoryManager) can see on the Purchase Orders page."""
+    store_id: Optional[int] = None
+    category_code: Optional[str] = None
+    brand_ids: Optional[List[int]] = None
+
+
+class BrandSupplierEmailCreate(BaseModel):
+    brand_name: str
+    email: str
+
+
+class BrandSupplierEmailOut(BrandSupplierEmailCreate):
+    id: int
+
+    class Config:
+        from_attributes = True
+
+
+class SendPurchaseOrderEmailResult(BaseModel):
+    sent_to: List[str]
+    notification_status: str
+
+
 class Token(BaseModel):
     access_token: str
     token_type: str
@@ -308,6 +357,8 @@ class PurchaseOrderCreate(BaseModel):
     brand_name: Optional[str] = None
     supplier_name: Optional[str] = None
     supplier_email: Optional[str] = None
+    supplier_address: Optional[str] = None
+    supplier_gstin: Optional[str] = None
     delivery_address: Optional[str] = None
     remarks: Optional[str] = None
     items: List[PurchaseOrderItemCreate]
@@ -318,6 +369,19 @@ class PurchaseOrderStatusUpdate(BaseModel):
     busy_po_number: Optional[str] = None
     ordered_date: Optional[date] = None
     processing_notes: Optional[str] = None
+    # Optional procurement fields Admin/MIS can fill in or correct while
+    # processing a category manager's request. Left out (None) = unchanged.
+    division: Optional[str] = None
+    branch_id: Optional[int] = None
+    brand_name: Optional[str] = None
+    supplier_name: Optional[str] = None
+    supplier_email: Optional[str] = None
+    supplier_address: Optional[str] = None
+    supplier_gstin: Optional[str] = None
+    delivery_address: Optional[str] = None
+    remarks: Optional[str] = None
+    # If provided, replaces the request's product list entirely.
+    items: Optional[List[PurchaseOrderItemCreate]] = None
 
 
 class PurchaseOrderItemOut(PurchaseOrderItemCreate):
@@ -336,6 +400,8 @@ class PurchaseOrderOut(BaseModel):
     brand_name: Optional[str]
     supplier_name: Optional[str]
     supplier_email: Optional[str]
+    supplier_address: Optional[str] = None
+    supplier_gstin: Optional[str] = None
     delivery_address: Optional[str]
     remarks: Optional[str]
     status: str

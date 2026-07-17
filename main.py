@@ -17,6 +17,8 @@ import importlib
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from uuid import uuid4
+import smtplib
+from email.mime.text import MIMEText
 
 import models
 import schemas
@@ -81,6 +83,9 @@ def ensure_database_schema():
     ensure_column("schemes", "product_id", "INTEGER")
     ensure_column("schemes", "variant_id", "INTEGER")
     ensure_column("schemes", "offer_type", "VARCHAR(50)")
+
+    ensure_column("purchase_orders", "supplier_address", "VARCHAR(500)")
+    ensure_column("purchase_orders", "supplier_gstin", "VARCHAR(30)")
     ensure_column("schemes", "offer_value", "FLOAT")
     ensure_column("schemes", "calculation_method", "VARCHAR(50)")
     ensure_column("schemes", "min_qty", "INTEGER")
@@ -787,7 +792,7 @@ def signup(user: schemas.UserSignup, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(db_user)
 
-    if user.role in ("BrandManager", "BrandPartner"):
+    if user.role in ("BrandManager", "BrandPartner", "CategoryManager"):
         for brand_id in user.brand_ids:
             db.add(models.UserBrand(user_id=db_user.id, brand_id=brand_id))
         db.commit()
@@ -1094,6 +1099,74 @@ def list_stores(db: Session = Depends(get_db)):
 
 
 # ============================================================
+# CURRENT USER PROFILE & ADMIN ASSIGNMENTS
+# (Used to scope a Category Manager's Division and Brand choices to only
+#  what's assigned to their account.)
+# ============================================================
+
+def serialize_user_with_brands(user: models.User) -> dict:
+    return {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "full_name": user.full_name,
+        "role": user.role,
+        "store_id": user.store_id,
+        "category_code": user.category_code,
+        "brand_ids": [ub.brand_id for ub in user.brands],
+        "status": user.status,
+    }
+
+
+@app.get("/api/me", response_model=schemas.MyProfileOut)
+def get_my_profile(current_user: models.User = Depends(auth.get_current_user)):
+    return {
+        "id": current_user.id,
+        "username": current_user.username,
+        "role": current_user.role,
+        "store_id": current_user.store_id,
+        "category_code": current_user.category_code,
+        "brand_ids": [ub.brand_id for ub in current_user.brands],
+    }
+
+
+@app.get("/api/users", response_model=List[schemas.UserAdminOut])
+def list_users_for_admin(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_roles("Admin")),
+):
+    users = db.query(models.User).order_by(models.User.username).all()
+    return [serialize_user_with_brands(u) for u in users]
+
+
+@app.patch("/api/users/{user_id}/assignments", response_model=schemas.UserAdminOut)
+def update_user_assignments(
+    user_id: int,
+    payload: schemas.UserAssignmentUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_roles("Admin")),
+):
+    """Assign which store, category (division), and brands a user — typically
+    a CategoryManager — can see on the Purchase Orders page."""
+    target_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if payload.store_id is not None:
+        target_user.store_id = payload.store_id
+    if payload.category_code is not None:
+        target_user.category_code = normalize_category_code(payload.category_code)
+    if payload.brand_ids is not None:
+        db.query(models.UserBrand).filter(models.UserBrand.user_id == target_user.id).delete()
+        for brand_id in payload.brand_ids:
+            db.add(models.UserBrand(user_id=target_user.id, brand_id=brand_id))
+
+    db.commit()
+    db.refresh(target_user)
+    return serialize_user_with_brands(target_user)
+
+
+# ============================================================
 # PURCHASE ORDERS
 # ============================================================
 
@@ -1110,6 +1183,8 @@ def serialize_purchase_order(purchase_order: models.PurchaseOrder, notification_
         "brand_name": purchase_order.brand_name,
         "supplier_name": purchase_order.supplier_name,
         "supplier_email": purchase_order.supplier_email,
+        "supplier_address": purchase_order.supplier_address,
+        "supplier_gstin": purchase_order.supplier_gstin,
         "delivery_address": purchase_order.delivery_address,
         "remarks": purchase_order.remarks,
         "status": purchase_order.status,
@@ -1174,6 +1249,153 @@ def can_access_purchase_order(current_user: models.User, purchase_order: models.
     return current_user.role in {"Admin", "MISExecutive"} or purchase_order.submitted_by_user_id == current_user.id
 
 
+# ============================================================
+# BRAND SUPPLIER EMAIL BOOK
+# ============================================================
+
+DEFAULT_BRAND_SUPPLIER_EMAILS = {
+    "Samsung": ["orders@samsung.com", "sales@samsung.com", "purchase@samsung.com", "support@samsung.com", "distributor@samsung.com"],
+    "LG": ["orders@lg.com", "sales@lg.com", "purchase@lg.com", "support@lg.com", "distributor@lg.com"],
+    "Haier": ["orders@haier.com", "sales@haier.com", "purchase@haier.com", "support@haier.com", "distributor@haier.com"],
+    "Vivo": ["orders@vivo.com", "sales@vivo.com", "purchase@vivo.com", "support@vivo.com", "distributor@vivo.com"],
+    "Oppo": ["orders@oppo.com", "sales@oppo.com", "purchase@oppo.com", "support@oppo.com", "distributor@oppo.com"],
+}
+
+
+def seed_default_brand_supplier_emails(db: Session):
+    existing_count = db.query(models.BrandSupplierEmail).count()
+    if existing_count:
+        return
+    for brand_name, emails in DEFAULT_BRAND_SUPPLIER_EMAILS.items():
+        for email in emails:
+            db.add(models.BrandSupplierEmail(brand_name=brand_name, email=email))
+    db.commit()
+
+
+with SessionLocal() as _db:
+    seed_default_brand_supplier_emails(_db)
+
+
+@app.get("/api/brand-emails", response_model=List[schemas.BrandSupplierEmailOut])
+def list_brand_emails(
+    brand: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    query = db.query(models.BrandSupplierEmail)
+    if brand:
+        query = query.filter(models.BrandSupplierEmail.brand_name == brand)
+    return query.order_by(models.BrandSupplierEmail.brand_name, models.BrandSupplierEmail.id).all()
+
+
+@app.post("/api/brand-emails", response_model=schemas.BrandSupplierEmailOut)
+def add_brand_email(
+    payload: schemas.BrandSupplierEmailCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_roles("Admin", "MISExecutive")),
+):
+    brand_name = payload.brand_name.strip()
+    email = payload.email.strip().lower()
+    if not brand_name or not email:
+        raise HTTPException(status_code=400, detail="Brand and email are required")
+    existing = (
+        db.query(models.BrandSupplierEmail)
+        .filter(models.BrandSupplierEmail.brand_name == brand_name, models.BrandSupplierEmail.email == email)
+        .first()
+    )
+    if existing:
+        return existing
+    row = models.BrandSupplierEmail(brand_name=brand_name, email=email)
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@app.delete("/api/brand-emails/{email_id}")
+def delete_brand_email(
+    email_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_roles("Admin", "MISExecutive")),
+):
+    row = db.query(models.BrandSupplierEmail).filter(models.BrandSupplierEmail.id == email_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Email not found")
+    db.delete(row)
+    db.commit()
+    return {"deleted": True}
+
+
+def send_purchase_order_email(purchase_order: models.PurchaseOrder, recipients: List[str]) -> str:
+    """Email the finalized PO to every address on file for the brand (plus
+    the request's own supplier_email if set) in a single send. Configure
+    SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM env vars."""
+    smtp_host = os.getenv("SMTP_HOST")
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_password = os.getenv("SMTP_PASSWORD")
+    smtp_from = os.getenv("SMTP_FROM", smtp_user or "")
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+    if not (smtp_host and smtp_user and smtp_password and recipients):
+        return "Not sent: SMTP is not configured (set SMTP_HOST, SMTP_USER, SMTP_PASSWORD)."
+
+    lines = [
+        f"Purchase Order: {purchase_order.request_no}",
+        f"Date: {purchase_order.request_date}",
+        f"Brand: {purchase_order.brand_name or '-'}",
+        f"Division: {purchase_order.division or '-'}",
+        f"Delivery address: {purchase_order.delivery_address or '-'}",
+        "",
+        "Items:",
+    ]
+    for item in purchase_order.items:
+        variant = f" ({item.variant})" if item.variant else ""
+        lines.append(f"  - {item.product_name}{variant} x {item.quantity} {item.unit or 'Nos'}")
+    if purchase_order.remarks:
+        lines.append("")
+        lines.append(f"Remarks: {purchase_order.remarks}")
+    body = "\n".join(lines)
+
+    message = MIMEText(body)
+    message["Subject"] = f"Purchase Order {purchase_order.request_no} - {purchase_order.brand_name or ''}"
+    message["From"] = smtp_from
+    message["To"] = ", ".join(recipients)
+
+    try:
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_password)
+            server.sendmail(smtp_from, recipients, message.as_string())
+    except Exception as exc:  # noqa: BLE001 - surface any SMTP failure to the caller
+        return f"Not sent: email delivery failed ({exc})."
+
+    return f"Emailed to {len(recipients)} recipient(s)."
+
+
+@app.post("/api/purchase-orders/{purchase_order_id}/send-email", response_model=schemas.SendPurchaseOrderEmailResult)
+def send_purchase_order_email_endpoint(
+    purchase_order_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_roles("Admin", "MISExecutive")),
+):
+    purchase_order = db.query(models.PurchaseOrder).filter(models.PurchaseOrder.id == purchase_order_id).first()
+    if not purchase_order:
+        raise HTTPException(status_code=404, detail="Purchase order request not found")
+
+    recipients = set()
+    if purchase_order.brand_name:
+        brand_rows = db.query(models.BrandSupplierEmail).filter(models.BrandSupplierEmail.brand_name == purchase_order.brand_name).all()
+        recipients.update(row.email for row in brand_rows)
+    if purchase_order.supplier_email:
+        recipients.add(purchase_order.supplier_email.strip().lower())
+    recipients = sorted(r for r in recipients if r)
+
+    if not recipients:
+        raise HTTPException(status_code=400, detail="No supplier emails on file for this brand yet. Add at least one first.")
+
+    notification_status = send_purchase_order_email(purchase_order, recipients)
+    return {"sent_to": recipients, "notification_status": notification_status}
+
+
 @app.post("/api/purchase-orders", response_model=schemas.PurchaseOrderOut)
 def create_purchase_order(
     payload: schemas.PurchaseOrderCreate,
@@ -1193,6 +1415,8 @@ def create_purchase_order(
         brand_name=payload.brand_name,
         supplier_name=payload.supplier_name,
         supplier_email=payload.supplier_email,
+        supplier_address=payload.supplier_address,
+        supplier_gstin=payload.supplier_gstin,
         delivery_address=payload.delivery_address,
         remarks=payload.remarks,
         status="Requested",
@@ -1251,6 +1475,35 @@ def update_purchase_order_status(
     purchase_order.busy_po_number = (payload.busy_po_number or "").strip() or None
     purchase_order.ordered_date = payload.ordered_date
     purchase_order.processing_notes = (payload.processing_notes or "").strip() or None
+
+    # Admin/MIS can fill in or correct procurement details while processing
+    # a category manager's request. Only touch fields that were actually sent.
+    if payload.division is not None:
+        purchase_order.division = payload.division or None
+    if payload.branch_id is not None:
+        purchase_order.branch_id = payload.branch_id
+    if payload.brand_name is not None:
+        purchase_order.brand_name = payload.brand_name or None
+    if payload.supplier_name is not None:
+        purchase_order.supplier_name = payload.supplier_name or None
+    if payload.supplier_email is not None:
+        purchase_order.supplier_email = payload.supplier_email or None
+    if payload.supplier_address is not None:
+        purchase_order.supplier_address = payload.supplier_address or None
+    if payload.supplier_gstin is not None:
+        purchase_order.supplier_gstin = payload.supplier_gstin or None
+    if payload.delivery_address is not None:
+        purchase_order.delivery_address = payload.delivery_address or None
+    if payload.remarks is not None:
+        purchase_order.remarks = payload.remarks or None
+
+    if payload.items is not None:
+        if not payload.items:
+            raise HTTPException(status_code=400, detail="A purchase order needs at least one item")
+        if any(not item.product_name.strip() or item.quantity <= 0 for item in payload.items):
+            raise HTTPException(status_code=400, detail="Every item needs a product name and quantity greater than zero")
+        purchase_order.items = [models.PurchaseOrderItem(**item.dict()) for item in payload.items]
+
     db.commit()
     db.refresh(purchase_order)
     return serialize_purchase_order(purchase_order)
