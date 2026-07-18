@@ -41,6 +41,14 @@ class BrandOut(BrandCreate):
         from_attributes = True
 
 
+class BrandCategoryVisibilityOut(BaseModel):
+    brand_id: int
+    category_id: int
+
+    class Config:
+        from_attributes = True
+
+
 class ProductCreate(BaseModel):
     brand_id: int
     name: str
@@ -322,6 +330,10 @@ class SendPurchaseOrderEmailResult(BaseModel):
     notification_status: str
 
 
+class MarkExportedToBusyRequest(BaseModel):
+    purchase_order_ids: List[int]
+
+
 class Token(BaseModel):
     access_token: str
     token_type: str
@@ -408,6 +420,8 @@ class PurchaseOrderOut(BaseModel):
     busy_po_number: Optional[str]
     ordered_date: Optional[date]
     processing_notes: Optional[str]
+    exported_to_busy: bool = False
+    exported_to_busy_at: Optional[datetime] = None
     submitted_by_user_id: int
     submitted_by_username: Optional[str] = None
     notification_status: Optional[str] = None

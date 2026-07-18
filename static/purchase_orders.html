@@ -39,7 +39,7 @@
     .add-email-row input { flex:1; }
     @media(max-width:850px) { main { padding:20px 14px 38px; } .form-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .span-3 { grid-column:span 2; } .title-row { align-items:flex-start; flex-direction:column; } } @media(max-width:540px) { header { align-items:flex-start; flex-direction:column; } .header-right { width:100%; justify-content:space-between; } .form-grid,.modal .form-grid { grid-template-columns:1fr; } .span-2,.span-3 { grid-column:span 1; } .actions { flex-direction:column; } .actions button { width:100%; } .export-actions { width:100%; } .export-actions button { flex:1; } }
 
-    /* ---- Official PO sheet (rendered off-screen, then captured as a real PDF/JPG) ---- */
+    /* ---- Official PO sheet (rendered off-screen, then captured as a real PDF) ---- */
     #poPrintHost { position:fixed; top:0; left:-99999px; z-index:-1; background:#fff; }
     .po-sheet-page { width:850px; font-family:Arial,sans-serif; color:#111; background:#fff; padding:22px; }
     .po-sheet { border:1.5px solid #111; padding:14px; }
@@ -75,7 +75,7 @@
     <div class="title-row"><div><h1>Purchase Order Requests</h1><p class="subtitle">Category managers raise stock requests; Admin/MIS verify and finalize with the supplier.</p></div><div class="filters"><select id="statusFilter" onchange="renderOrders()"><option value="">All statuses</option><option>Requested</option><option>Under Review</option><option>Ordered</option><option>Cancelled</option></select></div></div>
 
     <section class="card hidden" id="requisitionCard">
-      <div class="section-head"><div><h2>Procurement details</h2><p>Division is scoped to your account; pick any brand (or "Others" if it's not listed) and the branch that needs stock.</p></div></div>
+      <div class="section-head"><div><h2>Procurement details</h2><p>Division and Brand are scoped to your assigned category. Pick "Others" to type a brand that's not listed yet.</p></div></div>
       <div class="form-grid">
         <div><label for="cmDivision">Division / category</label><select id="cmDivision" disabled><option value="">Loading...</option></select></div>
         <div><label for="cmBranch">Branch</label><select id="cmBranch"><option value="">Select branch</option></select></div>
@@ -96,6 +96,7 @@
         <div class="export-actions hidden" id="exportActions">
           <button class="btn-outline" type="button" onclick="exportToExcel()">Export Excel</button>
           <button class="btn-outline" type="button" onclick="exportToPDF()">Export PDF</button>
+          <button class="btn-good" type="button" onclick="exportForBusy()">Export for Busy</button>
         </div>
       </div>
       <div id="orders" class="po-list"></div>
@@ -167,10 +168,23 @@
         </div>
       </div>
 
-      <div class="actions"><button class="btn-light" type="button" onclick="processDialog.close()">Cancel</button><button class="btn-outline" type="button" onclick="downloadPurchaseOrder('pdf')">Download PDF</button><button class="btn-outline" type="button" onclick="downloadPurchaseOrder('jpg')">Download JPG</button><button class="btn" value="default">Final Order</button></div>
+      <div class="actions"><button class="btn-light" type="button" onclick="processDialog.close()">Cancel</button><button class="btn-outline" type="button" onclick="viewPurchaseOrder()">View PO</button><button class="btn-outline" type="button" onclick="downloadPurchaseOrder()">Download PDF</button><button class="btn-light" type="button" onclick="saveChanges()">Save Changes</button><button class="btn" type="button" onclick="finalOrder()">Final Order</button></div>
+      <p class="hint">Use View PO to check everything first. Final Order sets status to Ordered, saves everything above, and emails the PO to every supplier address in the book — all in one click.</p>
       <div id="downloadMessage" class="message"></div>
       <div id="processMessage" class="message"></div>
     </form>
+  </dialog>
+
+  <dialog id="poPreviewDialog">
+    <div class="modal">
+      <div class="section-head"><div><h2>Purchase Order Preview</h2><p>This is exactly what gets downloaded and emailed. Nothing is saved yet.</p></div><button class="btn-light" type="button" onclick="poPreviewDialog.close()">Close</button></div>
+      <div id="poPreviewBody" style="overflow-x:auto; border:1px solid #e4e7ec; border-radius:6px; padding:12px; background:#f5f7fa;"></div>
+      <div class="actions">
+        <button class="btn-light" type="button" onclick="poPreviewDialog.close()">Close</button>
+        <button class="btn-outline" type="button" onclick="downloadPurchaseOrder()">Download PDF</button>
+        <button class="btn" type="button" onclick="poPreviewDialog.close(); finalOrder();">Looks good — Final Order</button>
+      </div>
+    </div>
   </dialog>
 
   <script>
@@ -183,7 +197,7 @@
     const isProcessor = isAdmin || isMIS;
     const isCategoryManager = role === 'CategoryManager';
     let orders = []; const processDialog = document.getElementById('processDialog');
-    let masterStores = []; let masterCategories = []; let masterBrands = [];
+    let masterStores = []; let masterCategories = []; let masterBrands = []; let masterSubcategories = []; let masterBrandVisibility = [];
     let myProfile = null;
     let currentProcessBrand = '';
 
@@ -195,8 +209,8 @@
     // ---- Load master data + my profile, then scope the Category Manager form ---
     async function loadMasters() {
       try {
-        const [stores, categories, brands, me] = await Promise.all([api('/stores'), api('/categories'), api('/brands'), api('/api/me')]);
-        masterStores = stores; masterCategories = categories; masterBrands = brands; myProfile = me;
+        const [stores, categories, brands, subcategories, visibility, me] = await Promise.all([api('/stores'), api('/categories'), api('/brands'), api('/subcategories'), api('/api/brand-category-visibility'), api('/api/me')]);
+        masterStores = stores; masterCategories = categories; masterBrands = brands; masterSubcategories = subcategories; masterBrandVisibility = visibility; myProfile = me;
         document.getElementById('cmBranch').insertAdjacentHTML('beforeend', optionHtml(stores, x => `${x.code ? x.code + ' - ' : ''}${x.name}`));
         populateScopedDropdowns();
       } catch (e) { console.warn('Could not load branch/brand master lists', e); }
@@ -218,8 +232,19 @@
         divisionSelect.disabled = true;
       }
 
-      // Brand shows the full list for everyone (same as the Schemes page), plus an Others option for anything not listed.
-      brandSelect.innerHTML = '<option value="">Select brand</option>' + optionHtml(masterBrands, x => x.name) + '<option value="__other__">Others (enter brand name)</option>';
+      // Admin/MIS see every brand, same as before. A Category Manager only
+      // sees brands that belong to their own division — either through the
+      // brand's primary SubCategory -> Category chain, or through the
+      // explicit visibility table (used when one brand, like Samsung or Mi,
+      // legitimately belongs to more than one division). "Others" is always
+      // available for anything not in the list yet.
+      let brandsForDropdown = masterBrands;
+      if (!isProcessor && myCategory) {
+        const subcategoryIdsInMyCategory = new Set(masterSubcategories.filter(sc => sc.category_id === myCategory.id).map(sc => sc.id));
+        const visibleBrandIds = new Set(masterBrandVisibility.filter(v => v.category_id === myCategory.id).map(v => v.brand_id));
+        brandsForDropdown = masterBrands.filter(b => subcategoryIdsInMyCategory.has(b.subcategory_id) || visibleBrandIds.has(b.id));
+      }
+      brandSelect.innerHTML = '<option value="">Select brand</option>' + optionHtml(brandsForDropdown, x => x.name) + '<option value="__other__">Others (enter brand name)</option>';
       brandSelect.disabled = false;
     }
     document.getElementById('cmBrand').addEventListener('change', () => {
@@ -301,7 +326,13 @@
         const items = order.items.map(item => `${escapeHtml(item.product_name)}${item.variant ? ` (${escapeHtml(item.variant)})` : ''} x ${item.quantity} ${escapeHtml(item.unit || 'Nos')}`).join('<br>');
         const processorActions = isProcessor ? `<button class="btn-light" onclick="openProcess(${order.id})">Process</button>` : '';
         const deleteAction = isProcessor ? `<button class="btn-danger" onclick="deleteOrder(${order.id})">Delete</button>` : '';
-        return `<article class="po-row"><div class="po-top"><div><div class="po-no">${escapeHtml(order.request_no)} ${order.busy_po_number ? `| Busy: ${escapeHtml(order.busy_po_number)}` : ''}</div><div class="po-meta">${escapeHtml(order.request_date)} | ${escapeHtml(order.division || 'No division')} | ${escapeHtml(order.brand_name || 'No brand yet')} | Submitted by ${escapeHtml(order.submitted_by_username || '')}</div></div><span class="status ${statusClass(order.status)}">${escapeHtml(order.status)}</span></div><div class="po-items">${items}</div>${order.processing_notes ? `<div class="po-meta">MIS notes: ${escapeHtml(order.processing_notes)}</div>` : ''}<div class="po-actions">${processorActions}${deleteAction}</div></article>`;
+        let busyBadge = '';
+        if (isProcessor && order.status === 'Ordered') {
+          busyBadge = order.exported_to_busy
+            ? `<span class="status ordered" title="${escapeHtml(order.exported_to_busy_at || '')}">Exported to Busy</span>`
+            : `<span class="status">Pending Busy export</span>`;
+        }
+        return `<article class="po-row"><div class="po-top"><div><div class="po-no">${escapeHtml(order.request_no)} ${order.busy_po_number ? `| Busy: ${escapeHtml(order.busy_po_number)}` : ''}</div><div class="po-meta">${escapeHtml(order.request_date)} | ${escapeHtml(order.division || 'No division')} | ${escapeHtml(order.brand_name || 'No brand yet')} | Submitted by ${escapeHtml(order.submitted_by_username || '')}</div></div><div style="display:flex;gap:6px;align-items:center;"><span class="status ${statusClass(order.status)}">${escapeHtml(order.status)}</span>${busyBadge}</div></div><div class="po-items">${items}</div>${order.processing_notes ? `<div class="po-meta">MIS notes: ${escapeHtml(order.processing_notes)}</div>` : ''}<div class="po-actions">${processorActions}${deleteAction}</div></article>`;
       }).join('');
     }
 
@@ -411,23 +442,32 @@
       processDialog.showModal();
     }
 
-    document.getElementById('processForm').addEventListener('submit', async event => {
-      event.preventDefault();
+    // Shared save logic. forcedStatus, when given, overrides whatever the
+    // Status dropdown shows (used by Final Order to guarantee Requested -> Ordered).
+    async function savePurchaseOrder(forcedStatus) {
       const id = document.getElementById('processId').value;
       const message = document.getElementById('processMessage');
+      message.className = 'message';
 
       const items = collectItems('processItemsBody');
-      if (!items.length || items.some(item => !item.product_name || !item.quantity || item.quantity < 1)) { message.textContent = 'Add at least one product with quantity greater than zero.'; return; }
+      if (!items.length || items.some(item => !item.product_name || !item.quantity || item.quantity < 1)) { message.textContent = 'Add at least one product with quantity greater than zero.'; return false; }
 
       const deliveryAddressSelect = document.getElementById('processDeliveryAddress').value;
       const deliveryAddress = deliveryAddressSelect === '__other__' ? document.getElementById('processCustomAddress').value.trim() : deliveryAddressSelect;
-      if (deliveryAddressSelect === '__other__' && !deliveryAddress) { message.textContent = 'Enter the delivery address.'; return; }
+      if (deliveryAddressSelect === '__other__' && !deliveryAddress) { message.textContent = 'Enter the delivery address.'; return false; }
+
+      if (forcedStatus) {
+        document.getElementById('processStatus').value = forcedStatus;
+        if (forcedStatus === 'Ordered' && !document.getElementById('orderedDate').value) {
+          document.getElementById('orderedDate').value = new Date().toISOString().slice(0, 10);
+        }
+      }
 
       try {
         await api(`/api/purchase-orders/${id}/status`, {
           method: 'PATCH',
           body: JSON.stringify({
-            status: document.getElementById('processStatus').value,
+            status: forcedStatus || document.getElementById('processStatus').value,
             busy_po_number: document.getElementById('busyNumber').value || null,
             ordered_date: document.getElementById('orderedDate').value || null,
             processing_notes: null,
@@ -440,10 +480,38 @@
             items,
           }),
         });
-        processDialog.close();
-        await loadOrders();
-      } catch (e) { message.textContent = e.message; }
-    });
+        return true;
+      } catch (e) { message.textContent = e.message; return false; }
+    }
+
+    async function saveChanges() {
+      const saved = await savePurchaseOrder(null);
+      if (saved) { processDialog.close(); await loadOrders(); }
+    }
+
+    // Final Order: sets status Requested -> Ordered, saves every field above,
+    // then emails the PO to every address in the brand's email book in the
+    // same click — no separate "Send PO Email" step needed to finalize.
+    async function finalOrder() {
+      const message = document.getElementById('processMessage');
+      const saved = await savePurchaseOrder('Ordered');
+      if (!saved) return;
+
+      message.className = 'message';
+      message.textContent = 'Order finalized. Emailing supplier...';
+      try {
+        const id = document.getElementById('processId').value;
+        const result = await api(`/api/purchase-orders/${id}/send-email`, { method: 'POST' });
+        message.className = 'message success';
+        message.textContent = `Order finalized and ${result.notification_status} (${result.sent_to.join(', ')})`;
+      } catch (e) {
+        message.className = 'message';
+        message.textContent = `Order finalized, but the email did not go out: ${e.message}`;
+      }
+
+      await loadOrders();
+      setTimeout(() => processDialog.close(), 900);
+    }
 
     async function deleteOrder(id) { if (!confirm('Delete this purchase request?')) return; try { await api(`/api/purchase-orders/${id}`, {method:'DELETE'}); await loadOrders(); } catch (e) { alert(e.message); } }
 
@@ -475,6 +543,56 @@
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Purchase Orders');
       XLSX.writeFile(workbook, `purchase-orders-${new Date().toISOString().slice(0,10)}.xlsx`);
+    }
+
+    // ---- Batch export for Busy's Import Vouchers feature ---------------
+    // Pulls every finalized ("Ordered") request that hasn't been exported
+    // yet, writes one row per item (Busy imports vouchers line-by-line),
+    // downloads it as Excel, then — once you confirm you've imported it
+    // into Busy — marks those requests as exported so next time's batch
+    // doesn't repeat them.
+    // NOTE: this is a starting column layout. Once you export one voucher
+    // from Busy (Administration -> Data Export/Import) and share it, these
+    // column names/order can be matched exactly to what Busy expects.
+    async function exportForBusy() {
+      const pending = orders.filter(o => o.status === 'Ordered' && !o.exported_to_busy);
+      if (!pending.length) { alert('No finalized orders are waiting to export. Everything already marked "Ordered" has been exported already.'); return; }
+      if (typeof XLSX === 'undefined') { alert('Excel export library did not load. Check your internet connection and try again.'); return; }
+
+      const rows = [];
+      pending.forEach(order => {
+        order.items.forEach(item => {
+          rows.push({
+            'Voucher Date': order.ordered_date || order.request_date,
+            'Reference No (this system)': order.request_no,
+            'Party Name': order.supplier_name || '',
+            'Party Address': order.supplier_address || '',
+            'Party GSTIN': order.supplier_gstin || '',
+            'Item Name': `${item.product_name}${item.variant ? ' ' + item.variant : ''}${item.color ? ' ' + item.color : ''}`,
+            'HSN/SAC': item.hsn_code || '',
+            'Qty': item.quantity,
+            'Unit': item.unit || 'Nos',
+            'Rate': item.estimated_price || 0,
+            'Amount': (item.estimated_price || 0) * item.quantity,
+            'Delivery Address': order.delivery_address || '',
+            'Remarks': order.remarks || '',
+          });
+        });
+      });
+
+      const worksheet = XLSX.utils.json_to_sheet(rows);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Busy Import');
+      const filename = `busy-import-${new Date().toISOString().slice(0,10)}.xlsx`;
+      XLSX.writeFile(workbook, filename);
+
+      const confirmed = confirm(`Downloaded ${filename} with ${pending.length} order(s) / ${rows.length} line(s).\n\nOnce you've imported this file into Busy, click OK here to mark these ${pending.length} order(s) as exported so they aren't included in the next batch.\n\nClick Cancel to leave them pending (e.g. if the import didn't go through).`);
+      if (!confirmed) return;
+
+      try {
+        await api('/api/purchase-orders/mark-exported-to-busy', { method: 'POST', body: JSON.stringify({ purchase_order_ids: pending.map(o => o.id) }) });
+        await loadOrders();
+      } catch (e) { alert(`Downloaded the file, but could not mark orders as exported: ${e.message}`); }
     }
 
     function exportToPDF() {
@@ -513,6 +631,15 @@
       if (thousand) parts.push(threeDigitWords(thousand) + ' Thousand');
       if (rest) parts.push(threeDigitWords(rest));
       return parts.join(' ').replace(/\s+/g, ' ').trim();
+    }
+
+    const poPreviewDialog = document.getElementById('poPreviewDialog');
+    function viewPurchaseOrder() {
+      const id = document.getElementById('processId').value;
+      const order = orders.find(o => o.id === Number(id));
+      if (!order) return;
+      document.getElementById('poPreviewBody').innerHTML = buildPoSheetHtml(order);
+      poPreviewDialog.showModal();
     }
 
     function buildPoSheetHtml(order) {
@@ -584,10 +711,10 @@
     }
 
     // Renders the PO sheet off-screen, rasterizes it with html2canvas, then
-    // produces a real downloadable file — a JPG image, or a PDF with that
-    // image placed on an A4 page. No popup window is used, since pop-ups are
-    // blocked or render blank in some browsers/WebViews.
-    async function downloadPurchaseOrder(format) {
+    // produces a real downloadable PDF file (image placed on an A4 page).
+    // No popup window is used, since pop-ups are blocked or render blank in
+    // some browsers/WebViews.
+    async function downloadPurchaseOrder() {
       const id = document.getElementById('processId').value;
       const order = orders.find(o => o.id === Number(id));
       const message = document.getElementById('downloadMessage');
@@ -607,21 +734,16 @@
         const orderNo = document.getElementById('busyNumber').value || order.request_no;
         const fileBase = orderNo.replace(/[^a-zA-Z0-9-_]/g, '_');
 
-        if (format === 'jpg') {
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
-          downloadBlobUrl(dataUrl, `${fileBase}.jpg`);
-        } else {
-          const { jsPDF } = window.jspdf;
-          const imgData = canvas.toDataURL('image/jpeg', 0.95);
-          const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-          const pageWidth = pdf.internal.pageSize.getWidth();
-          const pageHeight = pdf.internal.pageSize.getHeight();
-          const imgWidth = pageWidth - 20;
-          const imgHeight = (canvas.height * imgWidth) / canvas.width;
-          const y = imgHeight < pageHeight - 20 ? (pageHeight - imgHeight) / 2 : 10;
-          pdf.addImage(imgData, 'JPEG', 10, y, imgWidth, Math.min(imgHeight, pageHeight - 20));
-          pdf.save(`${fileBase}.pdf`);
-        }
+        const { jsPDF } = window.jspdf;
+        const imgData = canvas.toDataURL('image/jpeg', 0.95);
+        const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        const imgWidth = pageWidth - 20;
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+        const y = imgHeight < pageHeight - 20 ? (pageHeight - imgHeight) / 2 : 10;
+        pdf.addImage(imgData, 'JPEG', 10, y, imgWidth, Math.min(imgHeight, pageHeight - 20));
+        pdf.save(`${fileBase}.pdf`);
         message.className = 'message success';
         message.textContent = 'Downloaded.';
       } catch (e) {

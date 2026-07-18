@@ -86,6 +86,8 @@ def ensure_database_schema():
 
     ensure_column("purchase_orders", "supplier_address", "VARCHAR(500)")
     ensure_column("purchase_orders", "supplier_gstin", "VARCHAR(30)")
+    ensure_column("purchase_orders", "exported_to_busy", "BOOLEAN DEFAULT 0")
+    ensure_column("purchase_orders", "exported_to_busy_at", "DATETIME")
     ensure_column("schemes", "offer_value", "FLOAT")
     ensure_column("schemes", "calculation_method", "VARCHAR(50)")
     ensure_column("schemes", "min_qty", "INTEGER")
@@ -261,6 +263,33 @@ def ensure_default_master_data():
 
         db.commit()
 
+        def get_or_create_brand(name: str, fallback_subcategory_id):
+            """Brand names are unique in this database, so never insert a
+            second row for a name that already exists — reuse the existing
+            brand instead. Its subcategory_id (used elsewhere for schemes/
+            products) is only set on first creation and never overwritten,
+            so seeding one category never silently reassigns a brand that
+            already belongs to a different one."""
+            existing = db.query(models.Brand).filter(models.Brand.name.ilike(name)).first()
+            if existing:
+                return existing
+            brand = models.Brand(name=name, subcategory_id=fallback_subcategory_id)
+            db.add(brand)
+            db.flush()
+            return brand
+
+        def make_brand_visible_in_category(brand: "models.Brand", category: "models.Category"):
+            exists = (
+                db.query(models.BrandCategoryVisibility)
+                .filter(
+                    models.BrandCategoryVisibility.brand_id == brand.id,
+                    models.BrandCategoryVisibility.category_id == category.id,
+                )
+                .first()
+            )
+            if not exists:
+                db.add(models.BrandCategoryVisibility(brand_id=brand.id, category_id=category.id))
+
         mh_category = categories_by_code.get("MH")
         if mh_category:
             mobile_brand_names = [
@@ -273,27 +302,18 @@ def ensure_default_master_data():
                 "Motorola",
                 "Nothing",
                 "Google Pixel",
+                "Mi",
             ]
-
             mobile_subcategories = (
                 db.query(models.SubCategory)
                 .filter(models.SubCategory.category_id == mh_category.id)
                 .all()
             )
-
             if mobile_subcategories:
                 for index, brand_name in enumerate(mobile_brand_names):
                     target_subcategory = mobile_subcategories[index % len(mobile_subcategories)]
-                    existing_brand = (
-                        db.query(models.Brand)
-                        .filter(models.Brand.name.ilike(brand_name))
-                        .first()
-                    )
-                    if existing_brand:
-                        existing_brand.subcategory_id = target_subcategory.id
-                    else:
-                        db.add(models.Brand(name=brand_name, subcategory_id=target_subcategory.id))
-
+                    brand = get_or_create_brand(brand_name, target_subcategory.id)
+                    make_brand_visible_in_category(brand, mh_category)
                 db.commit()
 
         he_category = categories_by_code.get("HE")
@@ -306,17 +326,8 @@ def ensure_default_master_data():
             if led_tv_subcategory:
                 led_tv_brands = ["Sony", "Samsung", "LG", "Haier", "TCL", "Hisense", "Mi"]
                 for brand_name in led_tv_brands:
-                    existing_brand = (
-                        db.query(models.Brand)
-                        .filter(models.Brand.name.ilike(brand_name))
-                        .first()
-                    )
-                    if existing_brand:
-                        if existing_brand.subcategory_id != led_tv_subcategory.id:
-                            existing_brand.subcategory_id = led_tv_subcategory.id
-                    else:
-                        db.add(models.Brand(name=brand_name, subcategory_id=led_tv_subcategory.id))
-
+                    brand = get_or_create_brand(brand_name, led_tv_subcategory.id)
+                    make_brand_visible_in_category(brand, he_category)
                 db.commit()
 
         it_category = categories_by_code.get("IT")
@@ -329,17 +340,8 @@ def ensure_default_master_data():
             if laptop_subcategory:
                 laptop_brands = ["HP", "Dell", "Lenovo"]
                 for brand_name in laptop_brands:
-                    existing_brand = (
-                        db.query(models.Brand)
-                        .filter(models.Brand.name.ilike(brand_name))
-                        .first()
-                    )
-                    if existing_brand:
-                        if existing_brand.subcategory_id != laptop_subcategory.id:
-                            existing_brand.subcategory_id = laptop_subcategory.id
-                    else:
-                        db.add(models.Brand(name=brand_name, subcategory_id=laptop_subcategory.id))
-
+                    brand = get_or_create_brand(brand_name, laptop_subcategory.id)
+                    make_brand_visible_in_category(brand, it_category)
                 db.commit()
 
 
@@ -1010,11 +1012,32 @@ def list_brands(
     if subcategory_id is not None:
         query = query.filter(models.Brand.subcategory_id == subcategory_id)
     elif category_id is not None:
-        query = (
-            query.join(models.SubCategory, models.Brand.subcategory_id == models.SubCategory.id)
+        primary_ids = {
+            row[0]
+            for row in db.query(models.Brand.id)
+            .join(models.SubCategory, models.Brand.subcategory_id == models.SubCategory.id)
             .filter(models.SubCategory.category_id == category_id)
-        )
+            .all()
+        }
+        visible_ids = {
+            row[0]
+            for row in db.query(models.BrandCategoryVisibility.brand_id)
+            .filter(models.BrandCategoryVisibility.category_id == category_id)
+            .all()
+        }
+        all_ids = primary_ids | visible_ids
+        if not all_ids:
+            return []
+        query = query.filter(models.Brand.id.in_(all_ids))
     return query.order_by(models.Brand.name).all()
+
+
+@app.get("/api/brand-category-visibility", response_model=List[schemas.BrandCategoryVisibilityOut])
+def list_brand_category_visibility(db: Session = Depends(get_db)):
+    """All (brand, category) pairs — a brand can legitimately appear under
+    more than one division (e.g. Samsung under both Mobiles and Home
+    Entertainment) even though its `subcategory_id` only points to one."""
+    return db.query(models.BrandCategoryVisibility).all()
 
 
 @app.post("/products", response_model=schemas.ProductOut)
@@ -1191,6 +1214,8 @@ def serialize_purchase_order(purchase_order: models.PurchaseOrder, notification_
         "busy_po_number": purchase_order.busy_po_number,
         "ordered_date": purchase_order.ordered_date,
         "processing_notes": purchase_order.processing_notes,
+        "exported_to_busy": purchase_order.exported_to_busy,
+        "exported_to_busy_at": purchase_order.exported_to_busy_at,
         "submitted_by_user_id": purchase_order.submitted_by_user_id,
         "submitted_by_username": purchase_order.submitted_by.username if purchase_order.submitted_by else None,
         "created_date": purchase_order.created_date,
@@ -1521,6 +1546,28 @@ def delete_purchase_order(
     db.delete(purchase_order)
     db.commit()
     return {"message": "Purchase order request deleted"}
+
+
+@app.post("/api/purchase-orders/mark-exported-to-busy")
+def mark_purchase_orders_exported_to_busy(
+    payload: schemas.MarkExportedToBusyRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_roles("Admin", "MISExecutive")),
+):
+    """Called after downloading a batch export file for Busy's Import
+    Vouchers feature, so the same requests aren't included in next time's
+    export. Purely a bookkeeping flag on this side — it does not talk to
+    Busy directly."""
+    if not payload.purchase_order_ids:
+        return {"updated": 0}
+    now = datetime.utcnow()
+    updated = (
+        db.query(models.PurchaseOrder)
+        .filter(models.PurchaseOrder.id.in_(payload.purchase_order_ids))
+        .update({"exported_to_busy": True, "exported_to_busy_at": now}, synchronize_session=False)
+    )
+    db.commit()
+    return {"updated": updated}
 
 
 # ============================================================

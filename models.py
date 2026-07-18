@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Date, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, Date, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from database import Base
@@ -311,6 +311,8 @@ class PurchaseOrder(Base):
     busy_po_number = Column(String(80), nullable=True, unique=True)
     ordered_date = Column(Date, nullable=True)
     processing_notes = Column(String(500), nullable=True)
+    exported_to_busy = Column(Boolean, default=False, nullable=False)
+    exported_to_busy_at = Column(DateTime, nullable=True)
     submitted_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_date = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_date = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -336,6 +338,23 @@ class PurchaseOrderItem(Base):
     estimated_price = Column(Float, nullable=True)
 
     purchase_order = relationship("PurchaseOrder", back_populates="items")
+
+
+# ============================================================
+# BRAND VISIBILITY PER DIVISION (for Purchase Order dropdowns)
+# A brand's `subcategory_id` above is its primary home (used elsewhere for
+# schemes/products) and brand names must stay unique, so a brand can't just
+# get a second row for a second category. This table instead says "show this
+# existing brand in the Procurement Details dropdown for this category too" —
+# e.g. Samsung shows for both Home Entertainment and Mobiles/Handset.
+# ============================================================
+
+class BrandCategoryVisibility(Base):
+    __tablename__ = "brand_category_visibility"
+    id = Column(Integer, primary_key=True, index=True)
+    brand_id = Column(Integer, ForeignKey("brands.id"), nullable=False, index=True)
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=False, index=True)
+
 
 
 # ============================================================
