@@ -76,6 +76,13 @@ def ensure_database_schema():
     ensure_column("sales", "claim_overall_status", "VARCHAR(50)")
     ensure_column("sales", "settled_date", "DATE")
     ensure_column("sales", "sales_executive", "VARCHAR(150)")
+    ensure_column("sales", "upi_scheme_amount", "FLOAT")
+    ensure_column("sales", "upi_scheme_amount_exact", "VARCHAR(40)")
+    ensure_column("sales", "upi_claim_status", "VARCHAR(20)")
+    ensure_column("sales", "backend_scheme_amount", "FLOAT")
+    ensure_column("sales", "backend_scheme_amount_exact", "VARCHAR(40)")
+    ensure_column("sales", "backend_claim_type", "VARCHAR(30)")
+    ensure_column("sales", "backend_claim_status", "VARCHAR(20)")
 
     ensure_column("schemes", "brand_id", "INTEGER")
     ensure_column("schemes", "category_id", "INTEGER")
@@ -1728,11 +1735,17 @@ def create_sale(
     # Keep money fields stable at 2 decimals so users see the same values they entered.
     sale_value_num, sale_value_exact = quantize_money(sale.sale_value_exact, sale.sale_value, "sale_value")
     scheme_amount_num, scheme_amount_exact = quantize_money(sale.scheme_amount_exact, sale.scheme_amount, "scheme_amount")
+    upi_amount_num, upi_amount_exact = quantize_money(sale.upi_scheme_amount_exact, sale.upi_scheme_amount, "upi_scheme_amount")
+    backend_amount_num, backend_amount_exact = quantize_money(sale.backend_scheme_amount_exact, sale.backend_scheme_amount, "backend_scheme_amount")
 
     sale.sale_value = sale_value_num
     sale.sale_value_exact = sale_value_exact
     sale.scheme_amount = scheme_amount_num
     sale.scheme_amount_exact = scheme_amount_exact
+    sale.upi_scheme_amount = upi_amount_num
+    sale.upi_scheme_amount_exact = upi_amount_exact
+    sale.backend_scheme_amount = backend_amount_num
+    sale.backend_scheme_amount_exact = backend_amount_exact
 
     db_sale = models.Sale(**sale.dict())
     db.add(db_sale)
@@ -1787,11 +1800,17 @@ def update_sale(
 
     sale_value_num, sale_value_exact = quantize_money(sale.sale_value_exact, sale.sale_value, "sale_value")
     scheme_amount_num, scheme_amount_exact = quantize_money(sale.scheme_amount_exact, sale.scheme_amount, "scheme_amount")
+    upi_amount_num, upi_amount_exact = quantize_money(sale.upi_scheme_amount_exact, sale.upi_scheme_amount, "upi_scheme_amount")
+    backend_amount_num, backend_amount_exact = quantize_money(sale.backend_scheme_amount_exact, sale.backend_scheme_amount, "backend_scheme_amount")
 
     sale.sale_value = sale_value_num
     sale.sale_value_exact = sale_value_exact
     sale.scheme_amount = scheme_amount_num
     sale.scheme_amount_exact = scheme_amount_exact
+    sale.upi_scheme_amount = upi_amount_num
+    sale.upi_scheme_amount_exact = upi_amount_exact
+    sale.backend_scheme_amount = backend_amount_num
+    sale.backend_scheme_amount_exact = backend_amount_exact
 
     for field_name, value in sale.dict().items():
         setattr(db_sale, field_name, value)

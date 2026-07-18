@@ -188,6 +188,15 @@ class Sale(Base):
     claim_status_other = Column(String(255), nullable=True)
     claim_overall_status = Column(String(50), nullable=True)
     settled_date = Column(Date, nullable=True)
+    # "BACKEND & UPI" combined scheme: separate amount + claim tracking for
+    # each half instead of one single scheme_amount/claim_status pair.
+    upi_scheme_amount = Column(Float, nullable=True)
+    upi_scheme_amount_exact = Column(String(40), nullable=True)
+    upi_claim_status = Column(String(20), nullable=True)  # Pending / Settled
+    backend_scheme_amount = Column(Float, nullable=True)
+    backend_scheme_amount_exact = Column(String(40), nullable=True)
+    backend_claim_type = Column(String(30), nullable=True)  # Automatic Claim / Mannual Claim
+    backend_claim_status = Column(String(20), nullable=True)  # Pending / Settled
     sales_executive = Column(String(150), nullable=True)
     sale_date = Column(Date, nullable=False)
 

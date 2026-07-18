@@ -208,6 +208,13 @@ class SaleCreate(BaseModel):
     claim_status_other: Optional[str] = None
     claim_overall_status: Optional[str] = None
     settled_date: Optional[date] = None
+    upi_scheme_amount: Optional[float] = None
+    upi_scheme_amount_exact: Optional[str] = None
+    upi_claim_status: Optional[str] = None
+    backend_scheme_amount: Optional[float] = None
+    backend_scheme_amount_exact: Optional[str] = None
+    backend_claim_type: Optional[str] = None
+    backend_claim_status: Optional[str] = None
     sales_executive: Optional[str] = None
     sale_date: date
 

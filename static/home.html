@@ -13,22 +13,44 @@
     }
     * { box-sizing:border-box; }
     body { margin:0; font-family:Arial,sans-serif; background:var(--bg); color:var(--ink); }
-    header { background:#111827; color:#fff; padding:13px clamp(16px,3vw,42px); display:flex; gap:16px; align-items:center; justify-content:space-between; }
-    .brand { font-weight:700; letter-spacing:0; font-size:16px; }
-    .header-right { display:flex; align-items:center; gap:12px; color:#d0d5dd; font-size:14px; }
+    header { background:linear-gradient(90deg, #181818 0%, #000000 100%); color:#fff; padding:16px clamp(16px,3vw,42px); display:flex; gap:16px; align-items:center; justify-content:space-between; box-shadow:0 2px 10px rgba(0,0,0,0.12); position:relative; z-index:2; }
+    .brand { font-weight:700; letter-spacing:0.2px; font-size:16px; }
+    .header-right { display:flex; align-items:center; gap:14px; color:#d0d5dd; font-size:14px; }
     button { font:inherit; cursor:pointer; border:0; border-radius:6px; font-weight:700; }
-    .btn-light { padding:10px 14px; background:#fff; color:#344054; border:1px solid #98a2b3; }
-    .btn-light:hover { background:#f2f4f7; }
+    .btn-light { padding:10px 14px; background:#fff; color:#111111; border:1px solid transparent; }
+    .btn-light:hover { background:#f0f3f7; }
 
-    main { max-width:1080px; margin:0 auto; padding:60px 22px 80px; }
-    .eyebrow { display:inline-flex; align-items:center; gap:8px; font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--brand); background:var(--brand-glow); padding:6px 12px; border-radius:999px; }
-    h1 { margin:16px 0 8px; font-size:34px; letter-spacing:-0.02em; }
-    .subtitle { margin:0 0 44px; color:var(--muted); font-size:15px; max-width:520px; line-height:1.5; }
+    /* ---------------- Dark hero band ---------------- */
+    .hero {
+      position:relative;
+      background:radial-gradient(circle at 15% 20%, rgba(21,94,239,0.20) 0%, transparent 45%),
+                 radial-gradient(circle at 85% 80%, rgba(217,95,0,0.16) 0%, transparent 45%),
+                 linear-gradient(160deg, #0b0b0b 0%, #161616 55%, #0b0b0b 100%);
+      color:#fff;
+      overflow:hidden;
+      padding:56px clamp(16px,3vw,42px) 92px;
+    }
+    .hero::before {
+      content:'';
+      position:absolute; inset:0;
+      background-image:linear-gradient(rgba(255,255,255,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.045) 1px, transparent 1px);
+      background-size:42px 42px;
+      mask-image:radial-gradient(ellipse at 30% 0%, #000 45%, transparent 78%);
+      pointer-events:none;
+    }
+    .hero-inner { position:relative; max-width:1080px; margin:0 auto; }
+    .eyebrow { display:inline-flex; align-items:center; gap:8px; font-size:12px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:#c9d6ff; background:rgba(21,94,239,0.18); border:1px solid rgba(21,94,239,0.35); padding:6px 12px; border-radius:999px; }
+    .hero h1 { margin:18px 0 8px; font-size:36px; letter-spacing:-0.02em; color:#fff; }
+    .hero .subtitle { margin:0; color:#9aa4b2; font-size:15px; max-width:560px; line-height:1.55; }
 
+    main { max-width:1080px; margin:-56px auto 0; padding:0 22px 80px; position:relative; z-index:1; }
     .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:22px; }
-    .tile { position:relative; overflow:hidden; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:30px 26px; box-shadow:0 1px 2px rgba(16,24,40,.04); transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease; opacity:0; transform:translateY(14px); animation:riseIn .5s ease forwards; }
+    .tile { position:relative; overflow:hidden; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:30px 26px; box-shadow:0 20px 40px rgba(16,24,40,.14); transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease; opacity:0; transform:translateY(14px); animation:riseIn .5s ease forwards; }
     .tile:nth-child(2) { animation-delay:.08s; }
-    .tile:hover { transform:translateY(-4px); box-shadow:0 16px 32px rgba(16,24,40,.10); border-color:transparent; }
+    .tile:hover { transform:translateY(-4px); box-shadow:0 24px 48px rgba(16,24,40,.18); border-color:transparent; }
+    .tile::before { content:''; position:absolute; top:0; left:0; right:0; height:4px; }
+    .tile.schemes::before { background:linear-gradient(90deg, var(--brand), var(--brand-dark)); }
+    .tile.po::before { background:linear-gradient(90deg, var(--accent), var(--accent-dark)); }
     .tile-glow { position:absolute; top:-60px; right:-60px; width:180px; height:180px; border-radius:50%; filter:blur(10px); opacity:.55; animation:pulse 5s ease-in-out infinite; pointer-events:none; }
     .tile.schemes .tile-glow { background:radial-gradient(circle, var(--brand-glow), transparent 70%); }
     .tile.po .tile-glow { background:radial-gradient(circle, var(--accent-glow), transparent 70%); }
@@ -50,7 +72,7 @@
     @keyframes riseIn { to { opacity:1; transform:translateY(0); } }
     @keyframes pulse { 0%,100% { transform:scale(1); opacity:.5; } 50% { transform:scale(1.15); opacity:.7; } }
 
-    @media(max-width:700px) { .grid { grid-template-columns:1fr; } h1 { font-size:27px; } main { padding:36px 16px 60px; } }
+    @media(max-width:700px) { .grid { grid-template-columns:1fr; } .hero h1 { font-size:27px; } .hero { padding:40px 16px 76px; } main { margin-top:-44px; padding:0 16px 60px; } }
 
     /* ---------------- Login success overlay ---------------- */
     #loginSuccess { position:fixed; inset:0; z-index:50; display:flex; align-items:center; justify-content:center; background:rgba(16,24,40,.55); backdrop-filter:blur(3px); opacity:1; transition:opacity .45s ease; }
@@ -100,14 +122,29 @@
 
   <header>
     <div class="brand">INITIATIVE DATA SYSTEMS (P) LTD.</div>
-    <div class="header-right"><span id="userName"></span><button class="btn-light" onclick="logout()">Log out</button></div>
+    <div class="header-right"><span id="userName"></span><button class="btn-light" onclick="openLogoutModal()">Log out</button></div>
   </header>
 
-  <main>
-    <span class="eyebrow">Workspace</span>
-    <h1 id="welcomeHeading">Welcome</h1>
-    <p class="subtitle">Choose the workspace you need. Your work is securely saved to the shared company system.</p>
+  <div id="logoutModal" style="display:none; position:fixed; inset:0; z-index:60; align-items:center; justify-content:center; background:rgba(16,24,40,.55); backdrop-filter:blur(3px);" onclick="if (event.target === this) closeLogoutModal()">
+    <div style="background:#fff; border-radius:14px; padding:26px 28px; max-width:340px; width:90vw; box-shadow:0 24px 60px rgba(16,24,40,.35);">
+      <h3 style="margin:0 0 8px; font-size:17px; color:var(--ink);">Log out?</h3>
+      <p style="margin:0 0 18px; font-size:13px; color:var(--muted);">This will end your session and return you to the login page.</p>
+      <div style="display:flex; gap:10px; justify-content:flex-end;">
+        <button type="button" class="btn-light" onclick="closeLogoutModal()">Cancel</button>
+        <button type="button" style="padding:10px 14px; background:#d92d20; color:#fff; border-radius:6px; font-weight:700;" onclick="logout()">Log out</button>
+      </div>
+    </div>
+  </div>
 
+  <div class="hero">
+    <div class="hero-inner">
+      <span class="eyebrow">Workspace</span>
+      <h1 id="welcomeHeading">Welcome</h1>
+      <p class="subtitle">Choose the workspace you need. Your work is securely saved to the shared company system.</p>
+    </div>
+  </div>
+
+  <main>
     <div class="grid">
       <article class="tile schemes">
         <div class="tile-glow"></div>
@@ -146,6 +183,8 @@
     document.getElementById('userName').textContent = username;
     document.getElementById('welcomeHeading').textContent = `Welcome, ${username}`;
     function logout() { localStorage.clear(); location.href = appUrl('/login'); }
+    function openLogoutModal() { document.getElementById('logoutModal').style.display = 'flex'; }
+    function closeLogoutModal() { document.getElementById('logoutModal').style.display = 'none'; }
 
     // Show the login-success ring animation only right after a fresh login.
     // The login page should set sessionStorage.setItem('showLoginSuccess','1')

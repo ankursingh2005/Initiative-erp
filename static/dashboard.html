@@ -56,7 +56,17 @@
       font-weight: 600;
     }
     .logout-btn:hover { background: #f0f3f7; }
-    .header-actions { display: flex; align-items: center; }
+    .back-btn {
+      background: transparent;
+      color: #ffffff;
+      border: 1px solid rgba(255,255,255,0.55);
+      padding: 8px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .back-btn:hover { background: rgba(255,255,255,0.12); border-color: #ffffff; }
+    .header-actions { display: flex; align-items: center; gap: 10px; }
     .modal-backdrop {
       position: fixed;
       inset: 0;
@@ -471,6 +481,7 @@
   <header>
     <div class="brand">Initiative ERP <span class="badge" id="roleBadge"></span></div>
     <div class="header-actions">
+      <button class="back-btn" onclick="location.href = appUrl('/home')">&larr; Back</button>
       <button class="logout-btn" onclick="openLogoutModal()">Logout</button>
     </div>
   </header>
@@ -572,6 +583,7 @@
                   <option value="UPI OFFER">UPI OFFER</option>
                   <option value="CARD OFFER">CARD OFFER</option>
                   <option value="BACKEND SUPPORT">BACKEND SUPPORT</option>
+                  <option value="BACKEND & UPI">BACKEND & UPI</option>
                   <option value="FESTIVAL OFFER">FESTIVAL OFFER</option>
                   <option value="MONTHLY OFFER">MONTHLY OFFER</option>
                   <option value="OTHER">OTHER</option>
@@ -593,11 +605,11 @@
                 <label>Other (details)</label>
                 <input id="schemeMatchOther" placeholder="Write anything" />
               </div>
-              <div class="field">
+              <div class="field" id="schemeAmountField">
                 <label>Scheme Amount</label>
                 <input id="schemeAmount" type="text" inputmode="decimal" placeholder="0 or 0.00" />
               </div>
-              <div class="field">
+              <div class="field" id="claimField">
                 <label>Claim</label>
                 <select id="claimStatus">
                   <option value="Automatic Claim">Automatic Claim</option>
@@ -609,7 +621,44 @@
                 <label>Other Claims (details)</label>
                 <input id="claimStatusOther" placeholder="Write anything" />
               </div>
-              <div class="field">
+
+              <!-- BACKEND & UPI split amount/claim tracking, shown only when
+                   "BACKEND & UPI" is selected above -->
+              <div class="field" id="backendUpiGroup" style="display:none; grid-column:1 / -1; border:1px dashed #c7cdd6; border-radius:8px; padding:14px 14px 4px; background:#f9fafc;">
+                <label style="margin-bottom:10px; font-size:13px;">Backend &amp; UPI Split</label>
+                <div class="grid-2" style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px;">
+                  <div>
+                    <label>UPI Scheme Amount</label>
+                    <input id="upiSchemeAmount" type="text" inputmode="decimal" placeholder="0 or 0.00" />
+                  </div>
+                  <div>
+                    <label>UPI Claim Status</label>
+                    <select id="upiClaimStatus">
+                      <option value="Pending">Pending</option>
+                      <option value="Settled">Settled</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label>Backend Scheme Amount</label>
+                    <input id="backendSchemeAmount" type="text" inputmode="decimal" placeholder="0 or 0.00" />
+                  </div>
+                  <div>
+                    <label>Backend Claim</label>
+                    <select id="backendClaimType">
+                      <option value="Automatic Claim">Automatic Claim</option>
+                      <option value="Mannual Claim">Mannual Claim</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label>Backend Claim Status</label>
+                    <select id="backendClaimStatus">
+                      <option value="Pending">Pending</option>
+                      <option value="Settled">Settled</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div class="field" id="claimOverallField">
                 <label>Claim Status</label>
                 <select id="claimOverallStatus">
                   <option value="Pending">Pending</option>
@@ -1145,9 +1194,39 @@
       if (selectedScheme !== 'OTHER') {
         schemesOther.value = '';
       }
+
+      const isBackendUpi = selectedScheme === 'BACKEND & UPI';
+      const backendUpiGroup = document.getElementById('backendUpiGroup');
+      const schemeAmountField = document.getElementById('schemeAmountField');
+      const claimField = document.getElementById('claimField');
+      const claimOverallField = document.getElementById('claimOverallField');
+
+      backendUpiGroup.style.display = isBackendUpi ? '' : 'none';
+      schemeAmountField.style.display = isBackendUpi ? 'none' : '';
+      claimField.style.display = isBackendUpi ? 'none' : '';
+      claimOverallField.style.display = isBackendUpi ? 'none' : '';
+      document.getElementById('claimStatusOtherField').style.display =
+        (!isBackendUpi && document.getElementById('claimStatus').value === 'Other') ? '' : 'none';
+      document.getElementById('settledDateField').style.display =
+        (!isBackendUpi && document.getElementById('claimOverallStatus').value === 'Settled') ? '' : 'none';
+
+      if (!isBackendUpi) {
+        document.getElementById('upiSchemeAmount').value = '';
+        document.getElementById('backendSchemeAmount').value = '';
+        document.getElementById('upiClaimStatus').value = 'Pending';
+        document.getElementById('backendClaimType').value = 'Automatic Claim';
+        document.getElementById('backendClaimStatus').value = 'Pending';
+      } else {
+        document.getElementById('schemeAmount').value = '';
+        document.getElementById('claimStatus').value = 'Automatic Claim';
+        document.getElementById('claimStatusOther').value = '';
+        document.getElementById('claimOverallStatus').value = 'Pending';
+        document.getElementById('settledDate').value = '';
+      }
     }
 
     function applyClaimStatusVisibility() {
+      const isBackendUpi = document.getElementById('schemesSelect').value === 'BACKEND & UPI';
       const claimStatus = document.getElementById('claimStatus').value;
       const claimStatusOtherField = document.getElementById('claimStatusOtherField');
       const claimStatusOther = document.getElementById('claimStatusOther');
@@ -1155,12 +1234,12 @@
       const settledDateField = document.getElementById('settledDateField');
       const settledDate = document.getElementById('settledDate');
 
-      claimStatusOtherField.style.display = claimStatus === 'Other' ? '' : 'none';
+      claimStatusOtherField.style.display = (!isBackendUpi && claimStatus === 'Other') ? '' : 'none';
       if (claimStatus !== 'Other') {
         claimStatusOther.value = '';
       }
 
-      settledDateField.style.display = claimOverallStatus === 'Settled' ? '' : 'none';
+      settledDateField.style.display = (!isBackendUpi && claimOverallStatus === 'Settled') ? '' : 'none';
       if (claimOverallStatus !== 'Settled') {
         settledDate.value = '';
       }
@@ -1272,6 +1351,25 @@
         return text;
       }
       return formatMoney(numericValue);
+    }
+
+    function schemeAmountCellHtml(s) {
+      if (s.schemes === 'BACKEND & UPI') {
+        const upi = exactOrFormattedMoney(s.upi_scheme_amount_exact, s.upi_scheme_amount);
+        const backend = exactOrFormattedMoney(s.backend_scheme_amount_exact, s.backend_scheme_amount);
+        return `UPI: ${upi}<br>Backend: ${backend}`;
+      }
+      return exactOrFormattedMoney(s.scheme_amount_exact, s.scheme_amount);
+    }
+
+    function claimStatusCellHtml(s) {
+      if (s.schemes === 'BACKEND & UPI') {
+        const upiStatus = s.upi_claim_status || 'Pending';
+        const backendStatus = s.backend_claim_status || 'Pending';
+        const backendType = s.backend_claim_type || '';
+        return `UPI: ${upiStatus}<br>Backend (${backendType}): ${backendStatus}`;
+      }
+      return s.claim_status_other || s.claim_status || '';
     }
 
     function parseAmountExact(rawValue, fieldLabel, { required = false } = {}) {
@@ -1989,8 +2087,8 @@
           <td>${s.sales_executive || ''}</td>
           <td>${s.schemes_other || s.schemes || ''}</td>
           <td>${s.scheme_match_other || s.scheme_match || ''}</td>
-          <td>${exactOrFormattedMoney(s.scheme_amount_exact, s.scheme_amount)}</td>
-          <td>${s.claim_status_other || s.claim_status || ''}</td>
+          <td>${schemeAmountCellHtml(s)}</td>
+          <td>${claimStatusCellHtml(s)}</td>
           <td>${s.claim_overall_status || ''}</td>
           <td>${s.settled_date || ''}</td>
           <td>${canDeleteSales() ? `<button type="button" onclick="deleteSale(${s.id})" style="width:auto; padding:6px 10px; background:#c0392b;">Delete</button>` : '-'}</td>
@@ -2004,8 +2102,8 @@
           <td>${s.invoice_date || ''}</td>
           <td>${s.invoice_no || ''}</td>
           <td>${s.schemes_other || s.schemes || ''}</td>
-          <td>${exactOrFormattedMoney(s.scheme_amount_exact, s.scheme_amount)}</td>
-          <td>${s.claim_status_other || s.claim_status || ''}</td>
+          <td>${schemeAmountCellHtml(s)}</td>
+          <td>${claimStatusCellHtml(s)}</td>
           <td>${s.settled_date || ''}</td>
           <td>${canDeleteSales() ? `<button type="button" onclick="deleteSale(${s.id})" style="width:auto; padding:6px 10px; background:#c0392b;">Delete</button>` : '-'}</td>
           <td>${canEditSales() ? `<button type="button" onclick="startSaleEdit(${s.id})" style="width:auto; padding:6px 10px; background:#111111;">Edit</button>` : '-'}</td>
@@ -2072,6 +2170,11 @@
       document.getElementById('claimStatusOther').value = sale.claim_status_other || '';
       document.getElementById('claimOverallStatus').value = sale.claim_overall_status || 'Pending';
       document.getElementById('settledDate').value = sale.settled_date || '';
+      document.getElementById('upiSchemeAmount').value = exactOrFormattedMoney(sale.upi_scheme_amount_exact, sale.upi_scheme_amount);
+      document.getElementById('upiClaimStatus').value = sale.upi_claim_status || 'Pending';
+      document.getElementById('backendSchemeAmount').value = exactOrFormattedMoney(sale.backend_scheme_amount_exact, sale.backend_scheme_amount);
+      document.getElementById('backendClaimType').value = sale.backend_claim_type || 'Automatic Claim';
+      document.getElementById('backendClaimStatus').value = sale.backend_claim_status || 'Pending';
 
       applyCategoryFieldVisibility();
       applySchemesVisibility();
@@ -2107,13 +2210,31 @@
 
       let invoiceAmount;
       let schemeAmount;
+      let upiAmount;
+      let backendAmount;
+      const isBackendUpi = document.getElementById('schemesSelect').value === 'BACKEND & UPI';
       try {
         invoiceAmount = parseAmountExact(document.getElementById('invoiceValue').value, 'Invoice Value', { required: true });
-        schemeAmount = parseAmountExact(document.getElementById('schemeAmount').value, 'Scheme Amount');
+        if (isBackendUpi) {
+          upiAmount = parseAmountExact(document.getElementById('upiSchemeAmount').value, 'UPI Scheme Amount');
+          backendAmount = parseAmountExact(document.getElementById('backendSchemeAmount').value, 'Backend Scheme Amount');
+        } else {
+          schemeAmount = parseAmountExact(document.getElementById('schemeAmount').value, 'Scheme Amount');
+        }
       } catch (e) {
         saleMsg.textContent = e.message || 'Please enter valid amounts.';
         return;
       }
+
+      // When BACKEND & UPI is selected, the single Scheme Amount / Claim /
+      // Claim Status fields are replaced by the split UPI + Backend amounts
+      // below; combined totals are still saved so existing reports keep working.
+      const combinedSchemeAmount = isBackendUpi
+        ? (Number(upiAmount?.numeric || 0) + Number(backendAmount?.numeric || 0))
+        : schemeAmount.numeric;
+      const combinedClaimOverallStatus = isBackendUpi
+        ? ((document.getElementById('upiClaimStatus').value === 'Settled' && document.getElementById('backendClaimStatus').value === 'Settled') ? 'Settled' : 'Pending')
+        : document.getElementById('claimOverallStatus').value;
 
       const payload = {
         invoice_no: document.getElementById('invoiceNo').value,
@@ -2139,16 +2260,23 @@
         scheme_match_other: document.getElementById('schemeMatch').value === 'Other'
           ? (document.getElementById('schemeMatchOther').value.trim() || null)
           : null,
-        scheme_amount: schemeAmount.numeric,
-        scheme_amount_exact: schemeAmount.exact,
-        claim_status: document.getElementById('claimStatus').value,
-        claim_status_other: document.getElementById('claimStatus').value === 'Other'
+        scheme_amount: combinedSchemeAmount,
+        scheme_amount_exact: isBackendUpi ? null : schemeAmount.exact,
+        claim_status: isBackendUpi ? document.getElementById('backendClaimType').value : document.getElementById('claimStatus').value,
+        claim_status_other: (!isBackendUpi && document.getElementById('claimStatus').value === 'Other')
           ? (document.getElementById('claimStatusOther').value.trim() || null)
           : null,
-        claim_overall_status: document.getElementById('claimOverallStatus').value,
-        settled_date: document.getElementById('claimOverallStatus').value === 'Settled'
+        claim_overall_status: combinedClaimOverallStatus,
+        settled_date: (!isBackendUpi && document.getElementById('claimOverallStatus').value === 'Settled')
           ? document.getElementById('settledDate').value
           : null,
+        upi_scheme_amount: isBackendUpi ? upiAmount.numeric : null,
+        upi_scheme_amount_exact: isBackendUpi ? upiAmount.exact : null,
+        upi_claim_status: isBackendUpi ? document.getElementById('upiClaimStatus').value : null,
+        backend_scheme_amount: isBackendUpi ? backendAmount.numeric : null,
+        backend_scheme_amount_exact: isBackendUpi ? backendAmount.exact : null,
+        backend_claim_type: isBackendUpi ? document.getElementById('backendClaimType').value : null,
+        backend_claim_status: isBackendUpi ? document.getElementById('backendClaimStatus').value : null,
         sales_executive: document.getElementById('salesExecutive').value || null,
         sale_date: document.getElementById('invoiceDate').value
       };
