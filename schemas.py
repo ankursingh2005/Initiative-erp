@@ -272,6 +272,7 @@ class UserSignup(BaseModel):
     store_id: Optional[int] = None
     category_code: Optional[str] = None
     brand_ids: List[int] = []
+    invite_code: str
 
 
 class UserOut(BaseModel):
@@ -349,8 +350,17 @@ class Token(BaseModel):
 
 
 class ForgotPasswordRequest(BaseModel):
+    """Step 1: person asks for a reset link. We always respond the same way
+    whether or not the account exists, so this endpoint can't be used to
+    check who has an account (username/email enumeration)."""
     username: Optional[str] = None
     email: Optional[str] = None
+
+
+class ResetPasswordConfirm(BaseModel):
+    """Step 2: person clicks the emailed link and submits the token that
+    came with it, along with their new password."""
+    token: str
     new_password: str
     confirm_password: str
 

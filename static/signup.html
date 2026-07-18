@@ -233,6 +233,10 @@
       <label for="password">Password</label>
       <input id="password" type="password" placeholder="Password" required />
 
+      <label for="inviteCode">Invite Code</label>
+      <input id="inviteCode" type="password" placeholder="Code depends on your role/category/brand" required />
+      <p class="helper" style="margin-top:4px;">Each role has its own code (e.g. Admin, Accounts, MIS Executive). Category Managers need their category's code; Brand Managers/Partners need their brand's code. Ask your Admin if you don't have yours.</p>
+
       <label for="role">Role</label>
       <select id="role" onchange="onRoleChange()" required>
         <option value="">Select role</option>
@@ -358,11 +362,13 @@
       const username = document.getElementById("username").value.trim();
       const email = document.getElementById("email").value.trim();
       const password = document.getElementById("password").value;
+      const inviteCode = document.getElementById("inviteCode").value;
       const missingFields = [];
 
       if (!username) missingFields.push(fieldLabel("Username"));
       if (!email) missingFields.push(fieldLabel("Email"));
       if (!password) missingFields.push(fieldLabel("Password"));
+      if (!inviteCode) missingFields.push(fieldLabel("Invite Code"));
       if (!role) missingFields.push(fieldLabel("Role"));
 
       if (role === "CategoryManager") {
@@ -387,6 +393,7 @@
         email,
         password,
         role,
+        invite_code: inviteCode,
         store_id: null,
         category_code: null,
         brand_ids: []

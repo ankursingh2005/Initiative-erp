@@ -1,8 +1,9 @@
-const CACHE_NAME = 'initiative-erp-v4';
+const CACHE_NAME = 'initiative-erp-v5';
 const CORE_ASSETS = [
   '/login',
   '/signup',
   '/forgot-password',
+  '/reset-password',
   '/home',
   '/dashboard',
   '/purchase-orders',

@@ -285,6 +285,11 @@ class User(Base):
     status = Column(String(20), default="Active")
     created_date = Column(DateTime, default=datetime.utcnow)
 
+    # Used for the email-verified "forgot password" flow. A reset link is
+    # only valid if the token matches AND it hasn't expired.
+    reset_token = Column(String(100), nullable=True)
+    reset_token_expires = Column(DateTime, nullable=True)
+
     brands = relationship("UserBrand", back_populates="user", cascade="all, delete-orphan")
 
 

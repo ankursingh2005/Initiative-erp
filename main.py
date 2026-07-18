@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import inspect, text
 from typing import List, Optional
 from decimal import Decimal, ROUND_HALF_UP
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from io import BytesIO
 from collections import defaultdict
 import csv
@@ -109,6 +109,8 @@ def ensure_database_schema():
     ensure_column("users", "category_code", "VARCHAR(20)")
     ensure_column("users", "status", "VARCHAR(20)")
     ensure_column("users", "created_date", "TIMESTAMP")
+    ensure_column("users", "reset_token", "VARCHAR(100)")
+    ensure_column("users", "reset_token_expires", "TIMESTAMP")
 
 
 ensure_database_schema()
@@ -741,6 +743,12 @@ def forgot_password_page():
     return serve_html("static/forgot_password.html")
 
 
+@app.get("/reset-password")
+@app.get("/reset-password.html")
+def reset_password_page():
+    return serve_html("static/reset_password.html")
+
+
 @app.get("/dashboard")
 @app.get("/dashboard.html")
 def dashboard_page():
@@ -775,6 +783,75 @@ def service_worker_file():
 
 @app.post("/auth/signup", response_model=schemas.UserOut)
 def signup(user: schemas.UserSignup, db: Session = Depends(get_db)):
+    # --------------------------------------------------------------
+    # Invite-code gate: the signup page is public (anyone can reach it
+    # once this app is on the Play/App Store), so each role -- and each
+    # Category Manager's category, and each Brand Manager/Partner's
+    # brand -- requires its own separate code. This means a code that
+    # leaks only exposes that one role/category/brand, not the whole
+    # system, and you can rotate a single one without affecting others.
+    #
+    # Override any of these in your environment (Render dashboard ->
+    # Environment, or a local .env file) without changing code:
+    #   SIGNUP_CODE_ADMIN, SIGNUP_CODE_ACCOUNTS, SIGNUP_CODE_MIS,
+    #   SIGNUP_CODE_CAT_HA, SIGNUP_CODE_CAT_HE, SIGNUP_CODE_CAT_IT,
+    #   SIGNUP_CODE_CAT_MOBILE, SIGNUP_CODE_UNIVERSAL
+    # Brand codes are not env vars -- they're always "INITIATIVE@<BRAND NAME>"
+    # (uppercased, spaces removed), generated automatically per brand.
+    # --------------------------------------------------------------
+    ROLE_INVITE_CODES = {
+        "Admin": os.getenv("SIGNUP_CODE_ADMIN", "Initiative@#%_-Admin"),
+        "Accounts": os.getenv("SIGNUP_CODE_ACCOUNTS", "Initiative/AC"),
+        "MISExecutive": os.getenv("SIGNUP_CODE_MIS", "Initiative%MS"),
+    }
+    CATEGORY_INVITE_CODES = {
+        "HA": os.getenv("SIGNUP_CODE_CAT_HA", "Initiative@HA"),
+        "HE": os.getenv("SIGNUP_CODE_CAT_HE", "Initiative#HE"),
+        "IT": os.getenv("SIGNUP_CODE_CAT_IT", "Initiative-IT"),
+        "MH": os.getenv("SIGNUP_CODE_CAT_MOBILE", "Initiative_MO"),
+    }
+    UNIVERSAL_INVITE_CODE = os.getenv("SIGNUP_CODE_UNIVERSAL", "Initiative@Universal")
+
+    def brand_invite_code(brand_name: str) -> str:
+        normalized = re.sub(r"\s+", "", brand_name or "").upper()
+        return f"INITIATIVE@{normalized}"
+
+    submitted_code = (user.invite_code or "").strip()
+
+    if user.role in ROLE_INVITE_CODES:
+        expected = ROLE_INVITE_CODES[user.role]
+        if submitted_code != expected:
+            raise HTTPException(status_code=403, detail="Invalid invite code for this role")
+
+    elif user.role == "CategoryManager":
+        category_code = normalize_category_code(user.category_code)
+        expected = CATEGORY_INVITE_CODES.get(category_code)
+        if expected is None:
+            # No code configured for this category yet -- fall back to
+            # the universal code rather than locking everyone out.
+            expected = UNIVERSAL_INVITE_CODE
+        if submitted_code != expected:
+            raise HTTPException(status_code=403, detail="Invalid invite code for this category")
+
+    elif user.role in ("BrandManager", "BrandPartner"):
+        if not user.brand_ids:
+            raise HTTPException(status_code=400, detail="Select at least one brand")
+        brands = db.query(models.Brand).filter(models.Brand.id.in_(user.brand_ids)).all()
+        matched = any(
+            submitted_code.strip().upper() == brand_invite_code(b.name)
+            for b in brands
+        )
+        if not matched:
+            raise HTTPException(
+                status_code=403,
+                detail="Invalid invite code for the selected brand(s). "
+                       "Code format: INITIATIVE@<BRAND NAME IN CAPITALS>",
+            )
+
+    else:
+        if submitted_code != UNIVERSAL_INVITE_CODE:
+            raise HTTPException(status_code=403, detail="Invalid invite code")
+
     existing = (
         db.query(models.User)
         .filter((models.User.username == user.username) | (models.User.email == user.email))
@@ -831,13 +908,51 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     }
 
 
+def send_password_reset_email(user: models.User, token: str) -> str:
+    """Reuses the same SMTP env vars as send_purchase_order_email
+    (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM)."""
+    smtp_host = os.getenv("SMTP_HOST")
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_password = os.getenv("SMTP_PASSWORD")
+    smtp_from = os.getenv("SMTP_FROM", smtp_user or "")
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+    app_base_url = os.getenv("APP_BASE_URL", "").rstrip("/")
+
+    if not (smtp_host and smtp_user and smtp_password):
+        return "Not sent: SMTP is not configured (set SMTP_HOST, SMTP_USER, SMTP_PASSWORD)."
+
+    reset_link = f"{app_base_url}/reset-password?token={token}" if app_base_url else f"(reset code: {token})"
+    body = (
+        f"Hello {user.username},\n\n"
+        f"Use this link to reset your Initiative ERP password:\n{reset_link}\n\n"
+        f"This link expires in 30 minutes. If you didn't request this, you can ignore this email."
+    )
+    message = MIMEText(body)
+    message["Subject"] = "Initiative ERP - Password Reset"
+    message["From"] = smtp_from
+    message["To"] = user.email
+
+    try:
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_password)
+            server.sendmail(smtp_from, [user.email], message.as_string())
+    except Exception as exc:  # noqa: BLE001
+        return f"Not sent: email delivery failed ({exc})."
+
+    return "Reset email sent."
+
+
 @app.post("/auth/forgot-password")
 def forgot_password(payload: schemas.ForgotPasswordRequest, db: Session = Depends(get_db)):
-    if payload.new_password != payload.confirm_password:
-        raise HTTPException(status_code=400, detail="New password and confirm password do not match")
-
+    """Step 1: look up the account and, if found, email a one-time reset
+    link. Always returns the same generic message either way, so this
+    endpoint can't be used to check whether a username/email exists."""
     username = (payload.username or "").strip()
     email = (payload.email or "").strip()
+    generic_message = {
+        "message": "If an account matches those details, a password reset email has been sent."
+    }
     if not username and not email:
         raise HTTPException(status_code=400, detail="Enter username or email to reset the password")
 
@@ -848,10 +963,31 @@ def forgot_password(payload: schemas.ForgotPasswordRequest, db: Session = Depend
         user = query.filter(models.User.username == username).first()
     else:
         user = query.filter(models.User.email == email).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="No account found for the provided username or email")
+
+    if user:
+        token = uuid4().hex
+        user.reset_token = token
+        user.reset_token_expires = datetime.utcnow() + timedelta(minutes=30)
+        db.commit()
+        send_password_reset_email(user, token)
+
+    return generic_message
+
+
+@app.post("/auth/reset-password")
+def reset_password(payload: schemas.ResetPasswordConfirm, db: Session = Depends(get_db)):
+    """Step 2: person submits the token from their email plus a new
+    password. Only succeeds if the token matches and hasn't expired."""
+    if payload.new_password != payload.confirm_password:
+        raise HTTPException(status_code=400, detail="New password and confirm password do not match")
+
+    user = db.query(models.User).filter(models.User.reset_token == payload.token).first()
+    if not user or not user.reset_token_expires or user.reset_token_expires < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Reset link is invalid or has expired. Request a new one.")
 
     user.password_hash = auth.hash_password(payload.new_password)
+    user.reset_token = None
+    user.reset_token_expires = None
     db.commit()
 
     return {"message": "Password updated successfully"}
