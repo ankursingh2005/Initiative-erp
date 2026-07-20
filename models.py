@@ -328,11 +328,17 @@ class PurchaseOrder(Base):
     exported_to_busy = Column(Boolean, default=False, nullable=False)
     exported_to_busy_at = Column(DateTime, nullable=True)
     submitted_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    # Admin approval gate: a Category Manager's request must be Approved by
+    # an Admin before MIS is allowed to send it to the supplier / finalize it
+    # as Ordered. Set when an Admin moves the status to "Approved".
+    approved_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    approved_date = Column(DateTime, nullable=True)
     created_date = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_date = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     items = relationship("PurchaseOrderItem", back_populates="purchase_order", cascade="all, delete-orphan")
     submitted_by = relationship("User", foreign_keys=[submitted_by_user_id])
+    approved_by = relationship("User", foreign_keys=[approved_by_user_id])
 
 
 class PurchaseOrderItem(Base):
@@ -381,5 +387,29 @@ class BrandSupplierEmail(Base):
     __tablename__ = "brand_supplier_emails"
     id = Column(Integer, primary_key=True, index=True)
     brand_name = Column(String(150), nullable=False, index=True)
+    email = Column(String(150), nullable=False)
+
+
+# ============================================================
+# SUPPLIER PROFILE (per supplier name, not per brand)
+# Once Admin/MIS types a supplier's address and GSTIN on any purchase
+# order, it's remembered here and auto-filled next time the same supplier
+# name is used on a different request. Emails are tracked separately in
+# SupplierEmail so more than one contact can be saved per supplier.
+# ============================================================
+
+class SupplierProfile(Base):
+    __tablename__ = "supplier_profiles"
+    id = Column(Integer, primary_key=True, index=True)
+    supplier_name = Column(String(200), unique=True, nullable=False, index=True)
+    supplier_address = Column(String(500), nullable=True)
+    supplier_gstin = Column(String(30), nullable=True)
+    updated_date = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class SupplierEmail(Base):
+    __tablename__ = "supplier_emails"
+    id = Column(Integer, primary_key=True, index=True)
+    supplier_name = Column(String(200), nullable=False, index=True)
     email = Column(String(150), nullable=False)
     created_date = Column(DateTime, default=datetime.utcnow)

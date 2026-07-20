@@ -338,6 +338,30 @@ class SendPurchaseOrderEmailResult(BaseModel):
     notification_status: str
 
 
+class SupplierEmailCreate(BaseModel):
+    supplier_name: str
+    email: str
+
+
+class SupplierEmailEntry(BaseModel):
+    id: int
+    email: str
+
+    class Config:
+        from_attributes = True
+
+
+class SupplierProfileOut(BaseModel):
+    """Saved once per supplier name so Admin/MIS don't have to retype the
+    same address, GSTIN, or contact emails on every future purchase order
+    for that supplier."""
+    supplier_name: str
+    supplier_address: Optional[str] = None
+    supplier_gstin: Optional[str] = None
+    emails: List[SupplierEmailEntry] = []
+
+
+
 class MarkExportedToBusyRequest(BaseModel):
     purchase_order_ids: List[int]
 
@@ -386,6 +410,9 @@ class PurchaseOrderCreate(BaseModel):
     brand_name: Optional[str] = None
     supplier_name: Optional[str] = None
     supplier_email: Optional[str] = None
+    # Every email entered in the compact "Supplier email(s)" list, so more
+    # than one contact can be remembered per supplier name at once.
+    supplier_emails: Optional[List[str]] = None
     supplier_address: Optional[str] = None
     supplier_gstin: Optional[str] = None
     delivery_address: Optional[str] = None
@@ -405,6 +432,9 @@ class PurchaseOrderStatusUpdate(BaseModel):
     brand_name: Optional[str] = None
     supplier_name: Optional[str] = None
     supplier_email: Optional[str] = None
+    # Every email entered in the compact "Supplier email(s)" list, so more
+    # than one contact can be remembered per supplier name at once.
+    supplier_emails: Optional[List[str]] = None
     supplier_address: Optional[str] = None
     supplier_gstin: Optional[str] = None
     delivery_address: Optional[str] = None
@@ -441,6 +471,8 @@ class PurchaseOrderOut(BaseModel):
     exported_to_busy_at: Optional[datetime] = None
     submitted_by_user_id: int
     submitted_by_username: Optional[str] = None
+    approved_by_username: Optional[str] = None
+    approved_date: Optional[datetime] = None
     notification_status: Optional[str] = None
     created_date: datetime
     updated_date: datetime

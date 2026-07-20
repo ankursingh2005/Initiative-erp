@@ -24,8 +24,26 @@
     .table-wrap { overflow-x:auto; border:1px solid #e4e7ec; border-radius:6px; } table { width:100%; min-width:640px; border-collapse:collapse; } th,td { padding:9px 8px; border-bottom:1px solid #eaecf0; text-align:left; font-size:13px; vertical-align:top; } th { background:#f9fafb; color:#475467; font-size:12px; white-space:nowrap; } td input { min-width:100px; min-height:36px; padding:7px; } td .small { min-width:72px; width:78px; }
     .remove { background:transparent; color:var(--danger); font-size:18px; padding:5px 7px; } .actions { display:flex; justify-content:flex-end; gap:10px; margin-top:16px; } .message { min-height:20px; margin-top:12px; font-size:13px; color:var(--danger); } .message.success { color:var(--good); }
     .filters { display:flex; gap:10px; align-items:center; flex-wrap:wrap; } .filters select { width:auto; min-width:150px; }
+    .reason-options { display:flex; flex-direction:column; gap:10px; margin:18px 0 4px; }
+    .reason-option { display:flex; align-items:center; gap:12px; padding:14px 16px; border:1.5px solid var(--line); border-radius:10px; cursor:pointer; font-size:14px; font-weight:600; color:var(--ink); background:#fff; transition:border-color .15s ease, background .15s ease, box-shadow .15s ease; }
+    .reason-option:hover { border-color:#98a2b3; background:#f9fafb; }
+    .reason-option input[type="radio"] { width:18px; height:18px; min-height:0; accent-color:var(--danger); flex-shrink:0; margin:0; }
+    .reason-option.selected { border-color:var(--danger); background:#fef3f2; box-shadow:0 0 0 1px var(--danger) inset; }
+    .reason-option span { line-height:1.35; }
+    #rejectReasonManualWrap textarea { margin-top:2px; }
+    .confirm-modal { max-width:400px; text-align:center; padding:30px 28px 24px; }
+    .confirm-icon { width:56px; height:56px; border-radius:50%; margin:0 auto 18px; display:flex; align-items:center; justify-content:center; }
+    .confirm-icon svg { width:26px; height:26px; }
+    .confirm-icon.good { background:#ecfdf3; }
+    .confirm-icon.good svg { stroke:var(--good); }
+    .confirm-icon.danger { background:#fef3f2; }
+    .confirm-icon.danger svg { stroke:var(--danger); }
+    .confirm-modal h3 { font-size:18px; margin-bottom:8px; }
+    .confirm-message { color:var(--muted); font-size:14px; line-height:1.5; margin:0 0 22px; }
+    .confirm-modal .actions { justify-content:center; }
+    .confirm-modal .actions button { min-width:110px; padding:11px 16px; }
     .export-actions { display:flex; gap:8px; }
-    .po-list { display:grid; gap:12px; } .po-row { border:1px solid #e4e7ec; border-radius:7px; padding:15px; background:#fff; } .po-top { display:flex; gap:12px; align-items:flex-start; justify-content:space-between; } .po-no { font-weight:700; font-size:15px; } .po-meta { color:var(--muted); margin-top:4px; font-size:13px; } .status { padding:4px 8px; border-radius:999px; font-size:12px; font-weight:700; background:#eff8ff; color:#175cd3; white-space:nowrap; } .status.ordered { background:#ecfdf3; color:#027a48; } .status.cancelled { background:#fef3f2; color:#b42318; }
+    .po-list { display:grid; gap:12px; } .po-row { border:1px solid #e4e7ec; border-radius:7px; padding:15px; background:#fff; } .po-top { display:flex; gap:12px; align-items:flex-start; justify-content:space-between; } .po-no { font-weight:700; font-size:15px; } .po-meta { color:var(--muted); margin-top:4px; font-size:13px; } .status { padding:4px 8px; border-radius:999px; font-size:12px; font-weight:700; background:#eff8ff; color:#175cd3; white-space:nowrap; } .status.ordered { background:#ecfdf3; color:#027a48; } .status.cancelled { background:#fef3f2; color:#b42318; } .status.approved { background:#ecfdf3; color:#027a48; } .status.rejected { background:#fef3f2; color:#b42318; } .status.requested { background:#fffaeb; color:#b54708; }
     .po-items { margin-top:12px; color:#475467; font-size:13px; line-height:1.6; } .po-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; } .po-actions button { padding:7px 10px; font-size:13px; }
     dialog { width:min(880px,calc(100% - 32px)); max-height:90vh; overflow-y:auto; border:0; border-radius:8px; padding:0; box-shadow:0 20px 50px rgba(16,24,40,.28); } dialog::backdrop { background:rgba(16,24,40,.55); } .modal { padding:20px; } .modal h2 { margin-bottom:4px; } .modal .subtitle { margin-bottom:16px; } .modal .form-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .modal .section-block { border-top:1px solid #eaecf0; margin-top:18px; padding-top:18px; }
     .readonly-summary { background:#f9fafb; border:1px solid #eaecf0; border-radius:6px; padding:10px 12px; font-size:13px; color:#344054; display:flex; gap:18px; flex-wrap:wrap; }
@@ -68,6 +86,35 @@
     .po-sheet .terms .left { flex:1.5; border-right:1px solid #111; }
     .po-sheet .terms .right { flex:1; display:flex; flex-direction:column; justify-content:space-between; }
     .po-sheet .sign { text-align:right; margin-top:34px; }
+
+    /* ---- Send PO button: idle -> sending (spinning ring) -> sent (check) ---- */
+    .po-send-wrap { display:flex; justify-content:center; align-items:center; padding:6px 0 2px; }
+    .po-send-btn { position:relative; display:inline-flex; align-items:center; gap:10px; min-width:190px; justify-content:center; padding:13px 22px; border-radius:999px; background:var(--good); color:#fff; font-size:15.5px; box-shadow:0 8px 20px rgba(2,122,72,.25); transition:background .2s ease, box-shadow .2s ease, transform .12s ease; }
+    .po-send-btn:hover:not(:disabled) { background:#026139; transform:translateY(-1px); }
+    .po-send-btn:disabled { cursor:default; opacity:.92; }
+    .po-send-btn.sent { background:#027a48; box-shadow:0 8px 20px rgba(2,122,72,.3); }
+    .po-send-ring { position:relative; width:22px; height:22px; display:none; flex-shrink:0; }
+    .po-send-btn.sending .po-send-ring, .po-send-btn.sent .po-send-ring { display:inline-block; }
+    .po-send-ring svg { width:100%; height:100%; transform:rotate(-90deg); }
+    .po-send-ring .ring-bg { fill:none; stroke:rgba(255,255,255,.35); stroke-width:5; }
+    .po-send-ring .ring-progress { fill:none; stroke:#fff; stroke-width:5; stroke-linecap:round; stroke-dasharray:126; stroke-dashoffset:126; }
+    .po-send-btn.sending .po-send-ring .ring-progress { animation:poRingSpin 1s linear infinite; stroke-dasharray:90 36; }
+    .po-send-btn.sent .po-send-ring .ring-progress { animation:poRingDraw .5s cubic-bezier(.65,0,.35,1) forwards; }
+    .po-send-dot { position:absolute; top:50%; left:50%; width:5px; height:5px; margin:-2.5px; border-radius:50%; background:#fff; opacity:0; }
+    .po-send-btn.sending .po-send-dot { opacity:1; animation:poDotOrbit 1s cubic-bezier(.65,0,.35,1) infinite; }
+    .po-send-check { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; opacity:0; }
+    .po-send-check svg { width:15px; height:15px; }
+    .po-send-check path { fill:none; stroke:#fff; stroke-width:4.5; stroke-linecap:round; stroke-linejoin:round; stroke-dasharray:40; stroke-dashoffset:40; }
+    .po-send-btn.sent .po-send-check { opacity:1; }
+    .po-send-btn.sent .po-send-check path { animation:poCheckDraw .35s ease forwards .3s; }
+    @keyframes poRingSpin { to { transform:rotate(270deg); } }
+    @keyframes poRingDraw { to { stroke-dashoffset:0; } }
+    @keyframes poDotOrbit {
+      0%   { transform:rotate(0deg) translateX(11px) rotate(0deg); opacity:1; }
+      85%  { transform:rotate(320deg) translateX(11px) rotate(-320deg); opacity:1; }
+      100% { transform:rotate(360deg) translateX(11px) rotate(-360deg); opacity:0; }
+    }
+    @keyframes poCheckDraw { to { stroke-dashoffset:0; } }
   </style>
 </head>
 <body>
@@ -84,7 +131,7 @@
     </div>
   </div>
   <main>
-    <div class="title-row"><div><h1>Purchase Order Requests</h1><p class="subtitle">Category managers raise stock requests; Admin/MIS verify and finalize with the supplier.</p></div><div class="filters"><select id="statusFilter" onchange="renderOrders()"><option value="">All statuses</option><option>Requested</option><option>Under Review</option><option>Ordered</option><option>Cancelled</option></select></div></div>
+    <div class="title-row"><div><h1>Purchase Order Requests</h1><p class="subtitle">Category managers raise stock requests, Admin approves or rejects them, then MIS finalizes with the supplier.</p></div><div class="filters"><select id="statusFilter" onchange="renderOrders()"><option value="">All statuses</option><option>Requested</option><option>Approved</option><option>Rejected</option><option>Ordered</option><option>Cancelled</option></select></div></div>
 
     <section class="card hidden" id="requisitionCard">
       <div class="section-head"><div><h2>Procurement details</h2><p>Division and Brand are scoped to your assigned category. Pick "Others" to type a brand that's not listed yet.</p></div></div>
@@ -130,8 +177,16 @@
       </div>
 
       <div class="form-grid" style="margin-top:16px">
-        <div class="span-2"><label for="processSupplier">Supplier / distributor</label><input id="processSupplier" placeholder="Company or distributor name" /></div>
-        <div class="span-2"><label for="processSupplierEmail">Supplier email</label><input id="processSupplierEmail" type="email" placeholder="orders@supplier.com" /></div>
+        <div class="span-2">
+          <label for="processSupplier">Supplier / distributor</label>
+          <input id="processSupplier" placeholder="Company or distributor name" />
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-top:10px;">
+            <label style="margin:0;">Supplier email(s)</label>
+            <button class="btn-light" type="button" onclick="addSupplierEmailRow()" style="padding:4px 10px; font-size:12px;">+ Add email</button>
+          </div>
+          <div id="supplierEmailRows" style="margin-top:6px; display:flex; flex-direction:column; gap:6px;"></div>
+          <div id="supplierEmailMessage" class="message"></div>
+        </div>
         <div class="span-2"><label for="processSupplierAddress">Supplier address</label><textarea id="processSupplierAddress" placeholder="Full registered address of the supplier"></textarea></div>
         <div><label for="processSupplierGstin">Supplier GSTIN / UIN</label><input id="processSupplierGstin" placeholder="09AAACGXXXXX1ZS" /></div>
         <div class="span-2">
@@ -154,34 +209,45 @@
       </div>
 
       <div class="section-block">
-        <h3>Brand email book</h3>
-        <p class="hint">Every address here gets the PO in one click. Add more any time — they're saved for next time too.</p>
-        <div class="chip-list" id="brandEmailChips"></div>
-        <div class="add-email-row">
-          <input id="newBrandEmail" type="email" placeholder="Add another email for this brand" />
-          <button class="btn-light" type="button" onclick="addBrandEmail()">Add</button>
-          <button class="btn-good" type="button" onclick="sendPoEmail()">Send PO Email</button>
-        </div>
-        <div id="emailSendMessage" class="message"></div>
-      </div>
-
-      <div class="section-block">
         <div class="section-head"><div><h3>Requested Goods</h3><p>Edit the product list and add HSN/SAC codes before finalizing.</p></div><button class="btn-light" type="button" onclick="addItemRow('processItemsBody')">Add item</button></div>
         <div class="table-wrap"><table><thead><tr><th>Product name *</th><th>Variant</th><th>Color</th><th>HSN/SAC</th><th>Req. qty *</th><th>Price</th><th></th></tr></thead><tbody id="processItemsBody"></tbody></table></div>
       </div>
 
       <div class="section-block">
+        <div class="po-send-wrap">
+          <button id="sendPoBtn" class="po-send-btn" type="button" onclick="sendPoEmail()">
+            <span class="po-send-ring" id="sendPoRing">
+              <svg viewBox="0 0 48 48">
+                <circle class="ring-bg" cx="24" cy="24" r="20"></circle>
+                <circle class="ring-progress" cx="24" cy="24" r="20"></circle>
+              </svg>
+              <span class="po-send-dot"></span>
+              <span class="po-send-check">
+                <svg viewBox="0 0 24 24"><path d="M4 12.5L9.5 18L20 6"></path></svg>
+              </span>
+            </span>
+            <span class="po-send-label" id="sendPoLabel">Send PO</span>
+          </button>
+        </div>
+        <div id="sendEmailMessage" class="message" style="text-align:center;"></div>
+      </div>
+
+      <div class="section-block">
         <h3>Order status</h3>
-        <p class="hint">Set status to "Ordered" and enter the Busy PO number once the order is finalized with the party.</p>
+        <p class="hint" id="statusHint">Set status to "Ordered" and enter the Busy PO number once the order is finalized with the party.</p>
+        <div id="approvalWaitingNotice" class="message hidden" style="color:#b54708;">Waiting for Admin approval. This can't be sent to the supplier or marked Ordered until Admin approves it.</div>
         <div class="form-grid" style="margin-top:12px">
-          <div><label for="processStatus">Status</label><select id="processStatus"><option>Requested</option><option>Under Review</option><option>Ordered</option><option>Cancelled</option></select></div>
+          <div><label for="processStatus">Status</label><select id="processStatus" onchange="handleProcessStatusChange()"></select></div>
           <div><label for="busyNumber">Busy PO number</label><input id="busyNumber" placeholder="IDS/PO/HA/181" /></div>
           <div><label for="orderedDate">Ordered date</label><input id="orderedDate" type="date" /></div>
         </div>
+        <div class="form-grid" style="margin-top:12px">
+          <div class="span-2"><label for="processNote">Note (visible to the Category Manager)</label><textarea id="processNote" placeholder="Selecting Rejected above will ask you to pick a reason, or write any other instruction for the requester here"></textarea></div>
+        </div>
       </div>
 
-      <div class="actions"><button class="btn-light" type="button" onclick="processDialog.close()">Cancel</button><button class="btn-outline" type="button" onclick="viewPurchaseOrder()">View PO</button><button class="btn-outline" type="button" onclick="downloadPurchaseOrder()">Download PDF</button><button class="btn-light" type="button" onclick="saveChanges()">Save Changes</button><button class="btn" type="button" onclick="finalOrder()">Final Order</button></div>
-      <p class="hint">Use View PO to check everything first. Final Order sets status to Ordered, saves everything above, and emails the PO to every supplier address in the book — all in one click.</p>
+      <div class="actions"><button class="btn-light" type="button" onclick="processDialog.close()">Cancel</button><button class="btn-outline" type="button" onclick="viewPurchaseOrder()">View PO</button><button class="btn-outline" type="button" onclick="downloadPurchaseOrder('downloadMessage')">Download PDF</button><button class="btn-light" type="button" onclick="saveChanges()">Save Changes</button><button class="btn" type="button" id="finalOrderBtn" onclick="finalOrder()">Final Order</button></div>
+      <p class="hint">Use View PO to check everything first. Final Order sets status to Ordered, saves everything above, and emails the PO to every supplier address in the book — all in one click. Only available once Admin has approved the request.</p>
       <div id="downloadMessage" class="message"></div>
       <div id="processMessage" class="message"></div>
     </form>
@@ -189,12 +255,42 @@
 
   <dialog id="poPreviewDialog">
     <div class="modal">
-      <div class="section-head"><div><h2>Purchase Order Preview</h2><p>This is exactly what gets downloaded and emailed. Nothing is saved yet.</p></div><button class="btn-light" type="button" onclick="poPreviewDialog.close()">Close</button></div>
+      <div class="section-head"><div><h2>Purchase Order Preview</h2><p id="poPreviewSubtitle">This is exactly what gets downloaded and emailed. Nothing is saved yet.</p></div><button class="btn-light" type="button" onclick="poPreviewDialog.close()">Close</button></div>
       <div id="poPreviewBody" style="overflow-x:auto; border:1px solid #e4e7ec; border-radius:6px; padding:12px; background:#f5f7fa;"></div>
+      <div id="poPreviewMessage" class="message"></div>
       <div class="actions">
         <button class="btn-light" type="button" onclick="poPreviewDialog.close()">Close</button>
-        <button class="btn-outline" type="button" onclick="downloadPurchaseOrder()">Download PDF</button>
-        <button class="btn" type="button" onclick="poPreviewDialog.close(); finalOrder();">Looks good — Final Order</button>
+        <button class="btn-outline" type="button" onclick="downloadPurchaseOrder('poPreviewMessage')">Download PDF</button>
+        <button class="btn" type="button" id="previewFinalOrderBtn" onclick="poPreviewDialog.close(); finalOrder();">Looks good — Final Order</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="rejectReasonDialog">
+    <div class="modal" style="max-width:440px">
+      <div class="section-head"><div><h3>Reason for Rejection</h3><p>Select a reason to share with the Category Manager.</p></div></div>
+      <div class="reason-options">
+        <label class="reason-option"><input type="radio" name="rejectReason" value="CURRENTLY NO NEED OF THIS PRODUCT" /><span>Currently no need of this product</span></label>
+        <label class="reason-option"><input type="radio" name="rejectReason" value="THIS PRODUCT IS NOT PROFITABLE" /><span>This product is not profitable</span></label>
+        <label class="reason-option"><input type="radio" name="rejectReason" value="PRESENT IN OUR STOCK" /><span>Present in our stock</span></label>
+        <label class="reason-option"><input type="radio" name="rejectReason" value="__other__" /><span>Enter rejection reason manually</span></label>
+      </div>
+      <div id="rejectReasonManualWrap" class="hidden"><textarea id="rejectReasonManual" placeholder="Type the rejection reason" rows="3"></textarea></div>
+      <div id="rejectReasonMessage" class="message"></div>
+      <div class="actions"><button class="btn-light" type="button" onclick="rejectReasonDialog.close()">Cancel</button><button class="btn-danger" type="button" onclick="confirmRejectReason()">Confirm Rejection</button></div>
+    </div>
+  </dialog>
+
+  <dialog id="appConfirmDialog">
+    <div class="modal confirm-modal">
+      <div class="confirm-icon" id="confirmIcon">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path id="confirmIconPath" d="M4 12.5L9.5 18L20 6"></path></svg>
+      </div>
+      <h3 id="confirmTitle">Are you sure?</h3>
+      <p id="confirmMessage" class="confirm-message"></p>
+      <div class="actions">
+        <button class="btn-light" type="button" id="confirmCancelBtn">Cancel</button>
+        <button class="btn-good" type="button" id="confirmOkBtn">OK</button>
       </div>
     </div>
   </dialog>
@@ -211,7 +307,6 @@
     let orders = []; const processDialog = document.getElementById('processDialog');
     let masterStores = []; let masterCategories = []; let masterBrands = []; let masterSubcategories = []; let masterBrandVisibility = [];
     let myProfile = null;
-    let currentProcessBrand = '';
 
     function go(path) { location.href = appUrl(path); } function logout() { localStorage.clear(); location.href = appUrl('/login'); }
     function openLogoutModal() { document.getElementById('logoutModal').style.display = 'flex'; }
@@ -232,35 +327,49 @@
 
     function populateScopedDropdowns() {
       const divisionSelect = document.getElementById('cmDivision');
-      const brandSelect = document.getElementById('cmBrand');
       const myCategory = masterCategories.find(c => c.code === myProfile.category_code);
+
+      // Everyone who can submit a Purchase Order (Category Manager, Admin,
+      // MIS) sees every division and can pick whichever one this request is
+      // actually for. If the account has its own assigned division, that
+      // one is pre-selected for convenience, but it's never locked.
+      divisionSelect.innerHTML = '<option value="">Select division</option>' + optionHtml(masterCategories, x => `${x.code} - ${x.name}`);
+      divisionSelect.disabled = false;
       if (myCategory) {
-        divisionSelect.innerHTML = `<option value="${escapeHtml(myCategory.code + ' - ' + myCategory.name)}">${escapeHtml(myCategory.code + ' - ' + myCategory.name)}</option>`;
-        divisionSelect.disabled = true;
-      } else if (isProcessor) {
-        // Admin/MIS can create a PO for any division.
-        divisionSelect.innerHTML = '<option value="">Select division</option>' + optionHtml(masterCategories, x => `${x.code} - ${x.name}`);
-        divisionSelect.disabled = false;
-      } else {
-        divisionSelect.innerHTML = '<option value="">No division assigned - contact Admin</option>';
-        divisionSelect.disabled = true;
+        divisionSelect.value = `${myCategory.code} - ${myCategory.name}`;
       }
 
-      // Admin/MIS see every brand, same as before. A Category Manager only
-      // sees brands that belong to their own division — either through the
-      // brand's primary SubCategory -> Category chain, or through the
-      // explicit visibility table (used when one brand, like Samsung or Mi,
-      // legitimately belongs to more than one division). "Others" is always
-      // available for anything not in the list yet.
+      updateBrandDropdownForSelectedDivision();
+    }
+
+    // Admin/MIS still see every brand regardless of division (matches prior
+    // behavior). A Category Manager sees brands scoped to whichever division
+    // is currently picked in the dropdown above — either through the brand's
+    // primary SubCategory -> Category chain, or through the explicit
+    // visibility table (used when one brand, like Samsung or Mi, legitimately
+    // belongs to more than one division). "Others" is always available.
+    function updateBrandDropdownForSelectedDivision() {
+      const divisionSelect = document.getElementById('cmDivision');
+      const brandSelect = document.getElementById('cmBrand');
+      const selectedCategory = masterCategories.find(c => `${c.code} - ${c.name}` === divisionSelect.value);
+
       let brandsForDropdown = masterBrands;
-      if (!isProcessor && myCategory) {
-        const subcategoryIdsInMyCategory = new Set(masterSubcategories.filter(sc => sc.category_id === myCategory.id).map(sc => sc.id));
-        const visibleBrandIds = new Set(masterBrandVisibility.filter(v => v.category_id === myCategory.id).map(v => v.brand_id));
-        brandsForDropdown = masterBrands.filter(b => subcategoryIdsInMyCategory.has(b.subcategory_id) || visibleBrandIds.has(b.id));
+      if (!isProcessor) {
+        if (selectedCategory) {
+          const subcategoryIdsInDivision = new Set(masterSubcategories.filter(sc => sc.category_id === selectedCategory.id).map(sc => sc.id));
+          const visibleBrandIds = new Set(masterBrandVisibility.filter(v => v.category_id === selectedCategory.id).map(v => v.brand_id));
+          brandsForDropdown = masterBrands.filter(b => subcategoryIdsInDivision.has(b.subcategory_id) || visibleBrandIds.has(b.id));
+        } else {
+          brandsForDropdown = [];
+        }
       }
+
+      const previousValue = brandSelect.value;
       brandSelect.innerHTML = '<option value="">Select brand</option>' + optionHtml(brandsForDropdown, x => x.name) + '<option value="__other__">Others (enter brand name)</option>';
       brandSelect.disabled = false;
+      if ([...brandSelect.options].some(o => o.value === previousValue)) brandSelect.value = previousValue;
     }
+    document.getElementById('cmDivision').addEventListener('change', updateBrandDropdownForSelectedDivision);
     document.getElementById('cmBrand').addEventListener('change', () => {
       document.getElementById('cmBrandOtherWrap').classList.toggle('hidden', document.getElementById('cmBrand').value !== '__other__');
     });
@@ -324,7 +433,14 @@
       } catch (e) { message.textContent = e.message; }
     });
 
-    function statusClass(status) { return status === 'Ordered' ? 'ordered' : status === 'Cancelled' ? 'cancelled' : ''; }
+    function statusClass(status) {
+      if (status === 'Ordered') return 'ordered';
+      if (status === 'Cancelled') return 'cancelled';
+      if (status === 'Approved') return 'approved';
+      if (status === 'Rejected') return 'rejected';
+      if (status === 'Requested') return 'requested';
+      return '';
+    }
 
     function getScopedFilteredOrders() {
       const filter = document.getElementById('statusFilter').value;
@@ -338,6 +454,12 @@
       if (!visible.length) { target.innerHTML = '<div class="po-row po-meta">No purchase requests found.</div>'; return; }
       target.innerHTML = visible.map(order => {
         const items = order.items.map(item => `${escapeHtml(item.product_name)}${item.variant ? ` (${escapeHtml(item.variant)})` : ''} x ${item.quantity} ${escapeHtml(item.unit || 'Nos')}`).join('<br>');
+        // Admin gets one-click Approve/Reject right on the card so a
+        // Requested PO doesn't have to be opened just to action it.
+        const approveRejectActions = (isAdmin && order.status === 'Requested')
+          ? `<button class="btn-good" onclick="quickApprove(${order.id})">Approve</button><button class="btn-danger" onclick="quickReject(${order.id})">Reject</button>`
+          : '';
+        const viewAction = `<button class="btn-outline" onclick="viewOrderPdf(${order.id})">View</button>`;
         const processorActions = isProcessor ? `<button class="btn-light" onclick="openProcess(${order.id})">Process</button>` : '';
         const deleteAction = isProcessor ? `<button class="btn-danger" onclick="deleteOrder(${order.id})">Delete</button>` : '';
         let busyBadge = '';
@@ -346,7 +468,10 @@
             ? `<span class="status ordered" title="${escapeHtml(order.exported_to_busy_at || '')}">Exported to Busy</span>`
             : `<span class="status">Pending Busy export</span>`;
         }
-        return `<article class="po-row"><div class="po-top"><div><div class="po-no">${escapeHtml(order.request_no)} ${order.busy_po_number ? `| Busy: ${escapeHtml(order.busy_po_number)}` : ''}</div><div class="po-meta">${escapeHtml(order.request_date)} | ${escapeHtml(order.division || 'No division')} | ${escapeHtml(order.brand_name || 'No brand yet')} | Submitted by ${escapeHtml(order.submitted_by_username || '')}</div></div><div style="display:flex;gap:6px;align-items:center;"><span class="status ${statusClass(order.status)}">${escapeHtml(order.status)}</span>${busyBadge}</div></div><div class="po-items">${items}</div>${order.processing_notes ? `<div class="po-meta">MIS notes: ${escapeHtml(order.processing_notes)}</div>` : ''}<div class="po-actions">${processorActions}${deleteAction}</div></article>`;
+        const approvalLine = order.approved_by_username
+          ? `<div class="po-meta">Approved by ${escapeHtml(order.approved_by_username)}${order.approved_date ? ` on ${escapeHtml(String(order.approved_date).slice(0,10))}` : ''}</div>`
+          : (order.status === 'Requested' ? `<div class="po-meta">Waiting for Admin approval</div>` : '');
+        return `<article class="po-row"><div class="po-top"><div><div class="po-no">${escapeHtml(order.request_no)} ${order.busy_po_number ? `| Busy: ${escapeHtml(order.busy_po_number)}` : ''}</div><div class="po-meta">${escapeHtml(order.request_date)} | ${escapeHtml(order.division || 'No division')} | ${escapeHtml(order.brand_name || 'No brand yet')} | Submitted by ${escapeHtml(order.submitted_by_username || '')}</div>${approvalLine}</div><div style="display:flex;gap:6px;align-items:center;"><span class="status ${statusClass(order.status)}">${escapeHtml(order.status)}</span>${busyBadge}</div></div><div class="po-items">${items}</div>${order.processing_notes ? `<div class="po-meta">Note: ${escapeHtml(order.processing_notes)}</div>` : ''}<div class="po-actions">${viewAction}${approveRejectActions}${processorActions}${deleteAction}</div></article>`;
       }).join('');
     }
 
@@ -365,48 +490,106 @@
       } catch (e) { document.getElementById('orders').innerHTML = `<div class="po-row po-meta">${escapeHtml(e.message)}</div>`; }
     }
 
+    document.getElementById('processSupplier').addEventListener('change', loadSupplierProfile);
+
     document.getElementById('processDeliveryAddress').addEventListener('change', () => {
       document.getElementById('processCustomAddressWrap').classList.toggle('hidden', document.getElementById('processDeliveryAddress').value !== '__other__');
     });
 
-    // ---- Brand email book (inside the process dialog) -----------------------
-    async function loadBrandEmailChips() {
-      const wrap = document.getElementById('brandEmailChips');
-      if (!currentProcessBrand) { wrap.innerHTML = '<span class="hint">No brand set on this request yet.</span>'; return; }
+    // ---- Supplier email(s): compact inline list under Supplier / distributor.
+    // Address, GSTIN, and every email typed here are remembered per supplier
+    // name (see loadSupplierProfile) and auto-fill next time the same
+    // supplier is used on a different request.
+    function addSupplierEmailRow(email = '', id = '') {
+      const row = document.createElement('div');
+      row.className = 'email-row';
+      row.dataset.id = id || '';
+      row.style.cssText = 'display:flex; gap:8px; align-items:center;';
+      row.innerHTML = `<input type="email" value="${escapeHtml(email)}" placeholder="orders@supplier.com" style="flex:1;" />`
+        + `<button class="remove" type="button" title="Remove email" aria-label="Remove email" onclick="removeSupplierEmailRow(this)">x</button>`;
+      document.getElementById('supplierEmailRows').appendChild(row);
+      return row;
+    }
+    async function removeSupplierEmailRow(button) {
+      const row = button.closest('.email-row');
+      const id = row.dataset.id;
+      row.remove();
+      if (id) {
+        try { await api(`/api/supplier-emails/${id}`, { method: 'DELETE' }); }
+        catch (e) { document.getElementById('supplierEmailMessage').textContent = e.message; }
+      }
+    }
+    function collectSupplierEmails() {
+      const seen = new Set();
+      [...document.querySelectorAll('#supplierEmailRows .email-row input')].forEach(input => {
+        const email = input.value.trim().toLowerCase();
+        if (email) seen.add(email);
+      });
+      return [...seen];
+    }
+
+    // ---- Supplier profile (address, GSTIN, emails) saved per supplier name ----
+    let currentProcessSupplier = '';
+    let supplierProfileLoadToken = 0;
+
+    async function loadSupplierProfile() {
+      const supplierName = document.getElementById('processSupplier').value.trim();
+      currentProcessSupplier = supplierName;
+      if (!supplierName) return;
+      const thisLoad = ++supplierProfileLoadToken;
+
       try {
-        const rows = await api(`/api/brand-emails?brand=${encodeURIComponent(currentProcessBrand)}`);
-        wrap.innerHTML = rows.length
-          ? rows.map(r => `<span class="chip">${escapeHtml(r.email)}<button type="button" title="Remove" onclick="removeBrandEmail(${r.id})">&times;</button></span>`).join('')
-          : '<span class="hint">No emails saved for this brand yet — add one below.</span>';
-      } catch (e) { wrap.innerHTML = `<span class="hint">${escapeHtml(e.message)}</span>`; }
+        const profile = await api(`/api/supplier-profile?supplier_name=${encodeURIComponent(supplierName)}`);
+        if (thisLoad !== supplierProfileLoadToken) return; // supplier name changed again while this was in flight
+
+        // Only fill in fields the user hasn't already typed something into,
+        // so we never overwrite what's already on this request.
+        const addressField = document.getElementById('processSupplierAddress');
+        const gstinField = document.getElementById('processSupplierGstin');
+        if (!addressField.value.trim() && profile.supplier_address) addressField.value = profile.supplier_address;
+        if (!gstinField.value.trim() && profile.supplier_gstin) gstinField.value = profile.supplier_gstin;
+
+        // Add any saved emails for this supplier that aren't already showing
+        // as a row, instead of replacing what's there.
+        const existing = collectSupplierEmails();
+        profile.emails.forEach(e => {
+          if (!existing.includes(e.email.toLowerCase())) {
+            addSupplierEmailRow(e.email, e.id);
+            existing.push(e.email.toLowerCase());
+          }
+        });
+      } catch (e) {
+        if (thisLoad === supplierProfileLoadToken) document.getElementById('supplierEmailMessage').textContent = e.message;
+      } finally {
+        if (!document.getElementById('supplierEmailRows').children.length) addSupplierEmailRow('');
+      }
     }
-    async function addBrandEmail() {
-      const input = document.getElementById('newBrandEmail');
-      const email = input.value.trim();
-      if (!email) return;
-      if (!currentProcessBrand) { document.getElementById('emailSendMessage').textContent = 'This request has no brand set, so there is nowhere to save the email.'; return; }
-      try {
-        await api('/api/brand-emails', { method: 'POST', body: JSON.stringify({ brand_name: currentProcessBrand, email }) });
-        input.value = '';
-        document.getElementById('emailSendMessage').className = 'message';
-        document.getElementById('emailSendMessage').textContent = '';
-        await loadBrandEmailChips();
-      } catch (e) { document.getElementById('emailSendMessage').textContent = e.message; }
-    }
-    async function removeBrandEmail(id) {
-      try { await api(`/api/brand-emails/${id}`, { method: 'DELETE' }); await loadBrandEmailChips(); }
-      catch (e) { document.getElementById('emailSendMessage').textContent = e.message; }
-    }
+
     async function sendPoEmail() {
       const id = document.getElementById('processId').value;
-      const message = document.getElementById('emailSendMessage');
+      const btn = document.getElementById('sendPoBtn');
+      const label = document.getElementById('sendPoLabel');
+      const message = document.getElementById('sendEmailMessage');
       message.className = 'message';
-      message.textContent = 'Sending...';
+      message.textContent = '';
+      btn.disabled = true;
+      btn.classList.remove('sent');
+      btn.classList.add('sending');
+      label.textContent = 'Sending...';
       try {
         const result = await api(`/api/purchase-orders/${id}/send-email`, { method: 'POST' });
+        btn.classList.remove('sending');
+        btn.classList.add('sent');
+        label.textContent = 'PO Sent';
         message.className = 'message success';
         message.textContent = `${result.notification_status} (${result.sent_to.join(', ')})`;
-      } catch (e) { message.textContent = e.message; }
+      } catch (e) {
+        btn.classList.remove('sending');
+        btn.disabled = false;
+        label.textContent = 'Send PO';
+        message.className = 'message';
+        message.textContent = e.message;
+      }
     }
 
     // ---- Process dialog: supplier details + item edit + status --------------
@@ -419,12 +602,13 @@
       document.getElementById('summaryDivision').textContent = order.division || '-';
       document.getElementById('summaryBranch').textContent = store ? `${store.code ? store.code + ' - ' : ''}${store.name}` : '-';
       document.getElementById('summaryBrand').textContent = order.brand_name || '-';
-      currentProcessBrand = order.brand_name || '';
 
       document.getElementById('processSupplier').value = order.supplier_name || '';
-      document.getElementById('processSupplierEmail').value = order.supplier_email || '';
       document.getElementById('processSupplierAddress').value = order.supplier_address || '';
       document.getElementById('processSupplierGstin').value = order.supplier_gstin || '';
+
+      document.getElementById('supplierEmailRows').innerHTML = '';
+      if (order.supplier_email) addSupplierEmailRow(order.supplier_email);
 
       const addressSelect = document.getElementById('processDeliveryAddress');
       const addressOptionValues = [...addressSelect.options].map(o => o.value);
@@ -445,15 +629,49 @@
       processItemsBody.innerHTML = '';
       (order.items && order.items.length ? order.items : [{}]).forEach(item => fillItemRow(addItemRow('processItemsBody'), item));
 
-      document.getElementById('processStatus').value = order.status;
+      populateProcessStatusOptions(order);
       document.getElementById('busyNumber').value = order.busy_po_number || '';
       document.getElementById('orderedDate').value = order.ordered_date || '';
+      document.getElementById('processNote').value = order.processing_notes || '';
       document.getElementById('processMessage').textContent = '';
-      document.getElementById('emailSendMessage').textContent = '';
-      document.getElementById('newBrandEmail').value = '';
+      document.getElementById('supplierEmailMessage').className = 'message';
+      document.getElementById('supplierEmailMessage').textContent = '';
+      document.getElementById('sendEmailMessage').className = 'message';
+      document.getElementById('sendEmailMessage').textContent = '';
 
-      loadBrandEmailChips();
+      // Sending to the supplier and finalizing as "Ordered" are locked until
+      // Admin has approved the request.
+      const isApprovedOrLater = order.status === 'Approved' || order.status === 'Ordered';
+      document.getElementById('approvalWaitingNotice').classList.toggle('hidden', isApprovedOrLater || order.status === 'Rejected' || order.status === 'Cancelled');
+      const finalOrderBtn = document.getElementById('finalOrderBtn');
+      finalOrderBtn.disabled = !isApprovedOrLater;
+      finalOrderBtn.title = isApprovedOrLater ? '' : 'Waiting for Admin approval';
+      const sendPoBtn = document.getElementById('sendPoBtn');
+      sendPoBtn.classList.remove('sending', 'sent');
+      sendPoBtn.disabled = !isApprovedOrLater;
+      document.getElementById('sendPoLabel').textContent = 'Send PO';
+
+      loadSupplierProfile();
       processDialog.showModal();
+    }
+
+    // Only offer status transitions that are actually valid for this role
+    // and this PO's current status, so the approval gate can't be skipped
+    // from the UI even by mistake.
+    function populateProcessStatusOptions(order) {
+      const select = document.getElementById('processStatus');
+      let options;
+      if (isAdmin) {
+        options = ['Requested', 'Approved', 'Rejected', 'Ordered', 'Cancelled'];
+      } else if (order.status === 'Approved' || order.status === 'Ordered') {
+        // MIS can only move an already-Approved request on to Ordered/Cancelled.
+        options = ['Approved', 'Ordered', 'Cancelled'];
+      } else {
+        // MIS viewing a Requested/Rejected/Cancelled PO: nothing to change yet.
+        options = [order.status];
+      }
+      select.innerHTML = options.map(s => `<option${s === order.status ? ' selected' : ''}>${s}</option>`).join('');
+      select.disabled = options.length === 1;
     }
 
     // Shared save logic. forcedStatus, when given, overrides whatever the
@@ -470,6 +688,12 @@
       const deliveryAddress = deliveryAddressSelect === '__other__' ? document.getElementById('processCustomAddress').value.trim() : deliveryAddressSelect;
       if (deliveryAddressSelect === '__other__' && !deliveryAddress) { message.textContent = 'Enter the delivery address.'; return false; }
 
+      const effectiveStatus = forcedStatus || document.getElementById('processStatus').value;
+      if (effectiveStatus === 'Rejected' && !document.getElementById('processNote').value.trim()) {
+        message.textContent = 'Please select or enter a reason for rejection.';
+        return false;
+      }
+
       if (forcedStatus) {
         document.getElementById('processStatus').value = forcedStatus;
         if (forcedStatus === 'Ordered' && !document.getElementById('orderedDate').value) {
@@ -478,15 +702,17 @@
       }
 
       try {
+        const supplierEmails = collectSupplierEmails();
         await api(`/api/purchase-orders/${id}/status`, {
           method: 'PATCH',
           body: JSON.stringify({
             status: forcedStatus || document.getElementById('processStatus').value,
             busy_po_number: document.getElementById('busyNumber').value || null,
             ordered_date: document.getElementById('orderedDate').value || null,
-            processing_notes: null,
+            processing_notes: document.getElementById('processNote').value || null,
             supplier_name: document.getElementById('processSupplier').value || null,
-            supplier_email: document.getElementById('processSupplierEmail').value || null,
+            supplier_email: supplierEmails[0] || null,
+            supplier_emails: supplierEmails,
             supplier_address: document.getElementById('processSupplierAddress').value || null,
             supplier_gstin: document.getElementById('processSupplierGstin').value || null,
             delivery_address: deliveryAddress || null,
@@ -527,7 +753,111 @@
       setTimeout(() => processDialog.close(), 900);
     }
 
-    async function deleteOrder(id) { if (!confirm('Delete this purchase request?')) return; try { await api(`/api/purchase-orders/${id}`, {method:'DELETE'}); await loadOrders(); } catch (e) { alert(e.message); } }
+    // ---- Reusable, styled confirm dialog (replaces native confirm()) ----
+    const appConfirmDialog = document.getElementById('appConfirmDialog');
+    function showConfirm({ title = 'Are you sure?', message = '', okText = 'OK', tone = 'good' }) {
+      return new Promise((resolve) => {
+        document.getElementById('confirmTitle').textContent = title;
+        document.getElementById('confirmMessage').textContent = message;
+        const icon = document.getElementById('confirmIcon');
+        const okBtn = document.getElementById('confirmOkBtn');
+        const cancelBtn = document.getElementById('confirmCancelBtn');
+        const path = document.getElementById('confirmIconPath');
+        icon.className = `confirm-icon ${tone}`;
+        okBtn.className = tone === 'danger' ? 'btn-danger' : 'btn-good';
+        okBtn.textContent = okText;
+        path.setAttribute('d', tone === 'danger' ? 'M6 6l12 12M18 6L6 18' : 'M4 12.5L9.5 18L20 6');
+        const finish = (result) => {
+          okBtn.onclick = null;
+          cancelBtn.onclick = null;
+          appConfirmDialog.close();
+          resolve(result);
+        };
+        okBtn.onclick = () => finish(true);
+        cancelBtn.onclick = () => finish(false);
+        appConfirmDialog.showModal();
+      });
+    }
+
+    async function deleteOrder(id) {
+      const confirmed = await showConfirm({ title: 'Delete this purchase request?', message: 'This cannot be undone.', okText: 'Delete', tone: 'danger' });
+      if (!confirmed) return;
+      try { await api(`/api/purchase-orders/${id}`, {method:'DELETE'}); await loadOrders(); } catch (e) { alert(e.message); }
+    }
+
+    // ---- Admin quick actions: Approve / Reject a Requested PO right from the list ----
+    async function quickApprove(id) {
+      const confirmed = await showConfirm({
+        title: 'Approve this purchase request?',
+        message: 'MIS will then be able to send it to the supplier.',
+        okText: 'Approve',
+        tone: 'good',
+      });
+      if (!confirmed) return;
+      try { await api(`/api/purchase-orders/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'Approved' }) }); await loadOrders(); }
+      catch (e) { alert(e.message); }
+    }
+    // ---- Reject reason picker: shared by the quick-reject button on the
+    // list card and the Status dropdown inside the full process modal ----
+    let rejectReasonMode = null; // 'quick' or 'process'
+    let rejectReasonTargetId = null;
+    const rejectReasonDialog = document.getElementById('rejectReasonDialog');
+
+    document.querySelectorAll('input[name="rejectReason"]').forEach(radio => {
+      radio.addEventListener('change', () => {
+        document.querySelectorAll('.reason-option').forEach(opt => opt.classList.remove('selected'));
+        radio.closest('.reason-option').classList.add('selected');
+        document.getElementById('rejectReasonManualWrap').classList.toggle('hidden', radio.value !== '__other__');
+        if (radio.value === '__other__') document.getElementById('rejectReasonManual').focus();
+      });
+    });
+
+    function openRejectReasonDialog(mode, targetId) {
+      rejectReasonMode = mode;
+      rejectReasonTargetId = targetId;
+      document.querySelectorAll('input[name="rejectReason"]').forEach(r => r.checked = false);
+      document.querySelectorAll('.reason-option').forEach(opt => opt.classList.remove('selected'));
+      document.getElementById('rejectReasonManual').value = '';
+      document.getElementById('rejectReasonManualWrap').classList.add('hidden');
+      document.getElementById('rejectReasonMessage').textContent = '';
+      rejectReasonDialog.showModal();
+    }
+
+    async function confirmRejectReason() {
+      const message = document.getElementById('rejectReasonMessage');
+      const selected = document.querySelector('input[name="rejectReason"]:checked');
+      if (!selected) { message.textContent = 'Please select a reason.'; return; }
+
+      let reason = selected.value;
+      if (reason === '__other__') {
+        reason = document.getElementById('rejectReasonManual').value.trim();
+        if (!reason) { message.textContent = 'Please type a rejection reason.'; return; }
+      }
+
+      if (rejectReasonMode === 'quick') {
+        try {
+          await api(`/api/purchase-orders/${rejectReasonTargetId}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'Rejected', processing_notes: reason }) });
+          rejectReasonDialog.close();
+          await loadOrders();
+        } catch (e) { message.textContent = e.message; }
+      } else if (rejectReasonMode === 'process') {
+        document.getElementById('processNote').value = reason;
+        rejectReasonDialog.close();
+      }
+    }
+
+    // Called when the Status dropdown inside the process modal is changed
+    // by the admin, so choosing "Rejected" always prompts for a reason.
+    function handleProcessStatusChange() {
+      const status = document.getElementById('processStatus').value;
+      if (status === 'Rejected') {
+        openRejectReasonDialog('process', document.getElementById('processId').value);
+      }
+    }
+
+    async function quickReject(id) {
+      openRejectReasonDialog('quick', id);
+    }
 
     // ---- Export (Admin / MIS only) ------------------------------------------
     function exportRows() {
@@ -648,26 +978,61 @@
     }
 
     const poPreviewDialog = document.getElementById('poPreviewDialog');
+    // null when the preview/download was opened from the list ("View" button,
+    // any role) so buildPoSheetHtml uses the order's saved fields as-is.
+    // Set to the order's id when opened read-only; null when opened from
+    // inside the edit modal, where live unsaved edits are used instead.
+    let previewReadonlyOrderId = null;
+    function collectLiveProcessFields() {
+      const deliveryAddressSelect = document.getElementById('processDeliveryAddress').value;
+      const deliveryAddress = deliveryAddressSelect === '__other__' ? document.getElementById('processCustomAddress').value.trim() : deliveryAddressSelect;
+      return {
+        deliveryAddress,
+        supplierName: document.getElementById('processSupplier').value,
+        supplierAddress: document.getElementById('processSupplierAddress').value,
+        supplierGstin: document.getElementById('processSupplierGstin').value,
+        orderNo: document.getElementById('busyNumber').value,
+        orderedDate: document.getElementById('orderedDate').value,
+        items: collectItems('processItemsBody'),
+      };
+    }
+
+    // Opened from inside the Process modal - reflects unsaved edits.
     function viewPurchaseOrder() {
       const id = document.getElementById('processId').value;
       const order = orders.find(o => o.id === Number(id));
       if (!order) return;
+      previewReadonlyOrderId = null;
+      document.getElementById('poPreviewSubtitle').textContent = 'This is exactly what gets downloaded and emailed. Nothing is saved yet.';
+      document.getElementById('previewFinalOrderBtn').classList.remove('hidden');
+      document.getElementById('poPreviewMessage').textContent = '';
+      document.getElementById('poPreviewBody').innerHTML = buildPoSheetHtml(order, collectLiveProcessFields());
+      poPreviewDialog.showModal();
+    }
+
+    // Opened from the "View" button on the list card - available to every
+    // role (Category Manager, Admin, MIS) as a quick, read-only PDF look
+    // without needing to open the full edit form.
+    function viewOrderPdf(id) {
+      const order = orders.find(o => o.id === Number(id));
+      if (!order) return;
+      previewReadonlyOrderId = order.id;
+      document.getElementById('poPreviewSubtitle').textContent = 'Read-only view of this purchase request.';
+      document.getElementById('previewFinalOrderBtn').classList.add('hidden');
+      document.getElementById('poPreviewMessage').textContent = '';
       document.getElementById('poPreviewBody').innerHTML = buildPoSheetHtml(order);
       poPreviewDialog.showModal();
     }
 
-    function buildPoSheetHtml(order) {
+    function buildPoSheetHtml(order, live) {
       const store = masterStores.find(s => s.id === order.branch_id);
-      const deliveryAddressSelect = document.getElementById('processDeliveryAddress').value;
-      const deliveryAddress = deliveryAddressSelect === '__other__' ? document.getElementById('processCustomAddress').value.trim() : deliveryAddressSelect;
-
-      const supplierName = document.getElementById('processSupplier').value || '(Supplier name not set)';
-      const supplierAddress = document.getElementById('processSupplierAddress').value || '';
-      const supplierGstin = document.getElementById('processSupplierGstin').value || '';
-      const orderNo = document.getElementById('busyNumber').value || order.request_no;
-      const orderedDate = document.getElementById('orderedDate').value || order.request_date;
-
-      const items = collectItems('processItemsBody');
+      const deliveryAddress = (live ? live.deliveryAddress : order.delivery_address) || '';
+      const supplierName = (live ? live.supplierName : order.supplier_name) || '(Supplier name not set)';
+      const supplierAddress = (live ? live.supplierAddress : order.supplier_address) || '';
+      const supplierGstin = (live ? live.supplierGstin : order.supplier_gstin) || '';
+      const orderNo = (live ? live.orderNo : order.busy_po_number) || order.request_no;
+      const orderedDate = (live ? live.orderedDate : order.ordered_date) || order.request_date;
+      const items = (live ? live.items : order.items) || [];
       let grandQty = 0, grandAmount = 0;
       const rows = items.map((item, i) => {
         const price = Number(item.estimated_price) || 0;
@@ -728,24 +1093,25 @@
     // produces a real downloadable PDF file (image placed on an A4 page).
     // No popup window is used, since pop-ups are blocked or render blank in
     // some browsers/WebViews.
-    async function downloadPurchaseOrder() {
-      const id = document.getElementById('processId').value;
+    async function downloadPurchaseOrder(messageElId = 'downloadMessage') {
+      const id = previewReadonlyOrderId ?? Number(document.getElementById('processId').value);
       const order = orders.find(o => o.id === Number(id));
-      const message = document.getElementById('downloadMessage');
+      const message = document.getElementById(messageElId);
       message.className = 'message';
       if (!order) { message.textContent = 'Could not find this request.'; return; }
       if (typeof html2canvas === 'undefined') { message.textContent = 'Download library did not load. Check your internet connection and try again.'; return; }
 
       message.textContent = 'Preparing file...';
       const host = document.getElementById('poPrintHost');
-      host.innerHTML = buildPoSheetHtml(order);
+      const live = previewReadonlyOrderId ? null : collectLiveProcessFields();
+      host.innerHTML = buildPoSheetHtml(order, live);
       const sheetEl = host.querySelector('.po-sheet-page');
 
       try {
         // Let the browser lay out the off-screen content before capturing it.
         await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         const canvas = await html2canvas(sheetEl, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
-        const orderNo = document.getElementById('busyNumber').value || order.request_no;
+        const orderNo = (live ? live.orderNo : order.busy_po_number) || order.request_no;
         const fileBase = orderNo.replace(/[^a-zA-Z0-9-_]/g, '_');
 
         const { jsPDF } = window.jspdf;

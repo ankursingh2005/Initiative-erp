@@ -90,6 +90,44 @@ To send an alert to MIS Executive through WhatsApp, configure a WhatsApp Cloud A
 
 The PO is saved even when WhatsApp is not configured or its provider rejects a message. WhatsApp Business may require an approved message template for business-initiated alerts outside the customer service window.
 
+## Email sending (PO emails and password reset)
+
+Both the "Final Order" / "Send PO Email" action and the "Forgot password" flow send real emails through SMTP. In code, the host, username, port, and from-address already default to the company Gmail mailbox:
+
+- `SMTP_HOST` defaults to `smtp.gmail.com`
+- `SMTP_USER` / `SMTP_FROM` default to `initiative.lucknow@gmail.com`
+- `SMTP_PORT` defaults to `587`
+
+So on Render, the **only thing you must set yourself is `SMTP_PASSWORD`** - a Gmail **App Password**, not the normal account password (Gmail blocks plain-password SMTP login).
+
+### 1. Generate a Gmail App Password
+
+1. Sign in to `initiative.lucknow@gmail.com`.
+2. Turn on 2-Step Verification if it isn't already on: Google Account -> Security -> 2-Step Verification.
+3. Go to Google Account -> Security -> App passwords (or visit `myaccount.google.com/apppasswords` while signed in as that account).
+4. Create an app password (name it e.g. "Initiative ERP"). Google shows a 16-character code - copy it.
+
+### 2. Set it on Render
+
+In the Render dashboard, open the `idspl` web service -> **Environment**, and add:
+
+| Key | Value |
+|---|---|
+| `SMTP_PASSWORD` | the 16-character app password from step 1 |
+| `APP_BASE_URL` | your service's public URL, e.g. `https://idspl.onrender.com` (no trailing slash) - used to build the working link inside password-reset emails |
+
+`render.yaml` already declares both keys with `sync: false`, so if you deploy via Blueprint, Render will prompt you for these values instead of trying to read them from the repo (and they're never committed).
+
+Redeploy (or just save the environment changes - Render restarts the service automatically) and test:
+
+- Purchase Orders -> process a request -> **Send PO Email** or **Final Order**. The response message should say `Emailed to N recipient(s).` instead of `Not sent: ...`.
+- Login page -> **Forgot password** with a real account's email - you should receive a reset link email from `initiative.lucknow@gmail.com`.
+
+### Notes
+
+- If SMTP fails (wrong app password, Gmail blocking the login, network issue), the PO/request itself is still saved - only the email send is reported as failed, so nothing is lost.
+- To send from a different mailbox instead, just override `SMTP_HOST`, `SMTP_USER`, `SMTP_FROM`, and `SMTP_PASSWORD` with that provider's values; nothing else in the code needs to change.
+
 ## Oracle Cloud Free Tier
 
 - For Oracle Cloud Free Tier, deploy this app on an Ubuntu VM with `systemd` and `nginx`.

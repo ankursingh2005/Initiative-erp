@@ -11,6 +11,19 @@ services:
         fromDatabase:
           name: idspl-postgres
           property: connectionString
+      # Gmail App Password for initiative.lucknow@gmail.com. Host, user,
+      # port, and from-address already default to that Gmail account in the
+      # code, so this is the only email setting you must fill in yourself.
+      # Render will prompt for the value in the dashboard (never committed
+      # to the repo). See README.md "Email sending" section for how to
+      # generate it.
+      - key: SMTP_PASSWORD
+        sync: false
+      # Used to build the working reset-password link in the emailed
+      # message. Set this to your Render web service's public URL, e.g.
+      # https://idspl.onrender.com (no trailing slash).
+      - key: APP_BASE_URL
+        sync: false
 
 databases:
   - name: idspl-postgres

@@ -1,9 +1,9 @@
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Query
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Query, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect, text, func
 from typing import List, Optional
 from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, date, timedelta
@@ -19,6 +19,10 @@ from urllib.request import Request, urlopen
 from uuid import uuid4
 import smtplib
 from email.mime.text import MIMEText
+from dotenv import load_dotenv
+
+load_dotenv()  # reads a local .env file (if present) into os.environ before
+                # anything below calls os.getenv() - e.g. SMTP_*, SECRET_KEY.
 
 import models
 import schemas
@@ -95,6 +99,8 @@ def ensure_database_schema():
     ensure_column("purchase_orders", "supplier_gstin", "VARCHAR(30)")
     ensure_column("purchase_orders", "exported_to_busy", "BOOLEAN DEFAULT FALSE")
     ensure_column("purchase_orders", "exported_to_busy_at", "TIMESTAMP")
+    ensure_column("purchase_orders", "approved_by_user_id", "INTEGER")
+    ensure_column("purchase_orders", "approved_date", "TIMESTAMP")
     ensure_column("schemes", "offer_value", "FLOAT")
     ensure_column("schemes", "calculation_method", "VARCHAR(50)")
     ensure_column("schemes", "min_qty", "INTEGER")
@@ -358,6 +364,16 @@ ensure_default_branches()
 ensure_default_master_data()
 
 app = FastAPI(title="IDSPL Scheme Management ERP")
+
+
+@app.exception_handler(Exception)
+async def handle_unexpected_error(request: Request, exc: Exception):
+    """Any error we didn't explicitly raise as an HTTPException still comes
+    back as JSON (with a real message) instead of a raw text/HTML 500 page.
+    A non-JSON error body is what makes the frontend show a generic
+    'Request failed' / 'Failed to fetch' with no useful detail."""
+    return JSONResponse(status_code=500, content={"detail": f"{type(exc).__name__}: {exc}"})
+
 
 # Serves the login.html / signup.html / dashboard.html pages from the
 # "static" folder sitting next to this file.
@@ -910,16 +926,19 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 
 def send_password_reset_email(user: models.User, token: str) -> str:
     """Reuses the same SMTP env vars as send_purchase_order_email
-    (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM)."""
-    smtp_host = os.getenv("SMTP_HOST")
-    smtp_user = os.getenv("SMTP_USER")
+    (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM). Host, user,
+    port, and from-address all default to the company Gmail mailbox
+    (initiative.lucknow@gmail.com) so the only thing that has to be set as
+    a secret on Render is SMTP_PASSWORD (a Gmail App Password)."""
+    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    smtp_user = os.getenv("SMTP_USER", "initiative.lucknow@gmail.com")
     smtp_password = os.getenv("SMTP_PASSWORD")
-    smtp_from = os.getenv("SMTP_FROM", smtp_user or "")
+    smtp_from = os.getenv("SMTP_FROM", "initiative.lucknow@gmail.com")
     smtp_port = int(os.getenv("SMTP_PORT", "587"))
     app_base_url = os.getenv("APP_BASE_URL", "").rstrip("/")
 
     if not (smtp_host and smtp_user and smtp_password):
-        return "Not sent: SMTP is not configured (set SMTP_HOST, SMTP_USER, SMTP_PASSWORD)."
+        return "Not sent: SMTP is not configured (set SMTP_PASSWORD on the host)."
 
     reset_link = f"{app_base_url}/reset-password?token={token}" if app_base_url else f"(reset code: {token})"
     body = (
@@ -969,7 +988,8 @@ def forgot_password(payload: schemas.ForgotPasswordRequest, db: Session = Depend
         user.reset_token = token
         user.reset_token_expires = datetime.utcnow() + timedelta(minutes=30)
         db.commit()
-        send_password_reset_email(user, token)
+        result = send_password_reset_email(user, token)
+        print(f"[forgot-password] {user.username}: {result}")
 
     return generic_message
 
@@ -1336,7 +1356,26 @@ def update_user_assignments(
 # PURCHASE ORDERS
 # ============================================================
 
-PURCHASE_ORDER_STATUSES = {"Requested", "Under Review", "Ordered", "Cancelled"}
+PURCHASE_ORDER_STATUSES = {"Requested", "Approved", "Rejected", "Ordered", "Cancelled"}
+
+# Which roles are allowed to move a PO into which status. A Category
+# Manager's request starts as "Requested". Only Admin can Approve or Reject
+# it. Only once it's "Approved" can Admin/MIS move it on to "Ordered" (i.e.
+# finalized and sent to the supplier) or "Cancelled".
+ADMIN_ONLY_STATUSES = {"Approved", "Rejected", "Requested"}
+
+
+def assert_status_transition_allowed(current_user: models.User, purchase_order: models.PurchaseOrder, new_status: str):
+    if new_status in ADMIN_ONLY_STATUSES and current_user.role != "Admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Only Admin can approve, reject, or reopen a purchase order.",
+        )
+    if new_status == "Ordered" and purchase_order.status != "Approved":
+        raise HTTPException(
+            status_code=400,
+            detail="This purchase order must be Approved by Admin before it can be marked Ordered.",
+        )
 
 
 def serialize_purchase_order(purchase_order: models.PurchaseOrder, notification_status: Optional[str] = None):
@@ -1361,6 +1400,8 @@ def serialize_purchase_order(purchase_order: models.PurchaseOrder, notification_
         "exported_to_busy_at": purchase_order.exported_to_busy_at,
         "submitted_by_user_id": purchase_order.submitted_by_user_id,
         "submitted_by_username": purchase_order.submitted_by.username if purchase_order.submitted_by else None,
+        "approved_by_username": (getattr(purchase_order, "approved_by", None).username if getattr(purchase_order, "approved_by", None) else None),
+        "approved_date": getattr(purchase_order, "approved_date", None),
         "created_date": purchase_order.created_date,
         "updated_date": purchase_order.updated_date,
         "items": purchase_order.items,
@@ -1494,17 +1535,134 @@ def delete_brand_email(
     return {"deleted": True}
 
 
+# ============================================================
+# SUPPLIER PROFILE (per supplier name)
+# Address, GSTIN, and every email entered for a supplier are remembered
+# under that supplier's name, so the next purchase order for the same
+# supplier (on any brand/division) can auto-fill instead of retyping.
+# ============================================================
+
+def upsert_supplier_profile(db: Session, supplier_name: Optional[str], supplier_address: Optional[str], supplier_gstin: Optional[str]):
+    """Save/update the address and GSTIN on file for this supplier name.
+    Only overwrites a field when a non-blank value was actually provided,
+    so clearing one field on one PO doesn't blank it out for every other
+    request that shares the same supplier."""
+    name = (supplier_name or "").strip()
+    if not name:
+        return
+    profile = (
+        db.query(models.SupplierProfile)
+        .filter(func.lower(models.SupplierProfile.supplier_name) == name.lower())
+        .first()
+    )
+    if not profile:
+        profile = models.SupplierProfile(supplier_name=name)
+        db.add(profile)
+    if supplier_address and supplier_address.strip():
+        profile.supplier_address = supplier_address.strip()
+    if supplier_gstin and supplier_gstin.strip():
+        profile.supplier_gstin = supplier_gstin.strip()
+    db.commit()
+
+
+def upsert_supplier_email(db: Session, supplier_name: Optional[str], email: Optional[str]):
+    """Remember this email under the supplier's name (no duplicates)."""
+    name = (supplier_name or "").strip()
+    email = (email or "").strip().lower()
+    if not name or not email:
+        return
+    existing = (
+        db.query(models.SupplierEmail)
+        .filter(func.lower(models.SupplierEmail.supplier_name) == name.lower(), models.SupplierEmail.email == email)
+        .first()
+    )
+    if existing:
+        return
+    db.add(models.SupplierEmail(supplier_name=name, email=email))
+    db.commit()
+
+
+@app.get("/api/supplier-profile", response_model=schemas.SupplierProfileOut)
+def get_supplier_profile(
+    supplier_name: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    name = supplier_name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="supplier_name is required")
+
+    profile = (
+        db.query(models.SupplierProfile)
+        .filter(func.lower(models.SupplierProfile.supplier_name) == name.lower())
+        .first()
+    )
+    email_rows = (
+        db.query(models.SupplierEmail)
+        .filter(func.lower(models.SupplierEmail.supplier_name) == name.lower())
+        .order_by(models.SupplierEmail.id)
+        .all()
+    )
+    return {
+        "supplier_name": profile.supplier_name if profile else name,
+        "supplier_address": profile.supplier_address if profile else None,
+        "supplier_gstin": profile.supplier_gstin if profile else None,
+        "emails": email_rows,
+    }
+
+
+@app.post("/api/supplier-emails", response_model=schemas.SupplierEmailEntry)
+def add_supplier_email(
+    payload: schemas.SupplierEmailCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_roles("Admin", "MISExecutive")),
+):
+    supplier_name = payload.supplier_name.strip()
+    email = payload.email.strip().lower()
+    if not supplier_name or not email:
+        raise HTTPException(status_code=400, detail="Supplier name and email are required")
+    existing = (
+        db.query(models.SupplierEmail)
+        .filter(func.lower(models.SupplierEmail.supplier_name) == supplier_name.lower(), models.SupplierEmail.email == email)
+        .first()
+    )
+    if existing:
+        return existing
+    row = models.SupplierEmail(supplier_name=supplier_name, email=email)
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@app.delete("/api/supplier-emails/{email_id}")
+def delete_supplier_email(
+    email_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_roles("Admin", "MISExecutive")),
+):
+    row = db.query(models.SupplierEmail).filter(models.SupplierEmail.id == email_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Email not found")
+    db.delete(row)
+    db.commit()
+    return {"deleted": True}
+
+
 def send_purchase_order_email(purchase_order: models.PurchaseOrder, recipients: List[str]) -> str:
     """Email the finalized PO to every address on file for the brand (plus
-    the request's own supplier_email if set) in a single send. Configure
-    SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM env vars."""
-    smtp_host = os.getenv("SMTP_HOST")
-    smtp_user = os.getenv("SMTP_USER")
+    the request's own supplier_email if set) in a single send. Host, user,
+    port, and from-address all default to the company Gmail mailbox
+    (initiative.lucknow@gmail.com), so on Render the only secret you need
+    to set is SMTP_PASSWORD (a Gmail App Password) - see README for setup."""
+    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    smtp_user = os.getenv("SMTP_USER", "initiative.lucknow@gmail.com")
     smtp_password = os.getenv("SMTP_PASSWORD")
-    smtp_from = os.getenv("SMTP_FROM", smtp_user or "")
+    smtp_from = os.getenv("SMTP_FROM", "initiative.lucknow@gmail.com")
     smtp_port = int(os.getenv("SMTP_PORT", "587"))
     if not (smtp_host and smtp_user and smtp_password and recipients):
-        return "Not sent: SMTP is not configured (set SMTP_HOST, SMTP_USER, SMTP_PASSWORD)."
+        print("[PO email] Not sent: SMTP_PASSWORD not set (or no recipients).")
+        return "Not sent: SMTP is not configured (set SMTP_PASSWORD on the host)."
 
     lines = [
         f"Purchase Order: {purchase_order.request_no}",
@@ -1534,7 +1692,8 @@ def send_purchase_order_email(purchase_order: models.PurchaseOrder, recipients: 
             server.login(smtp_user, smtp_password)
             server.sendmail(smtp_from, recipients, message.as_string())
     except Exception as exc:  # noqa: BLE001 - surface any SMTP failure to the caller
-        return f"Not sent: email delivery failed ({exc})."
+        print(f"[PO email] SMTP send failed ({type(exc).__name__}): {exc}")
+        return f"Not sent: email delivery failed ({type(exc).__name__}: {exc})."
 
     return f"Emailed to {len(recipients)} recipient(s)."
 
@@ -1548,17 +1707,29 @@ def send_purchase_order_email_endpoint(
     purchase_order = db.query(models.PurchaseOrder).filter(models.PurchaseOrder.id == purchase_order_id).first()
     if not purchase_order:
         raise HTTPException(status_code=404, detail="Purchase order request not found")
+    if purchase_order.status not in {"Approved", "Ordered"}:
+        raise HTTPException(
+            status_code=400,
+            detail="This purchase order must be Approved by Admin before it can be sent to the supplier.",
+        )
 
     recipients = set()
     if purchase_order.brand_name:
         brand_rows = db.query(models.BrandSupplierEmail).filter(models.BrandSupplierEmail.brand_name == purchase_order.brand_name).all()
         recipients.update(row.email for row in brand_rows)
+    if purchase_order.supplier_name:
+        supplier_rows = (
+            db.query(models.SupplierEmail)
+            .filter(func.lower(models.SupplierEmail.supplier_name) == purchase_order.supplier_name.strip().lower())
+            .all()
+        )
+        recipients.update(row.email for row in supplier_rows)
     if purchase_order.supplier_email:
         recipients.add(purchase_order.supplier_email.strip().lower())
     recipients = sorted(r for r in recipients if r)
 
     if not recipients:
-        raise HTTPException(status_code=400, detail="No supplier emails on file for this brand yet. Add at least one first.")
+        raise HTTPException(status_code=400, detail="No supplier emails on file for this brand or supplier yet. Add at least one first.")
 
     notification_status = send_purchase_order_email(purchase_order, recipients)
     return {"sent_to": recipients, "notification_status": notification_status}
@@ -1594,6 +1765,12 @@ def create_purchase_order(
     db.add(purchase_order)
     db.commit()
     db.refresh(purchase_order)
+
+    if payload.supplier_name:
+        upsert_supplier_profile(db, payload.supplier_name, payload.supplier_address, payload.supplier_gstin)
+        for email in (payload.supplier_emails or ([payload.supplier_email] if payload.supplier_email else [])):
+            upsert_supplier_email(db, payload.supplier_name, email)
+
     notification_status = send_purchase_order_whatsapp_notification(purchase_order)
     return serialize_purchase_order(purchase_order, notification_status)
 
@@ -1639,6 +1816,18 @@ def update_purchase_order_status(
     if not purchase_order:
         raise HTTPException(status_code=404, detail="Purchase order request not found")
 
+    if status_value != purchase_order.status:
+        assert_status_transition_allowed(current_user, purchase_order, status_value)
+
+    if status_value == "Approved" and purchase_order.status != "Approved":
+        purchase_order.approved_by_user_id = current_user.id
+        purchase_order.approved_date = datetime.utcnow()
+    elif status_value in {"Rejected", "Requested"}:
+        # Sent back for changes or turned down - clear any prior approval so
+        # it has to go through Admin again before it can be Ordered.
+        purchase_order.approved_by_user_id = None
+        purchase_order.approved_date = None
+
     purchase_order.status = status_value
     purchase_order.busy_po_number = (payload.busy_po_number or "").strip() or None
     purchase_order.ordered_date = payload.ordered_date
@@ -1674,6 +1863,12 @@ def update_purchase_order_status(
 
     db.commit()
     db.refresh(purchase_order)
+
+    if purchase_order.supplier_name:
+        upsert_supplier_profile(db, purchase_order.supplier_name, purchase_order.supplier_address, purchase_order.supplier_gstin)
+        for email in (payload.supplier_emails or ([purchase_order.supplier_email] if purchase_order.supplier_email else [])):
+            upsert_supplier_email(db, purchase_order.supplier_name, email)
+
     return serialize_purchase_order(purchase_order)
 
 
