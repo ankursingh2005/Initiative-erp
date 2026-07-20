@@ -575,6 +575,22 @@
       btn.disabled = true;
       btn.classList.remove('sent');
       btn.classList.add('sending');
+      label.textContent = 'Saving details...';
+
+      // Whatever supplier name/emails/address were typed into the form need
+      // to be saved before we ask the backend to email them - otherwise the
+      // backend only sees whatever was saved on a previous visit (possibly
+      // nothing), even though the form looks filled in right now.
+      const saved = await savePurchaseOrder(null);
+      if (!saved) {
+        btn.classList.remove('sending');
+        btn.disabled = false;
+        label.textContent = 'Send PO';
+        message.className = 'message';
+        message.textContent = document.getElementById('processMessage').textContent || 'Could not save supplier details before sending.';
+        return;
+      }
+
       label.textContent = 'Sending...';
       try {
         const result = await api(`/api/purchase-orders/${id}/send-email`, { method: 'POST' });
@@ -583,6 +599,7 @@
         label.textContent = 'PO Sent';
         message.className = 'message success';
         message.textContent = `${result.notification_status} (${result.sent_to.join(', ')})`;
+        await loadOrders();
       } catch (e) {
         btn.classList.remove('sending');
         btn.disabled = false;
