@@ -181,6 +181,22 @@
     .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; touch-action: pan-x pan-y; scroll-behavior: smooth; }
     .claims-table { min-width: 900px; }
     .wide-table { min-width: 1300px; }
+    .scheme-fit-table {
+      width: 100%;
+      table-layout: fixed;
+      border-collapse: collapse;
+    }
+    .scheme-fit-table th, .scheme-fit-table td {
+      padding: 8px 6px;
+      font-size: 12.5px;
+      line-height: 1.35;
+      white-space: normal;
+      overflow-wrap: break-word;
+      word-break: break-word;
+      vertical-align: top;
+    }
+    .scheme-fit-table .scheme-actions { flex-direction: row; flex-wrap: nowrap; gap: 4px; }
+    .scheme-fit-table .scheme-actions button { flex: 1 1 0; width: auto; padding: 6px 2px; font-size: 11px; }
     #entryGrid { grid-template-columns: 1fr; }
     #scopeGrid { grid-template-columns: 1fr; }
     #schemeGrid { grid-template-columns: 1fr; }
@@ -224,13 +240,13 @@
 
     .interval-toolbar {
       display: grid;
-      grid-template-columns: 1.1fr 0.9fr 0.9fr auto;
-      gap: 10px;
+      grid-template-columns: 1fr 0.85fr 0.85fr 0.85fr auto;
+      gap: 14px;
       align-items: end;
-      margin-bottom: 12px;
-      padding: 12px;
+      margin-bottom: 14px;
+      padding: 14px 16px;
       border: 1px solid #dbe5f4;
-      border-radius: 10px;
+      border-radius: 12px;
       background: #f8fbff;
     }
 
@@ -240,18 +256,27 @@
       background: linear-gradient(90deg, #1d1d1d 0%, #000000 100%);
     }
 
+    #intervalRefreshBtn { background: #41506a !important; }
+
+    .interval-clear-btn {
+      background: linear-gradient(90deg, #1d1d1d 0%, #000000 100%) !important;
+      border: 1px solid #d92d20 !important;
+    }
+    .interval-clear-btn:hover { background: linear-gradient(90deg, #2a2a2a 0%, #0a0a0a 100%) !important; }
+
     .interval-summary-grid {
       display: grid;
       grid-template-columns: repeat(6, minmax(120px, 1fr));
       gap: 10px;
-      margin-bottom: 12px;
+      margin-bottom: 16px;
     }
 
     .interval-stat {
       border: 1px solid #dce6f5;
       border-radius: 10px;
-      padding: 10px;
+      padding: 12px;
       background: #ffffff;
+      box-shadow: 0 1px 2px rgba(16,24,40,0.04);
     }
 
     .interval-stat-label {
@@ -272,29 +297,51 @@
     .interval-layout {
       display: grid;
       grid-template-columns: 1.1fr 0.9fr;
-      gap: 12px;
+      gap: 14px;
     }
 
     .interval-panel {
       border: 1px solid #dce6f5;
-      border-radius: 10px;
+      border-radius: 12px;
       background: #ffffff;
-      padding: 10px;
+      padding: 14px;
     }
 
     .interval-panel h4 {
-      margin: 0 0 8px;
+      margin: 0 0 10px;
       font-size: 14px;
       color: #2d3f5e;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #e7eef8;
     }
 
     .interval-scroll {
       overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
     }
 
-    .interval-scroll table {
-      min-width: 680px;
+    /* Interval Trend and Top Items only have a handful of columns, so they
+       shrink to fit the panel instead of forcing a wide, scrollable table. */
+    .styled-table {
+      width: 100%;
+      table-layout: fixed;
     }
+    .styled-table th, .styled-table td {
+      font-size: 12.5px;
+      padding: 8px 6px;
+      white-space: normal;
+      overflow-wrap: break-word;
+      word-break: break-word;
+    }
+    .styled-table thead th {
+      background: #eef4fc;
+      color: #45526b;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      font-size: 10.5px;
+    }
+    .styled-table tbody tr:nth-child(even) { background: #f9fbfe; }
+    .styled-table tbody tr:hover { background: #eef6ff; }
 
     .sources-list {
       margin: 0;
@@ -308,26 +355,63 @@
     }
 
     .records-panel {
-      margin-top: 12px;
+      margin-top: 16px;
       border: 1px solid #dce6f5;
-      border-radius: 10px;
+      border-radius: 12px;
       background: #ffffff;
-      padding: 10px;
+      padding: 14px;
     }
 
     .records-panel h4 {
-      margin: 0 0 8px;
+      margin: 0 0 4px;
       font-size: 14px;
       color: #2d3f5e;
     }
 
+    .records-hint {
+      margin: 0 0 8px;
+      font-size: 12px;
+      color: #8493a8;
+    }
+
     .records-scroll {
       overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      border-radius: 8px;
     }
 
     .records-scroll table {
       min-width: 1200px;
     }
+
+    .table-zebra thead th {
+      background: #eef4fc;
+      color: #45526b;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      font-size: 10.5px;
+    }
+    .table-zebra tbody tr:nth-child(even) { background: #f9fbfe; }
+    .table-zebra tbody tr:hover { background: #eef6ff; }
+
+    .scope-more-wrap {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #e7eef8;
+    }
+    .scope-more-wrap button {
+      width: auto;
+      padding: 9px 16px;
+      background: linear-gradient(90deg, #1d1d1d 0%, #000000 100%);
+    }
+    .scope-more-wrap button:hover { background: linear-gradient(90deg, #2a2a2a 0%, #0a0a0a 100%); }
+    .scope-more-wrap button.scope-show-all-btn { background: #41506a; }
+    .scope-more-wrap button.scope-show-all-btn:hover { background: #35455e; }
 
     .records-more-wrap {
       display: flex;
@@ -560,6 +644,18 @@
     </div>
   </div>
 
+  <div id="clearIntervalModal" class="modal-backdrop" aria-hidden="true" onclick="if (event.target === this) closeClearIntervalModal()">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="clearIntervalTitle">
+      <h3 id="clearIntervalTitle">Clear all uploaded data?</h3>
+      <p>This will permanently delete every uploaded interval sales row from the dashboard. This cannot be undone.</p>
+      <div id="clearIntervalError" class="msg" style="display:none; text-align:left; margin:0 0 12px;"></div>
+      <div class="modal-actions">
+        <button type="button" class="modal-cancel" onclick="closeClearIntervalModal()">Cancel</button>
+        <button type="button" class="modal-confirm" id="clearIntervalConfirmBtn" onclick="confirmClearInterval()">Clear All</button>
+      </div>
+    </div>
+  </div>
+
   <div id="saveSuccessModal" class="save-success-backdrop" aria-hidden="true" onclick="if (event.target === this) hideSaveSuccessPopup()">
     <div class="save-success-modal" role="status" aria-live="polite">
       <div class="save-success-spinner" aria-hidden="true"></div>
@@ -764,16 +860,16 @@
         <div class="scheme-date-filter" id="salesDateFilterBar">
           <div class="field">
             <label>Invoice Date From</label>
-            <input id="salesDateFrom" type="date" onchange="renderScopeTables()" />
+            <input id="salesDateFrom" type="date" onchange="handleScopeDateFilterChange()" />
           </div>
           <div class="field">
             <label>Invoice Date To</label>
-            <input id="salesDateTo" type="date" onchange="renderScopeTables()" />
+            <input id="salesDateTo" type="date" onchange="handleScopeDateFilterChange()" />
           </div>
           <button type="button" onclick="clearSalesDateFilter()">Clear dates</button>
         </div>
         <div class="table-wrap">
-          <table id="salesTable" class="wide-table">
+          <table id="salesTable" class="wide-table table-zebra">
             <thead>
               <tr>
                 <th>Branch</th>
@@ -803,12 +899,17 @@
             <tbody></tbody>
           </table>
         </div>
+        <div id="salesMoreWrap" class="scope-more-wrap" style="display:none;">
+          <span id="salesCount" class="muted"></span>
+          <button type="button" id="salesMoreBtn" onclick="toggleSalesExpanded()">Show More</button>
+          <button type="button" id="salesShowAllBtn" class="scope-show-all-btn" onclick="showAllSales()">Show All</button>
+        </div>
       </div>
 
       <div class="card section-hero-card" id="claimsScopeCard">
         <h3 class="section-hero-title">Claims in your scope</h3>
         <div class="table-wrap">
-          <table id="claimsTable" class="claims-table">
+          <table id="claimsTable" class="claims-table table-zebra">
             <thead>
               <tr>
                 <th>Invoice Date</th>
@@ -823,6 +924,11 @@
             </thead>
             <tbody></tbody>
           </table>
+        </div>
+        <div id="claimsMoreWrap" class="scope-more-wrap" style="display:none;">
+          <span id="claimsCount" class="muted"></span>
+          <button type="button" id="claimsMoreBtn" onclick="toggleClaimsExpanded()">Show More</button>
+          <button type="button" id="claimsShowAllBtn" class="scope-show-all-btn" onclick="showAllClaims()">Show All</button>
         </div>
       </div>
     </div>
@@ -856,6 +962,7 @@
         <div style="display:flex; gap:8px;">
           <button id="intervalUploadBtn" type="submit">Upload & Process</button>
           <button id="intervalRefreshBtn" type="button" style="background:#41506a;">Refresh</button>
+          <button id="intervalClearBtn" type="button" class="interval-clear-btn" onclick="openClearIntervalModal()">Clear</button>
         </div>
       </form>
       <div id="intervalUploadMsg" class="msg"></div>
@@ -866,7 +973,7 @@
         <div class="interval-panel">
           <h4>Interval Trend</h4>
           <div class="interval-scroll">
-            <table>
+            <table class="styled-table">
               <thead>
                 <tr>
                   <th>Period</th>
@@ -888,7 +995,7 @@
 
         <div class="interval-panel">
           <h4>Top Items</h4>
-          <table>
+          <table class="styled-table">
             <thead>
               <tr>
                 <th>Item</th>
@@ -907,8 +1014,9 @@
 
       <div class="records-panel">
         <h4>Uploaded Rows in Dashboard</h4>
+        <p class="records-hint">Scroll sideways to see all columns →</p>
         <div class="records-scroll">
-          <table>
+          <table class="styled-table" style="table-layout:auto;">
             <thead>
               <tr>
                 <th>Date</th>
@@ -1026,10 +1134,21 @@
       </div>
 
       <div class="scheme-table-wrap">
-        <table id="schemeTable" class="wide-table">
+        <table id="schemeTable" class="scheme-fit-table">
+          <colgroup>
+            <col style="width:15%;">
+            <col style="width:11%;">
+            <col style="width:10%;">
+            <col style="width:9%;">
+            <col style="width:9%;">
+            <col style="width:7%;">
+            <col style="width:8%;">
+            <col style="width:15%;">
+            <col style="width:16%;">
+          </colgroup>
           <thead>
             <tr>
-              <th>Name</th><th>Offer</th><th>Scheme Type</th><th>Scheme Value</th><th>Target</th><th>Status</th><th>Dates</th><th>Action</th>
+              <th>Name</th><th>Offer</th><th>Scheme Type</th><th>Scheme Value</th><th>Brand</th><th>Target</th><th>Status</th><th>Dates</th><th>Action</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -1565,6 +1684,8 @@
     function clearSalesDateFilter() {
       document.getElementById('salesDateFrom').value = '';
       document.getElementById('salesDateTo').value = '';
+      salesVisibleCount = SCOPE_PAGE_INITIAL;
+      claimsVisibleCount = SCOPE_PAGE_INITIAL;
       renderScopeTables();
     }
 
@@ -1975,6 +2096,48 @@
       renderIntervalRecords(records);
     }
 
+    function openClearIntervalModal() {
+      const errorBox = document.getElementById('clearIntervalError');
+      errorBox.style.display = 'none';
+      errorBox.textContent = '';
+      const modal = document.getElementById('clearIntervalModal');
+      modal.classList.add('show');
+      modal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeClearIntervalModal() {
+      const modal = document.getElementById('clearIntervalModal');
+      modal.classList.remove('show');
+      modal.setAttribute('aria-hidden', 'true');
+    }
+
+    async function confirmClearInterval() {
+      const confirmBtn = document.getElementById('clearIntervalConfirmBtn');
+      const errorBox = document.getElementById('clearIntervalError');
+      errorBox.style.display = 'none';
+      errorBox.textContent = '';
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = 'Clearing...';
+
+      const response = await authFetch('/admin/interval-sales/clear', { method: 'DELETE' });
+
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = 'Clear All';
+
+      if (!response) return;
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        errorBox.textContent = data.detail || 'Unable to clear uploaded data';
+        errorBox.style.display = 'block';
+        return;
+      }
+
+      closeClearIntervalModal();
+      document.getElementById('intervalFile').value = '';
+      await loadIntervalSalesSummary();
+      await loadIntervalSalesRecords();
+    }
+
     async function uploadIntervalSales(event) {
       event.preventDefault();
       const message = document.getElementById('intervalUploadMsg');
@@ -2036,11 +2199,17 @@
     }
 
     function schemeTypeLabel(value, other) {
-      if (value === 'Other' || value === 'Fixed') {
-        const customLabel = String(other || '').trim();
-        if (customLabel) return customLabel;
-      }
-      return value || '';
+      // The backend stores "Target Based" schemes internally as "Slab"
+      // (that's the code the reward engine uses to compute rewards), so
+      // translate it back to what the user actually picked in the form.
+      const labels = {
+        'Fixed': 'Fixed',
+        'Percentage': 'Percentage',
+        'Slab': 'Target Based'
+      };
+      const customLabel = String(other || '').trim();
+      if (customLabel) return customLabel;
+      return labels[value] || value || '';
     }
 
     function getDateFilteredSchemes() {
@@ -2072,13 +2241,16 @@
       const visibleSchemes = getDateFilteredSchemes();
 
       if (!visibleSchemes.length) {
-        tbody.innerHTML = '<tr><td colspan="8" class="empty">No schemes found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="empty">No schemes found</td></tr>';
         return;
       }
 
       tbody.innerHTML = visibleSchemes.map(scheme => {
         const target = scheme.reward_type === 'Slab' ? (scheme.min_qty || '') : '';
-        const rewardValue = scheme.reward_value != null ? scheme.reward_value : '';
+        const rewardValue = scheme.reward_value != null
+          ? `${scheme.reward_value}${scheme.reward_type === 'Percentage' ? '%' : ''}`
+          : '';
+        const brandName = brands.find(b => b.id === scheme.brand_id)?.name || '';
         const dateRange = `${scheme.start_date || ''} to ${scheme.end_date || ''}`;
         const toggleButton = scheme.status === 'Active'
           ? `<button type="button" onclick="pauseScheme(${scheme.id})">Pause</button>`
@@ -2092,6 +2264,7 @@
             <td>${schemeOfferLabel(scheme.offer_type)}</td>
             <td>${schemeTypeLabel(scheme.reward_type, scheme.reward_type_other)}</td>
             <td>${rewardValue}</td>
+            <td>${brandName}</td>
             <td>${target}</td>
             <td>${scheme.status || ''}</td>
             <td>${dateRange}</td>
@@ -2273,6 +2446,8 @@
         }
 
         const refreshScopeByCategory = () => {
+          salesVisibleCount = SCOPE_PAGE_INITIAL;
+          claimsVisibleCount = SCOPE_PAGE_INITIAL;
           renderScopeTables();
         };
         exportCategoryFilter.addEventListener('change', refreshScopeByCategory);
@@ -2295,10 +2470,19 @@
 
           if (!intervalUploadForm.dataset.bound) {
             intervalUploadForm.addEventListener('submit', uploadIntervalSales);
-            intervalRefreshBtn.addEventListener('click', loadIntervalSalesSummary);
+            intervalRefreshBtn.addEventListener('click', () => {
+              loadIntervalSalesSummary();
+              loadIntervalSalesRecords();
+            });
             document.getElementById('intervalGranularity').addEventListener('change', loadIntervalSalesSummary);
-            document.getElementById('intervalStartDate').addEventListener('change', loadIntervalSalesSummary);
-            document.getElementById('intervalEndDate').addEventListener('change', loadIntervalSalesSummary);
+            document.getElementById('intervalStartDate').addEventListener('change', () => {
+              loadIntervalSalesSummary();
+              loadIntervalSalesRecords();
+            });
+            document.getElementById('intervalEndDate').addEventListener('change', () => {
+              loadIntervalSalesSummary();
+              loadIntervalSalesRecords();
+            });
             intervalUploadForm.dataset.bound = 'true';
           }
 
@@ -2347,6 +2531,13 @@
       await loadData();
     }
 
+    const SCOPE_PAGE_INITIAL = 5;
+    const SCOPE_PAGE_STEP = 10;
+    let salesVisibleCount = SCOPE_PAGE_INITIAL;
+    let claimsVisibleCount = SCOPE_PAGE_INITIAL;
+    let scopeSalesTotal = 0;
+    let scopeClaimsTotal = 0;
+
     async function loadData() {
       const salesRes = await authFetch('/my-scope/sales');
 
@@ -2354,7 +2545,35 @@
 
       const sales = await salesRes.json();
       scopedSales = sales;
+      salesVisibleCount = SCOPE_PAGE_INITIAL;
+      claimsVisibleCount = SCOPE_PAGE_INITIAL;
 
+      renderScopeTables();
+    }
+
+    function handleScopeDateFilterChange() {
+      salesVisibleCount = SCOPE_PAGE_INITIAL;
+      claimsVisibleCount = SCOPE_PAGE_INITIAL;
+      renderScopeTables();
+    }
+
+    function toggleSalesExpanded() {
+      salesVisibleCount = Math.min(salesVisibleCount + SCOPE_PAGE_STEP, scopeSalesTotal);
+      renderScopeTables();
+    }
+
+    function showAllSales() {
+      salesVisibleCount = scopeSalesTotal;
+      renderScopeTables();
+    }
+
+    function toggleClaimsExpanded() {
+      claimsVisibleCount = Math.min(claimsVisibleCount + SCOPE_PAGE_STEP, scopeClaimsTotal);
+      renderScopeTables();
+    }
+
+    function showAllClaims() {
+      claimsVisibleCount = scopeClaimsTotal;
       renderScopeTables();
     }
 
@@ -2362,14 +2581,23 @@
       const salesBody = document.querySelector('#salesTable tbody');
       const claimsBody = document.querySelector('#claimsTable tbody');
 
-      const filteredSales = getExportFilteredSales();
+      // Most recent invoices first, so "show 5 recent" actually means recent.
+      const filteredSales = getExportFilteredSales().slice().sort((a, b) => {
+        const dateA = String(a.invoice_date || '');
+        const dateB = String(b.invoice_date || '');
+        if (dateA !== dateB) return dateA < dateB ? 1 : -1;
+        return (b.id || 0) - (a.id || 0);
+      });
 
       const storesById = new Map(stores.map(item => [item.id, buildBranchLabel(item)]));
       const categoriesById = new Map(categories.map(item => [item.id, item.name]));
       const subcategoriesById = new Map(subcategories.map(item => [item.id, item.name]));
       const brandsById = new Map(brands.map(item => [item.id, item.name]));
 
-      salesBody.innerHTML = filteredSales.map(s => `
+      scopeSalesTotal = filteredSales.length;
+      const visibleSales = filteredSales.slice(0, salesVisibleCount);
+
+      salesBody.innerHTML = visibleSales.map(s => `
         <tr>
           <td>${storesById.get(s.store_id) || ''}</td>
           <td>${s.invoice_date || ''}</td>
@@ -2396,8 +2624,13 @@
         </tr>
       `).join('') || '<tr><td colspan="22" class="empty">No sales in your scope yet</td></tr>';
 
+      renderScopeMoreControls('sales', scopeSalesTotal, salesVisibleCount);
+
       const claimRows = filteredSales.filter(s => s.claim_status || s.claim_status_other || s.scheme_amount);
-      claimsBody.innerHTML = claimRows.map(s => `
+      scopeClaimsTotal = claimRows.length;
+      const visibleClaims = claimRows.slice(0, claimsVisibleCount);
+
+      claimsBody.innerHTML = visibleClaims.map(s => `
         <tr>
           <td>${s.invoice_date || ''}</td>
           <td>${s.invoice_no || ''}</td>
@@ -2409,6 +2642,26 @@
           <td>${canEditSales() ? `<button type="button" onclick="startSaleEdit(${s.id})" style="width:auto; padding:6px 10px; background:#111111;">Edit</button>` : '-'}</td>
         </tr>
       `).join('') || '<tr><td colspan="8" class="empty">No claims in your scope yet</td></tr>';
+
+      renderScopeMoreControls('claims', scopeClaimsTotal, claimsVisibleCount);
+    }
+
+    function renderScopeMoreControls(prefix, total, visibleCount) {
+      const wrap = document.getElementById(`${prefix}MoreWrap`);
+      const countLabel = document.getElementById(`${prefix}Count`);
+      const moreBtn = document.getElementById(`${prefix}MoreBtn`);
+      const showAllBtn = document.getElementById(`${prefix}ShowAllBtn`);
+      if (!wrap) return;
+
+      if (total <= SCOPE_PAGE_INITIAL) {
+        wrap.style.display = 'none';
+        return;
+      }
+
+      wrap.style.display = 'flex';
+      if (countLabel) countLabel.textContent = `Showing ${Math.min(visibleCount, total)} of ${total}`;
+      if (moreBtn) moreBtn.style.display = visibleCount >= total ? 'none' : '';
+      if (showAllBtn) showAllBtn.style.display = visibleCount >= total ? 'none' : '';
     }
 
     async function deleteSale(saleId) {

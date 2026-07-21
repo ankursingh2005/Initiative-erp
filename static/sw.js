@@ -1,4 +1,4 @@
-const CACHE_NAME = 'initiative-erp-v5';
+const CACHE_NAME = 'initiative-erp-v6';
 const CORE_ASSETS = [
   '/login',
   '/signup',
@@ -51,7 +51,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   const url = new URL(request.url);
-  if (url.pathname.startsWith('/auth/') || url.pathname.startsWith('/my-scope/') || url.pathname.startsWith('/sales') || url.pathname.startsWith('/schemes') || url.pathname.startsWith('/api/purchase-orders')) {
+  if (url.pathname.startsWith('/auth/') || url.pathname.startsWith('/my-scope/') || url.pathname.startsWith('/sales') || url.pathname.startsWith('/schemes') || url.pathname.startsWith('/api/purchase-orders') || url.pathname.startsWith('/admin/')) {
     return;
   }
 

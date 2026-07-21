@@ -2326,6 +2326,16 @@ def upload_interval_sales_file(
     }
 
 
+@app.delete("/admin/interval-sales/clear")
+def clear_interval_sales_data(
+    current_user: models.User = Depends(auth.require_roles("Admin")),
+    db: Session = Depends(get_db),
+):
+    deleted_count = db.query(models.IntervalSaleUpload).delete()
+    db.commit()
+    return {"message": "All uploaded interval sales data cleared", "deleted": deleted_count}
+
+
 @app.get("/admin/interval-sales/summary")
 def interval_sales_summary(
     interval: str = Query("daily", pattern="^(daily|weekly|monthly|custom)$"),
