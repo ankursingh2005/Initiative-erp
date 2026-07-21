@@ -112,6 +112,7 @@ class Scheme(Base):
     remarks = Column(String(255), nullable=True)
     reward_type = Column(String(20), nullable=False, default="Fixed")
     reward_value = Column(Float, default=0)
+    reward_type_other = Column(String(100), nullable=True)
 
     created_date = Column(DateTime, default=datetime.utcnow)
 

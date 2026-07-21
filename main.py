@@ -110,6 +110,7 @@ def ensure_database_schema():
     ensure_column("schemes", "applicable_dealer", "VARCHAR(100)")
     ensure_column("schemes", "circular_number", "VARCHAR(50)")
     ensure_column("schemes", "remarks", "VARCHAR(255)")
+    ensure_column("schemes", "reward_type_other", "VARCHAR(100)")
 
     ensure_column("users", "store_id", "INTEGER")
     ensure_column("users", "category_code", "VARCHAR(20)")
@@ -117,6 +118,15 @@ def ensure_database_schema():
     ensure_column("users", "created_date", "TIMESTAMP")
     ensure_column("users", "reset_token", "VARCHAR(100)")
     ensure_column("users", "reset_token_expires", "TIMESTAMP")
+
+    ensure_column("claim_headers", "claim_no", "VARCHAR(50)")
+    ensure_column("claim_headers", "brand_id", "INTEGER")
+    ensure_column("claim_headers", "invoice_no", "VARCHAR(50)")
+    ensure_column("claim_headers", "branch_id", "INTEGER")
+    ensure_column("claim_headers", "remarks", "VARCHAR(255)")
+    ensure_column("claim_headers", "payment_amount", "FLOAT")
+    ensure_column("claim_headers", "balance", "FLOAT")
+    ensure_column("claim_headers", "created_date", "TIMESTAMP")
 
 
 ensure_database_schema()
@@ -408,7 +418,12 @@ def normalize_reward_type(raw_value: str) -> str:
         return "Percentage"
     if value in {"target based", "target", "slab"}:
         return "Slab"
-    raise HTTPException(status_code=400, detail="reward_type must be one of: Fixed Amount, Target Based, %, Slab")
+    if value in {"other"}:
+        # Custom scheme types still need a concrete calculation behind them
+        # for auto claim generation; treat "Other" as a flat/fixed amount.
+        # The user's own label is kept separately in reward_type_other.
+        return "Fixed"
+    raise HTTPException(status_code=400, detail="reward_type must be one of: Fixed Amount, Target Based, %, Slab, Other")
 
 
 def normalize_offer_type(raw_value: str) -> str:
@@ -1916,21 +1931,27 @@ def mark_purchase_orders_exported_to_busy(
 def create_scheme(
     scheme: schemas.SchemeCreate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.require_roles("Admin")),
+    current_user: models.User = Depends(auth.require_roles("Admin", "BrandPartner")),
 ):
-    existing = (
-        db.query(models.Scheme)
-        .filter(models.Scheme.scheme_code == scheme.scheme_code)
-        .first()
-    )
-    if existing:
-        raise HTTPException(status_code=400, detail="Scheme code already exists")
+    scheme_code = (scheme.scheme_code or "").strip()
+    if not scheme_code:
+        # Auto-generate a unique code since the Scheme Maintenance form no
+        # longer asks for one. Format: SCH-<epoch-milliseconds>.
+        scheme_code = f"SCH-{int(datetime.utcnow().timestamp() * 1000)}"
+    else:
+        existing = (
+            db.query(models.Scheme)
+            .filter(models.Scheme.scheme_code == scheme_code)
+            .first()
+        )
+        if existing:
+            raise HTTPException(status_code=400, detail="Scheme code already exists")
 
     normalized_reward_type = normalize_reward_type(scheme.reward_type)
     normalized_offer_type = normalize_offer_type(scheme.offer_type)
 
     db_scheme = models.Scheme(
-        scheme_code=scheme.scheme_code,
+        scheme_code=scheme_code,
         scheme_name=scheme.scheme_name,
         brand_id=scheme.brand_id,
         category_id=scheme.category_id,
@@ -1951,6 +1972,7 @@ def create_scheme(
         remarks=scheme.remarks,
         reward_type=normalized_reward_type,
         reward_value=scheme.reward_value,
+        reward_type_other=(scheme.reward_type_other or "").strip() or None,
         status=scheme.status,
     )
     db.add(db_scheme)
@@ -2004,6 +2026,34 @@ def activate_scheme(scheme_id: int, db: Session = Depends(get_db)):
     scheme.status = "Active"
     db.commit()
     return {"message": f"Scheme {scheme_id} activated"}
+
+
+@app.delete("/schemes/{scheme_id}")
+def delete_scheme(
+    scheme_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_roles("Admin")),
+):
+    scheme = db.query(models.Scheme).filter(models.Scheme.id == scheme_id).first()
+    if not scheme:
+        raise HTTPException(status_code=404, detail="Scheme not found")
+
+    existing_claims = (
+        db.query(models.ClaimHeader.id)
+        .filter(models.ClaimHeader.scheme_id == scheme_id)
+        .count()
+    )
+    if existing_claims:
+        raise HTTPException(
+            status_code=400,
+            detail="This scheme has claims linked to it and can't be deleted. Pause it instead.",
+        )
+
+    # SchemeCondition and SchemeSlab rows are removed automatically via the
+    # cascade="all, delete-orphan" relationship on the Scheme model.
+    db.delete(scheme)
+    db.commit()
+    return {"message": f"Scheme {scheme_id} deleted"}
 
 
 # ============================================================

@@ -21,9 +21,11 @@
     .form-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; } .span-2 { grid-column:span 2; } .span-3 { grid-column:span 3; }
     label { display:block; margin:0 0 6px; font-size:12px; color:var(--muted); font-weight:700; } input, select, textarea { width:100%; min-height:39px; border:1px solid var(--line); border-radius:6px; padding:9px 10px; font:inherit; color:var(--ink); background:#fff; } textarea { min-height:70px; resize:vertical; } select:disabled, input:disabled { background:#f2f4f7; color:var(--muted); }
     .section-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; gap:12px; flex-wrap:wrap; } .section-head p { margin:4px 0 0; color:var(--muted); font-size:13px; }
-    .table-wrap { overflow-x:auto; border:1px solid #e4e7ec; border-radius:6px; } table { width:100%; min-width:640px; border-collapse:collapse; } th,td { padding:9px 8px; border-bottom:1px solid #eaecf0; text-align:left; font-size:13px; vertical-align:top; } th { background:#f9fafb; color:#475467; font-size:12px; white-space:nowrap; } td input { min-width:100px; min-height:36px; padding:7px; } td .small { min-width:72px; width:78px; }
+    .table-wrap { overflow-x:auto; border:1px solid #e4e7ec; border-radius:6px; -webkit-overflow-scrolling:touch; touch-action:pan-x pan-y; } table { width:100%; min-width:640px; border-collapse:collapse; } th,td { padding:9px 8px; border-bottom:1px solid #eaecf0; text-align:left; font-size:13px; vertical-align:top; } th { background:#f9fafb; color:#475467; font-size:12px; white-space:nowrap; } td input { min-width:100px; min-height:36px; padding:7px; } td .small { min-width:72px; width:78px; }
     .remove { background:transparent; color:var(--danger); font-size:18px; padding:5px 7px; } .actions { display:flex; justify-content:flex-end; gap:10px; margin-top:16px; } .message { min-height:20px; margin-top:12px; font-size:13px; color:var(--danger); } .message.success { color:var(--good); }
     .filters { display:flex; gap:10px; align-items:center; flex-wrap:wrap; } .filters select { width:auto; min-width:150px; }
+    .filter-date-label { display:flex; flex-direction:column; gap:3px; font-size:12px; color:#556; font-weight:600; }
+    .filter-date-label input[type="date"] { padding:8px 10px; border:1px solid #c9c9c9; border-radius:8px; font-size:13px; font-family:inherit; }
     .reason-options { display:flex; flex-direction:column; gap:10px; margin:18px 0 4px; }
     .reason-option { display:flex; align-items:center; gap:12px; padding:14px 16px; border:1.5px solid var(--line); border-radius:10px; cursor:pointer; font-size:14px; font-weight:600; color:var(--ink); background:#fff; transition:border-color .15s ease, background .15s ease, box-shadow .15s ease; }
     .reason-option:hover { border-color:#98a2b3; background:#f9fafb; }
@@ -43,7 +45,7 @@
     .confirm-modal .actions { justify-content:center; }
     .confirm-modal .actions button { min-width:110px; padding:11px 16px; }
     .export-actions { display:flex; gap:8px; }
-    .po-list { display:grid; gap:12px; } .po-row { border:1px solid #e4e7ec; border-radius:7px; padding:15px; background:#fff; } .po-top { display:flex; gap:12px; align-items:flex-start; justify-content:space-between; } .po-no { font-weight:700; font-size:15px; } .po-meta { color:var(--muted); margin-top:4px; font-size:13px; } .status { padding:4px 8px; border-radius:999px; font-size:12px; font-weight:700; background:#eff8ff; color:#175cd3; white-space:nowrap; } .status.ordered { background:#ecfdf3; color:#027a48; } .status.cancelled { background:#fef3f2; color:#b42318; } .status.approved { background:#ecfdf3; color:#027a48; } .status.rejected { background:#fef3f2; color:#b42318; } .status.requested { background:#fffaeb; color:#b54708; }
+    .po-list { display:grid; gap:12px; } .po-row { border:1px solid #e4e7ec; border-radius:7px; padding:15px; background:#fff; } .po-top { display:flex; gap:12px; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; } .po-no { font-weight:700; font-size:15px; word-break:break-word; } .po-meta { color:var(--muted); margin-top:4px; font-size:13px; } .status { padding:4px 8px; border-radius:999px; font-size:12px; font-weight:700; background:#eff8ff; color:#175cd3; white-space:nowrap; } .status.ordered { background:#ecfdf3; color:#027a48; } .status.cancelled { background:#fef3f2; color:#b42318; } .status.approved { background:#ecfdf3; color:#027a48; } .status.rejected { background:#fef3f2; color:#b42318; } .status.requested { background:#fffaeb; color:#b54708; }
     .po-items { margin-top:12px; color:#475467; font-size:13px; line-height:1.6; } .po-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; } .po-actions button { padding:7px 10px; font-size:13px; }
     dialog { width:min(880px,calc(100% - 32px)); max-height:90vh; overflow-y:auto; border:0; border-radius:8px; padding:0; box-shadow:0 20px 50px rgba(16,24,40,.28); } dialog::backdrop { background:rgba(16,24,40,.55); } .modal { padding:20px; } .modal h2 { margin-bottom:4px; } .modal .subtitle { margin-bottom:16px; } .modal .form-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .modal .section-block { border-top:1px solid #eaecf0; margin-top:18px; padding-top:18px; }
     .readonly-summary { background:#f9fafb; border:1px solid #eaecf0; border-radius:6px; padding:10px 12px; font-size:13px; color:#344054; display:flex; gap:18px; flex-wrap:wrap; }
@@ -56,7 +58,19 @@
     .chip button:hover { background:rgba(21,94,239,.12); }
     .add-email-row { display:flex; gap:8px; }
     .add-email-row input { flex:1; }
-    @media(max-width:850px) { main { padding:20px 14px 38px; } .form-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .span-3 { grid-column:span 2; } .title-row { align-items:flex-start; flex-direction:column; } } @media(max-width:540px) { header { align-items:flex-start; flex-direction:column; } .header-right { width:100%; justify-content:space-between; } .form-grid,.modal .form-grid { grid-template-columns:1fr; } .span-2,.span-3 { grid-column:span 1; } .actions { flex-direction:column; } .actions button { width:100%; } .export-actions { width:100%; } .export-actions button { flex:1; } }
+    @media(max-width:850px) { main { padding:20px 14px 38px; } .form-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .span-3 { grid-column:span 2; } .title-row { align-items:flex-start; flex-direction:column; } }
+    @media(max-width:700px) {
+      header { padding:14px 16px; }
+      .card { padding:14px; }
+      .filters { width:100%; }
+      .filters select, .filter-date-label { flex:1 1 140px; }
+      input, select, textarea { min-height:44px; }
+      .btn, .btn-danger, .btn-good, .back-btn, .btn-light { min-height:44px; }
+      .btn-outline, .status { min-height:0; }
+      .po-actions button { flex:1 1 120px; min-height:40px; }
+      th, td { padding:8px 6px; font-size:12.5px; }
+    }
+    @media(max-width:540px) { header { align-items:flex-start; flex-direction:column; } .header-right { width:100%; justify-content:space-between; } .form-grid,.modal .form-grid { grid-template-columns:1fr; } .span-2,.span-3 { grid-column:span 1; } .actions { flex-direction:column; } .actions button { width:100%; } .export-actions { width:100%; } .export-actions button { flex:1; } .filters { flex-direction:column; align-items:stretch; } .filters select, .filter-date-label input { width:100%; } .po-actions button { flex:1 1 100%; } }
 
     /* ---- Official PO sheet (rendered off-screen, then captured as a real PDF) ---- */
     #poPrintHost { position:fixed; top:0; left:-99999px; z-index:-1; background:#fff; }
@@ -131,7 +145,7 @@
     </div>
   </div>
   <main>
-    <div class="title-row"><div><h1>Purchase Order Requests</h1><p class="subtitle">Category managers raise stock requests, Admin approves or rejects them, then MIS finalizes with the supplier.</p></div><div class="filters"><select id="statusFilter" onchange="renderOrders()"><option value="">All statuses</option><option>Requested</option><option>Approved</option><option>Rejected</option><option>Ordered</option><option>Cancelled</option></select></div></div>
+    <div class="title-row"><div><h1>Purchase Order Requests</h1><p class="subtitle">Category managers raise stock requests, Admin approves or rejects them, then MIS finalizes with the supplier.</p></div><div class="filters"><select id="statusFilter" onchange="renderOrders()"><option value="">All statuses</option><option>Requested</option><option>Approved</option><option>Rejected</option><option>Ordered</option><option>Cancelled</option></select><select id="poDateField" onchange="renderOrders()"><option value="request_date">Filter by Request Date</option><option value="ordered_date">Filter by Ordered Date</option></select><label class="filter-date-label">From<input id="poDateFrom" type="date" onchange="renderOrders()" /></label><label class="filter-date-label">To<input id="poDateTo" type="date" onchange="renderOrders()" /></label><button type="button" class="btn-outline" onclick="clearPoDateFilter()">Clear dates</button></div></div>
 
     <section class="card hidden" id="requisitionCard">
       <div class="section-head"><div><h2>Procurement details</h2><p>Division and Brand are scoped to your assigned category. Pick "Others" to type a brand that's not listed yet.</p></div></div>
@@ -256,7 +270,7 @@
   <dialog id="poPreviewDialog">
     <div class="modal">
       <div class="section-head"><div><h2>Purchase Order Preview</h2><p id="poPreviewSubtitle">This is exactly what gets downloaded and emailed. Nothing is saved yet.</p></div><button class="btn-light" type="button" onclick="poPreviewDialog.close()">Close</button></div>
-      <div id="poPreviewBody" style="overflow-x:auto; border:1px solid #e4e7ec; border-radius:6px; padding:12px; background:#f5f7fa;"></div>
+      <div id="poPreviewBody" style="overflow-x:auto; border:1px solid #e4e7ec; border-radius:6px; padding:12px; background:#f5f7fa; -webkit-overflow-scrolling:touch; touch-action:pan-x pan-y;"></div>
       <div id="poPreviewMessage" class="message"></div>
       <div class="actions">
         <button class="btn-light" type="button" onclick="poPreviewDialog.close()">Close</button>
@@ -381,7 +395,7 @@
       const row = document.createElement('tr');
       row.innerHTML = `<td>${itemInput('product_name','Product name')}</td><td>${itemInput('variant','Variant')}</td><td>${itemInput('color','Color')}</td>`
         + (includeHsn ? `<td>${itemInput('hsn_code','HSN/SAC','text','small')}</td>` : '')
-        + `<td>${itemInput('quantity','1','number','small')}</td><td>${itemInput('estimated_price','0','number','small')}</td><td><button class="remove" type="button" title="Remove item" aria-label="Remove item" onclick="this.closest('tr').remove()">x</button></td>`;
+        + `<td>${itemInput('quantity','1','number','small')}</td><td>${itemInput('estimated_price','0 or ₹0.00','text','small')}</td><td><button class="remove" type="button" title="Remove item" aria-label="Remove item" onclick="this.closest('tr').remove()">x</button></td>`;
       document.getElementById(bodyId).appendChild(row);
       return row;
     }
@@ -394,12 +408,27 @@
       row.querySelector('[data-field="quantity"]').value = item.quantity ?? '';
       row.querySelector('[data-field="estimated_price"]').value = item.estimated_price ?? '';
     }
+    function extractAmountNumber(rawValue) {
+      const text = String(rawValue ?? '').trim();
+      if (!text) return null;
+      // Strip common currency/percent symbols and thousands separators so
+      // people can type "₹45,600.50", "Rs 500", etc. and we still pull out
+      // the underlying number for the Rate/Amount math.
+      const cleaned = text.replace(/[₹$,]/gi, '').replace(/rs\.?/gi, '').replace(/inr/gi, '').replace(/%/g, '');
+      const match = cleaned.match(/-?\d+(\.\d+)?/);
+      return match ? Number(match[0]) : null;
+    }
+
     function collectItems(bodyId = 'itemsBody') {
       return [...document.querySelectorAll(`#${bodyId} tr`)].map(row => {
         const result = { unit: 'Nos.' };
         row.querySelectorAll('[data-field]').forEach(input => {
           let value = input.value.trim();
-          if (['quantity','estimated_price'].includes(input.dataset.field)) value = value === '' ? null : Number(value);
+          if (input.dataset.field === 'quantity') {
+            value = value === '' ? null : Number(value);
+          } else if (input.dataset.field === 'estimated_price') {
+            value = value === '' ? null : extractAmountNumber(value);
+          }
           result[input.dataset.field] = value;
         });
         return result;
@@ -444,8 +473,27 @@
 
     function getScopedFilteredOrders() {
       const filter = document.getElementById('statusFilter').value;
+      const dateField = document.getElementById('poDateField').value || 'request_date';
+      const dateFrom = document.getElementById('poDateFrom').value;
+      const dateTo = document.getElementById('poDateTo').value;
       const scoped = isProcessor ? orders : orders.filter(order => order.submitted_by_username === username);
-      return scoped.filter(order => !filter || order.status === filter);
+      return scoped
+        .filter(order => !filter || order.status === filter)
+        .filter(order => {
+          if (!dateFrom && !dateTo) return true;
+          const rawDate = dateField === 'ordered_date' ? order.ordered_date : order.request_date;
+          const orderDate = String(rawDate || '').slice(0, 10);
+          if (!orderDate) return false;
+          if (dateFrom && orderDate < dateFrom) return false;
+          if (dateTo && orderDate > dateTo) return false;
+          return true;
+        });
+    }
+
+    function clearPoDateFilter() {
+      document.getElementById('poDateFrom').value = '';
+      document.getElementById('poDateTo').value = '';
+      renderOrders();
     }
 
     function renderOrders() {
@@ -1025,6 +1073,7 @@
       document.getElementById('poPreviewMessage').textContent = '';
       document.getElementById('poPreviewBody').innerHTML = buildPoSheetHtml(order, collectLiveProcessFields());
       poPreviewDialog.showModal();
+      fitPoSheetPreview();
     }
 
     // Opened from the "View" button on the list card - available to every
@@ -1039,7 +1088,46 @@
       document.getElementById('poPreviewMessage').textContent = '';
       document.getElementById('poPreviewBody').innerHTML = buildPoSheetHtml(order);
       poPreviewDialog.showModal();
+      fitPoSheetPreview();
     }
+
+    // The PO sheet is a fixed 850px "print" layout so it always captures
+    // and downloads at proper document proportions. On a phone that's
+    // narrower than that, so instead of forcing a tiny horizontal
+    // scroll, shrink it to fit the dialog width (never scale up past
+    // 100%) so the whole document is readable at a proper size at once.
+    const SUPPORTS_CSS_ZOOM = 'zoom' in document.documentElement.style;
+
+    function fitPoSheetPreview() {
+      const container = document.getElementById('poPreviewBody');
+      const sheet = container && container.querySelector('.po-sheet-page');
+      if (!container || !sheet) return;
+
+      sheet.style.zoom = '';
+      sheet.style.transform = 'none';
+      sheet.style.marginBottom = '0';
+
+      const naturalWidth = 850;
+      const availableWidth = container.clientWidth - 4;
+      const scale = Math.min(1, availableWidth / naturalWidth);
+      if (scale >= 1) return;
+
+      if (SUPPORTS_CSS_ZOOM) {
+        // zoom reflows layout, so the container shrinks to fit with it -
+        // no leftover blank space or side scrollbar to account for.
+        sheet.style.zoom = String(scale);
+      } else {
+        sheet.style.transformOrigin = 'top left';
+        sheet.style.transform = `scale(${scale})`;
+        // transform doesn't affect layout size, so collapse the blank
+        // space it would otherwise leave behind in the dialog.
+        sheet.style.marginBottom = `${sheet.offsetHeight * (scale - 1)}px`;
+      }
+    }
+
+    window.addEventListener('resize', () => {
+      if (poPreviewDialog.open) fitPoSheetPreview();
+    });
 
     function buildPoSheetHtml(order, live) {
       const store = masterStores.find(s => s.id === order.branch_id);

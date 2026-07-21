@@ -125,7 +125,7 @@ class SchemeSlabCreate(BaseModel):
 
 
 class SchemeCreate(BaseModel):
-    scheme_code: str
+    scheme_code: Optional[str] = None
     scheme_name: str
     brand_id: Optional[int] = None
     category_id: Optional[int] = None
@@ -147,6 +147,7 @@ class SchemeCreate(BaseModel):
     remarks: Optional[str] = None
     reward_type: str = "Fixed"
     reward_value: float = 0
+    reward_type_other: Optional[str] = None
     conditions: List[SchemeConditionCreate] = []
     slabs: List[SchemeSlabCreate] = []
 
@@ -175,6 +176,7 @@ class SchemeOut(BaseModel):
     remarks: Optional[str]
     reward_type: str
     reward_value: float
+    reward_type_other: Optional[str] = None
 
     class Config:
         from_attributes = True

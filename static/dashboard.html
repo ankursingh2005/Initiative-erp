@@ -178,15 +178,21 @@
     }
     .scheme-list { margin: 0; padding-left: 18px; color: var(--muted); }
     .scheme-list li { margin-bottom: 6px; }
-    .table-wrap { overflow-x: auto; }
+    .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; touch-action: pan-x pan-y; scroll-behavior: smooth; }
+    .claims-table { min-width: 900px; }
     .wide-table { min-width: 1300px; }
     #entryGrid { grid-template-columns: 1fr; }
     #scopeGrid { grid-template-columns: 1fr; }
     #schemeGrid { grid-template-columns: 1fr; }
     .scheme-toolbar { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
-    .scheme-table-wrap { overflow-x: auto; margin-top: 12px; }
+    .scheme-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; touch-action: pan-x pan-y; scroll-behavior: smooth; margin-top: 12px; }
+    .scheme-date-filter { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; margin-top: 16px; padding: 12px; border: 1px solid #dbe5f4; border-radius: 10px; background: #f8fbff; }
+    .scheme-date-filter .field { margin: 0; }
+    .scheme-date-filter button { width: auto; padding: 9px 12px; }
     .scheme-actions { display: flex; gap: 8px; flex-wrap: wrap; }
     .scheme-actions button { width: auto; padding: 8px 12px; }
+    .scheme-actions button.scheme-delete-btn { background: #d92d20; color: #fff; border-color: #d92d20; }
+    .scheme-actions button.scheme-delete-btn:hover { background: #b42318; }
     .export-panel {
       display: grid;
       grid-template-columns: minmax(180px, 260px) 1fr;
@@ -323,6 +329,25 @@
       min-width: 1200px;
     }
 
+    .records-more-wrap {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      margin-top: 10px;
+    }
+
+    .records-more-wrap button {
+      width: auto;
+      padding: 9px 18px;
+      background: linear-gradient(90deg, #1d1d1d 0%, #000000 100%);
+      color: #ffffff;
+    }
+
+    .records-more-wrap button:hover {
+      background: linear-gradient(90deg, #2a2a2a 0%, #0a0a0a 100%);
+    }
+
     /* Sales form visual refresh */
     #saleForm {
       margin-top: 14px;
@@ -404,6 +429,32 @@
       .interval-toolbar { grid-template-columns: 1fr; }
       .interval-summary-grid { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
       .interval-layout { grid-template-columns: 1fr; }
+      .scheme-toolbar { grid-template-columns: 1fr; }
+      .export-panel { grid-template-columns: 1fr; }
+      .content { padding: 0 14px 32px; margin: 16px auto; }
+      header { padding: 14px 16px; }
+    }
+
+    @media (max-width: 700px) {
+      header { flex-wrap: wrap; gap: 10px; }
+      .brand { font-size: 17px; }
+      .header-actions { width: 100%; justify-content: flex-end; }
+      .section-hero-title { font-size: 17px; padding: 12px 14px; margin: -20px -14px 12px; }
+      .card { padding: 14px; border-radius: 12px; }
+      .hero { padding: 18px; }
+      .hero h2 { font-size: 20px; }
+      .scheme-date-filter { padding: 10px; gap: 10px; }
+      .scheme-date-filter .field { flex: 1 1 140px; }
+      input, select, button { min-height: 44px; }
+      .scheme-actions button, .export-actions button, .interval-toolbar button { min-height: 40px; }
+      th, td { padding: 8px 6px; font-size: 13px; }
+    }
+
+    @media (max-width: 480px) {
+      .interval-summary-grid { grid-template-columns: 1fr 1fr; }
+      .export-actions { flex-direction: column; }
+      .export-actions button { width: 100%; }
+      .modal { padding: 18px; }
     }
 
     .modal-backdrop {
@@ -497,6 +548,18 @@
     </div>
   </div>
 
+  <div id="deleteSchemeModal" class="modal-backdrop" aria-hidden="true" onclick="if (event.target === this) closeDeleteSchemeModal()">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="deleteSchemeTitle">
+      <h3 id="deleteSchemeTitle">Delete this scheme?</h3>
+      <p>This will permanently remove the scheme. This cannot be undone.</p>
+      <div id="deleteSchemeError" class="msg" style="display:none; text-align:left; margin:0 0 12px;"></div>
+      <div class="modal-actions">
+        <button type="button" class="modal-cancel" onclick="closeDeleteSchemeModal()">Cancel</button>
+        <button type="button" class="modal-confirm" id="deleteSchemeConfirmBtn" onclick="confirmDeleteScheme()">Delete</button>
+      </div>
+    </div>
+  </div>
+
   <div id="saveSuccessModal" class="save-success-backdrop" aria-hidden="true" onclick="if (event.target === this) hideSaveSuccessPopup()">
     <div class="save-success-modal" role="status" aria-live="polite">
       <div class="save-success-spinner" aria-hidden="true"></div>
@@ -553,7 +616,7 @@
               </div>
               <div class="field">
                 <label>Invoice Value</label>
-                <input id="invoiceValue" type="text" inputmode="decimal" placeholder="0 or 0.00" required />
+                <input id="invoiceValue" type="text" inputmode="decimal" placeholder="45600, ₹45,600.50, etc." required />
               </div>
             </div>
             <div class="form-column">
@@ -607,7 +670,7 @@
               </div>
               <div class="field" id="schemeAmountField">
                 <label>Scheme Amount</label>
-                <input id="schemeAmount" type="text" inputmode="decimal" placeholder="0 or 0.00" />
+                <input id="schemeAmount" type="text" inputmode="decimal" placeholder="45600, ₹45,600.50, etc." />
               </div>
               <div class="field" id="claimField">
                 <label>Claim</label>
@@ -629,7 +692,7 @@
                 <div class="grid-2" style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px;">
                   <div>
                     <label>UPI Scheme Amount</label>
-                    <input id="upiSchemeAmount" type="text" inputmode="decimal" placeholder="0 or 0.00" />
+                    <input id="upiSchemeAmount" type="text" inputmode="decimal" placeholder="45600, ₹45,600.50, etc." />
                   </div>
                   <div>
                     <label>UPI Claim Status</label>
@@ -640,7 +703,7 @@
                   </div>
                   <div>
                     <label>Backend Scheme Amount</label>
-                    <input id="backendSchemeAmount" type="text" inputmode="decimal" placeholder="0 or 0.00" />
+                    <input id="backendSchemeAmount" type="text" inputmode="decimal" placeholder="45600, ₹45,600.50, etc." />
                   </div>
                   <div>
                     <label>Backend Claim</label>
@@ -698,6 +761,17 @@
             <button type="button" onclick="downloadSalesJpg()">Download JPG</button>
           </div>
         </div>
+        <div class="scheme-date-filter" id="salesDateFilterBar">
+          <div class="field">
+            <label>Invoice Date From</label>
+            <input id="salesDateFrom" type="date" onchange="renderScopeTables()" />
+          </div>
+          <div class="field">
+            <label>Invoice Date To</label>
+            <input id="salesDateTo" type="date" onchange="renderScopeTables()" />
+          </div>
+          <button type="button" onclick="clearSalesDateFilter()">Clear dates</button>
+        </div>
         <div class="table-wrap">
           <table id="salesTable" class="wide-table">
             <thead>
@@ -733,21 +807,23 @@
 
       <div class="card section-hero-card" id="claimsScopeCard">
         <h3 class="section-hero-title">Claims in your scope</h3>
-        <table id="claimsTable">
-          <thead>
-            <tr>
-              <th>Invoice Date</th>
-              <th>Invoice No</th>
-              <th>Schemes</th>
-              <th>Scheme Amount</th>
-              <th>Claim Status</th>
-              <th>Settled Date</th>
-              <th>Action</th>
-              <th>Edit</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
+        <div class="table-wrap">
+          <table id="claimsTable" class="claims-table">
+            <thead>
+              <tr>
+                <th>Invoice Date</th>
+                <th>Invoice No</th>
+                <th>Schemes</th>
+                <th>Scheme Amount</th>
+                <th>Claim Status</th>
+                <th>Settled Date</th>
+                <th>Action</th>
+                <th>Edit</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -804,6 +880,10 @@
               <tbody id="intervalSeriesBody"></tbody>
             </table>
           </div>
+          <div id="intervalSeriesMoreWrap" class="records-more-wrap" style="display:none;">
+            <span id="intervalSeriesCount" class="muted"></span>
+            <button type="button" id="intervalSeriesMoreBtn" onclick="toggleIntervalSeriesExpanded()">See More</button>
+          </div>
         </div>
 
         <div class="interval-panel">
@@ -847,6 +927,10 @@
             <tbody id="intervalRecordsBody"></tbody>
           </table>
         </div>
+        <div id="intervalRecordsMoreWrap" class="records-more-wrap" style="display:none;">
+          <span id="intervalRecordsCount" class="muted"></span>
+          <button type="button" id="intervalRecordsMoreBtn" onclick="toggleIntervalRecordsExpanded()">See More</button>
+        </div>
       </div>
     </div>
 
@@ -855,10 +939,6 @@
       <p class="muted section-hero-subtitle">Maintain retail schemes for percentage, fixed, and target-based rewards.</p>
       <form id="schemeForm">
         <div class="scheme-toolbar">
-          <div class="field">
-            <label>Scheme Code</label>
-            <input id="schemeCode" required placeholder="SCH-RET-001" />
-          </div>
           <div class="field">
             <label>Scheme Name</label>
             <input id="schemeName" required placeholder="Summer Retail Offer" />
@@ -875,16 +955,21 @@
             </select>
           </div>
           <div class="field">
-            <label>Reward Type</label>
+            <label>Scheme Type</label>
             <select id="schemeRewardType">
               <option value="Fixed">Fixed</option>
               <option value="Percentage">Percentage</option>
               <option value="Target Based">Target Based</option>
+              <option value="Other">Other</option>
             </select>
           </div>
+          <div class="field" id="schemeRewardTypeOtherField" style="display:none;">
+            <label>Scheme Type (Other)</label>
+            <input id="schemeRewardTypeOther" placeholder="Write anything" />
+          </div>
           <div class="field">
-            <label>Reward Value</label>
-            <input id="schemeRewardValue" type="number" min="0" step="0.01" required placeholder="500 or 2" />
+            <label>Scheme Value</label>
+            <input id="schemeRewardValue" type="text" inputmode="decimal" required placeholder="500, ₹500, 2%, etc." />
           </div>
           <div class="field" id="schemeTargetQtyField" style="display:none;">
             <label>Target Quantity</label>
@@ -928,11 +1013,23 @@
         <div id="schemeMsg" class="msg"></div>
       </form>
 
+      <div class="scheme-date-filter">
+        <div class="field">
+          <label>Active From</label>
+          <input id="schemeDateFrom" type="date" onchange="renderSchemesTable()" />
+        </div>
+        <div class="field">
+          <label>Active To</label>
+          <input id="schemeDateTo" type="date" onchange="renderSchemesTable()" />
+        </div>
+        <button type="button" onclick="clearSchemeDateFilter()">Clear dates</button>
+      </div>
+
       <div class="scheme-table-wrap">
         <table id="schemeTable" class="wide-table">
           <thead>
             <tr>
-              <th>Code</th><th>Name</th><th>Offer</th><th>Type</th><th>Value</th><th>Target</th><th>Status</th><th>Dates</th><th>Action</th>
+              <th>Name</th><th>Offer</th><th>Scheme Type</th><th>Scheme Value</th><th>Target</th><th>Status</th><th>Dates</th><th>Action</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -1252,6 +1349,14 @@
       if (rewardType !== 'Target Based') {
         document.getElementById('schemeTargetQty').value = '';
       }
+
+      const otherField = document.getElementById('schemeRewardTypeOtherField');
+      if (otherField) {
+        otherField.style.display = rewardType === 'Other' ? '' : 'none';
+        if (rewardType !== 'Other') {
+          document.getElementById('schemeRewardTypeOther').value = '';
+        }
+      }
     }
 
     function isSchemeMobileCategorySelected() {
@@ -1372,6 +1477,17 @@
       return s.claim_status_other || s.claim_status || '';
     }
 
+    function extractAmountNumber(rawValue) {
+      const text = String(rawValue ?? '').trim();
+      if (!text) return null;
+      // Strip common currency/percent symbols and thousands separators so
+      // people can type "₹45,600.50", "Rs 500", "10%", etc. and we still
+      // pull out the number underneath for calculations.
+      const cleaned = text.replace(/[₹$,]/gi, '').replace(/rs\.?/gi, '').replace(/inr/gi, '').replace(/%/g, '');
+      const match = cleaned.match(/-?\d+(\.\d+)?/);
+      return match ? Number(match[0]) : null;
+    }
+
     function parseAmountExact(rawValue, fieldLabel, { required = false } = {}) {
       const text = String(rawValue ?? '').trim();
       if (!text) {
@@ -1381,11 +1497,12 @@
         return { exact: '', numeric: 0 };
       }
 
-      if (!/^\d+(\.\d{1,2})?$/.test(text)) {
-        throw new Error(`${fieldLabel} must be a valid amount (example: 45600 or 45600.50).`);
+      const numeric = extractAmountNumber(text);
+      if (numeric === null) {
+        throw new Error(`${fieldLabel} must contain a number (examples: 45600, ₹45,600.50, 10%).`);
       }
 
-      return { exact: text, numeric: normalizeMoney(text) };
+      return { exact: text, numeric: normalizeMoney(numeric) };
     }
 
     function canDeleteSales() {
@@ -1419,15 +1536,36 @@
 
     function getExportFilteredSales() {
       const categoryFilter = getSelectedExportCategoryFilter();
-      if (categoryFilter === 'ALL') {
-        return scopedSales;
+      const dateFrom = document.getElementById('salesDateFrom')?.value || '';
+      const dateTo = document.getElementById('salesDateTo')?.value || '';
+
+      let result = scopedSales;
+
+      if (categoryFilter !== 'ALL') {
+        result = result.filter(sale => {
+          const categoryCode = getCategoryCodeById(sale.category_id);
+          const selectedCode = normalizeCategoryCode(categoryFilter);
+          return categoryCode === selectedCode;
+        });
       }
 
-      return scopedSales.filter(sale => {
-        const categoryCode = getCategoryCodeById(sale.category_id);
-        const selectedCode = normalizeCategoryCode(categoryFilter);
-        return categoryCode === selectedCode;
-      });
+      if (dateFrom || dateTo) {
+        result = result.filter(sale => {
+          const invoiceDate = String(sale.invoice_date || '').slice(0, 10);
+          if (!invoiceDate) return false;
+          if (dateFrom && invoiceDate < dateFrom) return false;
+          if (dateTo && invoiceDate > dateTo) return false;
+          return true;
+        });
+      }
+
+      return result;
+    }
+
+    function clearSalesDateFilter() {
+      document.getElementById('salesDateFrom').value = '';
+      document.getElementById('salesDateTo').value = '';
+      renderScopeTables();
     }
 
     function getExportData() {
@@ -1637,18 +1775,12 @@
         <div class="interval-stat"><div class="interval-stat-label">Profit %</div><div class="interval-stat-value">${formatAmount(totals.profit_percent || 0)}%</div></div>
       `;
 
-      const seriesBody = document.getElementById('intervalSeriesBody');
       const series = summary.series || [];
-      seriesBody.innerHTML = series.map(item => `
-        <tr>
-          <td>${item.label || ''}</td>
-          <td>${formatAmount(item.qty || 0)}</td>
-          <td>${formatAmount(item.sales_amt || 0)}</td>
-          <td>${formatAmount(item.cost_amt || 0)}</td>
-          <td>${formatAmount(item.profit_loss || 0)}</td>
-          <td>${formatAmount(item.profit_percent || 0)}%</td>
-        </tr>
-      `).join('') || '<tr><td colspan="6" class="empty">No interval data found for selected filter</td></tr>';
+      // Backend returns periods oldest-first; show most recent first so
+      // "recent data" appears immediately, with older periods behind See More.
+      intervalSeriesAll = series.slice().reverse();
+      intervalSeriesVisibleCount = INTERVAL_SERIES_PAGE_SIZE;
+      renderIntervalSeriesView();
 
       const topItemsBody = document.getElementById('intervalTopItemsBody');
       const topItems = summary.top_items || [];
@@ -1666,11 +1798,63 @@
       sourcesList.innerHTML = sources.map(source => `<li>${source.file || 'Unknown file'} (${source.rows || 0} rows)</li>`).join('') || '<li>No upload history yet</li>';
     }
 
-    function renderIntervalRecords(records = []) {
-      const body = document.getElementById('intervalRecordsBody');
-      if (!body) return;
+    const INTERVAL_SERIES_PAGE_SIZE = 10;
+    let intervalSeriesAll = [];
+    let intervalSeriesVisibleCount = INTERVAL_SERIES_PAGE_SIZE;
 
-      body.innerHTML = records.map(record => `
+    function renderIntervalSeriesRows(rows) {
+      return rows.map(item => `
+        <tr>
+          <td>${item.label || ''}</td>
+          <td>${formatAmount(item.qty || 0)}</td>
+          <td>${formatAmount(item.sales_amt || 0)}</td>
+          <td>${formatAmount(item.cost_amt || 0)}</td>
+          <td>${formatAmount(item.profit_loss || 0)}</td>
+          <td>${formatAmount(item.profit_percent || 0)}%</td>
+        </tr>
+      `).join('') || '<tr><td colspan="6" class="empty">No interval data found for selected filter</td></tr>';
+    }
+
+    function renderIntervalSeriesView() {
+      const seriesBody = document.getElementById('intervalSeriesBody');
+      const moreWrap = document.getElementById('intervalSeriesMoreWrap');
+      const moreBtn = document.getElementById('intervalSeriesMoreBtn');
+      const countLabel = document.getElementById('intervalSeriesCount');
+      if (!seriesBody) return;
+
+      const total = intervalSeriesAll.length;
+      const visible = intervalSeriesAll.slice(0, intervalSeriesVisibleCount);
+      seriesBody.innerHTML = renderIntervalSeriesRows(visible);
+
+      if (moreWrap) {
+        if (total > INTERVAL_SERIES_PAGE_SIZE) {
+          moreWrap.style.display = 'flex';
+          if (countLabel) countLabel.textContent = `Showing ${visible.length} of ${total} periods`;
+          if (moreBtn) moreBtn.textContent = intervalSeriesVisibleCount >= total ? 'Show Less' : 'See More';
+        } else {
+          moreWrap.style.display = 'none';
+        }
+      }
+    }
+
+    function toggleIntervalSeriesExpanded() {
+      const total = intervalSeriesAll.length;
+      if (intervalSeriesVisibleCount >= total) {
+        intervalSeriesVisibleCount = INTERVAL_SERIES_PAGE_SIZE;
+        renderIntervalSeriesView();
+        document.getElementById('intervalSeriesMoreWrap')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      } else {
+        intervalSeriesVisibleCount = Math.min(intervalSeriesVisibleCount + INTERVAL_SERIES_PAGE_SIZE, total);
+        renderIntervalSeriesView();
+      }
+    }
+
+    const INTERVAL_RECORDS_PAGE_SIZE = 10;
+    let intervalRecordsAll = [];
+    let intervalRecordsVisibleCount = INTERVAL_RECORDS_PAGE_SIZE;
+
+    function renderIntervalRecordsRows(records) {
+      return records.map(record => `
         <tr>
           <td>${record.sale_date || ''}</td>
           <td>${record.vch_no || ''}</td>
@@ -1685,6 +1869,46 @@
           <td>${record.source_file || ''}</td>
         </tr>
       `).join('') || '<tr><td colspan="11" class="empty">No uploaded rows yet</td></tr>';
+    }
+
+    function renderIntervalRecords(records = []) {
+      intervalRecordsAll = records;
+      intervalRecordsVisibleCount = INTERVAL_RECORDS_PAGE_SIZE;
+      renderIntervalRecordsView();
+    }
+
+    function renderIntervalRecordsView() {
+      const body = document.getElementById('intervalRecordsBody');
+      const moreWrap = document.getElementById('intervalRecordsMoreWrap');
+      const moreBtn = document.getElementById('intervalRecordsMoreBtn');
+      const countLabel = document.getElementById('intervalRecordsCount');
+      if (!body) return;
+
+      const total = intervalRecordsAll.length;
+      const visible = intervalRecordsAll.slice(0, intervalRecordsVisibleCount);
+      body.innerHTML = renderIntervalRecordsRows(visible);
+
+      if (moreWrap) {
+        if (total > INTERVAL_RECORDS_PAGE_SIZE) {
+          moreWrap.style.display = 'flex';
+          if (countLabel) countLabel.textContent = `Showing ${visible.length} of ${total} rows`;
+          if (moreBtn) moreBtn.textContent = intervalRecordsVisibleCount >= total ? 'Show Less' : 'See More';
+        } else {
+          moreWrap.style.display = 'none';
+        }
+      }
+    }
+
+    function toggleIntervalRecordsExpanded() {
+      const total = intervalRecordsAll.length;
+      if (intervalRecordsVisibleCount >= total) {
+        intervalRecordsVisibleCount = INTERVAL_RECORDS_PAGE_SIZE;
+        renderIntervalRecordsView();
+        document.getElementById('intervalRecordsMoreWrap')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      } else {
+        intervalRecordsVisibleCount = Math.min(intervalRecordsVisibleCount + INTERVAL_RECORDS_PAGE_SIZE, total);
+        renderIntervalRecordsView();
+      }
     }
 
     async function loadIntervalSalesSummary() {
@@ -1811,37 +2035,67 @@
       return labels[value] || value || '';
     }
 
-    function schemeTypeLabel(value) {
+    function schemeTypeLabel(value, other) {
+      if (value === 'Other' || value === 'Fixed') {
+        const customLabel = String(other || '').trim();
+        if (customLabel) return customLabel;
+      }
       return value || '';
+    }
+
+    function getDateFilteredSchemes() {
+      const dateFrom = document.getElementById('schemeDateFrom')?.value || '';
+      const dateTo = document.getElementById('schemeDateTo')?.value || '';
+      if (!dateFrom && !dateTo) return schemes;
+
+      return schemes.filter(scheme => {
+        const start = String(scheme.start_date || '').slice(0, 10);
+        const end = String(scheme.end_date || '').slice(0, 10);
+        if (!start && !end) return false;
+        // Show any scheme whose active window overlaps the selected range.
+        if (dateTo && start && start > dateTo) return false;
+        if (dateFrom && end && end < dateFrom) return false;
+        return true;
+      });
+    }
+
+    function clearSchemeDateFilter() {
+      document.getElementById('schemeDateFrom').value = '';
+      document.getElementById('schemeDateTo').value = '';
+      renderSchemesTable();
     }
 
     function renderSchemesTable() {
       const tbody = document.querySelector('#schemeTable tbody');
       if (!tbody) return;
 
-      if (!schemes.length) {
-        tbody.innerHTML = '<tr><td colspan="9" class="empty">No schemes found</td></tr>';
+      const visibleSchemes = getDateFilteredSchemes();
+
+      if (!visibleSchemes.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="empty">No schemes found</td></tr>';
         return;
       }
 
-      tbody.innerHTML = schemes.map(scheme => {
+      tbody.innerHTML = visibleSchemes.map(scheme => {
         const target = scheme.reward_type === 'Slab' ? (scheme.min_qty || '') : '';
         const rewardValue = scheme.reward_value != null ? scheme.reward_value : '';
         const dateRange = `${scheme.start_date || ''} to ${scheme.end_date || ''}`;
-        const actionButton = scheme.status === 'Active'
+        const toggleButton = scheme.status === 'Active'
           ? `<button type="button" onclick="pauseScheme(${scheme.id})">Pause</button>`
           : `<button type="button" onclick="activateScheme(${scheme.id})">Activate</button>`;
+        const deleteButton = hasRole('Admin')
+          ? `<button type="button" class="scheme-delete-btn" onclick="openDeleteSchemeModal(${scheme.id})">Delete</button>`
+          : '';
         return `
           <tr>
-            <td>${scheme.scheme_code || ''}</td>
             <td>${scheme.scheme_name || ''}</td>
             <td>${schemeOfferLabel(scheme.offer_type)}</td>
-            <td>${schemeTypeLabel(scheme.reward_type)}</td>
+            <td>${schemeTypeLabel(scheme.reward_type, scheme.reward_type_other)}</td>
             <td>${rewardValue}</td>
             <td>${target}</td>
             <td>${scheme.status || ''}</td>
             <td>${dateRange}</td>
-            <td><div class="scheme-actions">${actionButton}</div></td>
+            <td><div class="scheme-actions">${toggleButton}${deleteButton}</div></td>
           </tr>
         `;
       }).join('');
@@ -1856,6 +2110,52 @@
     async function activateScheme(schemeId) {
       const response = await authFetch(`/schemes/${schemeId}/activate`, { method: 'PUT' });
       if (!response) return;
+      await loadSchemes();
+    }
+
+    let pendingDeleteSchemeId = null;
+
+    function openDeleteSchemeModal(schemeId) {
+      pendingDeleteSchemeId = schemeId;
+      const errorBox = document.getElementById('deleteSchemeError');
+      errorBox.style.display = 'none';
+      errorBox.textContent = '';
+      const modal = document.getElementById('deleteSchemeModal');
+      modal.classList.add('show');
+      modal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeDeleteSchemeModal() {
+      pendingDeleteSchemeId = null;
+      const modal = document.getElementById('deleteSchemeModal');
+      modal.classList.remove('show');
+      modal.setAttribute('aria-hidden', 'true');
+    }
+
+    async function confirmDeleteScheme() {
+      if (!pendingDeleteSchemeId) return;
+      const schemeId = pendingDeleteSchemeId;
+      const confirmBtn = document.getElementById('deleteSchemeConfirmBtn');
+      const errorBox = document.getElementById('deleteSchemeError');
+      errorBox.style.display = 'none';
+      errorBox.textContent = '';
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = 'Deleting...';
+
+      const response = await authFetch(`/schemes/${schemeId}`, { method: 'DELETE' });
+
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = 'Delete';
+
+      if (!response) return;
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        errorBox.textContent = data.detail || 'Unable to delete scheme';
+        errorBox.style.display = 'block';
+        return;
+      }
+
+      closeDeleteSchemeModal();
       await loadSchemes();
     }
 
@@ -1954,7 +2254,7 @@
       });
 
       if (document.getElementById('schemeAdminCard')) {
-        document.getElementById('schemeAdminCard').style.display = hasRole('Admin') ? 'block' : 'none';
+        document.getElementById('schemeAdminCard').style.display = hasRole('Admin', 'BrandPartner') ? 'block' : 'none';
       }
       if (document.getElementById('exportPanel')) {
         const exportPanel = document.getElementById('exportPanel');
@@ -1979,7 +2279,7 @@
         exportCategoryFilter.addEventListener('input', refreshScopeByCategory);
       }
       if (document.getElementById('claimsScopeCard')) {
-        document.getElementById('claimsScopeCard').style.display = 'block';
+        document.getElementById('claimsScopeCard').style.display = hasRole('BrandPartner') ? 'none' : 'block';
       }
 
       const intervalUploadCard = document.getElementById('intervalUploadCard');
@@ -2322,11 +2622,21 @@
       schemeMsg.textContent = '';
 
       const rewardType = document.getElementById('schemeRewardType').value;
-      const rewardValue = Number(document.getElementById('schemeRewardValue').value || 0);
+      const rewardValueRaw = document.getElementById('schemeRewardValue').value;
+      const rewardValueNumeric = extractAmountNumber(rewardValueRaw);
+      if (rewardValueNumeric === null) {
+        schemeMsg.textContent = 'Scheme Value must contain a number (examples: 500, ₹500, 2%).';
+        return;
+      }
+      const rewardValue = normalizeMoney(rewardValueNumeric);
       const targetQty = Number(document.getElementById('schemeTargetQty').value || 0);
+      const rewardTypeOther = document.getElementById('schemeRewardTypeOther').value.trim();
+      if (rewardType === 'Other' && !rewardTypeOther) {
+        schemeMsg.textContent = 'Please write a Scheme Type in the Other field.';
+        return;
+      }
 
       const payload = {
-        scheme_code: document.getElementById('schemeCode').value,
         scheme_name: document.getElementById('schemeName').value,
         brand_id: Number(document.getElementById('schemeBrand').value) || null,
         category_id: Number(document.getElementById('schemeCategory').value) || null,
@@ -2348,6 +2658,7 @@
         remarks: document.getElementById('schemeRemarks').value || null,
         reward_type: rewardType,
         reward_value: rewardValue,
+        reward_type_other: rewardType === 'Other' ? rewardTypeOther : null,
         conditions: [],
         slabs: rewardType === 'Target Based' && targetQty > 0 && rewardValue > 0 ? [{ min_quantity: targetQty, reward_per_unit: rewardValue }] : []
       };
