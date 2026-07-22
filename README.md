@@ -77,6 +77,28 @@ Existing data in `scheme_erp.db` is local SQLite data. It is not automatically c
 - Start command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
 - For Railway, add a PostgreSQL service and set `SECRET_KEY` in the project variables.
 
+## Scheme documents (OCR + LLM extraction)
+
+Under Scheme Maintenance, an Admin/BrandManager/BrandPartner can attach the scheme circular they received from a brand - an image, PDF, or Excel file - via **Attach Scheme Document**. This:
+
+1. Creates a new scheme with status `Draft`.
+2. Saves the uploaded file (stored in the database, not on disk, so it survives Render restarts/redeploys).
+3. Sends the document to the Claude API, which reads it (tables, stamps, handwriting for images/PDFs; a flattened cell dump for Excel/CSV) and returns the scheme's terms - brand, product, dates, reward type/value or slabs, min/max quantity, offer type, circular number, and remarks.
+4. Pre-fills the Draft scheme with whatever was extracted. **It is never activated automatically** - it stays in "Draft Schemes Pending Review" until an Admin reviews the extracted fields, corrects anything needed, and clicks **Activate**.
+
+If extraction fails, or the document type isn't supported, or `ANTHROPIC_API_KEY` isn't set, the document is still saved and the scheme still appears in the Draft queue - it just needs to be filled in by hand before activating.
+
+To enable extraction, set `ANTHROPIC_API_KEY` on the web service (Render dashboard -> `idspl` -> Environment). Without it, document upload still works, but scheme fields must be entered manually.
+
+## Scheme-matched sales (profitability report)
+
+In **Sales in your scope**, the **Profitability Report - Scheme Matched Sales** panel filters your uploaded profitability report (Interval Sales Analytics Upload - the Date/Vch No/Account/Item/Qty/Unit/Sales Amt/Cost/Profit-Loss/Profit% format exported from Busy) down to only the rows that:
+
+- fall inside an Active scheme's start/end date, and
+- exactly match that scheme's product (or, for a brand-wide scheme with no specific product, any product under that brand).
+
+Each matched row shows the computed backend claim amount, using the same Fixed/Percentage/Slab reward math as the automatic claim engine (`scheme_engine.py`), so Admin can see at a glance which Busy sales are scheme-eligible without manual cross-checking.
+
 ## Purchase Orders and WhatsApp Alerts
 
 After login, users can choose **Schemes** or **Purchase Orders**. Any logged-in user can submit a stock requisition with branch, division, supplier, delivery address, product/model/serial details, stock balance, sales rate, quantity, and estimated price. Admin and MIS Executive users see every request and can update its status, Busy PO number, order date, and processing notes.

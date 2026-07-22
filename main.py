@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Query, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from sqlalchemy import inspect, text, func
@@ -17,6 +17,7 @@ import importlib
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from uuid import uuid4
+import base64
 import smtplib
 from email.mime.text import MIMEText
 from dotenv import load_dotenv
@@ -750,6 +751,151 @@ def build_interval_analytics(rows: List[models.IntervalSaleUpload], interval: st
         "series": points,
         "top_items": top_item_rows,
     }
+
+
+# ============================================================
+# SCHEME DOCUMENT -> LLM EXTRACTION
+# A promoter/brand manager attaches a scheme circular (image, PDF, or
+# Excel). Claude reads it and returns structured scheme fields, which are
+# used to pre-fill a Draft scheme for Admin to review. Extraction never
+# raises - if it fails or ANTHROPIC_API_KEY isn't set, the scheme is just
+# left as a bare Draft for Admin to fill in by hand.
+# ============================================================
+
+SCHEME_EXTRACTION_MODEL = "claude-sonnet-5"
+
+
+def _document_to_llm_content_block(filename: str, content_type: str, raw_bytes: bytes) -> Optional[dict]:
+    """Turn an uploaded scheme document into a Claude API content block.
+    Images and PDFs are sent as-is (base64) so Claude can read tables,
+    stamps, and handwriting directly. Excel/CSV files are flattened to a
+    plain-text cell dump first, since the Messages API has no spreadsheet
+    input type."""
+    ext = "." + filename.lower().split(".")[-1] if "." in filename else ""
+    b64 = base64.b64encode(raw_bytes).decode("ascii")
+
+    if ext in {".jpg", ".jpeg", ".png", ".webp"}:
+        media_type = content_type or ("image/png" if ext == ".png" else "image/jpeg")
+        return {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}}
+
+    if ext == ".pdf":
+        return {"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": b64}}
+
+    if ext in {".xlsx", ".xls", ".csv"}:
+        try:
+            if ext == ".csv":
+                text_dump = raw_bytes.decode("utf-8-sig", errors="replace")
+            else:
+                openpyxl_module = importlib.import_module("openpyxl")
+                workbook = openpyxl_module.load_workbook(filename=BytesIO(raw_bytes), data_only=True, read_only=True)
+                lines = []
+                for sheet in workbook.worksheets:
+                    lines.append(f"--- Sheet: {sheet.title} ---")
+                    for row in sheet.iter_rows(values_only=True):
+                        cells = [str(cell) for cell in row if cell is not None]
+                        if cells:
+                            lines.append(" | ".join(cells))
+                text_dump = "\n".join(lines)
+        except Exception:
+            return None
+        return {"type": "text", "text": text_dump[:20000]}
+
+    return None
+
+
+def extract_scheme_from_document(db: Session, filename: str, content_type: str, raw_bytes: bytes) -> dict:
+    """Calls the Claude API to read a scheme circular and return structured
+    fields. Returns {"status": "Extracted"/"Failed"/"Skipped", "data": {...}, "error": str|None}."""
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        return {"status": "Skipped", "data": {}, "error": "ANTHROPIC_API_KEY is not configured on the server."}
+
+    content_block = _document_to_llm_content_block(filename, content_type, raw_bytes)
+    if not content_block:
+        return {"status": "Failed", "data": {}, "error": "Unsupported file type for extraction."}
+
+    brands = [{"id": b.id, "name": b.name} for b in db.query(models.Brand).all()]
+    categories = [{"id": c.id, "code": c.code, "name": c.name} for c in db.query(models.Category).all()]
+
+    instructions = (
+        "You are reading a dealer/brand scheme circular (an incentive or backend "
+        "scheme notice) for an electronics retail ERP. Extract the scheme terms "
+        "and reply with ONLY a JSON object - no prose, no markdown fences. Schema:\n"
+        "{\n"
+        '  "scheme_name": string,\n'
+        '  "brand_name": string or null (the brand this scheme is for),\n'
+        '  "product_name": string or null (specific product/model if the scheme is product-specific),\n'
+        '  "category_hint": string or null (e.g. HA, HE, IT, Mobile - only if clearly stated),\n'
+        '  "start_date": "YYYY-MM-DD" or null,\n'
+        '  "end_date": "YYYY-MM-DD" or null,\n'
+        '  "reward_type": one of "Fixed", "Percentage", "Slab",\n'
+        '  "reward_value": number (flat amount for Fixed, percent for Percentage, 0 for Slab),\n'
+        '  "slabs": [{"min_quantity": number, "reward_per_unit": number}] (only for Slab, else []),\n'
+        '  "min_qty": number or 0,\n'
+        '  "max_qty": number or null,\n'
+        '  "offer_type": one of "Backend", "UPI", "CARD", "FESTIVAL", "MONTHLY", "OTH",\n'
+        '  "circular_number": string or null,\n'
+        '  "remarks": string or null (any other important terms/conditions in the document)\n'
+        "}\n\n"
+        "If the document mentions only a month/quarter (e.g. \"August 2026 scheme\") without "
+        "exact dates, set start_date to the first day and end_date to the last day of that "
+        "period. If a field truly isn't in the document, use null (or 0/[] as shown above). "
+        f"Known brands in this system: {json.dumps(brands)}. Known categories: {json.dumps(categories)}."
+    )
+
+    payload = json.dumps({
+        "model": SCHEME_EXTRACTION_MODEL,
+        "max_tokens": 1500,
+        "messages": [
+            {"role": "user", "content": [content_block, {"type": "text", "text": instructions}]}
+        ],
+    }).encode("utf-8")
+
+    request = Request(
+        "https://api.anthropic.com/v1/messages",
+        data=payload,
+        headers={
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with urlopen(request, timeout=45) as response:
+            response_data = json.loads(response.read().decode("utf-8"))
+    except (HTTPError, URLError, TimeoutError) as exc:
+        return {"status": "Failed", "data": {}, "error": f"Claude API request failed: {exc}"}
+    except Exception as exc:
+        return {"status": "Failed", "data": {}, "error": f"Unexpected error calling Claude API: {exc}"}
+
+    try:
+        text_blocks = [block["text"] for block in response_data.get("content", []) if block.get("type") == "text"]
+        raw_text = "\n".join(text_blocks).strip()
+        raw_text = re.sub(r"^```(json)?|```$", "", raw_text, flags=re.MULTILINE).strip()
+        extracted = json.loads(raw_text)
+    except Exception as exc:
+        return {"status": "Failed", "data": {}, "error": f"Could not parse Claude's response as JSON: {exc}"}
+
+    return {"status": "Extracted", "data": extracted, "error": None}
+
+
+def _calculate_reward_for_interval_row(scheme: models.Scheme, row: models.IntervalSaleUpload) -> float:
+    """Same reward math as scheme_engine._calculate_reward, adapted for an
+    IntervalSaleUpload row (Busy profitability report import) instead of a
+    Sale row entered manually."""
+    if scheme.reward_type == "Fixed":
+        return float(scheme.reward_value)
+    if scheme.reward_type == "Percentage":
+        return round((row.sales_amt or 0) * (scheme.reward_value / 100), 2)
+    if scheme.reward_type == "Slab":
+        applicable_slabs = [s for s in scheme.slabs if (row.qty or 0) >= s.min_quantity]
+        if not applicable_slabs:
+            return 0
+        best_slab = max(applicable_slabs, key=lambda s: s.min_quantity)
+        return round(best_slab.reward_per_unit * (row.qty or 0), 2)
+    return 0
 
 
 def serve_html(path: str):
@@ -2006,8 +2152,178 @@ def create_scheme(
 
 
 @app.get("/schemes", response_model=List[schemas.SchemeOut])
-def list_schemes(db: Session = Depends(get_db)):
-    return db.query(models.Scheme).all()
+def list_schemes(status: Optional[str] = Query(None), db: Session = Depends(get_db)):
+    query = db.query(models.Scheme)
+    if status:
+        query = query.filter(models.Scheme.status == status)
+    return query.all()
+
+
+@app.post("/schemes/upload-document")
+def upload_scheme_document(
+    file: UploadFile = File(...),
+    brand_id: Optional[int] = Query(None),
+    scheme_name: Optional[str] = Query(None),
+    current_user: models.User = Depends(auth.require_roles("Admin", "BrandManager", "BrandPartner")),
+    db: Session = Depends(get_db),
+):
+    """A promoter/brand manager attaches a scheme circular (image, PDF, or
+    Excel). This creates a Draft scheme, saves the document, and calls
+    Claude to pre-fill the scheme fields from it. Admin reviews and hits
+    Activate (existing PUT /schemes/{id}/activate) when it looks right."""
+    filename = file.filename or "scheme_document"
+    raw_bytes = file.file.read()
+    if not raw_bytes:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
+    if current_user.role in {"BrandManager", "BrandPartner"}:
+        allowed_brand_ids = [ub.brand_id for ub in current_user.brands]
+        if not allowed_brand_ids:
+            raise HTTPException(status_code=403, detail="Your account has no brand assigned yet. Ask an Admin to assign one.")
+        if brand_id is None:
+            brand_id = allowed_brand_ids[0]
+        elif brand_id not in allowed_brand_ids:
+            raise HTTPException(status_code=403, detail="You can only attach documents for your own assigned brand(s).")
+
+    today = date.today()
+    db_scheme = models.Scheme(
+        scheme_code=f"SCH-{int(datetime.utcnow().timestamp() * 1000)}",
+        scheme_name=(scheme_name or "").strip() or f"Pending review - {filename}",
+        brand_id=brand_id,
+        start_date=today,
+        end_date=today,
+        status="Draft",
+        reward_type="Fixed",
+        reward_value=0,
+        offer_type="Backend",
+        calculation_method="Fixed Amount",
+        remarks="Awaiting extraction from attached document.",
+    )
+    db.add(db_scheme)
+    db.commit()
+    db.refresh(db_scheme)
+
+    content_type = file.content_type or ""
+    attachment = models.SchemeAttachment(
+        scheme_id=db_scheme.id,
+        original_filename=filename,
+        content_type=content_type,
+        file_size=len(raw_bytes),
+        file_data=raw_bytes,
+        uploaded_by_user_id=current_user.id,
+        extraction_status="Pending",
+    )
+    db.add(attachment)
+    db.commit()
+
+    extraction = extract_scheme_from_document(db, filename, content_type, raw_bytes)
+    attachment.extraction_status = extraction["status"]
+    attachment.extraction_error = extraction.get("error")
+    attachment.extraction_raw_json = json.dumps(extraction.get("data") or {})
+
+    if extraction["status"] == "Extracted":
+        data = extraction["data"]
+        try:
+            if data.get("brand_name") and db_scheme.brand_id is None:
+                match = (
+                    db.query(models.Brand)
+                    .filter(func.lower(models.Brand.name) == str(data["brand_name"]).strip().lower())
+                    .first()
+                )
+                if match:
+                    db_scheme.brand_id = match.id
+
+            if data.get("product_name"):
+                product_match = (
+                    db.query(models.Product)
+                    .filter(func.lower(models.Product.name) == str(data["product_name"]).strip().lower())
+                    .first()
+                )
+                if product_match:
+                    db_scheme.product_id = product_match.id
+
+            if data.get("scheme_name"):
+                db_scheme.scheme_name = str(data["scheme_name"]).strip()[:200] or db_scheme.scheme_name
+            if data.get("start_date"):
+                db_scheme.start_date = parse_date_value(data["start_date"])
+            if data.get("end_date"):
+                db_scheme.end_date = parse_date_value(data["end_date"])
+            if data.get("reward_type"):
+                db_scheme.reward_type = normalize_reward_type(data["reward_type"])
+            if data.get("reward_value") is not None:
+                db_scheme.reward_value = parse_float_value(data.get("reward_value"), fallback=0.0)
+            if data.get("min_qty") is not None:
+                db_scheme.min_qty = int(parse_float_value(data.get("min_qty"), fallback=0.0))
+            if data.get("max_qty"):
+                db_scheme.max_qty = int(parse_float_value(data.get("max_qty"), fallback=0.0))
+            if data.get("offer_type"):
+                db_scheme.offer_type = normalize_offer_type(data["offer_type"])
+            if data.get("circular_number"):
+                db_scheme.circular_number = str(data["circular_number"])[:50]
+
+            extracted_remarks = str(data.get("remarks") or "").strip()
+            db_scheme.remarks = (
+                (extracted_remarks or "Extracted from attached scheme document.")
+                + " (Draft - review before activating.)"
+            )[:255]
+
+            for slab in data.get("slabs") or []:
+                try:
+                    db.add(models.SchemeSlab(
+                        scheme_id=db_scheme.id,
+                        min_quantity=int(slab.get("min_quantity") or 0),
+                        reward_per_unit=float(slab.get("reward_per_unit") or 0),
+                    ))
+                except Exception:
+                    continue
+        except Exception as exc:
+            attachment.extraction_status = "Failed"
+            attachment.extraction_error = f"Extracted data didn't fit the scheme form: {exc}"
+
+    db.commit()
+    db.refresh(db_scheme)
+    db.refresh(attachment)
+
+    return {
+        "scheme_id": db_scheme.id,
+        "scheme_code": db_scheme.scheme_code,
+        "status": db_scheme.status,
+        "extraction_status": attachment.extraction_status,
+        "extraction_error": attachment.extraction_error,
+        "message": (
+            "Document attached and scheme fields pre-filled. Review and Activate when ready."
+            if attachment.extraction_status == "Extracted"
+            else "Document attached, but automatic extraction did not complete - fill the scheme fields manually before activating."
+        ),
+    }
+
+
+@app.get("/schemes/{scheme_id}/attachment")
+def download_scheme_attachment(
+    scheme_id: int,
+    current_user: models.User = Depends(auth.require_roles("Admin", "BrandManager", "BrandPartner")),
+    db: Session = Depends(get_db),
+):
+    attachment = (
+        db.query(models.SchemeAttachment)
+        .filter(models.SchemeAttachment.scheme_id == scheme_id)
+        .order_by(models.SchemeAttachment.id.desc())
+        .first()
+    )
+    if not attachment:
+        raise HTTPException(status_code=404, detail="No document attached to this scheme")
+
+    if current_user.role in {"BrandManager", "BrandPartner"}:
+        scheme = db.query(models.Scheme).filter(models.Scheme.id == scheme_id).first()
+        allowed_brand_ids = [ub.brand_id for ub in current_user.brands]
+        if not scheme or scheme.brand_id not in allowed_brand_ids:
+            raise HTTPException(status_code=403, detail="You can only view documents for your own brand's schemes.")
+
+    return Response(
+        content=attachment.file_data,
+        media_type=attachment.content_type or "application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{attachment.original_filename}"'},
+    )
 
 
 @app.put("/schemes/{scheme_id}", response_model=schemas.SchemeOut)
@@ -2479,6 +2795,97 @@ def interval_sales_records(
         }
         for row in rows
     ]
+
+
+@app.get("/admin/interval-sales/scheme-matches")
+def interval_sales_scheme_matches(
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
+    current_user: models.User = Depends(auth.require_roles("Admin", "Accounts", "MISExecutive")),
+    db: Session = Depends(get_db),
+):
+    """Feeds 'Sales in your scope': out of the uploaded profitability report
+    (Interval Sales Analytics Upload), return only the rows whose item and
+    sale date fall inside an Active scheme from Scheme Maintenance, with the
+    backend claim amount computed for each - so Admin can see exactly which
+    Busy sales are scheme-eligible without re-typing anything."""
+    filters = {
+        "start_date": start_date.isoformat() if start_date else None,
+        "end_date": end_date.isoformat() if end_date else None,
+    }
+    empty_result = {"matches": [], "totals": {"records": 0, "qty": 0, "sales_amt": 0, "backend_amount": 0}, "filters": filters}
+
+    sales_query = db.query(models.IntervalSaleUpload)
+    if start_date:
+        sales_query = sales_query.filter(models.IntervalSaleUpload.sale_date >= start_date)
+    if end_date:
+        sales_query = sales_query.filter(models.IntervalSaleUpload.sale_date <= end_date)
+    sale_rows = sales_query.all()
+    if not sale_rows:
+        return empty_result
+
+    active_schemes = db.query(models.Scheme).filter(models.Scheme.status == "Active").all()
+    if not active_schemes:
+        return empty_result
+
+    # For each scheme, the exact product-name set it applies to: its own
+    # product if one is set, else every product under its brand.
+    scheme_product_names = {}
+    for scheme in active_schemes:
+        names = set()
+        if scheme.product_id:
+            product = db.query(models.Product).filter(models.Product.id == scheme.product_id).first()
+            if product:
+                names.add(product.name.strip().lower())
+        elif scheme.brand_id:
+            for product in db.query(models.Product).filter(models.Product.brand_id == scheme.brand_id).all():
+                names.add(product.name.strip().lower())
+        scheme_product_names[scheme.id] = names
+
+    matches = []
+    for row in sale_rows:
+        item_name = (row.item or "").strip().lower()
+        if not item_name:
+            continue
+        for scheme in active_schemes:
+            if not (scheme.start_date <= row.sale_date <= scheme.end_date):
+                continue
+            if item_name not in scheme_product_names.get(scheme.id, set()):
+                continue
+
+            backend_amount = _calculate_reward_for_interval_row(scheme, row)
+            if backend_amount <= 0:
+                continue
+
+            matches.append({
+                "sale_id": row.id,
+                "sale_date": row.sale_date.isoformat(),
+                "vch_no": row.vch_no,
+                "account": row.account,
+                "item": row.item,
+                "qty": row.qty,
+                "unit": row.unit,
+                "sales_amt": row.sales_amt,
+                "scheme_id": scheme.id,
+                "scheme_code": scheme.scheme_code,
+                "scheme_name": scheme.scheme_name,
+                "reward_type": scheme.reward_type,
+                "backend_amount": round(backend_amount, 2),
+            })
+            break  # a sale counts once, against its first matching scheme
+
+    totals = {
+        "records": len(matches),
+        "qty": round(sum(m["qty"] or 0 for m in matches), 2),
+        "sales_amt": round(sum(m["sales_amt"] or 0 for m in matches), 2),
+        "backend_amount": round(sum(m["backend_amount"] for m in matches), 2),
+    }
+
+    return {
+        "matches": sorted(matches, key=lambda m: m["sale_date"], reverse=True),
+        "totals": totals,
+        "filters": filters,
+    }
 
 
 # ============================================================

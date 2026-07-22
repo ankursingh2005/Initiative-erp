@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Date, DateTime, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, String, Float, Date, DateTime, ForeignKey, Boolean, LargeBinary, Text
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from database import Base
@@ -153,6 +153,39 @@ class SchemeSlab(Base):
     reward_per_unit = Column(Float, nullable=False)
 
     scheme = relationship("Scheme", back_populates="slabs")
+
+
+# ============================================================
+# SCHEME DOCUMENT ATTACHMENTS
+# A brand promoter/manager attaches the scheme circular (image, PDF, or
+# Excel) they received from the brand. Admin can view/download it. The
+# file bytes are stored IN THE DATABASE rather than on disk, because
+# Render's web-service filesystem is temporary (same reason this project
+# already recommends PostgreSQL over SQLite in production - see README).
+# Claude reads the document and pre-fills the linked Scheme's fields; the
+# scheme is always created with status="Draft" so an Admin reviews and
+# confirms it before it goes Active.
+# ============================================================
+
+class SchemeAttachment(Base):
+    __tablename__ = "scheme_attachments"
+    id = Column(Integer, primary_key=True, index=True)
+    scheme_id = Column(Integer, ForeignKey("schemes.id"), nullable=False, index=True)
+    original_filename = Column(String(255), nullable=False)
+    content_type = Column(String(100), nullable=True)
+    file_size = Column(Integer, default=0)
+    file_data = Column(LargeBinary, nullable=False)
+
+    uploaded_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    # Pending -> Extracted / Failed / Skipped (no ANTHROPIC_API_KEY configured)
+    extraction_status = Column(String(20), default="Pending", nullable=False)
+    extraction_error = Column(String(500), nullable=True)
+    extraction_raw_json = Column(Text, nullable=True)
+
+    created_date = Column(DateTime, default=datetime.utcnow)
+
+    scheme = relationship("Scheme", backref="attachments")
 
 
 # ============================================================

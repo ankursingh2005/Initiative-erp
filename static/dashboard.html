@@ -978,6 +978,31 @@
           <button type="button" id="salesMoreBtn" onclick="toggleSalesExpanded()">Show More</button>
           <button type="button" id="salesShowAllBtn" class="scope-show-all-btn" onclick="showAllSales()">Show All</button>
         </div>
+
+        <div class="card section-hero-card" id="schemeMatchedSalesCard" style="display:none; margin-top:16px;">
+          <h4 style="margin:0 0 6px;">Profitability Report - Scheme Matched Sales</h4>
+          <p class="muted section-hero-subtitle">From your uploaded profitability report (Interval Sales Analytics Upload), showing only the rows that fall under an Active scheme, with the backend amount computed automatically.</p>
+          <div class="scheme-date-filter">
+            <div class="field">
+              <label>From</label>
+              <input id="schemeMatchDateFrom" type="date" />
+            </div>
+            <div class="field">
+              <label>To</label>
+              <input id="schemeMatchDateTo" type="date" />
+            </div>
+            <button type="button" onclick="loadSchemeMatchedSales()">Refresh</button>
+          </div>
+          <div id="schemeMatchSummary" class="interval-summary-grid"></div>
+          <div class="table-wrap">
+            <table class="wide-table table-zebra">
+              <thead>
+                <tr><th>Sale Date</th><th>Vch No</th><th>Account</th><th>Item</th><th>Qty</th><th>Sales Amt</th><th>Scheme</th><th>Backend Amount</th></tr>
+              </thead>
+              <tbody id="schemeMatchedSalesBody"></tbody>
+            </table>
+          </div>
+        </div>
         </div>
       </div>
 
@@ -1205,6 +1230,42 @@
         <button id="schemeCancelEditBtn" type="button" style="display:none; margin-top:8px; background:#6b7a90;" onclick="cancelSchemeEdit()">Cancel Edit</button>
         <div id="schemeMsg" class="msg"></div>
       </form>
+
+      <div class="card section-hero-card" id="schemeDocCard" style="margin-top:16px;">
+        <h4 style="margin:0 0 6px;">Attach Scheme Document</h4>
+        <p class="muted section-hero-subtitle">Attach the scheme circular (image, PDF, or Excel) you received from the brand. It's read automatically and saved as a Draft scheme for Admin to review.</p>
+        <form id="schemeDocForm" class="interval-toolbar">
+          <div class="field">
+            <label>Document</label>
+            <input id="schemeDocFile" type="file" accept=".jpg,.jpeg,.png,.pdf,.xlsx,.xls,.csv" required />
+          </div>
+          <div class="field" id="schemeDocBrandField" style="display:none;">
+            <label>Brand</label>
+            <select id="schemeDocBrand"></select>
+          </div>
+          <div class="field">
+            <label>Scheme Name (optional)</label>
+            <input id="schemeDocName" placeholder="Leave blank to use the extracted name" />
+          </div>
+          <div class="field">
+            <button id="schemeDocUploadBtn" type="submit">Upload & Extract</button>
+          </div>
+        </form>
+        <div id="schemeDocMsg" class="msg"></div>
+      </div>
+
+      <div class="card section-hero-card" id="schemeDraftsCard" style="display:none; margin-top:16px;">
+        <h4 style="margin:0 0 6px;">Draft Schemes Pending Review</h4>
+        <p class="muted section-hero-subtitle">Created from attached documents. Review the extracted fields, correct anything needed, then Activate.</p>
+        <div class="scheme-table-wrap">
+          <table class="scheme-fit-table">
+            <thead>
+              <tr><th>Scheme</th><th>Brand</th><th>Dates</th><th>Reward</th><th>Extraction</th><th>Actions</th></tr>
+            </thead>
+            <tbody id="schemeDraftsBody"></tbody>
+          </table>
+        </div>
+      </div>
 
       <div class="scheme-date-filter">
         <div class="field">
@@ -2344,6 +2405,7 @@
         fileInput.value = '';
         await loadIntervalSalesSummary();
         await loadIntervalSalesRecords();
+        await loadSchemeMatchedSales();
       } finally {
         uploadBtn.disabled = false;
         refreshBtn.disabled = false;
@@ -2450,6 +2512,7 @@
       const response = await authFetch(`/schemes/${schemeId}/activate`, { method: 'PUT' });
       if (!response) return;
       await loadSchemes();
+      await loadSchemeDrafts();
     }
 
     let editingSchemeId = null;
@@ -2565,6 +2628,172 @@
       }
     }
 
+    let myBrandIds = [];
+
+    async function setupSchemeDocUpload() {
+      const form = document.getElementById('schemeDocForm');
+      if (!form) return;
+
+      const brandField = document.getElementById('schemeDocBrandField');
+      const brandSelectEl = document.getElementById('schemeDocBrand');
+
+      if (hasRole('Admin')) {
+        brandField.style.display = '';
+        fillSelectWithPlaceholder(brandSelectEl, brands, 'id', 'name', 'Select brand');
+      } else {
+        try {
+          const meRes = await authFetch('/api/me');
+          if (meRes) {
+            const profile = await meRes.json();
+            myBrandIds = profile.brand_ids || [];
+          }
+        } catch (e) {}
+        if (myBrandIds.length > 1) {
+          brandField.style.display = '';
+          fillSelect(brandSelectEl, brands.filter(b => myBrandIds.includes(b.id)), 'id', 'name');
+        } else {
+          brandField.style.display = 'none';
+        }
+      }
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const msg = document.getElementById('schemeDocMsg');
+        msg.className = 'msg';
+        msg.textContent = '';
+
+        const fileInput = document.getElementById('schemeDocFile');
+        const file = fileInput.files[0];
+        if (!file) {
+          msg.textContent = 'Please choose a file to attach.';
+          return;
+        }
+
+        const params = new URLSearchParams();
+        if (brandField.style.display !== 'none' && brandSelectEl.value) {
+          params.append('brand_id', brandSelectEl.value);
+        }
+        const nameValue = document.getElementById('schemeDocName').value.trim();
+        if (nameValue) params.append('scheme_name', nameValue);
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const uploadBtn = document.getElementById('schemeDocUploadBtn');
+        uploadBtn.disabled = true;
+        uploadBtn.textContent = 'Uploading & reading document...';
+
+        try {
+          const response = await authFetch(`/schemes/upload-document?${params.toString()}`, {
+            method: 'POST',
+            body: formData
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            msg.textContent = data.detail || 'Upload failed';
+            return;
+          }
+          msg.classList.add('success');
+          msg.textContent = data.message || 'Document attached.';
+          form.reset();
+          await loadSchemes();
+          await loadSchemeDrafts();
+        } catch (e) {
+          msg.textContent = 'Upload failed: ' + e.message;
+        } finally {
+          uploadBtn.disabled = false;
+          uploadBtn.textContent = 'Upload & Extract';
+        }
+      });
+    }
+
+    async function loadSchemeDrafts() {
+      const draftsCard = document.getElementById('schemeDraftsCard');
+      if (!draftsCard || !hasRole('Admin')) return;
+
+      const res = await authFetch('/schemes?status=Draft');
+      if (!res) return;
+      const drafts = await res.json();
+      draftsCard.style.display = drafts.length ? 'block' : 'none';
+
+      const body = document.getElementById('schemeDraftsBody');
+      body.innerHTML = drafts.map(scheme => {
+        const brand = brands.find(b => b.id === scheme.brand_id);
+        return `<tr>
+          <td>${scheme.scheme_name || ''}</td>
+          <td>${brand ? brand.name : 'Not matched'}</td>
+          <td>${scheme.start_date || ''} to ${scheme.end_date || ''}</td>
+          <td>${scheme.reward_type || ''} ${scheme.reward_value || 0}</td>
+          <td>${scheme.remarks ? scheme.remarks.replace(/</g, '&lt;') : ''}</td>
+          <td>
+            <button type="button" onclick="editScheme(${scheme.id})">Edit</button>
+            <button type="button" onclick="downloadSchemeAttachment(${scheme.id})">Download</button>
+            <button type="button" onclick="activateScheme(${scheme.id})">Activate</button>
+          </td>
+        </tr>`;
+      }).join('') || '<tr><td colspan="6" class="empty">No draft schemes pending review</td></tr>';
+    }
+
+    async function downloadSchemeAttachment(schemeId) {
+      const response = await authFetch(`/schemes/${schemeId}/attachment`);
+      if (!response) return;
+      if (!response.ok) {
+        alert('Could not download the attached document.');
+        return;
+      }
+      const blob = await response.blob();
+      const disposition = response.headers.get('Content-Disposition') || '';
+      const match = disposition.match(/filename="?([^"]+)"?/);
+      const filename = match ? match[1] : `scheme-${schemeId}-document`;
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    }
+
+    async function loadSchemeMatchedSales() {
+      const card = document.getElementById('schemeMatchedSalesCard');
+      if (!card || !hasRole('Admin', 'Accounts', 'MISExecutive')) return;
+      card.style.display = 'block';
+
+      const params = new URLSearchParams();
+      const from = document.getElementById('schemeMatchDateFrom').value;
+      const to = document.getElementById('schemeMatchDateTo').value;
+      if (from) params.append('start_date', from);
+      if (to) params.append('end_date', to);
+
+      const res = await authFetch(`/admin/interval-sales/scheme-matches?${params.toString()}`);
+      if (!res) return;
+      const data = await res.json();
+
+      const summary = document.getElementById('schemeMatchSummary');
+      const totals = data.totals || {};
+      summary.innerHTML = `
+        <div class="interval-stat"><div class="interval-stat-label">Matched Sales</div><div class="interval-stat-value">${totals.records || 0}</div></div>
+        <div class="interval-stat"><div class="interval-stat-label">Qty</div><div class="interval-stat-value">${formatAmount(totals.qty || 0)}</div></div>
+        <div class="interval-stat"><div class="interval-stat-label">Sales Amt</div><div class="interval-stat-value">${formatAmount(totals.sales_amt || 0)}</div></div>
+        <div class="interval-stat"><div class="interval-stat-label">Backend Amount</div><div class="interval-stat-value">${formatAmount(totals.backend_amount || 0)}</div></div>
+      `;
+
+      const body = document.getElementById('schemeMatchedSalesBody');
+      body.innerHTML = (data.matches || []).map(row => `
+        <tr>
+          <td>${row.sale_date}</td>
+          <td>${row.vch_no || ''}</td>
+          <td>${row.account || ''}</td>
+          <td>${row.item || ''}</td>
+          <td>${row.qty}</td>
+          <td>${formatAmount(row.sales_amt)}</td>
+          <td>${row.scheme_name} (${row.scheme_code})</td>
+          <td>${formatAmount(row.backend_amount)}</td>
+        </tr>
+      `).join('') || '<tr><td colspan="8" class="empty">No scheme-matched sales found for this range</td></tr>';
+    }
+
     async function loadInitialData() {
       const meRes = await authFetch('/me');
       if (!meRes) return;
@@ -2629,6 +2858,10 @@
       if (document.getElementById('schemeAdminCard')) {
         document.getElementById('schemeAdminCard').style.display = hasRole('Admin', 'BrandPartner') ? 'block' : 'none';
       }
+      if (hasRole('Admin', 'BrandPartner', 'BrandManager')) {
+        await setupSchemeDocUpload();
+        await loadSchemeDrafts();
+      }
       if (document.getElementById('exportPanel')) {
         const exportPanel = document.getElementById('exportPanel');
         const exportCategoryFilter = document.getElementById('exportCategoryFilter');
@@ -2663,6 +2896,7 @@
         intervalUploadCard.style.display = canViewInterval ? 'block' : 'none';
 
         if (canViewInterval) {
+          await loadSchemeMatchedSales();
           const intervalUploadForm = document.getElementById('intervalUploadForm');
           const intervalRefreshBtn = document.getElementById('intervalRefreshBtn');
           const intervalUploadBtn = document.getElementById('intervalUploadBtn');
