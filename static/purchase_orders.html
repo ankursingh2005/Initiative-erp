@@ -20,13 +20,25 @@
     h1 { margin:0; font-size:27px; letter-spacing:0; } .subtitle { margin:6px 0 0; color:var(--muted); } h2 { margin:0; font-size:18px; } h3 { margin:0; font-size:15px; }
     .card { background:var(--card); border:1px solid #e4e7ec; border-radius:8px; padding:20px; box-shadow:0 1px 2px rgba(16,24,40,.04); margin-bottom:20px; }
     .form-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; } .span-2 { grid-column:span 2; } .span-3 { grid-column:span 3; }
-    label { display:block; margin:0 0 6px; font-size:12px; color:var(--muted); font-weight:700; } input, select, textarea { width:100%; min-height:39px; border:1px solid var(--line); border-radius:6px; padding:9px 10px; font:inherit; color:var(--ink); background:#fff; } textarea { min-height:70px; resize:vertical; } select:disabled, input:disabled { background:#f2f4f7; color:var(--muted); }
+    label { display:block; margin:0 0 6px; font-size:12px; color:var(--muted); font-weight:700; }
+    input, select, textarea {
+      width:100%; min-height:39px; height:39px; border:1px solid var(--line); border-radius:6px; padding:9px 10px;
+      font:inherit; line-height:1.3; color:var(--ink); background:#fff; box-sizing:border-box;
+      -webkit-appearance:none; appearance:none;
+    }
+    textarea { height:auto; min-height:70px; resize:vertical; }
+    select {
+      background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23667085' stroke-width='1.6'><path d='M5 7.5L10 12.5L15 7.5'/></svg>");
+      background-repeat:no-repeat; background-position:right 10px center; background-size:14px; padding-right:32px;
+    }
+    input[type="date"] { -webkit-appearance:none; appearance:none; }
+    select:disabled, input:disabled { background-color:#f2f4f7; color:var(--muted); }
     .section-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; gap:12px; flex-wrap:wrap; } .section-head p { margin:4px 0 0; color:var(--muted); font-size:13px; }
-    .table-wrap { overflow-x:auto; border:1px solid #e4e7ec; border-radius:6px; -webkit-overflow-scrolling:touch; touch-action:pan-x pan-y; } table { width:100%; min-width:640px; border-collapse:collapse; } th,td { padding:9px 8px; border-bottom:1px solid #eaecf0; text-align:left; font-size:13px; vertical-align:top; } th { background:#f9fafb; color:#475467; font-size:12px; white-space:nowrap; } td input { min-width:100px; min-height:36px; padding:7px; } td .small { min-width:72px; width:78px; }
+    .table-wrap { overflow-x:auto; border:1px solid #e4e7ec; border-radius:6px; -webkit-overflow-scrolling:touch; touch-action:pan-x pan-y; } table { width:100%; min-width:640px; border-collapse:collapse; } th,td { padding:9px 8px; border-bottom:1px solid #eaecf0; text-align:left; font-size:13px; vertical-align:top; } th { background:#f9fafb; color:#475467; font-size:12px; white-space:nowrap; } td input { min-width:100px; min-height:36px; height:36px; padding:7px; } td .small { min-width:72px; width:78px; }
     .remove { background:transparent; color:var(--danger); font-size:18px; padding:5px 7px; } .actions { display:flex; justify-content:flex-end; gap:10px; margin-top:16px; } .message { min-height:20px; margin-top:12px; font-size:13px; color:var(--danger); } .message.success { color:var(--good); }
     .filters { display:flex; gap:10px; align-items:center; flex-wrap:wrap; } .filters select { width:auto; min-width:150px; }
     .filter-date-label { display:flex; flex-direction:column; gap:3px; font-size:12px; color:#556; font-weight:600; }
-    .filter-date-label input[type="date"] { padding:8px 10px; border:1px solid #c9c9c9; border-radius:8px; font-size:13px; font-family:inherit; }
+    .filter-date-label input[type="date"] { height:37px; padding:8px 10px; border:1px solid #c9c9c9; border-radius:8px; font-size:13px; font-family:inherit; }
     .reason-options { display:flex; flex-direction:column; gap:10px; margin:18px 0 4px; }
     .reason-option { display:flex; align-items:center; gap:12px; padding:14px 16px; border:1.5px solid var(--line); border-radius:10px; cursor:pointer; font-size:14px; font-weight:600; color:var(--ink); background:#fff; transition:border-color .15s ease, background .15s ease, box-shadow .15s ease; }
     .reason-option:hover { border-color:#98a2b3; background:#f9fafb; }

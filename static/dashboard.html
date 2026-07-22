@@ -182,6 +182,12 @@
     label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
     input, select, button {
       width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); font-size: 14px;
+      box-sizing: border-box; line-height: 1.3;
+    }
+    input, select { -webkit-appearance: none; appearance: none; }
+    select {
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23667085' stroke-width='1.6'><path d='M5 7.5L10 12.5L15 7.5'/></svg>");
+      background-repeat: no-repeat; background-position: right 10px center; background-size: 14px; padding-right: 32px;
     }
     button {
       background: var(--navy); color: white; border: none; cursor: pointer; font-weight: 600;
@@ -764,6 +770,10 @@
                 <label>Brand</label>
                 <select id="brandSelect"></select>
               </div>
+              <div class="field" id="brandSelectOtherWrap" style="display:none;">
+                <label for="brandSelectOther">Enter brand name</label>
+                <input id="brandSelectOther" placeholder="Brand name" />
+              </div>
               <div class="field">
                 <label>Product</label>
                 <input id="productName" placeholder="Enter product name and details" required />
@@ -1165,6 +1175,10 @@
             <label>Brand</label>
             <select id="schemeBrand"></select>
           </div>
+          <div class="field" id="schemeBrandOtherWrap" style="display:none;">
+            <label for="schemeBrandOther">Enter brand name</label>
+            <input id="schemeBrandOther" placeholder="Brand name" />
+          </div>
           <div class="field">
             <label>Start Date</label>
             <input id="schemeStartDate" type="date" required />
@@ -1322,17 +1336,47 @@
     }
 
     const MOBILE_CATEGORY_NAMES = ['mobiles / handset', 'mobile / handset', 'mobile', 'handset'];
-    const MOBILE_BRANDS = [
-      'Apple',
-      'Samsung',
-      'Vivo',
-      'iQOO',
-      'Realme',
-      'Oppo',
-      'Motorola',
-      'Nothing',
-      'Google Pixel'
-    ];
+    const OTHER_BRAND_VALUE = '__other_brand__';
+
+    // Appends an "Others (enter brand name)" option to a brand <select> so
+    // any brand not yet in the master list can still be used. Call this
+    // right after filling the select with the real brand options.
+    function appendOtherBrandOption(select) {
+      const opt = document.createElement('option');
+      opt.value = OTHER_BRAND_VALUE;
+      opt.textContent = 'Others (enter brand name)';
+      select.appendChild(opt);
+    }
+
+    // Resolves whichever brand id a "Brand" select + its paired "Other"
+    // text input should submit as. If "Others" wasn't picked, just returns
+    // the select's numeric value. If it was, reuses a matching existing
+    // brand (case-insensitive) when one exists, otherwise creates a new
+    // brand via POST /brands and returns its new id.
+    async function resolveBrandId(selectEl, otherInputEl) {
+      if (selectEl.value !== OTHER_BRAND_VALUE) {
+        return Number(selectEl.value) || null;
+      }
+      const typedName = (otherInputEl.value || '').trim();
+      if (!typedName) {
+        throw new Error('Please enter the brand name.');
+      }
+      const existing = brands.find(b => b.name.toLowerCase() === typedName.toLowerCase());
+      if (existing) {
+        return existing.id;
+      }
+      const response = await authFetch('/brands', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: typedName, subcategory_id: null })
+      });
+      if (!response || !response.ok) {
+        throw new Error('Unable to add the new brand name.');
+      }
+      const newBrand = await response.json();
+      brands.push(newBrand);
+      return newBrand.id;
+    }
 
     document.getElementById('roleBadge').textContent = normalizeRoleName(role) || '';
     document.getElementById('userName').textContent = username || '';
@@ -1577,6 +1621,7 @@
       if (!selectedCategoryId) {
         fillSelectWithPlaceholder(schemeSubCategory, [], 'id', 'name', 'All sub categories');
         fillSelectWithPlaceholder(schemeBrand, brands, 'id', 'name', 'All brands');
+        appendOtherBrandOption(schemeBrand);
         applySchemeCategoryVisibility();
         return;
       }
@@ -1585,11 +1630,8 @@
         fillSelectWithPlaceholder(schemeSubCategory, [], 'id', 'name', 'Not required for Mobile / Handset');
         const schemeBrandsRes = await authFetch(`/brands?category_id=${selectedCategoryId}`);
         const mobileBrands = schemeBrandsRes ? await schemeBrandsRes.json() : [];
-        const nameMap = new Map(mobileBrands.map(item => [item.name.toLowerCase(), item]));
-        const filteredMobileBrands = MOBILE_BRANDS
-          .map(name => nameMap.get(name.toLowerCase()))
-          .filter(Boolean);
-        fillSelectWithPlaceholder(schemeBrand, filteredMobileBrands, 'id', 'name', 'No mobile brands found');
+        fillSelectWithPlaceholder(schemeBrand, mobileBrands, 'id', 'name', 'No mobile brands found');
+        appendOtherBrandOption(schemeBrand);
         applySchemeCategoryVisibility();
         return;
       }
@@ -1599,6 +1641,7 @@
       fillSelectWithPlaceholder(schemeSubCategory, schemeSubs, 'id', 'name', 'All sub categories');
       const filteredBrands = brands.filter(item => !item.subcategory_id || schemeSubs.some(sub => sub.id === item.subcategory_id));
       fillSelectWithPlaceholder(schemeBrand, filteredBrands, 'id', 'name', 'All brands');
+      appendOtherBrandOption(schemeBrand);
       applySchemeCategoryVisibility();
     }
 
@@ -1607,6 +1650,7 @@
       const selectedSubId = Number(document.getElementById('schemeSubCategory').value || 0);
       const filteredBrands = selectedSubId ? brands.filter(item => item.subcategory_id === selectedSubId) : brands;
       fillSelectWithPlaceholder(schemeBrand, filteredBrands, 'id', 'name', 'All brands');
+      appendOtherBrandOption(schemeBrand);
     }
 
     async function updateSubcategoryOptions() {
@@ -1645,17 +1689,14 @@
         const brandsRes = await authFetch(`/brands?category_id=${categoryId}`);
         if (!brandsRes) return;
         const allMobileBrands = await brandsRes.json();
-        const nameMap = new Map(allMobileBrands.map(item => [item.name.toLowerCase(), item]));
-        const filteredMobileBrands = MOBILE_BRANDS
-          .map(name => nameMap.get(name.toLowerCase()))
-          .filter(Boolean);
-
-        fillSelectWithPlaceholder(brandSelect, filteredMobileBrands, 'id', 'name', 'No mobile brands found');
+        fillSelectWithPlaceholder(brandSelect, allMobileBrands, 'id', 'name', 'No mobile brands found');
+        appendOtherBrandOption(brandSelect);
         return;
       }
 
       if (!subcategoryId) {
         fillSelectWithPlaceholder(brandSelect, [], 'id', 'name', 'Select sub category first');
+        appendOtherBrandOption(brandSelect);
         return;
       }
 
@@ -1663,6 +1704,7 @@
       if (!brandsRes) return;
       const filteredBrands = await brandsRes.json();
       fillSelectWithPlaceholder(brandSelect, filteredBrands, 'id', 'name', 'No brands found');
+      appendOtherBrandOption(brandSelect);
     }
 
     function toggleSectionBody(bodyId, headerEl) {
@@ -2561,9 +2603,18 @@
       fillSelectWithPlaceholder(categorySelect, categories, 'id', 'name', 'No categories found');
       fillSelectWithPlaceholder(subcategorySelect, [], 'id', 'name', 'Select category first');
       fillSelectWithPlaceholder(brandSelect, [], 'id', 'name', 'Select sub category first');
+      appendOtherBrandOption(brandSelect);
       fillSelectWithPlaceholder(schemeCategory, categories, 'id', 'name', 'All categories');
       fillSelectWithPlaceholder(schemeSubCategory, [], 'id', 'name', 'All sub categories');
       fillSelectWithPlaceholder(schemeBrand, brands, 'id', 'name', 'All brands');
+      appendOtherBrandOption(schemeBrand);
+
+      brandSelect.addEventListener('change', () => {
+        document.getElementById('brandSelectOtherWrap').style.display = brandSelect.value === OTHER_BRAND_VALUE ? '' : 'none';
+      });
+      schemeBrand.addEventListener('change', () => {
+        document.getElementById('schemeBrandOtherWrap').style.display = schemeBrand.value === OTHER_BRAND_VALUE ? '' : 'none';
+      });
 
       categorySelect.addEventListener('change', updateSubcategoryOptions);
       subcategorySelect.addEventListener('change', updateBrandOptions);
@@ -2928,6 +2979,15 @@
         return;
       }
 
+      let saleBrandId;
+      try {
+        saleBrandId = await resolveBrandId(document.getElementById('brandSelect'), document.getElementById('brandSelectOther'));
+        if (!saleBrandId) throw new Error('Please select a brand.');
+      } catch (e) {
+        saleMsg.textContent = e.message || 'Please select a brand.';
+        return;
+      }
+
       // When BACKEND & UPI is selected, the single Scheme Amount / Claim /
       // Claim Status fields are replaced by the split UPI + Backend amounts
       // below; combined totals are still saved so existing reports keep working.
@@ -2944,7 +3004,7 @@
         store_id: Number(document.getElementById('storeSelect').value),
         category_id: Number(document.getElementById('categorySelect').value),
         subcategory_id: isMobileCategorySelected() ? null : (Number(document.getElementById('subcategorySelect').value) || null),
-        brand_id: Number(document.getElementById('brandSelect').value),
+        brand_id: saleBrandId,
         product_id: null,
         imei: isMobileCategorySelected() ? (document.getElementById('imei').value || null) : null,
         serial_no: isMobileCategorySelected() ? null : (document.getElementById('serialNo').value || null),
@@ -3038,9 +3098,17 @@
         return;
       }
 
+      let schemeBrandId = null;
+      try {
+        schemeBrandId = await resolveBrandId(document.getElementById('schemeBrand'), document.getElementById('schemeBrandOther'));
+      } catch (e) {
+        schemeMsg.textContent = e.message || 'Please select a brand.';
+        return;
+      }
+
       const payload = {
         scheme_name: document.getElementById('schemeName').value,
-        brand_id: Number(document.getElementById('schemeBrand').value) || null,
+        brand_id: schemeBrandId,
         category_id: Number(document.getElementById('schemeCategory').value) || null,
         subcategory_id: Number(document.getElementById('schemeSubCategory').value) || null,
         product_id: null,

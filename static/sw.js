@@ -1,4 +1,11 @@
-const CACHE_NAME = 'initiative-erp-v6';
+// Bumped to v7: earlier versions could end up caching API responses like
+// /brands, /categories, /subcategories, /stores, /api/me, etc. (anything
+// not explicitly excluded), so a phone that cached the brand list before a
+// new brand (e.g. Redmi) was added would keep serving that stale list
+// forever. Bumping the cache name forces every existing install to drop
+// its old cache on the next activate, and the fetch handler below now only
+// ever caches page navigations and static assets - never API/data calls.
+const CACHE_NAME = 'initiative-erp-v7';
 const CORE_ASSETS = [
   '/login',
   '/signup',
@@ -29,6 +36,20 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+// Only these are safe to ever serve from cache: the app's own page shell
+// (index/login/dashboard/etc, handled separately below via request.mode
+// === 'navigate') and genuinely static files (images, the manifest, the
+// service worker's own core assets). Every API/data endpoint - /brands,
+// /categories, /subcategories, /stores, /api/*, /sales, /schemes,
+// /products, /variants, /customers, /dealers, and anything else that
+// isn't a static file - must always go to the network so master data and
+// records are never stuck showing an old snapshot.
+function isCacheableStaticAsset(pathname) {
+  if (pathname.startsWith('/static/')) return true;
+  if (pathname === '/manifest.webmanifest') return true;
+  return false;
+}
+
 self.addEventListener('fetch', (event) => {
   const request = event.request;
   if (request.method !== 'GET') {
@@ -51,7 +72,11 @@ self.addEventListener('fetch', (event) => {
   }
 
   const url = new URL(request.url);
-  if (url.pathname.startsWith('/auth/') || url.pathname.startsWith('/my-scope/') || url.pathname.startsWith('/sales') || url.pathname.startsWith('/schemes') || url.pathname.startsWith('/api/purchase-orders') || url.pathname.startsWith('/admin/')) {
+  if (!isCacheableStaticAsset(url.pathname)) {
+    // Data/API request: always hit the network. Do not fall back to
+    // cache on failure either - a failed API call should surface as a
+    // normal network error to the page, not silently resolve with
+    // whatever (possibly stale) data happened to be cached before.
     return;
   }
 
