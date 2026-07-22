@@ -2079,7 +2079,11 @@ def mark_purchase_orders_exported_to_busy(
 def create_scheme(
     scheme: schemas.SchemeCreate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.require_roles("Admin", "BrandPartner")),
+    # Brand promoters/managers no longer get manual create rights - their
+    # only path into the scheme table is "Attach Scheme Document"
+    # (POST /schemes/upload-document), which always lands as a Draft for
+    # an Admin to review.
+    current_user: models.User = Depends(auth.require_roles("Admin")),
 ):
     scheme_code = (scheme.scheme_code or "").strip()
     if not scheme_code:
@@ -2152,11 +2156,59 @@ def create_scheme(
 
 
 @app.get("/schemes", response_model=List[schemas.SchemeOut])
-def list_schemes(status: Optional[str] = Query(None), db: Session = Depends(get_db)):
+def list_schemes(
+    status: Optional[str] = Query(None),
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
     query = db.query(models.Scheme)
     if status:
         query = query.filter(models.Scheme.status == status)
+    if current_user.role != "Admin":
+        # Draft schemes hold whatever a document upload extracted and
+        # haven't been reviewed yet. Only Admin should see those fields -
+        # everyone else (including the promoter who attached the
+        # document) only sees schemes once they're Active/Paused.
+        query = query.filter(models.Scheme.status != "Draft")
     return query.all()
+
+
+@app.get("/schemes/my-attachments")
+def list_my_scheme_attachments(
+    current_user: models.User = Depends(auth.require_roles("Admin", "BrandManager", "BrandPartner")),
+    db: Session = Depends(get_db),
+):
+    """Upload history for a brand promoter/manager. Deliberately excludes
+    the extracted scheme fields (offer, reward value, target, etc.) -
+    those stay hidden until an Admin reviews and activates the Draft.
+    Non-admins only ever see their own uploads."""
+    query = db.query(models.SchemeAttachment).order_by(models.SchemeAttachment.id.desc())
+    if current_user.role != "Admin":
+        query = query.filter(models.SchemeAttachment.uploaded_by_user_id == current_user.id)
+
+    rows = []
+    for attachment in query.limit(200).all():
+        scheme = attachment.scheme
+        brand = (
+            db.query(models.Brand).filter(models.Brand.id == scheme.brand_id).first()
+            if scheme and scheme.brand_id
+            else None
+        )
+        uploader = (
+            db.query(models.User).filter(models.User.id == attachment.uploaded_by_user_id).first()
+            if attachment.uploaded_by_user_id
+            else None
+        )
+        rows.append({
+            "id": attachment.id,
+            "scheme_id": attachment.scheme_id,
+            "filename": attachment.original_filename,
+            "brand": brand.name if brand else "Not matched yet",
+            "uploaded_by": uploader.username if uploader else "",
+            "uploaded_date": attachment.created_date.isoformat() if attachment.created_date else None,
+            "review_status": "Reviewed" if scheme and scheme.status != "Draft" else "Pending review",
+        })
+    return rows
 
 
 @app.post("/schemes/upload-document")
@@ -2331,7 +2383,10 @@ def update_scheme(
     scheme_id: int,
     scheme: schemas.SchemeCreate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.require_roles("Admin", "BrandPartner")),
+    # Editing (including Draft review/correction) is Admin-only. Brand
+    # promoters/managers only attach documents; they don't see or touch
+    # the extracted fields.
+    current_user: models.User = Depends(auth.require_roles("Admin")),
 ):
     db_scheme = db.query(models.Scheme).filter(models.Scheme.id == scheme_id).first()
     if not db_scheme:
@@ -2393,7 +2448,11 @@ def update_scheme(
 
 
 @app.put("/schemes/{scheme_id}/pause")
-def pause_scheme(scheme_id: int, db: Session = Depends(get_db)):
+def pause_scheme(
+    scheme_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_roles("Admin")),
+):
     scheme = db.query(models.Scheme).filter(models.Scheme.id == scheme_id).first()
     if not scheme:
         raise HTTPException(status_code=404, detail="Scheme not found")
@@ -2403,7 +2462,11 @@ def pause_scheme(scheme_id: int, db: Session = Depends(get_db)):
 
 
 @app.put("/schemes/{scheme_id}/activate")
-def activate_scheme(scheme_id: int, db: Session = Depends(get_db)):
+def activate_scheme(
+    scheme_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_roles("Admin")),
+):
     scheme = db.query(models.Scheme).filter(models.Scheme.id == scheme_id).first()
     if not scheme:
         raise HTTPException(status_code=404, detail="Scheme not found")

@@ -1267,7 +1267,20 @@
         </div>
       </div>
 
-      <div class="scheme-date-filter">
+      <div class="card section-hero-card" id="schemePromoterUploadsCard" style="display:none; margin-top:16px;">
+        <h4 style="margin:0 0 6px;">Your Attached Documents</h4>
+        <p class="muted section-hero-subtitle">A record of the scheme circulars you've attached. An Admin reviews the extracted offer details and activates the scheme - those fields aren't shown here.</p>
+        <div class="scheme-table-wrap">
+          <table class="scheme-fit-table">
+            <thead>
+              <tr><th>Date</th><th>Brand</th><th>Attached By</th><th>Review Status</th></tr>
+            </thead>
+            <tbody id="schemePromoterUploadsBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="scheme-date-filter" id="schemeDateFilterWrap">
         <div class="field">
           <label>Active From</label>
           <input id="schemeDateFrom" type="date" onchange="renderSchemesTable()" />
@@ -1279,7 +1292,7 @@
         <button type="button" onclick="clearSchemeDateFilter()">Clear dates</button>
       </div>
 
-      <div class="scheme-table-wrap">
+      <div class="scheme-table-wrap" id="schemeTableWrap">
         <table id="schemeTable" class="scheme-fit-table">
           <colgroup>
             <col style="width:13%;">
@@ -2698,6 +2711,7 @@
           form.reset();
           await loadSchemes();
           await loadSchemeDrafts();
+          await loadMyPromoterUploads();
         } catch (e) {
           msg.textContent = 'Upload failed: ' + e.message;
         } finally {
@@ -2705,6 +2719,25 @@
           uploadBtn.textContent = 'Upload & Extract';
         }
       });
+    }
+
+    async function loadMyPromoterUploads() {
+      const card = document.getElementById('schemePromoterUploadsCard');
+      if (!card || card.style.display === 'none') return;
+
+      const res = await authFetch('/schemes/my-attachments');
+      if (!res) return;
+      const rows = await res.json();
+
+      const body = document.getElementById('schemePromoterUploadsBody');
+      body.innerHTML = rows.map(row => `
+        <tr>
+          <td>${row.uploaded_date ? String(row.uploaded_date).slice(0, 10) : ''}</td>
+          <td>${row.brand || ''}</td>
+          <td>${row.uploaded_by || ''}</td>
+          <td>${row.review_status || ''}</td>
+        </tr>
+      `).join('') || '<tr><td colspan="4" class="empty">No documents attached yet</td></tr>';
     }
 
     async function loadSchemeDrafts() {
@@ -2857,10 +2890,30 @@
 
       if (document.getElementById('schemeAdminCard')) {
         document.getElementById('schemeAdminCard').style.display = hasRole('Admin', 'BrandPartner') ? 'block' : 'none';
+
+        // Brand promoters only get the "Attach Scheme Document" upload and
+        // a plain log of what they've attached (date/brand/who). The manual
+        // create/edit form and the full scheme table (Model No, Offer,
+        // Scheme Type, Scheme Value, Target, Status, Dates, Action) are
+        // Admin-only - a promoter's uploads stay hidden as unreviewed
+        // Drafts until an Admin checks and activates them.
+        const isSchemeAdmin = hasRole('Admin');
+        const manualForm = document.getElementById('schemeForm');
+        const cancelEditBtn = document.getElementById('schemeCancelEditBtn');
+        const dateFilterWrap = document.getElementById('schemeDateFilterWrap');
+        const tableWrap = document.getElementById('schemeTableWrap');
+        const promoterUploadsCard = document.getElementById('schemePromoterUploadsCard');
+
+        if (manualForm) manualForm.style.display = isSchemeAdmin ? '' : 'none';
+        if (cancelEditBtn && !isSchemeAdmin) cancelEditBtn.style.display = 'none';
+        if (dateFilterWrap) dateFilterWrap.style.display = isSchemeAdmin ? '' : 'none';
+        if (tableWrap) tableWrap.style.display = isSchemeAdmin ? '' : 'none';
+        if (promoterUploadsCard) promoterUploadsCard.style.display = (!isSchemeAdmin && hasRole('BrandPartner')) ? 'block' : 'none';
       }
       if (hasRole('Admin', 'BrandPartner', 'BrandManager')) {
         await setupSchemeDocUpload();
         await loadSchemeDrafts();
+        await loadMyPromoterUploads();
       }
       if (document.getElementById('exportPanel')) {
         const exportPanel = document.getElementById('exportPanel');
