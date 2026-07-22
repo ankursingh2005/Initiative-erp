@@ -242,6 +242,7 @@
     .scheme-date-filter { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; margin-top: 16px; padding: 12px; border: 1px solid #dbe5f4; border-radius: 10px; background: #f8fbff; }
     .scheme-date-filter .field { margin: 0; }
     .scheme-date-filter button { width: auto; padding: 9px 12px; }
+    .scheme-icon-btn { width: 32px; padding: 6px 0 !important; font-size: 15px; line-height: 1; }
     .scheme-actions { display: flex; gap: 8px; flex-wrap: wrap; }
     .scheme-actions button { width: auto; padding: 8px 12px; }
     .scheme-actions button.scheme-delete-btn { background: #d92d20; color: #fff; border-color: #d92d20; }
@@ -2650,7 +2651,17 @@
       const brandField = document.getElementById('schemeDocBrandField');
       const brandSelectEl = document.getElementById('schemeDocBrand');
 
-      if (hasRole('Admin')) {
+      // Promoters/brand managers just upload - extraction is deferred to
+      // an Admin, who runs "Extract (OCR)" from Draft Schemes Pending
+      // Review. Admin uploads still extract immediately, so their button
+      // keeps saying so.
+      const isSchemeAdmin = hasRole('Admin');
+      const idleLabel = isSchemeAdmin ? 'Upload & Extract' : 'Upload';
+      const busyLabel = isSchemeAdmin ? 'Uploading & reading document...' : 'Uploading...';
+      const uploadBtnEl = document.getElementById('schemeDocUploadBtn');
+      if (uploadBtnEl) uploadBtnEl.textContent = idleLabel;
+
+      if (isSchemeAdmin) {
         brandField.style.display = '';
         fillSelectWithPlaceholder(brandSelectEl, brands, 'id', 'name', 'Select brand');
       } else {
@@ -2694,7 +2705,7 @@
 
         const uploadBtn = document.getElementById('schemeDocUploadBtn');
         uploadBtn.disabled = true;
-        uploadBtn.textContent = 'Uploading & reading document...';
+        uploadBtn.textContent = busyLabel;
 
         try {
           const response = await authFetch(`/schemes/upload-document?${params.toString()}`, {
@@ -2716,7 +2727,7 @@
           msg.textContent = 'Upload failed: ' + e.message;
         } finally {
           uploadBtn.disabled = false;
-          uploadBtn.textContent = 'Upload & Extract';
+          uploadBtn.textContent = idleLabel;
         }
       });
     }
@@ -2744,27 +2755,51 @@
       const draftsCard = document.getElementById('schemeDraftsCard');
       if (!draftsCard || !hasRole('Admin')) return;
 
-      const res = await authFetch('/schemes?status=Draft');
+      const res = await authFetch('/schemes/drafts');
       if (!res) return;
       const drafts = await res.json();
       draftsCard.style.display = drafts.length ? 'block' : 'none';
 
       const body = document.getElementById('schemeDraftsBody');
-      body.innerHTML = drafts.map(scheme => {
-        const brand = brands.find(b => b.id === scheme.brand_id);
+      body.innerHTML = drafts.map(d => {
+        const extractionLabel = d.extraction_status === 'Extracted'
+          ? 'Extracted'
+          : d.extraction_status === 'Failed'
+            ? `Failed${d.extraction_error ? ' - ' + d.extraction_error.replace(/</g, '&lt;') : ''}`
+            : 'Awaiting extraction from attached document.';
+
+        // Not yet extracted: only a download icon (view the circular) and
+        // an OCR button - the Model No/Offer/etc fields aren't filled in
+        // yet, so there's nothing to Edit/Activate. Once extraction runs,
+        // the normal Edit/Activate actions appear for review.
+        const actions = d.extraction_status === 'Extracted'
+          ? `<button type="button" onclick="editScheme(${d.id})">Edit</button>
+             <button type="button" class="scheme-icon-btn" title="Download document" onclick="downloadSchemeAttachment(${d.id})">&#8681;</button>
+             <button type="button" onclick="activateScheme(${d.id})">Activate</button>`
+          : `<button type="button" class="scheme-icon-btn" title="Download document" onclick="downloadSchemeAttachment(${d.id})">&#8681;</button>
+             <button type="button" onclick="extractSchemeDocument(${d.id})">Extract (OCR)</button>`;
+
         return `<tr>
-          <td>${scheme.scheme_name || ''}</td>
-          <td>${brand ? brand.name : 'Not matched'}</td>
-          <td>${scheme.start_date || ''} to ${scheme.end_date || ''}</td>
-          <td>${scheme.reward_type || ''} ${scheme.reward_value || 0}</td>
-          <td>${scheme.remarks ? scheme.remarks.replace(/</g, '&lt;') : ''}</td>
-          <td>
-            <button type="button" onclick="editScheme(${scheme.id})">Edit</button>
-            <button type="button" onclick="downloadSchemeAttachment(${scheme.id})">Download</button>
-            <button type="button" onclick="activateScheme(${scheme.id})">Activate</button>
-          </td>
+          <td>${d.scheme_name || ''}</td>
+          <td>${d.brand || 'Not matched'}</td>
+          <td>${d.start_date || ''} to ${d.end_date || ''}</td>
+          <td>${d.reward_type || ''} ${d.reward_value || 0}</td>
+          <td>${extractionLabel}</td>
+          <td><div class="scheme-actions">${actions}</div></td>
         </tr>`;
       }).join('') || '<tr><td colspan="6" class="empty">No draft schemes pending review</td></tr>';
+    }
+
+    async function extractSchemeDocument(schemeId) {
+      const response = await authFetch(`/schemes/${schemeId}/extract`, { method: 'POST' });
+      if (!response) return;
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        alert(data.detail || 'Extraction failed');
+        return;
+      }
+      await loadSchemeDrafts();
+      await loadSchemes();
     }
 
     async function downloadSchemeAttachment(schemeId) {

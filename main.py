@@ -2211,64 +2211,12 @@ def list_my_scheme_attachments(
     return rows
 
 
-@app.post("/schemes/upload-document")
-def upload_scheme_document(
-    file: UploadFile = File(...),
-    brand_id: Optional[int] = Query(None),
-    scheme_name: Optional[str] = Query(None),
-    current_user: models.User = Depends(auth.require_roles("Admin", "BrandManager", "BrandPartner")),
-    db: Session = Depends(get_db),
-):
-    """A promoter/brand manager attaches a scheme circular (image, PDF, or
-    Excel). This creates a Draft scheme, saves the document, and calls
-    Claude to pre-fill the scheme fields from it. Admin reviews and hits
-    Activate (existing PUT /schemes/{id}/activate) when it looks right."""
-    filename = file.filename or "scheme_document"
-    raw_bytes = file.file.read()
-    if not raw_bytes:
-        raise HTTPException(status_code=400, detail="Uploaded file is empty")
-
-    if current_user.role in {"BrandManager", "BrandPartner"}:
-        allowed_brand_ids = [ub.brand_id for ub in current_user.brands]
-        if not allowed_brand_ids:
-            raise HTTPException(status_code=403, detail="Your account has no brand assigned yet. Ask an Admin to assign one.")
-        if brand_id is None:
-            brand_id = allowed_brand_ids[0]
-        elif brand_id not in allowed_brand_ids:
-            raise HTTPException(status_code=403, detail="You can only attach documents for your own assigned brand(s).")
-
-    today = date.today()
-    db_scheme = models.Scheme(
-        scheme_code=f"SCH-{int(datetime.utcnow().timestamp() * 1000)}",
-        scheme_name=(scheme_name or "").strip() or f"Pending review - {filename}",
-        brand_id=brand_id,
-        start_date=today,
-        end_date=today,
-        status="Draft",
-        reward_type="Fixed",
-        reward_value=0,
-        offer_type="Backend",
-        calculation_method="Fixed Amount",
-        remarks="Awaiting extraction from attached document.",
-    )
-    db.add(db_scheme)
-    db.commit()
-    db.refresh(db_scheme)
-
-    content_type = file.content_type or ""
-    attachment = models.SchemeAttachment(
-        scheme_id=db_scheme.id,
-        original_filename=filename,
-        content_type=content_type,
-        file_size=len(raw_bytes),
-        file_data=raw_bytes,
-        uploaded_by_user_id=current_user.id,
-        extraction_status="Pending",
-    )
-    db.add(attachment)
-    db.commit()
-
-    extraction = extract_scheme_from_document(db, filename, content_type, raw_bytes)
+def apply_scheme_extraction(db: Session, db_scheme: "models.Scheme", attachment: "models.SchemeAttachment", extraction: dict) -> None:
+    """Applies a Claude extraction result onto a Draft scheme + its
+    attachment record. Shared by the upload endpoint (Admin uploads, which
+    still extract immediately) and the Admin-triggered
+    POST /schemes/{id}/extract endpoint (used for promoter uploads, which
+    are deferred until an Admin runs OCR)."""
     attachment.extraction_status = extraction["status"]
     attachment.extraction_error = extraction.get("error")
     attachment.extraction_raw_json = json.dumps(extraction.get("data") or {})
@@ -2332,9 +2280,75 @@ def upload_scheme_document(
             attachment.extraction_status = "Failed"
             attachment.extraction_error = f"Extracted data didn't fit the scheme form: {exc}"
 
+
+@app.post("/schemes/upload-document")
+def upload_scheme_document(
+    file: UploadFile = File(...),
+    brand_id: Optional[int] = Query(None),
+    scheme_name: Optional[str] = Query(None),
+    current_user: models.User = Depends(auth.require_roles("Admin", "BrandManager", "BrandPartner")),
+    db: Session = Depends(get_db),
+):
+    """A promoter/brand manager attaches a scheme circular (image, PDF, or
+    Excel). This creates a Draft scheme and saves the document. When an
+    Admin uploads directly, Claude reads it immediately (Admin already
+    reviews everything). When a promoter/brand manager uploads, extraction
+    is deferred - the document just sits in "Draft Schemes Pending
+    Review" until an Admin clicks "Extract (OCR)" there. Either way, Admin
+    reviews and hits Activate (existing PUT /schemes/{id}/activate) when
+    it looks right."""
+    filename = file.filename or "scheme_document"
+    raw_bytes = file.file.read()
+    if not raw_bytes:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
+    if current_user.role in {"BrandManager", "BrandPartner"}:
+        allowed_brand_ids = [ub.brand_id for ub in current_user.brands]
+        if not allowed_brand_ids:
+            raise HTTPException(status_code=403, detail="Your account has no brand assigned yet. Ask an Admin to assign one.")
+        if brand_id is None:
+            brand_id = allowed_brand_ids[0]
+        elif brand_id not in allowed_brand_ids:
+            raise HTTPException(status_code=403, detail="You can only attach documents for your own assigned brand(s).")
+
+    today = date.today()
+    db_scheme = models.Scheme(
+        scheme_code=f"SCH-{int(datetime.utcnow().timestamp() * 1000)}",
+        scheme_name=(scheme_name or "").strip() or f"Pending review - {filename}",
+        brand_id=brand_id,
+        start_date=today,
+        end_date=today,
+        status="Draft",
+        reward_type="Fixed",
+        reward_value=0,
+        offer_type="Backend",
+        calculation_method="Fixed Amount",
+        remarks="Awaiting extraction from attached document.",
+    )
+    db.add(db_scheme)
     db.commit()
     db.refresh(db_scheme)
-    db.refresh(attachment)
+
+    content_type = file.content_type or ""
+    attachment = models.SchemeAttachment(
+        scheme_id=db_scheme.id,
+        original_filename=filename,
+        content_type=content_type,
+        file_size=len(raw_bytes),
+        file_data=raw_bytes,
+        uploaded_by_user_id=current_user.id,
+        extraction_status="Pending",
+    )
+    db.add(attachment)
+    db.commit()
+
+    if current_user.role == "Admin":
+        # Admin uploads still extract right away, same as before.
+        extraction = extract_scheme_from_document(db, filename, content_type, raw_bytes)
+        apply_scheme_extraction(db, db_scheme, attachment, extraction)
+        db.commit()
+        db.refresh(db_scheme)
+        db.refresh(attachment)
 
     return {
         "scheme_id": db_scheme.id,
@@ -2345,9 +2359,92 @@ def upload_scheme_document(
         "message": (
             "Document attached and scheme fields pre-filled. Review and Activate when ready."
             if attachment.extraction_status == "Extracted"
+            else "Document attached. An Admin will review it shortly."
+            if current_user.role != "Admin"
             else "Document attached, but automatic extraction did not complete - fill the scheme fields manually before activating."
         ),
     }
+
+
+@app.post("/schemes/{scheme_id}/extract")
+def extract_scheme_document(
+    scheme_id: int,
+    current_user: models.User = Depends(auth.require_roles("Admin")),
+    db: Session = Depends(get_db),
+):
+    """Admin-triggered OCR/extraction for a Draft scheme's most recently
+    attached document - used for promoter/brand-manager uploads, which no
+    longer auto-extract at upload time."""
+    db_scheme = db.query(models.Scheme).filter(models.Scheme.id == scheme_id).first()
+    if not db_scheme:
+        raise HTTPException(status_code=404, detail="Scheme not found")
+
+    attachment = (
+        db.query(models.SchemeAttachment)
+        .filter(models.SchemeAttachment.scheme_id == scheme_id)
+        .order_by(models.SchemeAttachment.id.desc())
+        .first()
+    )
+    if not attachment:
+        raise HTTPException(status_code=404, detail="No document attached to this scheme")
+
+    extraction = extract_scheme_from_document(
+        db, attachment.original_filename, attachment.content_type or "", attachment.file_data
+    )
+    apply_scheme_extraction(db, db_scheme, attachment, extraction)
+    db.commit()
+    db.refresh(db_scheme)
+    db.refresh(attachment)
+
+    return {
+        "scheme_id": db_scheme.id,
+        "extraction_status": attachment.extraction_status,
+        "extraction_error": attachment.extraction_error,
+        "message": (
+            "Extraction complete. Review the fields and Activate when ready."
+            if attachment.extraction_status == "Extracted"
+            else "Automatic extraction did not complete - fill the scheme fields manually before activating."
+        ),
+    }
+
+
+@app.get("/schemes/drafts")
+def list_draft_schemes(
+    current_user: models.User = Depends(auth.require_roles("Admin")),
+    db: Session = Depends(get_db),
+):
+    """Admin-only feed for the "Draft Schemes Pending Review" table -
+    includes attachment/extraction status so the UI can decide whether to
+    show "Extract (OCR)" or the normal Edit/Activate actions."""
+    drafts = (
+        db.query(models.Scheme)
+        .filter(models.Scheme.status == "Draft")
+        .order_by(models.Scheme.id.desc())
+        .all()
+    )
+
+    rows = []
+    for scheme in drafts:
+        brand = db.query(models.Brand).filter(models.Brand.id == scheme.brand_id).first() if scheme.brand_id else None
+        attachment = (
+            db.query(models.SchemeAttachment)
+            .filter(models.SchemeAttachment.scheme_id == scheme.id)
+            .order_by(models.SchemeAttachment.id.desc())
+            .first()
+        )
+        rows.append({
+            "id": scheme.id,
+            "scheme_name": scheme.scheme_name,
+            "brand": brand.name if brand else "Not matched",
+            "start_date": str(scheme.start_date) if scheme.start_date else "",
+            "end_date": str(scheme.end_date) if scheme.end_date else "",
+            "reward_type": scheme.reward_type,
+            "reward_value": scheme.reward_value,
+            "extraction_status": attachment.extraction_status if attachment else "Pending",
+            "extraction_error": attachment.extraction_error if attachment else None,
+            "filename": attachment.original_filename if attachment else None,
+        })
+    return rows
 
 
 @app.get("/schemes/{scheme_id}/attachment")
