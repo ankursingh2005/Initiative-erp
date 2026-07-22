@@ -328,6 +328,7 @@ def ensure_default_master_data():
                 "Nothing",
                 "Google Pixel",
                 "Mi",
+                "Redmi",
             ]
             mobile_subcategories = (
                 db.query(models.SubCategory)
@@ -1483,6 +1484,7 @@ DEFAULT_BRAND_SUPPLIER_EMAILS = {
     "Haier": ["orders@haier.com", "sales@haier.com", "purchase@haier.com", "support@haier.com", "distributor@haier.com"],
     "Vivo": ["orders@vivo.com", "sales@vivo.com", "purchase@vivo.com", "support@vivo.com", "distributor@vivo.com"],
     "Oppo": ["orders@oppo.com", "sales@oppo.com", "purchase@oppo.com", "support@oppo.com", "distributor@oppo.com"],
+    "Redmi": ["orders@mi.com", "sales@mi.com", "purchase@mi.com", "support@mi.com", "distributor@mi.com"],
 }
 
 
