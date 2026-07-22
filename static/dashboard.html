@@ -138,6 +138,36 @@
       color: #394250;
       font-weight: 600;
     }
+
+    /* Collapsible section headers: click to reveal/hide the fields inside */
+    .section-hero-title.collapsible,
+    .admin-tools-title.collapsible {
+      cursor: pointer;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .section-toggle-chevron {
+      display: inline-flex;
+      font-size: 14px;
+      line-height: 1;
+      transition: transform 0.2s ease;
+      flex-shrink: 0;
+    }
+    .section-hero-title.collapsible.open .section-toggle-chevron,
+    .admin-tools-title.collapsible.open .section-toggle-chevron {
+      transform: rotate(180deg);
+    }
+    .admin-tools-title.collapsible {
+      background: #1d2939;
+      color: #fff;
+      margin: -20px -20px 12px;
+      padding: 14px 16px;
+      border-radius: 14px 14px 0 0;
+      font-size: 18px;
+    }
     .grid { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 20px; }
     .card {
       background: var(--card);
@@ -210,6 +240,8 @@
     .scheme-actions button { width: auto; padding: 8px 12px; }
     .scheme-actions button.scheme-delete-btn { background: #d92d20; color: #fff; border-color: #d92d20; }
     .scheme-actions button.scheme-delete-btn:hover { background: #b42318; }
+    .scheme-actions button.scheme-edit-btn { background: #155eef; color: #fff; border-color: #155eef; }
+    .scheme-actions button.scheme-edit-btn:hover { background: #0d3fb0; }
     .export-panel {
       display: grid;
       grid-template-columns: minmax(180px, 260px) 1fr;
@@ -674,7 +706,8 @@
 
     <div class="grid" id="entryGrid">
       <div class="card section-hero-card" id="quickSalesCard">
-        <h3 class="section-hero-title">Quick Sales Entry</h3>
+        <h3 class="section-hero-title collapsible" onclick="toggleSectionBody('quickSalesBody', this)">Quick Sales Entry<span class="section-toggle-chevron">&#9662;</span></h3>
+        <div class="section-body" id="quickSalesBody" style="display:none;">
         <p class="muted section-hero-subtitle">Record sales and let the scheme engine evaluate eligible rewards automatically.</p>
         <form id="saleForm">
           <div class="form-columns">
@@ -835,12 +868,14 @@
           <button id="cancelEditBtn" type="button" style="display:none; margin-top:8px; background:#6b7a90;" onclick="cancelSaleEdit()">Cancel Edit</button>
           <div id="saleMsg" class="msg"></div>
         </form>
+        </div>
       </div>
     </div>
 
     <div class="grid" id="scopeGrid" style="margin-top:20px;">
       <div class="card section-hero-card" id="salesScopeCard">
-        <h3 class="section-hero-title">Sales in your scope</h3>
+        <h3 class="section-hero-title collapsible" onclick="toggleSectionBody('salesScopeBody', this)">Sales in your scope<span class="section-toggle-chevron">&#9662;</span></h3>
+        <div class="section-body" id="salesScopeBody" style="display:none;">
         <div id="exportPanel" class="export-panel" style="display:none;">
           <div class="field" style="margin:0;">
             <label>Export Category</label>
@@ -905,10 +940,12 @@
           <button type="button" id="salesMoreBtn" onclick="toggleSalesExpanded()">Show More</button>
           <button type="button" id="salesShowAllBtn" class="scope-show-all-btn" onclick="showAllSales()">Show All</button>
         </div>
+        </div>
       </div>
 
       <div class="card section-hero-card" id="claimsScopeCard">
-        <h3 class="section-hero-title">Claims in your scope</h3>
+        <h3 class="section-hero-title collapsible" onclick="toggleSectionBody('claimsScopeBody', this)">Claims in your scope<span class="section-toggle-chevron">&#9662;</span></h3>
+        <div class="section-body" id="claimsScopeBody" style="display:none;">
         <div class="table-wrap">
           <table id="claimsTable" class="claims-table table-zebra">
             <thead>
@@ -931,11 +968,13 @@
           <button type="button" id="claimsMoreBtn" onclick="toggleClaimsExpanded()">Show More</button>
           <button type="button" id="claimsShowAllBtn" class="scope-show-all-btn" onclick="showAllClaims()">Show All</button>
         </div>
+        </div>
       </div>
     </div>
 
     <div class="card section-hero-card" id="intervalUploadCard" style="display:none; margin-top:20px;">
-      <h3 class="section-hero-title">Interval Sales Analytics Upload</h3>
+      <h3 class="section-hero-title collapsible" onclick="toggleSectionBody('intervalUploadBody', this)">Interval Sales Analytics Upload<span class="section-toggle-chevron">&#9662;</span></h3>
+      <div class="section-body" id="intervalUploadBody" style="display:none;">
       <p class="muted section-hero-subtitle">Upload Excel, CSV, PDF, or JPG data in Date/Vch/Account/Item format and track daily, weekly, monthly, or custom interval performance.</p>
 
       <form id="intervalUploadForm" class="interval-toolbar">
@@ -1041,16 +1080,18 @@
           <button type="button" id="intervalRecordsMoreBtn" onclick="toggleIntervalRecordsExpanded()">See More</button>
         </div>
       </div>
+      </div>
     </div>
 
     <div class="card section-hero-card" id="schemeAdminCard" style="display:none; margin-top:20px;">
-      <h3 class="section-hero-title">Scheme Maintenance</h3>
+      <h3 class="section-hero-title collapsible" onclick="toggleSectionBody('schemeAdminBody', this)">Scheme Maintenance<span class="section-toggle-chevron">&#9662;</span></h3>
+      <div class="section-body" id="schemeAdminBody" style="display:none;">
       <p class="muted section-hero-subtitle">Maintain retail schemes for percentage, fixed, and target-based rewards.</p>
       <form id="schemeForm">
         <div class="scheme-toolbar">
           <div class="field">
-            <label>Scheme Name</label>
-            <input id="schemeName" required placeholder="Summer Retail Offer" />
+            <label>Model No.</label>
+            <input id="schemeName" required placeholder="e.g. LG-1.5T-AC-2024" />
           </div>
           <div class="field">
             <label>Offer Type</label>
@@ -1119,6 +1160,7 @@
           </div>
         </div>
         <button type="submit">Save Scheme</button>
+        <button id="schemeCancelEditBtn" type="button" style="display:none; margin-top:8px; background:#6b7a90;" onclick="cancelSchemeEdit()">Cancel Edit</button>
         <div id="schemeMsg" class="msg"></div>
       </form>
 
@@ -1137,30 +1179,33 @@
       <div class="scheme-table-wrap">
         <table id="schemeTable" class="scheme-fit-table">
           <colgroup>
-            <col style="width:15%;">
-            <col style="width:11%;">
+            <col style="width:13%;">
             <col style="width:10%;">
             <col style="width:9%;">
-            <col style="width:9%;">
-            <col style="width:7%;">
             <col style="width:8%;">
-            <col style="width:15%;">
-            <col style="width:16%;">
+            <col style="width:8%;">
+            <col style="width:6%;">
+            <col style="width:7%;">
+            <col style="width:14%;">
+            <col style="width:25%;">
           </colgroup>
           <thead>
             <tr>
-              <th>Name</th><th>Offer</th><th>Scheme Type</th><th>Scheme Value</th><th>Brand</th><th>Target</th><th>Status</th><th>Dates</th><th>Action</th>
+              <th>Model No.</th><th>Offer</th><th>Scheme Type</th><th>Scheme Value</th><th>Brand</th><th>Target</th><th>Status</th><th>Dates</th><th>Action</th>
             </tr>
           </thead>
           <tbody></tbody>
         </table>
       </div>
+      </div>
     </div>
 
     <div class="card" id="adminLinks" style="display:none; margin-top:20px;">
-      <h3>Admin Tools</h3>
+      <h3 class="admin-tools-title collapsible" onclick="toggleSectionBody('adminLinksBody', this)">Admin Tools<span class="section-toggle-chevron">&#9662;</span></h3>
+      <div class="section-body" id="adminLinksBody" style="display:none;">
       <p>Admin users can open the full API docs to review schemes, brands, stores, claims and users.</p>
       <a class="link-btn" href="docs" target="_blank">Open API docs</a>
+      </div>
     </div>
   </div>
 
@@ -1495,6 +1540,47 @@
       brandField.style.display = '';
     }
 
+    async function onSchemeCategoryChange() {
+      const schemeSubCategory = document.getElementById('schemeSubCategory');
+      const schemeBrand = document.getElementById('schemeBrand');
+      const selectedCategoryId = Number(document.getElementById('schemeCategory').value || 0);
+      const isMobile = isSchemeMobileCategorySelected();
+
+      if (!selectedCategoryId) {
+        fillSelectWithPlaceholder(schemeSubCategory, [], 'id', 'name', 'All sub categories');
+        fillSelectWithPlaceholder(schemeBrand, brands, 'id', 'name', 'All brands');
+        applySchemeCategoryVisibility();
+        return;
+      }
+
+      if (isMobile) {
+        fillSelectWithPlaceholder(schemeSubCategory, [], 'id', 'name', 'Not required for Mobile / Handset');
+        const schemeBrandsRes = await authFetch(`/brands?category_id=${selectedCategoryId}`);
+        const mobileBrands = schemeBrandsRes ? await schemeBrandsRes.json() : [];
+        const nameMap = new Map(mobileBrands.map(item => [item.name.toLowerCase(), item]));
+        const filteredMobileBrands = MOBILE_BRANDS
+          .map(name => nameMap.get(name.toLowerCase()))
+          .filter(Boolean);
+        fillSelectWithPlaceholder(schemeBrand, filteredMobileBrands, 'id', 'name', 'No mobile brands found');
+        applySchemeCategoryVisibility();
+        return;
+      }
+
+      const schemeSubRes = await authFetch(`/subcategories?category_id=${selectedCategoryId}`);
+      const schemeSubs = schemeSubRes ? await schemeSubRes.json() : [];
+      fillSelectWithPlaceholder(schemeSubCategory, schemeSubs, 'id', 'name', 'All sub categories');
+      const filteredBrands = brands.filter(item => !item.subcategory_id || schemeSubs.some(sub => sub.id === item.subcategory_id));
+      fillSelectWithPlaceholder(schemeBrand, filteredBrands, 'id', 'name', 'All brands');
+      applySchemeCategoryVisibility();
+    }
+
+    function onSchemeSubCategoryChange() {
+      const schemeBrand = document.getElementById('schemeBrand');
+      const selectedSubId = Number(document.getElementById('schemeSubCategory').value || 0);
+      const filteredBrands = selectedSubId ? brands.filter(item => item.subcategory_id === selectedSubId) : brands;
+      fillSelectWithPlaceholder(schemeBrand, filteredBrands, 'id', 'name', 'All brands');
+    }
+
     async function updateSubcategoryOptions() {
       const categoryId = Number(document.getElementById('categorySelect').value || 0);
       const subcategorySelect = document.getElementById('subcategorySelect');
@@ -1549,6 +1635,14 @@
       if (!brandsRes) return;
       const filteredBrands = await brandsRes.json();
       fillSelectWithPlaceholder(brandSelect, filteredBrands, 'id', 'name', 'No brands found');
+    }
+
+    function toggleSectionBody(bodyId, headerEl) {
+      const body = document.getElementById(bodyId);
+      if (!body) return;
+      const isOpen = body.style.display !== 'none' && body.style.display !== '';
+      body.style.display = isOpen ? 'none' : 'block';
+      if (headerEl) headerEl.classList.toggle('open', !isOpen);
     }
 
     function buildBranchLabel(item) {
@@ -2256,6 +2350,7 @@
         const toggleButton = scheme.status === 'Active'
           ? `<button type="button" onclick="pauseScheme(${scheme.id})">Pause</button>`
           : `<button type="button" onclick="activateScheme(${scheme.id})">Activate</button>`;
+        const editButton = `<button type="button" class="scheme-edit-btn" onclick="editScheme(${scheme.id})">Edit</button>`;
         const deleteButton = hasRole('Admin')
           ? `<button type="button" class="scheme-delete-btn" onclick="openDeleteSchemeModal(${scheme.id})">Delete</button>`
           : '';
@@ -2269,7 +2364,7 @@
             <td>${target}</td>
             <td>${scheme.status || ''}</td>
             <td>${dateRange}</td>
-            <td><div class="scheme-actions">${toggleButton}${deleteButton}</div></td>
+            <td><div class="scheme-actions">${toggleButton}${editButton}${deleteButton}</div></td>
           </tr>
         `;
       }).join('');
@@ -2285,6 +2380,65 @@
       const response = await authFetch(`/schemes/${schemeId}/activate`, { method: 'PUT' });
       if (!response) return;
       await loadSchemes();
+    }
+
+    let editingSchemeId = null;
+
+    async function editScheme(schemeId) {
+      const scheme = schemes.find(s => s.id === schemeId);
+      if (!scheme) return;
+
+      editingSchemeId = schemeId;
+
+      // Make sure the Scheme Maintenance section is open so the form is visible.
+      const schemeBody = document.getElementById('schemeAdminBody');
+      const schemeHeader = document.querySelector('#schemeAdminCard .section-hero-title');
+      if (schemeBody && schemeBody.style.display === 'none') {
+        schemeBody.style.display = 'block';
+        schemeHeader?.classList.add('open');
+      }
+
+      document.getElementById('schemeName').value = scheme.scheme_name || '';
+      document.getElementById('schemeOfferType').value = scheme.offer_type || 'BACKEND SUPPORT';
+
+      const rewardType = scheme.reward_type === 'Slab' ? 'Target Based' : (scheme.reward_type || 'Fixed');
+      document.getElementById('schemeRewardType').value = rewardType;
+      document.getElementById('schemeRewardTypeOther').value = scheme.reward_type_other || '';
+      document.getElementById('schemeRewardValue').value = scheme.reward_value != null ? scheme.reward_value : '';
+      applySchemeRewardVisibility();
+      document.getElementById('schemeTargetQty').value = scheme.min_qty || '';
+
+      document.getElementById('schemeCategory').value = scheme.category_id || '';
+      await onSchemeCategoryChange();
+      document.getElementById('schemeSubCategory').value = scheme.subcategory_id || '';
+      onSchemeSubCategoryChange();
+      document.getElementById('schemeBrand').value = scheme.brand_id || '';
+
+      document.getElementById('schemeStartDate').value = String(scheme.start_date || '').slice(0, 10);
+      document.getElementById('schemeEndDate').value = String(scheme.end_date || '').slice(0, 10);
+      document.getElementById('schemeStatus').value = scheme.status || 'Active';
+      document.getElementById('schemeRemarks').value = scheme.remarks || '';
+
+      const schemeForm = document.getElementById('schemeForm');
+      schemeForm.querySelector('button[type="submit"]').textContent = 'Update Scheme';
+      document.getElementById('schemeCancelEditBtn').style.display = '';
+
+      const schemeMsg = document.getElementById('schemeMsg');
+      schemeMsg.className = 'msg';
+      schemeMsg.textContent = '';
+
+      schemeForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function cancelSchemeEdit() {
+      editingSchemeId = null;
+      const schemeForm = document.getElementById('schemeForm');
+      schemeForm.reset();
+      applySchemeRewardVisibility();
+      applySchemeCategoryVisibility();
+      schemeForm.querySelector('button[type="submit"]').textContent = 'Save Scheme';
+      document.getElementById('schemeCancelEditBtn').style.display = 'none';
+      document.getElementById('schemeMsg').textContent = '';
     }
 
     let pendingDeleteSchemeId = null;
@@ -2390,42 +2544,8 @@
       document.getElementById('claimStatus').addEventListener('change', applyClaimStatusVisibility);
       document.getElementById('claimOverallStatus').addEventListener('change', applyClaimStatusVisibility);
       document.getElementById('schemeRewardType').addEventListener('change', applySchemeRewardVisibility);
-      document.getElementById('schemeCategory').addEventListener('change', async () => {
-        const selectedCategoryId = Number(document.getElementById('schemeCategory').value || 0);
-        const isMobile = isSchemeMobileCategorySelected();
-
-        if (!selectedCategoryId) {
-          fillSelectWithPlaceholder(schemeSubCategory, [], 'id', 'name', 'All sub categories');
-          fillSelectWithPlaceholder(schemeBrand, brands, 'id', 'name', 'All brands');
-          applySchemeCategoryVisibility();
-          return;
-        }
-
-        if (isMobile) {
-          fillSelectWithPlaceholder(schemeSubCategory, [], 'id', 'name', 'Not required for Mobile / Handset');
-          const schemeBrandsRes = await authFetch(`/brands?category_id=${selectedCategoryId}`);
-          const mobileBrands = schemeBrandsRes ? await schemeBrandsRes.json() : [];
-          const nameMap = new Map(mobileBrands.map(item => [item.name.toLowerCase(), item]));
-          const filteredMobileBrands = MOBILE_BRANDS
-            .map(name => nameMap.get(name.toLowerCase()))
-            .filter(Boolean);
-          fillSelectWithPlaceholder(schemeBrand, filteredMobileBrands, 'id', 'name', 'No mobile brands found');
-          applySchemeCategoryVisibility();
-          return;
-        }
-
-        const schemeSubRes = await authFetch(`/subcategories?category_id=${selectedCategoryId}`);
-        const schemeSubs = schemeSubRes ? await schemeSubRes.json() : [];
-        fillSelectWithPlaceholder(schemeSubCategory, schemeSubs, 'id', 'name', 'All sub categories');
-        const filteredBrands = brands.filter(item => !item.subcategory_id || schemeSubs.some(sub => sub.id === item.subcategory_id));
-        fillSelectWithPlaceholder(schemeBrand, filteredBrands, 'id', 'name', 'All brands');
-        applySchemeCategoryVisibility();
-      });
-      document.getElementById('schemeSubCategory').addEventListener('change', () => {
-        const selectedSubId = Number(document.getElementById('schemeSubCategory').value || 0);
-        const filteredBrands = selectedSubId ? brands.filter(item => item.subcategory_id === selectedSubId) : brands;
-        fillSelectWithPlaceholder(schemeBrand, filteredBrands, 'id', 'name', 'All brands');
-      });
+      document.getElementById('schemeCategory').addEventListener('change', onSchemeCategoryChange);
+      document.getElementById('schemeSubCategory').addEventListener('change', onSchemeSubCategoryChange);
 
       if (document.getElementById('schemeAdminCard')) {
         document.getElementById('schemeAdminCard').style.display = hasRole('Admin', 'BrandPartner') ? 'block' : 'none';
@@ -2917,8 +3037,9 @@
         slabs: rewardType === 'Target Based' && targetQty > 0 && rewardValue > 0 ? [{ min_quantity: targetQty, reward_per_unit: rewardValue }] : []
       };
 
-      const response = await authFetch('/schemes', {
-        method: 'POST',
+      const isEditingScheme = editingSchemeId !== null;
+      const response = await authFetch(isEditingScheme ? `/schemes/${editingSchemeId}` : '/schemes', {
+        method: isEditingScheme ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
@@ -2931,9 +3052,13 @@
       }
 
       schemeMsg.classList.add('success');
-      schemeMsg.textContent = 'Scheme saved successfully.';
+      schemeMsg.textContent = isEditingScheme ? 'Scheme updated successfully.' : 'Scheme saved successfully.';
       this.reset();
+      editingSchemeId = null;
+      this.querySelector('button[type="submit"]').textContent = 'Save Scheme';
+      document.getElementById('schemeCancelEditBtn').style.display = 'none';
       applySchemeRewardVisibility();
+      applySchemeCategoryVisibility();
       await loadSchemes();
     });
 

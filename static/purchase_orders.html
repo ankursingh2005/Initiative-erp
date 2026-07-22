@@ -53,6 +53,10 @@
     .readonly-summary b { color:var(--ink); }
     .hint { font-size:12px; color:var(--muted); margin:6px 0 0; }
     .hidden { display:none !important; }
+    .collapsible-title { cursor:pointer; user-select:none; display:flex; align-items:center; justify-content:space-between; gap:10px; background:linear-gradient(120deg, #050505 0%, #111111 46%, #ff7a18 100%); color:#fff !important; margin:-20px -20px 16px; padding:14px 16px; border-radius:8px 8px 0 0; font-size:19px; font-weight:800; }
+    .section-toggle-chevron { display:inline-flex; font-size:14px; line-height:1; transition:transform .2s ease; flex-shrink:0; }
+    .collapsible-title.open .section-toggle-chevron { transform:rotate(180deg); }
+    .section-body { display:none; }
     .chip-list { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0; }
     .chip { display:inline-flex; align-items:center; gap:6px; background:#eff8ff; color:#175cd3; border-radius:999px; padding:5px 6px 5px 12px; font-size:12.5px; }
     .chip button { background:transparent; color:#175cd3; font-size:14px; padding:2px 6px; border-radius:50%; line-height:1; }
@@ -149,6 +153,8 @@
     <div class="title-row"><div><h1>Purchase Order Requests</h1><p class="subtitle">Category managers raise stock requests, Admin approves or rejects them, then MIS finalizes with the supplier.</p></div><div class="filters"><select id="statusFilter" onchange="renderOrders()"><option value="">All statuses</option><option>Requested</option><option>Approved</option><option>Rejected</option><option>Ordered</option><option>Cancelled</option></select><select id="poDateField" onchange="renderOrders()"><option value="request_date">Filter by Request Date</option><option value="ordered_date">Filter by Ordered Date</option></select><label class="filter-date-label">From<input id="poDateFrom" type="date" onchange="renderOrders()" /></label><label class="filter-date-label">To<input id="poDateTo" type="date" onchange="renderOrders()" /></label><button type="button" class="btn-outline" onclick="clearPoDateFilter()">Clear dates</button></div></div>
 
     <section class="card hidden" id="requisitionCard">
+      <h2 class="collapsible-title" onclick="toggleSectionBody('requisitionBody', this)">New Purchase Request<span class="section-toggle-chevron">&#9662;</span></h2>
+      <div class="section-body" id="requisitionBody">
       <div class="section-head"><div><h2>Procurement details</h2><p>Division and Brand are scoped to your assigned category. Pick "Others" to type a brand that's not listed yet.</p></div></div>
       <div class="form-grid">
         <div><label for="cmDivision">Division / category</label><select id="cmDivision" disabled><option value="">Loading...</option></select></div>
@@ -162,11 +168,14 @@
         <div class="table-wrap"><table><thead><tr><th>Product name *</th><th>Variant</th><th>Color</th><th>Req. qty *</th><th>Estimated price</th><th></th></tr></thead><tbody id="itemsBody"></tbody></table></div>
         <div class="actions"><button class="btn" type="submit">Submit Purchase Request</button></div><div id="formMessage" class="message"></div>
       </form>
+      </div>
     </section>
 
     <section class="card">
+      <h2 class="collapsible-title" onclick="toggleSectionBody('myRequestsBody', this)"><span id="listTitle">My Purchase Requests</span><span class="section-toggle-chevron">&#9662;</span></h2>
+      <div class="section-body" id="myRequestsBody">
       <div class="section-head">
-        <div><h2 id="listTitle">My Purchase Requests</h2><p id="listHelp">Your submitted requisitions and their current status.</p></div>
+        <div><p id="listHelp">Your submitted requisitions and their current status.</p></div>
         <div class="export-actions hidden" id="exportActions">
           <button class="btn-outline" type="button" onclick="exportToExcel()">Export Excel</button>
           <button class="btn-outline" type="button" onclick="exportToPDF()">Export PDF</button>
@@ -174,6 +183,7 @@
         </div>
       </div>
       <div id="orders" class="po-list"></div>
+      </div>
     </section>
   </main>
 
@@ -312,6 +322,13 @@
 
   <script>
     function appUrl(path) { const p = location.pathname; const base = p === '/erp' || p.startsWith('/erp/') ? '/erp' : ''; return `${base}${path}`; }
+    function toggleSectionBody(bodyId, headerEl) {
+      const body = document.getElementById(bodyId);
+      if (!body) return;
+      const isOpen = body.style.display === 'block';
+      body.style.display = isOpen ? 'none' : 'block';
+      if (headerEl) headerEl.classList.toggle('open', !isOpen);
+    }
     const token = localStorage.getItem('token'); const role = localStorage.getItem('role') || ''; const username = localStorage.getItem('username') || '';
     if (!token) location.href = appUrl('/login'); document.getElementById('userName').textContent = username;
 

@@ -2010,6 +2010,72 @@ def list_schemes(db: Session = Depends(get_db)):
     return db.query(models.Scheme).all()
 
 
+@app.put("/schemes/{scheme_id}", response_model=schemas.SchemeOut)
+def update_scheme(
+    scheme_id: int,
+    scheme: schemas.SchemeCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_roles("Admin", "BrandPartner")),
+):
+    db_scheme = db.query(models.Scheme).filter(models.Scheme.id == scheme_id).first()
+    if not db_scheme:
+        raise HTTPException(status_code=404, detail="Scheme not found")
+
+    normalized_reward_type = normalize_reward_type(scheme.reward_type)
+    normalized_offer_type = normalize_offer_type(scheme.offer_type)
+
+    db_scheme.scheme_name = scheme.scheme_name
+    db_scheme.brand_id = scheme.brand_id
+    db_scheme.category_id = scheme.category_id
+    db_scheme.subcategory_id = scheme.subcategory_id
+    db_scheme.product_id = scheme.product_id
+    db_scheme.variant_id = scheme.variant_id
+    db_scheme.offer_type = normalized_offer_type
+    db_scheme.offer_value = scheme.offer_value
+    db_scheme.calculation_method = scheme.calculation_method
+    db_scheme.start_date = scheme.start_date
+    db_scheme.end_date = scheme.end_date
+    db_scheme.min_qty = scheme.min_qty
+    db_scheme.max_qty = scheme.max_qty
+    db_scheme.applicable_branch_id = scheme.applicable_branch_id
+    db_scheme.applicable_customer = scheme.applicable_customer
+    db_scheme.applicable_dealer = scheme.applicable_dealer
+    db_scheme.circular_number = scheme.circular_number
+    db_scheme.remarks = scheme.remarks
+    db_scheme.reward_type = normalized_reward_type
+    db_scheme.reward_value = scheme.reward_value
+    db_scheme.reward_type_other = (scheme.reward_type_other or "").strip() or None
+    db_scheme.status = scheme.status
+
+    # Replace conditions/slabs entirely with whatever was submitted.
+    db_scheme.conditions.clear()
+    db_scheme.slabs.clear()
+    db.flush()
+
+    for cond in scheme.conditions:
+        db.add(
+            models.SchemeCondition(
+                scheme_id=db_scheme.id,
+                field_name=cond.field_name,
+                operator=cond.operator,
+                value=cond.value,
+            )
+        )
+
+    for slab in scheme.slabs:
+        db.add(
+            models.SchemeSlab(
+                scheme_id=db_scheme.id,
+                min_quantity=slab.min_quantity,
+                reward_per_unit=slab.reward_per_unit,
+            )
+        )
+
+    db.commit()
+    db.refresh(db_scheme)
+    return db_scheme
+
+
 @app.put("/schemes/{scheme_id}/pause")
 def pause_scheme(scheme_id: int, db: Session = Depends(get_db)):
     scheme = db.query(models.Scheme).filter(models.Scheme.id == scheme_id).first()
