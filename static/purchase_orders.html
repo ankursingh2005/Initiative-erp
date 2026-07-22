@@ -80,14 +80,30 @@
       header { padding:14px 16px; }
       .card { padding:14px; }
       .filters { width:100%; }
-      .filters select, .filter-date-label { flex:1 1 140px; }
       input, select, textarea { min-height:44px; }
       .btn, .btn-danger, .btn-good, .back-btn, .btn-light { min-height:44px; }
       .btn-outline, .status { min-height:0; }
       .po-actions button { flex:1 1 120px; min-height:40px; }
       th, td { padding:8px 6px; font-size:12.5px; }
     }
-    @media(max-width:540px) { header { align-items:flex-start; flex-direction:column; } .header-right { width:100%; justify-content:space-between; } .form-grid,.modal .form-grid { grid-template-columns:1fr; } .span-2,.span-3 { grid-column:span 1; } .actions { flex-direction:column; } .actions button { width:100%; } .export-actions { width:100%; } .export-actions button { flex:1; } .filters { flex-direction:column; align-items:stretch; } .filters select, .filter-date-label input { width:100%; } .po-actions button { flex:1 1 100%; } }
+    @media(max-width:540px) {
+      header { align-items:flex-start; flex-direction:column; } .header-right { width:100%; justify-content:space-between; }
+      .form-grid,.modal .form-grid { grid-template-columns:1fr; } .span-2,.span-3 { grid-column:span 1; }
+      .actions { flex-direction:column; } .actions button { width:100%; }
+      .export-actions { width:100%; } .export-actions button { flex:1; }
+      .po-actions button { flex:1 1 100%; }
+
+      /* Compact single-row filter bar on mobile, instead of stacking each
+         control full-width (which made them look oversized). Everything
+         stays sized to its content and, if the row is still too wide for
+         the screen, it scrolls horizontally rather than wrapping/stacking. */
+      .filters { flex-direction:row; flex-wrap:nowrap; align-items:center; gap:8px; overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:6px; }
+      .filters select, .filter-date-label, .filters .btn-outline { flex:0 0 auto; width:auto; }
+      .filters select { min-width:0; width:auto; min-height:36px; height:36px; font-size:12.5px; padding:6px 26px 6px 9px; background-size:12px; background-position:right 8px center; }
+      .filter-date-label { font-size:11px; white-space:nowrap; gap:2px; }
+      .filter-date-label input[type="date"] { width:108px; min-height:34px; height:34px; font-size:11.5px; padding:6px 7px; }
+      .filters .btn-outline { padding:6px 10px; font-size:12px; white-space:nowrap; min-height:34px; }
+    }
 
     /* ---- Official PO sheet (rendered off-screen, then captured as a real PDF) ---- */
     #poPrintHost { position:fixed; top:0; left:-99999px; z-index:-1; background:#fff; }
