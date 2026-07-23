@@ -915,18 +915,6 @@ def signup_page():
     return serve_html("static/signup.html")
 
 
-@app.get("/forgot-password")
-@app.get("/forgot-password.html")
-def forgot_password_page():
-    return serve_html("static/forgot_password.html")
-
-
-@app.get("/reset-password")
-@app.get("/reset-password.html")
-def reset_password_page():
-    return serve_html("static/reset_password.html")
-
-
 @app.get("/dashboard")
 @app.get("/dashboard.html")
 def dashboard_page():
@@ -1084,95 +1072,6 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         "role": user.role,
         "username": user.username,
     }
-
-
-def send_password_reset_email(user: models.User, token: str) -> str:
-    """Reuses the same SMTP env vars as send_purchase_order_email
-    (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM). Host, user,
-    port, and from-address all default to the company Gmail mailbox
-    (initiative.lucknow@gmail.com) so the only thing that has to be set as
-    a secret on Render is SMTP_PASSWORD (a Gmail App Password)."""
-    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
-    smtp_user = os.getenv("SMTP_USER", "initiative.lucknow@gmail.com")
-    smtp_password = os.getenv("SMTP_PASSWORD")
-    smtp_from = os.getenv("SMTP_FROM", "initiative.lucknow@gmail.com")
-    smtp_port = int(os.getenv("SMTP_PORT", "587"))
-    app_base_url = os.getenv("APP_BASE_URL", "").rstrip("/")
-
-    if not (smtp_host and smtp_user and smtp_password):
-        return "Not sent: SMTP is not configured (set SMTP_PASSWORD on the host)."
-
-    reset_link = f"{app_base_url}/reset-password?token={token}" if app_base_url else f"(reset code: {token})"
-    body = (
-        f"Hello {user.username},\n\n"
-        f"Use this link to reset your Initiative ERP password:\n{reset_link}\n\n"
-        f"This link expires in 30 minutes. If you didn't request this, you can ignore this email."
-    )
-    message = MIMEText(body)
-    message["Subject"] = "Initiative ERP - Password Reset"
-    message["From"] = smtp_from
-    message["To"] = user.email
-
-    try:
-        with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as server:
-            server.starttls()
-            server.login(smtp_user, smtp_password)
-            server.sendmail(smtp_from, [user.email], message.as_string())
-    except Exception as exc:  # noqa: BLE001
-        return f"Not sent: email delivery failed ({exc})."
-
-    return "Reset email sent."
-
-
-@app.post("/auth/forgot-password")
-def forgot_password(payload: schemas.ForgotPasswordRequest, db: Session = Depends(get_db)):
-    """Step 1: look up the account and, if found, email a one-time reset
-    link. Always returns the same generic message either way, so this
-    endpoint can't be used to check whether a username/email exists."""
-    username = (payload.username or "").strip()
-    email = (payload.email or "").strip()
-    generic_message = {
-        "message": "If an account matches those details, a password reset email has been sent."
-    }
-    if not username and not email:
-        raise HTTPException(status_code=400, detail="Enter username or email to reset the password")
-
-    query = db.query(models.User)
-    if username and email:
-        user = query.filter((models.User.username == username) | (models.User.email == email)).first()
-    elif username:
-        user = query.filter(models.User.username == username).first()
-    else:
-        user = query.filter(models.User.email == email).first()
-
-    if user:
-        token = uuid4().hex
-        user.reset_token = token
-        user.reset_token_expires = datetime.utcnow() + timedelta(minutes=30)
-        db.commit()
-        result = send_password_reset_email(user, token)
-        print(f"[forgot-password] {user.username}: {result}")
-
-    return generic_message
-
-
-@app.post("/auth/reset-password")
-def reset_password(payload: schemas.ResetPasswordConfirm, db: Session = Depends(get_db)):
-    """Step 2: person submits the token from their email plus a new
-    password. Only succeeds if the token matches and hasn't expired."""
-    if payload.new_password != payload.confirm_password:
-        raise HTTPException(status_code=400, detail="New password and confirm password do not match")
-
-    user = db.query(models.User).filter(models.User.reset_token == payload.token).first()
-    if not user or not user.reset_token_expires or user.reset_token_expires < datetime.utcnow():
-        raise HTTPException(status_code=400, detail="Reset link is invalid or has expired. Request a new one.")
-
-    user.password_hash = auth.hash_password(payload.new_password)
-    user.reset_token = None
-    user.reset_token_expires = None
-    db.commit()
-
-    return {"message": "Password updated successfully"}
 
 
 @app.get("/me", response_model=schemas.UserOut)
@@ -1463,6 +1362,7 @@ def serialize_user_with_brands(user: models.User) -> dict:
         "category_code": user.category_code,
         "brand_ids": [ub.brand_id for ub in user.brands],
         "status": user.status,
+        "created_date": user.created_date,
     }
 
 
@@ -1485,6 +1385,46 @@ def list_users_for_admin(
 ):
     users = db.query(models.User).order_by(models.User.username).all()
     return [serialize_user_with_brands(u) for u in users]
+
+
+@app.get("/api/users/count", response_model=schemas.UserCountOut)
+def count_registered_users(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_roles("Admin")),
+):
+    """Total number of accounts registered on this system, plus a
+    breakdown by role, shown on the Admin dashboard."""
+    rows = db.query(models.User.role, func.count(models.User.id)).group_by(models.User.role).all()
+    by_role = {role: count for role, count in rows}
+    return {"total": sum(by_role.values()), "by_role": by_role}
+
+
+@app.post("/api/users/{user_id}/reset-password")
+def admin_reset_user_password(
+    user_id: int,
+    payload: schemas.AdminPasswordReset,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_roles("Admin")),
+):
+    """Admin-only account recovery: directly set a new password for any
+    user. This replaces the old email-based forgot-password flow, since
+    outbound account-recovery email isn't configured in this deployment -
+    a user who's locked out should ask an Admin to reset their password
+    here instead."""
+    target_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    new_password = (payload.new_password or "").strip()
+    if len(new_password) < 4:
+        raise HTTPException(status_code=400, detail="New password must be at least 4 characters")
+
+    target_user.password_hash = auth.hash_password(new_password)
+    target_user.reset_token = None
+    target_user.reset_token_expires = None
+    db.commit()
+
+    return {"message": f"Password reset for {target_user.username}"}
 
 
 @app.patch("/api/users/{user_id}/assignments", response_model=schemas.UserAdminOut)

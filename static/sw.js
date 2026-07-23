@@ -1,16 +1,12 @@
-// Bumped to v7: earlier versions could end up caching API responses like
-// /brands, /categories, /subcategories, /stores, /api/me, etc. (anything
-// not explicitly excluded), so a phone that cached the brand list before a
-// new brand (e.g. Redmi) was added would keep serving that stale list
-// forever. Bumping the cache name forces every existing install to drop
-// its old cache on the next activate, and the fetch handler below now only
-// ever caches page navigations and static assets - never API/data calls.
-const CACHE_NAME = 'initiative-erp-v7';
+// Bumped to v8: the email-based forgot-password/reset-password pages were
+// removed (account recovery is now Admin-only, via the dashboard's User
+// Management panel), so those two routes no longer exist and must not stay
+// cached on devices that visited them before. Bumping the cache name forces
+// every existing install to drop its old cache on the next activate.
+const CACHE_NAME = 'initiative-erp-v8';
 const CORE_ASSETS = [
   '/login',
   '/signup',
-  '/forgot-password',
-  '/reset-password',
   '/home',
   '/dashboard',
   '/purchase-orders',

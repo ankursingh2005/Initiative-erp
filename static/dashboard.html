@@ -1317,11 +1317,50 @@
       </div>
     </div>
 
+    <div class="card section-hero-card" id="userManagementCard" style="display:none; margin-top:20px;">
+      <h3 class="section-hero-title collapsible" onclick="toggleSectionBody('userManagementBody', this)">User Management<span class="section-toggle-chevron">&#9662;</span></h3>
+      <div class="section-body" id="userManagementBody" style="display:none;">
+        <p class="muted section-hero-subtitle">Since account-recovery email isn't configured on this system, a user who forgets their password should contact you to have it reset here. This also shows every account that has been registered.</p>
+        <div id="userCountSummary" style="margin:4px 0 16px; display:flex; flex-wrap:wrap; gap:8px; align-items:center;"></div>
+        <div class="table-wrap">
+          <table class="wide-table table-zebra">
+            <thead>
+              <tr>
+                <th>Username</th><th>Email</th><th>Role</th><th>Store/Category</th><th>Status</th><th>Registered</th><th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="userManagementTableBody"></tbody>
+          </table>
+        </div>
+        <div id="userManagementMsg" class="msg"></div>
+      </div>
+    </div>
+
     <div class="card" id="adminLinks" style="display:none; margin-top:20px;">
       <h3 class="admin-tools-title collapsible" onclick="toggleSectionBody('adminLinksBody', this)">Admin Tools<span class="section-toggle-chevron">&#9662;</span></h3>
       <div class="section-body" id="adminLinksBody" style="display:none;">
       <p>Admin users can open the full API docs to review schemes, brands, stores, claims and users.</p>
       <a class="link-btn" href="docs" target="_blank">Open API docs</a>
+      </div>
+    </div>
+  </div>
+
+  <div id="resetPasswordModal" class="modal-backdrop" aria-hidden="true" onclick="if (event.target === this) closeResetPasswordModal()">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="resetPasswordTitle">
+      <h3 id="resetPasswordTitle">Reset password</h3>
+      <p style="margin-top:0;">Set a new password for <strong id="resetPasswordUsername"></strong>. They'll need to log in again with this password.</p>
+      <div class="field">
+        <label>New Password</label>
+        <input id="resetPasswordNew" type="password" placeholder="Enter new password" autocomplete="new-password" />
+      </div>
+      <div class="field">
+        <label>Confirm Password</label>
+        <input id="resetPasswordConfirm" type="password" placeholder="Confirm new password" autocomplete="new-password" />
+      </div>
+      <div id="resetPasswordError" class="msg" style="display:none; text-align:left; margin:0 0 12px;"></div>
+      <div class="modal-actions">
+        <button type="button" class="modal-cancel" onclick="closeResetPasswordModal()">Cancel</button>
+        <button type="button" class="modal-confirm" id="resetPasswordConfirmBtn" style="background:#155eef;" onclick="confirmResetPassword()">Reset Password</button>
       </div>
     </div>
   </div>
@@ -2862,6 +2901,115 @@
       `).join('') || '<tr><td colspan="8" class="empty">No scheme-matched sales found for this range</td></tr>';
     }
 
+    function formatDateShort(value) {
+      if (!value) return '-';
+      const d = new Date(value);
+      if (isNaN(d.getTime())) return '-';
+      return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    }
+
+    let resetPasswordTargetId = null;
+
+    async function loadUserManagement() {
+      const [usersRes, countRes] = await Promise.all([
+        authFetch('/api/users'),
+        authFetch('/api/users/count')
+      ]);
+      if (!usersRes || !countRes) return;
+      const users = await usersRes.json();
+      const countData = await countRes.json();
+      renderUserCountSummary(countData);
+      renderUserManagementTable(users);
+    }
+
+    function renderUserCountSummary(countData) {
+      const wrap = document.getElementById('userCountSummary');
+      const roleChips = Object.entries(countData.by_role || {})
+        .sort((a, b) => b[1] - a[1])
+        .map(([roleName, count]) => `<span class="pill" style="font-size:12px;">${roleName}: ${count}</span>`)
+        .join('');
+      wrap.innerHTML = `<span class="pill" style="background:#111111; color:#fff; font-weight:700;">${countData.total} account${countData.total === 1 ? '' : 's'} registered</span>${roleChips}`;
+    }
+
+    function renderUserManagementTable(users) {
+      const tbody = document.getElementById('userManagementTableBody');
+      tbody.innerHTML = users.map(u => {
+        const scope = u.role === 'StoreManager'
+          ? (stores.find(s => String(s.id) === String(u.store_id))?.name || (u.store_id ?? '-'))
+          : (u.category_code || '-');
+        return `
+          <tr>
+            <td>${u.username}</td>
+            <td>${u.email}</td>
+            <td>${u.role}</td>
+            <td>${scope}</td>
+            <td>${u.status}</td>
+            <td>${formatDateShort(u.created_date)}</td>
+            <td><button type="button" onclick="openResetPasswordModal(${u.id}, '${String(u.username).replace(/'/g, "\\'")}')" style="width:auto; padding:6px 10px; background:#155eef;">Reset Password</button></td>
+          </tr>
+        `;
+      }).join('') || '<tr><td colspan="7" class="empty">No registered accounts found</td></tr>';
+    }
+
+    function openResetPasswordModal(userId, usernameLabel) {
+      resetPasswordTargetId = userId;
+      document.getElementById('resetPasswordUsername').textContent = usernameLabel;
+      document.getElementById('resetPasswordNew').value = '';
+      document.getElementById('resetPasswordConfirm').value = '';
+      const err = document.getElementById('resetPasswordError');
+      err.style.display = 'none';
+      err.textContent = '';
+      document.getElementById('resetPasswordModal').classList.add('show');
+      document.getElementById('resetPasswordModal').setAttribute('aria-hidden', 'false');
+    }
+
+    function closeResetPasswordModal() {
+      resetPasswordTargetId = null;
+      document.getElementById('resetPasswordModal').classList.remove('show');
+      document.getElementById('resetPasswordModal').setAttribute('aria-hidden', 'true');
+    }
+
+    async function confirmResetPassword() {
+      const err = document.getElementById('resetPasswordError');
+      err.style.display = 'none';
+      err.textContent = '';
+
+      const newPassword = document.getElementById('resetPasswordNew').value;
+      const confirmPassword = document.getElementById('resetPasswordConfirm').value;
+
+      if (!newPassword || newPassword.length < 4) {
+        err.textContent = 'Password must be at least 4 characters.';
+        err.style.display = 'block';
+        return;
+      }
+      if (newPassword !== confirmPassword) {
+        err.textContent = 'New password and confirm password do not match.';
+        err.style.display = 'block';
+        return;
+      }
+
+      const btn = document.getElementById('resetPasswordConfirmBtn');
+      btn.disabled = true;
+      try {
+        const response = await authFetch(`/api/users/${resetPasswordTargetId}/reset-password`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ new_password: newPassword })
+        });
+        if (!response) return;
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          err.textContent = data.detail || 'Unable to reset password';
+          err.style.display = 'block';
+          return;
+        }
+        closeResetPasswordModal();
+        showSaveSuccessPopup(data.message || 'Password reset successfully');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
     async function loadInitialData() {
       const meRes = await authFetch('/me');
       if (!meRes) return;
@@ -2872,6 +3020,8 @@
 
       if (effectiveRole === 'Admin') {
         document.getElementById('adminLinks').style.display = 'block';
+        document.getElementById('userManagementCard').style.display = 'block';
+        await loadUserManagement();
       }
 
       const storesRes = await authFetch('/stores');

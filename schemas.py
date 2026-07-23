@@ -291,6 +291,20 @@ class UserOut(BaseModel):
         from_attributes = True
 
 
+class UserCountOut(BaseModel):
+    """How many accounts have been registered in total, plus a breakdown by
+    role. Shown to Admin on the dashboard."""
+    total: int
+    by_role: dict
+
+
+class AdminPasswordReset(BaseModel):
+    """Admin-only: directly set a new password for any user. Replaces the
+    old email-based forgot-password flow, since outbound account-recovery
+    email is not configured in this deployment."""
+    new_password: str
+
+
 class MyProfileOut(BaseModel):
     """Returned by GET /api/me. Used by the Purchase Orders page to scope a
     Category Manager's Division and Brand dropdowns to only what's assigned
@@ -313,6 +327,7 @@ class UserAdminOut(BaseModel):
     category_code: Optional[str]
     brand_ids: List[int] = []
     status: str
+    created_date: Optional[datetime] = None
 
 
 class UserAssignmentUpdate(BaseModel):
@@ -373,22 +388,6 @@ class Token(BaseModel):
     token_type: str
     role: str
     username: str
-
-
-class ForgotPasswordRequest(BaseModel):
-    """Step 1: person asks for a reset link. We always respond the same way
-    whether or not the account exists, so this endpoint can't be used to
-    check who has an account (username/email enumeration)."""
-    username: Optional[str] = None
-    email: Optional[str] = None
-
-
-class ResetPasswordConfirm(BaseModel):
-    """Step 2: person clicks the emailed link and submits the token that
-    came with it, along with their new password."""
-    token: str
-    new_password: str
-    confirm_password: str
 
 
 class PurchaseOrderItemCreate(BaseModel):
