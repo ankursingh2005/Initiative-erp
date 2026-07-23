@@ -2533,8 +2533,9 @@ def delete_scheme(
             detail="This scheme has claims linked to it and can't be deleted. Pause it instead.",
         )
 
-    # SchemeCondition and SchemeSlab rows are removed automatically via the
-    # cascade="all, delete-orphan" relationship on the Scheme model.
+    # SchemeCondition, SchemeSlab, and SchemeAttachment rows are removed
+    # automatically via the cascade="all, delete-orphan" relationships on
+    # the Scheme model.
     db.delete(scheme)
     db.commit()
     return {"message": f"Scheme {scheme_id} deleted"}

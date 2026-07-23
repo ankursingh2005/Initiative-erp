@@ -122,6 +122,9 @@ class Scheme(Base):
     slabs = relationship(
         "SchemeSlab", back_populates="scheme", cascade="all, delete-orphan"
     )
+    attachments = relationship(
+        "SchemeAttachment", back_populates="scheme", cascade="all, delete-orphan"
+    )
 
 
 class SchemeCondition(Base):
@@ -185,7 +188,7 @@ class SchemeAttachment(Base):
 
     created_date = Column(DateTime, default=datetime.utcnow)
 
-    scheme = relationship("Scheme", backref="attachments")
+    scheme = relationship("Scheme", back_populates="attachments")
 
 
 # ============================================================
