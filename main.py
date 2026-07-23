@@ -2115,13 +2115,13 @@ def list_schemes(
 
 @app.get("/schemes/my-attachments")
 def list_my_scheme_attachments(
-    current_user: models.User = Depends(auth.require_roles("Admin", "BrandManager", "BrandPartner")),
+    current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Upload history for a brand promoter/manager. Deliberately excludes
-    the extracted scheme fields (offer, reward value, target, etc.) -
-    those stay hidden until an Admin reviews and activates the Draft.
-    Non-admins only ever see their own uploads."""
+    """Upload history for whoever attached the document. Deliberately
+    excludes the extracted scheme fields (offer, reward value, target,
+    etc.) - those stay hidden until an Admin reviews and activates the
+    Draft. Non-admins only ever see their own uploads."""
     query = db.query(models.SchemeAttachment).order_by(models.SchemeAttachment.id.desc())
     if current_user.role != "Admin":
         query = query.filter(models.SchemeAttachment.uploaded_by_user_id == current_user.id)
@@ -2226,13 +2226,13 @@ def upload_scheme_document(
     file: UploadFile = File(...),
     brand_id: Optional[int] = Query(None),
     scheme_name: Optional[str] = Query(None),
-    current_user: models.User = Depends(auth.require_roles("Admin", "BrandManager", "BrandPartner")),
+    current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(get_db),
 ):
-    """A promoter/brand manager attaches a scheme circular (image, PDF, or
+    """Any logged-in user can attach a scheme circular (image, PDF, or
     Excel). This creates a Draft scheme and saves the document. When an
     Admin uploads directly, Claude reads it immediately (Admin already
-    reviews everything). When a promoter/brand manager uploads, extraction
+    reviews everything). When anyone else uploads, extraction
     is deferred - the document just sits in "Draft Schemes Pending
     Review" until an Admin clicks "Extract (OCR)" there. Either way, Admin
     reviews and hits Activate (existing PUT /schemes/{id}/activate) when
@@ -2533,9 +2533,16 @@ def delete_scheme(
             detail="This scheme has claims linked to it and can't be deleted. Pause it instead.",
         )
 
-    # SchemeCondition, SchemeSlab, and SchemeAttachment rows are removed
-    # automatically via the cascade="all, delete-orphan" relationships on
-    # the Scheme model.
+    # Delete child rows explicitly and in this order (attachments/slabs/
+    # conditions all have a NOT NULL scheme_id). We don't rely on the
+    # relationship cascade="all, delete-orphan" alone here — depending on
+    # what's already loaded in the session, SQLAlchemy can try to detach a
+    # child by setting its scheme_id to NULL instead of deleting the row,
+    # which fails against the NOT NULL constraint. Bulk-deleting by query
+    # issues a direct DELETE for each table and avoids that entirely.
+    db.query(models.SchemeAttachment).filter(models.SchemeAttachment.scheme_id == scheme_id).delete(synchronize_session=False)
+    db.query(models.SchemeSlab).filter(models.SchemeSlab.scheme_id == scheme_id).delete(synchronize_session=False)
+    db.query(models.SchemeCondition).filter(models.SchemeCondition.scheme_id == scheme_id).delete(synchronize_session=False)
     db.delete(scheme)
     db.commit()
     return {"message": f"Scheme {scheme_id} deleted"}
