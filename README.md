@@ -34,7 +34,7 @@ python -m uvicorn main:app --reload
 Open:
 
 - App:https://scheme-management-for-idspl.onrender.com
-- 
+  
 Optional dependencies for file-based analytics uploads:
 
 ```powershell
