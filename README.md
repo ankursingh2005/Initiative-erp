@@ -33,9 +33,8 @@ python -m uvicorn main:app --reload
 
 Open:
 
-- App: http://127.0.0.1:8000/login
-- API Docs: http://127.0.0.1:8000/docs
-
+- App:https://scheme-management-for-idspl.onrender.com
+- 
 Optional dependencies for file-based analytics uploads:
 
 ```powershell
@@ -169,6 +168,3 @@ Redeploy (or just save the environment changes - Render restarts the service aut
 - Use SQLite for a small single-server setup, or PostgreSQL on the VM for better reliability.
 - Full setup instructions are in `ORACLE_CLOUD_FREE_TIER_SETUP.md`.
 
-## License
-
-No license file is included yet.
