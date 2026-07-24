@@ -8,7 +8,10 @@ IDSPL is a FastAPI-based ERP application for managing scheme-driven sales, claim
 - Role-based access for Admin, Category Manager, Brand Manager, Brand Partner, Accounts, and MIS Executive
 - Sales entry, scoped visibility, and claim tracking
 - Scheme creation, activation, pause, and mapping workflows
-- Interval sales analytics upload and reporting
+- Scheme document upload with Claude-powered OCR/extraction into Draft schemes for Admin review
+- Interval sales analytics upload and reporting, with a Scheme-Matched Sales profitability view
+- Purchase Orders with WhatsApp alerts and emailed PO documents
+- Admin-managed user list and password reset (no outbound account-recovery email)
 - Static dashboard UI served directly by FastAPI
 
 ## Tech Stack
@@ -112,9 +115,20 @@ To send an alert to MIS Executive through WhatsApp, configure a WhatsApp Cloud A
 
 The PO is saved even when WhatsApp is not configured or its provider rejects a message. WhatsApp Business may require an approved message template for business-initiated alerts outside the customer service window.
 
-## Email sending (PO emails and password reset)
+## Account recovery (Admin-managed, no email)
 
-Both the "Final Order" / "Send PO Email" action and the "Forgot password" flow send real emails through SMTP. In code, the host, username, port, and from-address already default to the company Gmail mailbox:
+There is no "forgot password" email flow. A locked-out user is told on the login page to ask their Admin. Instead:
+
+- Admin logs in and opens **Purchase Orders -> Manage Users** (visible only to the Admin role).
+- The panel lists every registered account (username, email, role, status) and shows the total number of registered accounts, broken down by role, on the Schemes dashboard too.
+- Clicking **Reset Password** on any user opens a small dialog to set a new password directly. No email is sent, no token or expiring link is involved, and it works identically whether or not SMTP is configured.
+- This calls `POST /api/users/{user_id}/reset-password`, Admin-only, which hashes and saves the new password and invalidates any old reset token that may still exist from before this flow was introduced.
+
+The old email-based `/auth/forgot-password` and `/auth/reset-password` endpoints, and the `forgot_password.html` / `reset_password.html` pages, no longer exist in this codebase.
+
+## Email sending (Purchase Order emails)
+
+The "Final Order" / "Send PO Email" action on a Purchase Order sends a real email through SMTP. In code, the host, username, port, and from-address already default to the company Gmail mailbox:
 
 - `SMTP_HOST` defaults to `smtp.gmail.com`
 - `SMTP_USER` / `SMTP_FROM` default to `initiative.lucknow@gmail.com`
@@ -136,19 +150,18 @@ In the Render dashboard, open the `idspl` web service -> **Environment**, and ad
 | Key | Value |
 |---|---|
 | `SMTP_PASSWORD` | the 16-character app password from step 1 |
-| `APP_BASE_URL` | your service's public URL, e.g. `https://idspl.onrender.com` (no trailing slash) - used to build the working link inside password-reset emails |
 
-`render.yaml` already declares both keys with `sync: false`, so if you deploy via Blueprint, Render will prompt you for these values instead of trying to read them from the repo (and they're never committed).
+`render.yaml` already declares this key with `sync: false`, so if you deploy via Blueprint, Render will prompt you for it instead of trying to read it from the repo (and it's never committed).
 
 Redeploy (or just save the environment changes - Render restarts the service automatically) and test:
 
 - Purchase Orders -> process a request -> **Send PO Email** or **Final Order**. The response message should say `Emailed to N recipient(s).` instead of `Not sent: ...`.
-- Login page -> **Forgot password** with a real account's email - you should receive a reset link email from `initiative.lucknow@gmail.com`.
 
 ### Notes
 
 - If SMTP fails (wrong app password, Gmail blocking the login, network issue), the PO/request itself is still saved - only the email send is reported as failed, so nothing is lost.
 - To send from a different mailbox instead, just override `SMTP_HOST`, `SMTP_USER`, `SMTP_FROM`, and `SMTP_PASSWORD` with that provider's values; nothing else in the code needs to change.
+- SMTP configuration only affects Purchase Order emails now. Account recovery never uses email - see "Account recovery" above.
 
 ## Oracle Cloud Free Tier
 
