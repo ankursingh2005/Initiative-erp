@@ -10,6 +10,7 @@
       --ink:#1d2939; --muted:#667085; --line:#e4e7ec; --bg:#f5f7fa; --card:#fff;
       --brand:#155eef; --brand-dark:#0d3fb0; --brand-glow:#e8f0ff;
       --accent:#d95f00; --accent-dark:#a94800; --accent-glow:#fff1e6;
+      --ai:#7c3aed; --ai-dark:#5b21b6; --ai-glow:#f1e8ff;
       --good:#027a48;
     }
     * { box-sizing:border-box; }
@@ -45,20 +46,24 @@
     .hero .subtitle { margin:0; color:#9aa4b2; font-size:15px; max-width:560px; line-height:1.55; }
 
     main { max-width:1080px; margin:-56px auto 0; padding:0 22px 80px; position:relative; z-index:1; }
-    .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:22px; }
+    .grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:22px; }
     .tile { position:relative; overflow:hidden; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:30px 26px; box-shadow:0 20px 40px rgba(16,24,40,.14); transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease; opacity:0; transform:translateY(14px); animation:riseIn .5s ease forwards; }
     .tile:nth-child(2) { animation-delay:.08s; }
+    .tile:nth-child(3) { animation-delay:.16s; }
     .tile:hover { transform:translateY(-4px); box-shadow:0 24px 48px rgba(16,24,40,.18); border-color:transparent; }
     .tile::before { content:''; position:absolute; top:0; left:0; right:0; height:4px; }
     .tile.schemes::before { background:linear-gradient(90deg, var(--brand), var(--brand-dark)); }
     .tile.po::before { background:linear-gradient(90deg, var(--accent), var(--accent-dark)); }
+    .tile.ai::before { background:linear-gradient(90deg, var(--ai), var(--ai-dark)); }
     .tile-glow { position:absolute; top:-60px; right:-60px; width:180px; height:180px; border-radius:50%; filter:blur(10px); opacity:.55; animation:pulse 5s ease-in-out infinite; pointer-events:none; }
     .tile.schemes .tile-glow { background:radial-gradient(circle, var(--brand-glow), transparent 70%); }
     .tile.po .tile-glow { background:radial-gradient(circle, var(--accent-glow), transparent 70%); }
+    .tile.ai .tile-glow { background:radial-gradient(circle, var(--ai-glow), transparent 70%); }
 
     .icon-badge { position:relative; width:56px; height:56px; border-radius:14px; display:flex; align-items:center; justify-content:center; margin-bottom:20px; }
     .tile.schemes .icon-badge { background:linear-gradient(135deg, var(--brand), var(--brand-dark)); box-shadow:0 8px 18px rgba(21,94,239,.28); }
     .tile.po .icon-badge { background:linear-gradient(135deg, var(--accent), var(--accent-dark)); box-shadow:0 8px 18px rgba(217,95,0,.28); }
+    .tile.ai .icon-badge { background:linear-gradient(135deg, var(--ai), var(--ai-dark)); box-shadow:0 8px 18px rgba(124,58,237,.28); }
     .icon-badge svg { width:28px; height:28px; }
 
     .tile h2 { margin:0 0 8px; font-size:19px; }
@@ -68,11 +73,14 @@
     .tile.schemes .tile-btn:hover { background:var(--brand-dark); gap:11px; }
     .tile.po .tile-btn { background:var(--accent); }
     .tile.po .tile-btn:hover { background:var(--accent-dark); gap:11px; }
+    .tile.ai .tile-btn { background:var(--ai); }
+    .tile.ai .tile-btn:hover { background:var(--ai-dark); gap:11px; }
     .tile-btn svg { width:14px; height:14px; }
 
     @keyframes riseIn { to { opacity:1; transform:translateY(0); } }
     @keyframes pulse { 0%,100% { transform:scale(1); opacity:.5; } 50% { transform:scale(1.15); opacity:.7; } }
 
+    @media(max-width:920px) { .grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
     @media(max-width:700px) { .grid { grid-template-columns:1fr; } .hero h1 { font-size:27px; } .hero { padding:40px 16px 76px; } main { margin-top:-44px; padding:0 16px 60px; } header { flex-wrap:wrap; row-gap:8px; } .brand { font-size:14px; } .header-right { width:100%; justify-content:space-between; } }
     @media(max-width:420px) { .tile { padding:22px 18px; } .success-card { padding:28px 24px; } }
 
@@ -172,6 +180,20 @@
         <h2>Purchase Orders</h2>
         <p class="desc">Create stock requisitions and track the Busy purchase order process.</p>
         <a class="tile-btn" href="/purchase-orders">Open Purchase Orders
+          <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>
+        </a>
+      </article>
+
+      <article class="tile ai">
+        <div class="tile-glow"></div>
+        <div class="icon-badge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 3v18h18"></path><path d="M7 15l4-5 3 3 5-7"></path><circle cx="7" cy="15" r="1.2" fill="#fff" stroke="none"></circle><circle cx="11" cy="10" r="1.2" fill="#fff" stroke="none"></circle><circle cx="14" cy="13" r="1.2" fill="#fff" stroke="none"></circle><circle cx="19" cy="6" r="1.2" fill="#fff" stroke="none"></circle>
+          </svg>
+        </div>
+        <h2>AI Analysis</h2>
+        <p class="desc">Upload a sales export and get an instant profitability dashboard with recommendations.</p>
+        <a class="tile-btn" href="/analytics">Open AI Analysis
           <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>
         </a>
       </article>

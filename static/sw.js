@@ -1,15 +1,15 @@
-// Bumped to v8: the email-based forgot-password/reset-password pages were
-// removed (account recovery is now Admin-only, via the dashboard's User
-// Management panel), so those two routes no longer exist and must not stay
-// cached on devices that visited them before. Bumping the cache name forces
-// every existing install to drop its old cache on the next activate.
-const CACHE_NAME = 'initiative-erp-v8';
+// Bumped to v9: added the new /analytics (AI Analysis) page to the core
+// asset list. Bumping the cache name forces every existing install to drop
+// its old cache on the next activate, so the new page shell gets prefetched
+// too instead of only being cached the first time a user happens to visit it.
+const CACHE_NAME = 'initiative-erp-v9';
 const CORE_ASSETS = [
   '/login',
   '/signup',
   '/home',
   '/dashboard',
   '/purchase-orders',
+  '/analytics',
   '/manifest.webmanifest',
   '/static/Initiative%20logo.png'
 ];

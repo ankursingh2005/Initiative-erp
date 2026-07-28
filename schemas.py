@@ -379,6 +379,14 @@ class SupplierProfileOut(BaseModel):
 
 
 
+class AnalyticsReassignRequest(BaseModel):
+    """Bulk-reassign the Division of specific staged rows during the AI
+    Analysis upload review step, before the data is committed to the
+    dashboard."""
+    row_ids: List[int]
+    division: str
+
+
 class MarkExportedToBusyRequest(BaseModel):
     purchase_order_ids: List[int]
 

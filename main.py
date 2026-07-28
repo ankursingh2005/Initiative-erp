@@ -7,7 +7,7 @@ from sqlalchemy import inspect, text, func
 from typing import List, Optional
 from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, date, timedelta
-from io import BytesIO
+from io import BytesIO, StringIO
 from collections import defaultdict
 import csv
 import json
@@ -102,6 +102,7 @@ def ensure_database_schema():
     ensure_column("purchase_orders", "exported_to_busy_at", "TIMESTAMP")
     ensure_column("purchase_orders", "approved_by_user_id", "INTEGER")
     ensure_column("purchase_orders", "approved_date", "TIMESTAMP")
+    ensure_column("analytics_sales_rows", "brand", "VARCHAR(150)")
     ensure_column("schemes", "offer_value", "FLOAT")
     ensure_column("schemes", "calculation_method", "VARCHAR(50)")
     ensure_column("schemes", "min_qty", "INTEGER")
@@ -931,6 +932,18 @@ def app_home_page():
 @app.get("/purchase-orders.html")
 def purchase_orders_page():
     return serve_html("static/purchase_orders.html")
+
+
+@app.get("/analytics")
+@app.get("/analytics.html")
+def analytics_page():
+    return serve_html("static/analytics.html")
+
+
+@app.get("/privacy")
+@app.get("/privacy.html")
+def privacy_page():
+    return serve_html("static/privacy.html")
 
 
 @app.get("/manifest.webmanifest")
@@ -3029,3 +3042,947 @@ def update_claim_status(
     return {
         "message": f"Claim {claim_id} status changed from {old_status} to {update.new_status}"
     }
+
+# ============================================================
+# AI ANALYSIS DASHBOARD (home-page "AI Analysis" tile)
+# ============================================================
+# Upload any sales/profitability Excel or CSV export (Date, Item, Sales Amt,
+# Cost Amt, Profit/Loss, and optionally Division/Qty - column names are
+# matched loosely and out of order). Every sheet in a workbook is read, so a
+# single file with one tab per financial year works in one upload. The
+# previous dataset is replaced each time a new file is uploaded - this is a
+# "current snapshot" dashboard, not a historical archive.
+#
+# All KPIs, rankings, and the recommendations panel are computed directly
+# from the uploaded numbers with plain arithmetic/aggregation below - no
+# external AI call is made, so it stays fast, free, and every recommendation
+# can be traced back to a real figure in the data.
+
+ANALYTICS_HEADER_ALIASES = {
+    "sale_date": {"date", "invoicedate", "saledate", "billdate"},
+    "vch_no": {"vchno", "voucherno", "invoiceno", "billno"},
+    "item": {"item", "product", "itemname", "description"},
+    "qty": {"qty", "quantity"},
+    "sales_amt": {"salesamt", "salesamount", "salevalue", "amount", "invoicevalue"},
+    "cost_amt": {"costamt", "costamount", "cost"},
+    "profit_loss": {"profitloss", "grossprofit"},
+    "division": {"division", "div", "segment"},
+}
+
+
+def analytics_canonical_column(normalized_header: str) -> Optional[str]:
+    for canonical, aliases in ANALYTICS_HEADER_ALIASES.items():
+        if normalized_header in aliases:
+            return canonical
+    return None
+
+
+def find_analytics_header_row(table_rows: List[List]) -> tuple:
+    scan_limit = min(len(table_rows), 15)
+    best_index = 0
+    best_score = -1
+    for row_index in range(scan_limit):
+        row = table_rows[row_index] or []
+        normalized = [normalize_header_name(cell) for cell in row]
+        canonicals = {analytics_canonical_column(name) for name in normalized if analytics_canonical_column(name)}
+        canonicals.discard(None)
+        score = len(canonicals)
+        if "sale_date" in canonicals:
+            score += 2
+        if "sales_amt" in canonicals:
+            score += 2
+        if "item" in canonicals:
+            score += 1
+        if score > best_score:
+            best_score = score
+            best_index = row_index
+    return best_index, best_score
+
+
+def parse_analytics_file(filename: str, content: bytes) -> List[dict]:
+    ext = "." + filename.lower().split(".")[-1] if "." in filename else ""
+    rows_out: List[dict] = []
+
+    def build_row(row_dict: dict, source_sheet: Optional[str]) -> Optional[dict]:
+        if not any(str(v or "").strip() for v in row_dict.values()):
+            return None
+        try:
+            sale_date = parse_date_value(row_dict.get("sale_date"))
+        except Exception:
+            return None
+        item = str(row_dict.get("item") or "").strip() or "Unknown Item"
+        division_raw = str(row_dict.get("division") or "").strip()
+        division = division_raw.upper() if division_raw else "UNCATEGORIZED"
+        vch_no = str(row_dict.get("vch_no") or "").strip() or None
+        qty_raw = row_dict.get("qty")
+        qty = parse_float_value(qty_raw, fallback=None) if str(qty_raw or "").strip() else None
+        sales_amt = parse_float_value(row_dict.get("sales_amt"), fallback=0.0)
+        cost_amt = parse_float_value(row_dict.get("cost_amt"), fallback=0.0)
+        profit_loss = parse_float_value(row_dict.get("profit_loss"), fallback=sales_amt - cost_amt)
+        return {
+            "sale_date": sale_date,
+            "item": item,
+            "division": division,
+            "division_from_file": division_raw.upper() if division_raw else None,
+            "vch_no": vch_no,
+            "qty": qty,
+            "sales_amt": sales_amt,
+            "cost_amt": cost_amt,
+            "profit_loss": profit_loss,
+            "source_sheet": source_sheet,
+            "source_file": filename,
+        }
+
+    if ext in {".xlsx", ".xls"}:
+        try:
+            openpyxl_module = importlib.import_module("openpyxl")
+            load_workbook = openpyxl_module.load_workbook
+        except ImportError as exc:
+            raise HTTPException(status_code=400, detail="Excel upload requires openpyxl package. Install: pip install openpyxl") from exc
+
+        workbook = load_workbook(filename=BytesIO(content), data_only=True, read_only=True)
+        for worksheet in workbook.worksheets:
+            raw_rows = [list(row) for row in worksheet.iter_rows(values_only=True)]
+            if not raw_rows:
+                continue
+            header_index, score = find_analytics_header_row(raw_rows)
+            if score < 3:
+                continue
+            headers = [normalize_header_name(cell) for cell in raw_rows[header_index]]
+            canonical_headers = [analytics_canonical_column(h) for h in headers]
+            if "sale_date" not in canonical_headers or "sales_amt" not in canonical_headers:
+                continue
+
+            for row in raw_rows[header_index + 1:]:
+                row_dict = {}
+                for idx, canonical in enumerate(canonical_headers):
+                    if canonical:
+                        row_dict[canonical] = row[idx] if idx < len(row) else None
+                built = build_row(row_dict, worksheet.title)
+                if built:
+                    rows_out.append(built)
+        return rows_out
+
+    if ext == ".csv":
+        decoded = content.decode("utf-8-sig", errors="replace")
+        raw_lines = [line for line in decoded.splitlines() if line.strip()]
+        if not raw_lines:
+            return []
+        preview_rows = [next(csv.reader([line])) for line in raw_lines[:15]]
+        header_index, score = find_analytics_header_row(preview_rows)
+        if score < 3:
+            return []
+
+        data_lines = raw_lines[header_index:]
+        reader = csv.DictReader(data_lines)
+        for input_row in reader:
+            row_dict = {}
+            for key, value in input_row.items():
+                canonical = analytics_canonical_column(normalize_header_name(key))
+                if canonical:
+                    row_dict[canonical] = value
+            built = build_row(row_dict, None)
+            if built:
+                rows_out.append(built)
+        return rows_out
+
+    raise HTTPException(status_code=400, detail="Unsupported file format. Upload an Excel (.xlsx/.xls) or CSV file.")
+
+
+def analytics_fiscal_year_label(d: date) -> str:
+    start_year = d.year if d.month >= 4 else d.year - 1
+    end_year = start_year + 1
+    return f"{start_year}-{str(end_year)[-2:]}"
+
+
+def build_analytics_dashboard(rows: List[models.AnalyticsSalesRow]) -> dict:
+    if not rows:
+        return {"has_data": False}
+
+    total_sales = 0.0
+    total_cost = 0.0
+    total_profit = 0.0
+    dates = []
+
+    item_stats = defaultdict(lambda: {"sales": 0.0, "cost": 0.0, "profit": 0.0, "qty": 0.0, "qty_known": False, "count": 0})
+    division_stats = defaultdict(lambda: {"sales": 0.0, "cost": 0.0, "profit": 0.0, "count": 0})
+    brand_stats = defaultdict(lambda: {"sales": 0.0, "cost": 0.0, "profit": 0.0, "count": 0})
+    monthly_stats = defaultdict(lambda: {"sales": 0.0, "cost": 0.0, "profit": 0.0})
+    yearly_stats = defaultdict(lambda: {"sales": 0.0, "cost": 0.0, "profit": 0.0})
+    division_year_profit = defaultdict(float)
+    month_number_profit = defaultdict(float)  # 1-12, across all years, for seasonality
+
+    for row in rows:
+        total_sales += row.sales_amt or 0.0
+        total_cost += row.cost_amt or 0.0
+        total_profit += row.profit_loss or 0.0
+        dates.append(row.sale_date)
+
+        item = row.item or "Unknown Item"
+        istat = item_stats[item]
+        istat["sales"] += row.sales_amt or 0.0
+        istat["cost"] += row.cost_amt or 0.0
+        istat["profit"] += row.profit_loss or 0.0
+        istat["count"] += 1
+        if row.qty is not None:
+            istat["qty"] += row.qty
+            istat["qty_known"] = True
+
+        division = row.division or "UNCATEGORIZED"
+        dstat = division_stats[division]
+        dstat["sales"] += row.sales_amt or 0.0
+        dstat["cost"] += row.cost_amt or 0.0
+        dstat["profit"] += row.profit_loss or 0.0
+        dstat["count"] += 1
+
+        brand = row.brand or "Unknown Brand"
+        bstat = brand_stats[brand]
+        bstat["sales"] += row.sales_amt or 0.0
+        bstat["cost"] += row.cost_amt or 0.0
+        bstat["profit"] += row.profit_loss or 0.0
+        bstat["count"] += 1
+
+        ym = row.sale_date.strftime("%Y-%m")
+        mstat = monthly_stats[ym]
+        mstat["sales"] += row.sales_amt or 0.0
+        mstat["cost"] += row.cost_amt or 0.0
+        mstat["profit"] += row.profit_loss or 0.0
+
+        fy = analytics_fiscal_year_label(row.sale_date)
+        ystat = yearly_stats[fy]
+        ystat["sales"] += row.sales_amt or 0.0
+        ystat["cost"] += row.cost_amt or 0.0
+        ystat["profit"] += row.profit_loss or 0.0
+
+        division_year_profit[(division, fy)] += row.profit_loss or 0.0
+        month_number_profit[row.sale_date.month] += row.profit_loss or 0.0
+
+    def margin(sales, profit):
+        return round((profit / sales) * 100, 2) if sales else 0.0
+
+    overall_margin = margin(total_sales, total_profit)
+
+    def item_out(name, stats):
+        return {
+            "item": name,
+            "sales": round(stats["sales"], 2),
+            "cost": round(stats["cost"], 2),
+            "profit": round(stats["profit"], 2),
+            "margin_percent": margin(stats["sales"], stats["profit"]),
+            "qty": round(stats["qty"], 2) if stats["qty_known"] else None,
+            "transactions": stats["count"],
+        }
+
+    all_items = [item_out(name, stats) for name, stats in item_stats.items()]
+    top_profit_items = sorted(all_items, key=lambda x: x["profit"], reverse=True)[:10]
+    top_revenue_items = sorted(all_items, key=lambda x: x["sales"], reverse=True)[:10]
+    loss_items = sorted([i for i in all_items if i["profit"] < 0], key=lambda x: x["profit"])[:10]
+    qty_known_items = [i for i in all_items if i["qty"] is not None]
+    top_qty_items = sorted(qty_known_items, key=lambda x: x["qty"], reverse=True)[:10]
+
+    # Margin leaders/laggards - only among items with enough transactions to
+    # be meaningful (avoids one lucky/unlucky single sale skewing the list).
+    margin_eligible = [i for i in all_items if i["transactions"] >= 3 and i["sales"] > 0]
+    top_margin_items = sorted(margin_eligible, key=lambda x: x["margin_percent"], reverse=True)[:10]
+    bottom_margin_items = sorted(margin_eligible, key=lambda x: x["margin_percent"])[:10]
+
+    division_breakdown = []
+    for name, stats in division_stats.items():
+        division_breakdown.append({
+            "division": name,
+            "sales": round(stats["sales"], 2),
+            "cost": round(stats["cost"], 2),
+            "profit": round(stats["profit"], 2),
+            "margin_percent": margin(stats["sales"], stats["profit"]),
+            "transactions": stats["count"],
+            "profit_share_percent": round((stats["profit"] / total_profit) * 100, 2) if total_profit else 0.0,
+        })
+    division_breakdown.sort(key=lambda x: x["profit"], reverse=True)
+
+    brand_breakdown = []
+    for name, stats in brand_stats.items():
+        brand_breakdown.append({
+            "brand": name,
+            "sales": round(stats["sales"], 2),
+            "cost": round(stats["cost"], 2),
+            "profit": round(stats["profit"], 2),
+            "margin_percent": margin(stats["sales"], stats["profit"]),
+            "transactions": stats["count"],
+        })
+    brand_breakdown.sort(key=lambda x: x["profit"], reverse=True)
+    brand_breakdown = brand_breakdown[:15]
+
+    monthly_trend = [
+        {"period": ym, "sales": round(s["sales"], 2), "cost": round(s["cost"], 2), "profit": round(s["profit"], 2)}
+        for ym, s in sorted(monthly_stats.items())
+    ]
+    yearly_trend = [
+        {"period": fy, "sales": round(s["sales"], 2), "cost": round(s["cost"], 2), "profit": round(s["profit"], 2), "margin_percent": margin(s["sales"], s["profit"])}
+        for fy, s in sorted(yearly_stats.items())
+    ]
+
+    # ---------------- Recommendations (rule-based, computed from the
+    # aggregates above - every number quoted is real, nothing is invented) ----
+    recommendations = []
+
+    if division_breakdown:
+        leader = division_breakdown[0]
+        if leader["profit"] > 0:
+            recommendations.append({
+                "type": "opportunity",
+                "priority": "high",
+                "title": f"{leader['division']} is your leading profit driver",
+                "detail": f"It contributed ₹{leader['profit']:,.0f} in profit, {leader['profit_share_percent']:.1f}% of total profit across the uploaded data. Prioritize stock availability and scheme/promotional support here to protect this contribution.",
+            })
+
+    # YoY growth/decline per division, comparing the two most recent fiscal
+    # years that division has data for.
+    division_years = defaultdict(dict)
+    for (division, fy), profit in division_year_profit.items():
+        division_years[division][fy] = profit
+    for division, year_map in division_years.items():
+        years_sorted = sorted(year_map.keys())
+        if len(years_sorted) < 2:
+            continue
+        prev_fy, latest_fy = years_sorted[-2], years_sorted[-1]
+        prev_profit, latest_profit = year_map[prev_fy], year_map[latest_fy]
+        if prev_profit == 0:
+            continue
+        change_pct = ((latest_profit - prev_profit) / abs(prev_profit)) * 100
+        if change_pct <= -15:
+            recommendations.append({
+                "type": "decline",
+                "priority": "high",
+                "title": f"{division} profit declined {abs(change_pct):.0f}% year-on-year",
+                "detail": f"FY {prev_fy} → FY {latest_fy}: ₹{prev_profit:,.0f} → ₹{latest_profit:,.0f}. Consider a fresh scheme, a pricing/cost review, or a promotional push to reverse the trend.",
+            })
+        elif change_pct >= 15:
+            recommendations.append({
+                "type": "growth",
+                "priority": "medium",
+                "title": f"{division} profit grew {change_pct:.0f}% year-on-year",
+                "detail": f"FY {prev_fy} → FY {latest_fy}: ₹{prev_profit:,.0f} → ₹{latest_profit:,.0f}. Increase inventory allocation and marketing focus here to capture the momentum.",
+            })
+
+    if loss_items:
+        names = ", ".join(f"{i['item']} (₹{i['profit']:,.0f})" for i in loss_items[:3])
+        recommendations.append({
+            "type": "loss",
+            "priority": "high",
+            "title": f"{len(loss_items)} item(s) are being sold at a net loss",
+            "detail": f"Worst offenders: {names}. Review purchase cost, scheme support, or selling price for these lines.",
+        })
+
+    if margin_eligible:
+        high_revenue_cutoff = sorted([i["sales"] for i in margin_eligible], reverse=True)
+        cutoff_value = high_revenue_cutoff[max(0, len(high_revenue_cutoff) // 4 - 1)] if len(high_revenue_cutoff) >= 4 else high_revenue_cutoff[0]
+        candidates = [
+            i for i in margin_eligible
+            if i["sales"] >= cutoff_value and i["margin_percent"] < overall_margin and i["margin_percent"] >= 0
+        ]
+        candidates.sort(key=lambda x: x["sales"], reverse=True)
+        if candidates:
+            top = candidates[0]
+            recommendations.append({
+                "type": "opportunity",
+                "priority": "medium",
+                "title": f"{top['item']} sells well but at a thin margin",
+                "detail": f"₹{top['sales']:,.0f} in revenue at only {top['margin_percent']:.1f}% margin, below your overall {overall_margin:.1f}% average. Consider bundling with a scheme, or renegotiating cost, to lift profitability on this high-volume line.",
+            })
+
+    if month_number_profit:
+        month_names = ["", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+        best_month_num = max(month_number_profit, key=month_number_profit.get)
+        worst_month_num = min(month_number_profit, key=month_number_profit.get)
+        if best_month_num != worst_month_num:
+            recommendations.append({
+                "type": "seasonal",
+                "priority": "low",
+                "title": f"{month_names[best_month_num]} is historically your strongest month",
+                "detail": f"Across the uploaded years, {month_names[best_month_num]} generated the most profit and {month_names[worst_month_num]} the least. Plan stock and staffing ahead of {month_names[best_month_num]}, and consider a targeted scheme in {month_names[worst_month_num]} to offset the seasonal dip.",
+            })
+
+    if total_sales > 0:
+        if overall_margin < 8:
+            recommendations.append({
+                "type": "decline",
+                "priority": "medium",
+                "title": f"Overall margin is {overall_margin:.1f}%",
+                "detail": "This is below a typical general-retail benchmark of ~10-12%. A broad cost or pricing review across top-selling lines may help.",
+            })
+        else:
+            recommendations.append({
+                "type": "growth",
+                "priority": "low",
+                "title": f"Overall margin of {overall_margin:.1f}% is healthy",
+                "detail": "Maintain current pricing and scheme discipline; use the division and item breakdowns above to reinforce what's already working.",
+            })
+
+    priority_rank = {"high": 0, "medium": 1, "low": 2}
+    recommendations.sort(key=lambda r: priority_rank.get(r["priority"], 3))
+
+    return {
+        "has_data": True,
+        "kpis": {
+            "total_sales": round(total_sales, 2),
+            "total_cost": round(total_cost, 2),
+            "total_profit": round(total_profit, 2),
+            "margin_percent": overall_margin,
+            "transactions": len(rows),
+            "unique_items": len(item_stats),
+            "divisions": len(division_stats),
+            "date_from": min(dates).isoformat() if dates else None,
+            "date_to": max(dates).isoformat() if dates else None,
+        },
+        "top_profit_items": top_profit_items,
+        "top_revenue_items": top_revenue_items,
+        "loss_items": loss_items,
+        "top_margin_items": top_margin_items,
+        "bottom_margin_items": bottom_margin_items,
+        "top_qty_items": top_qty_items,
+        "division_breakdown": division_breakdown,
+        "brand_breakdown": brand_breakdown,
+        "monthly_trend": monthly_trend,
+        "yearly_trend": yearly_trend,
+        "recommendations": recommendations,
+    }
+
+
+
+# ------------------------------------------------------------------
+# DIVISION / BRAND AUTO-DETECTION + AC INDOOR/OUTDOOR MERGE
+# ------------------------------------------------------------------
+# Keyword rules below mirror the reference mapping the business uses
+# (Home Appliance / Home Entertainment / Mobile / Computer / Digital
+# Camera). Category keywords are checked before brand names, since a
+# brand like Samsung or LG sells across every division and only the
+# item text (AC/TV/Fridge/etc.) tells us which one a given row is.
+DIVISION_KEYWORD_RULES = [
+    ("HA", [
+        # Cooling
+        r"\bs\.?a\.?c\b", r"\bw\.?a\.?c\b", r"\bac\b", r"split\s*ac", r"window\s*ac",
+        r"\brefrigerator\b", r"\brefregerator\b", r"\brefrigirator\b", r"\bfridge\b",
+        r"\bcooler\b", r"air\s*cooler", r"chest\s*fre+zer", r"deep\s*fre+zer", r"\bfre+zer\b",
+        # Fans & ventilation
+        r"\bfan\b", r"ceiling\s*fan", r"table\s*fan", r"pedestal\s*fan", r"exhaust\s*fan",
+        r"tower\s*fan", r"wall\s*fan",
+        # Washing / cleaning
+        r"washing\s*machine", r"\bwm\b", r"dish\s*washer", r"vacuum\s*cleaner",
+        # Kitchen appliances
+        r"\bmicrowave\b", r"\bmwo\b", r"\boven\b", r"\botg\b", r"induction\s*cook(top|er)?",
+        r"\bcooktop\b", r"gas\s*stove", r"\bhob\b", r"\bchimney\b", r"mixer\s*grinder",
+        r"\bmixer\b", r"\bjuicer\b", r"\bblender\b", r"food\s*processor", r"\btoaster\b",
+        r"sandwich\s*maker", r"rice\s*cooker", r"pressure\s*cooker", r"\bkettle\b",
+        r"electric\s*kettle",
+        # Water
+        r"water\s*purifier", r"\bro\s*purifier\b", r"water\s*dispenser", r"\bwater\s*d\b",
+        r"\bgeyser\b", r"water\s*heater", r"immersion\s*rod", r"air\s*purifier",
+        # Personal care / other small appliances
+        r"hair\s*dryer", r"\btrimmer\b", r"\bshaver\b",
+        # Comfort / power
+        r"room\s*heater", r"\bheater\b", r"\bblower\b",
+        r"\binverter\b", r"\bups\b", r"stabili[sz]er", r"\bgenerator\b",
+    ]),
+    ("HE", [
+        r"\btv\b", r"\bled\b", r"sound\s*bar", r"soundbar", r"\bspeaker\b",
+        r"home\s*theat(er|re)",
+    ]),
+    ("IT", [
+        r"\bcomputer\b", r"\bdesktop\b", r"\blaptop\b", r"\bprinter\b", r"\bcpu\b",
+    ]),
+    ("DC", [
+        r"\bcamera\b", r"\blens\b", r"\bdslr\b", r"\bgopro\b",
+    ]),
+    ("MH", [
+        r"\bvivo\b", r"\boppo\b", r"\brealme\b", r"\bredmi\b", r"\biphone\b", r"\bapple\b",
+        r"\bsamsung\b", r"\bmotorola\b", r"\bmoto\b", r"\biqoo\b", r"\bnothing\b",
+        r"google\s*pixel", r"\bpixel\b", r"\bxiaomi\b", r"\bmi\b",
+    ]),
+]
+DIVISION_NAMES = {
+    "HA": "Home Appliance",
+    "HE": "Home Entertainment",
+    "MH": "Mobile",
+    "IT": "Computer/IT",
+    "DC": "Digital Camera",
+    "UNCATEGORIZED": "Uncategorized",
+}
+
+BRAND_LIST = [
+    "Daikin", "Blue Star", "O General", "Voltas", "Hitachi", "LG", "Samsung", "Whirlpool",
+    "Godrej", "Haier", "Panasonic", "Sony", "Onida", "Videocon", "Mitashi", "IFB", "Bosch",
+    "Carrier", "Lloyd", "Micromax", "Kenstar", "Symphony", "Crompton", "Usha", "Bajaj",
+    "Orient Electric", "Orient", "Havells", "Eureka Forbes", "Kent", "Livpure", "AO Smith", "Racold",
+    "Prestige", "Butterfly", "Preethi", "Inalsa", "Wonderchef", "Morphy Richards",
+    "Maharaja Whiteline", "Faber", "Glen", "Electrolux", "Kelvinator", "V-Guard",
+    "Khaitan", "Borosil", "Pigeon", "Philips", "Luminous", "Su-Kam", "Sukam",
+    "Exide", "Amaron", "Orient Fans", "Atomberg", "Polycab",
+    "Vivo", "Oppo", "Realme", "Redmi", "Xiaomi", "iPhone", "Apple", "Motorola", "IQOO",
+    "Nothing", "Google Pixel", "Google", "OnePlus", "Poco", "Tecno", "Infinix", "Itel", "Honor",
+    "HP", "Dell", "Lenovo", "Acer", "Asus", "Canon", "Nikon", "GoPro", "Fujifilm", "Epson",
+]
+# Longest names first, so e.g. "Google Pixel" matches before bare "Google".
+BRAND_LIST.sort(key=len, reverse=True)
+
+AC_ITEM_RE = re.compile(r"\b(s\.?a\.?c|w\.?a\.?c|ac)\b", re.IGNORECASE)
+AC_ROLE_RE = re.compile(r"\b(ID|OD|INDOOR|OUTDOOR)\b", re.IGNORECASE)
+
+
+def detect_division_code(item_text: str) -> str:
+    for code, patterns in DIVISION_KEYWORD_RULES:
+        for pattern in patterns:
+            if re.search(pattern, item_text, re.IGNORECASE):
+                return code
+    return "UNCATEGORIZED"
+
+
+def detect_brand(item_text: str) -> Optional[str]:
+    for brand in BRAND_LIST:
+        if re.search(r"\b" + re.escape(brand) + r"\b", item_text, re.IGNORECASE):
+            return brand
+    first_word = re.match(r"[A-Za-z0-9]+", item_text.strip())
+    return first_word.group(0).title() if first_word else None
+
+
+def detect_ac_role(item_text: str) -> Optional[str]:
+    if not AC_ITEM_RE.search(item_text):
+        return None
+    match = AC_ROLE_RE.search(item_text)
+    if not match:
+        return None
+    token = match.group(1).upper()
+    return "ID" if token in ("ID", "INDOOR") else "OD"
+
+
+def ac_merge_key(row: dict) -> tuple:
+    """Groups an AC indoor row with its matching outdoor row. Prefers the
+    invoice/voucher number (most reliable - both halves of one AC sale are
+    almost always billed on the same voucher). Falls back to the item text
+    with the ID/OD marker and the model code right after it stripped out,
+    since that code is the one thing that legitimately differs between an
+    indoor and outdoor unit of the same sale."""
+    if row.get("vch_no"):
+        return ("VCH", row["vch_no"].strip().upper(), row["sale_date"].isoformat())
+
+    tokens = row["item"].split()
+    role_idx = None
+    for i, tok in enumerate(tokens):
+        if AC_ROLE_RE.fullmatch(tok.strip(".,")):
+            role_idx = i
+            break
+    if role_idx is not None:
+        remove_indexes = {role_idx}
+        if role_idx + 1 < len(tokens):
+            remove_indexes.add(role_idx + 1)
+        tokens = [t for i, t in enumerate(tokens) if i not in remove_indexes]
+    base = " ".join(tokens).upper().strip()
+    return ("ITEM", base, row["sale_date"].isoformat())
+
+
+def merge_ac_pairs(rows: List[dict]) -> List[dict]:
+    groups = defaultdict(list)
+    passthrough = []
+    for row in rows:
+        if row.get("ac_role"):
+            groups[ac_merge_key(row)].append(row)
+        else:
+            passthrough.append(row)
+
+    merged_out = list(passthrough)
+    for key, group in groups.items():
+        ids = [r for r in group if r["ac_role"] == "ID"]
+        ods = [r for r in group if r["ac_role"] == "OD"]
+        if len(ids) == 1 and len(ods) == 1:
+            id_row, od_row = ids[0], ods[0]
+            combined = dict(id_row)
+            combined["sales_amt"] = (id_row.get("sales_amt") or 0.0) + (od_row.get("sales_amt") or 0.0)
+            combined["cost_amt"] = (id_row.get("cost_amt") or 0.0) + (od_row.get("cost_amt") or 0.0)
+            combined["profit_loss"] = combined["sales_amt"] - combined["cost_amt"]
+            combined["qty"] = id_row.get("qty") if id_row.get("qty") else od_row.get("qty")
+            combined["item"] = f"{id_row['item']}  +  {od_row['item']} (ID+OD combined)"
+            combined["merged"] = True
+            combined["note"] = "Indoor + outdoor unit combined from 2 rows of the same AC sale."
+            merged_out.append(combined)
+        elif len(ids) == 1 and not ods:
+            ids[0]["note"] = "Indoor unit only - no matching outdoor row found, shown individually."
+            merged_out.append(ids[0])
+        elif len(ods) == 1 and not ids:
+            ods[0]["note"] = "Outdoor unit only - no matching indoor row found, shown individually."
+            merged_out.append(ods[0])
+        else:
+            for r in group:
+                r["note"] = "AC indoor/outdoor row could not be uniquely auto-matched - review manually."
+                merged_out.append(r)
+    return merged_out
+
+
+def build_staged_rows(parsed_rows: List[dict]) -> List[dict]:
+    staged = []
+    for r in parsed_rows:
+        row = dict(r)
+        row["division"] = detect_division_code(row["item"])
+        row["brand"] = detect_brand(row["item"])
+        row["ac_role"] = detect_ac_role(row["item"])
+        row["merged"] = False
+        row["note"] = None
+        staged.append(row)
+    merged = merge_ac_pairs(staged)
+    for i, row in enumerate(merged):
+        row["row_id"] = i
+    return merged
+
+
+def serialize_staged_row(row: dict) -> dict:
+    return {
+        "row_id": row["row_id"],
+        "sale_date": row["sale_date"].isoformat() if row.get("sale_date") else None,
+        "item": row["item"],
+        "division": row["division"],
+        "division_name": DIVISION_NAMES.get(row["division"], row["division"]),
+        "brand": row.get("brand"),
+        "qty": row.get("qty"),
+        "sales_amt": round(row.get("sales_amt") or 0.0, 2),
+        "cost_amt": round(row.get("cost_amt") or 0.0, 2),
+        "profit_loss": round(row.get("profit_loss") or 0.0, 2),
+        "ac_role": row.get("ac_role"),
+        "merged": bool(row.get("merged")),
+        "note": row.get("note"),
+        "source_sheet": row.get("source_sheet"),
+    }
+
+
+def build_staging_summary(rows: List[dict]) -> dict:
+    by_division = defaultdict(lambda: {"count": 0, "sales": 0.0})
+    merged_count = 0
+    flagged_count = 0
+    brand_counts = defaultdict(int)
+    for row in rows:
+        stat = by_division[row["division"]]
+        stat["count"] += 1
+        stat["sales"] += row.get("sales_amt") or 0.0
+        if row.get("merged"):
+            merged_count += 1
+        elif row.get("note"):
+            flagged_count += 1
+        if row.get("brand"):
+            brand_counts[row["brand"]] += 1
+
+    division_summary = [
+        {"division": code, "division_name": DIVISION_NAMES.get(code, code), "count": s["count"], "sales": round(s["sales"], 2)}
+        for code, s in sorted(by_division.items(), key=lambda x: -x[1]["sales"])
+    ]
+    return {
+        "total_rows": len(rows),
+        "uncategorized_count": by_division.get("UNCATEGORIZED", {}).get("count", 0),
+        "merged_ac_rows": merged_count,
+        "flagged_ac_rows": flagged_count,
+        "division_summary": division_summary,
+        "brands_detected": len(brand_counts),
+        "top_brands": [{"brand": b, "count": c} for b, c in sorted(brand_counts.items(), key=lambda x: -x[1])[:12]],
+    }
+
+
+# In-memory staging area: a file that's been parsed + auto-classified but not
+# yet written to the live dashboard tables, so the Admin can review, bulk
+# re-assign divisions, download the cleaned file, and only then commit it (or
+# discard it and try a different file). Keyed by a random token; capped so a
+# few abandoned uploads in a row don't grow this unbounded.
+ANALYTICS_STAGING: dict = {}
+ANALYTICS_STAGING_LIMIT = 5
+
+
+def _staging_get_or_404(token: str) -> dict:
+    entry = ANALYTICS_STAGING.get(token)
+    if not entry:
+        raise HTTPException(status_code=404, detail="This review session has expired. Please upload the file again.")
+    return entry
+
+
+@app.post("/api/analytics/stage")
+def stage_analytics_file(
+    file: UploadFile = File(...),
+    current_user: models.User = Depends(auth.require_roles("Admin")),
+):
+    filename = file.filename or "uploaded_file"
+    raw_content = file.file.read()
+    if not raw_content:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
+    parsed_rows = parse_analytics_file(filename, raw_content)
+    if not parsed_rows:
+        raise HTTPException(
+            status_code=400,
+            detail="No readable sales rows found. Ensure the file has columns for Date, Item, Sales Amt, Cost Amt and Profit/Loss (Division, Qty, and Vch No are optional).",
+        )
+
+    staged_rows = build_staged_rows(parsed_rows)
+
+    if len(ANALYTICS_STAGING) >= ANALYTICS_STAGING_LIMIT:
+        oldest_token = next(iter(ANALYTICS_STAGING))
+        ANALYTICS_STAGING.pop(oldest_token, None)
+
+    token = uuid4().hex
+    ANALYTICS_STAGING[token] = {
+        "rows": staged_rows,
+        "filename": filename,
+        "created_by": current_user.username,
+    }
+
+    return {
+        "staging_token": token,
+        "file_name": filename,
+        "rows": [serialize_staged_row(r) for r in staged_rows],
+        "summary": build_staging_summary(staged_rows),
+    }
+
+
+@app.post("/api/analytics/stage/{token}/reassign")
+def reassign_staged_rows(
+    token: str,
+    payload: schemas.AnalyticsReassignRequest,
+    current_user: models.User = Depends(auth.require_roles("Admin")),
+):
+    entry = _staging_get_or_404(token)
+    rows = entry["rows"]
+    new_division = (payload.division or "").strip().upper() or "UNCATEGORIZED"
+    row_ids = set(payload.row_ids)
+    updated = 0
+    for row in rows:
+        if row["row_id"] in row_ids:
+            row["division"] = new_division
+            updated += 1
+
+    return {
+        "message": f"Reassigned {updated} row(s) to {DIVISION_NAMES.get(new_division, new_division)}.",
+        "rows": [serialize_staged_row(r) for r in rows],
+        "summary": build_staging_summary(rows),
+    }
+
+
+@app.get("/api/analytics/stage/{token}/download")
+def download_staged_file(
+    token: str,
+    current_user: models.User = Depends(auth.require_roles("Admin")),
+):
+    entry = _staging_get_or_404(token)
+    rows = entry["rows"]
+
+    buffer = StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["Date", "Item", "Division", "Brand", "Qty", "Sales Amt", "Cost Amt", "Profit/Loss", "AC Role", "Note"])
+    for row in rows:
+        writer.writerow([
+            row["sale_date"].strftime("%d-%m-%Y") if row.get("sale_date") else "",
+            row["item"],
+            DIVISION_NAMES.get(row["division"], row["division"]),
+            row.get("brand") or "",
+            row.get("qty") if row.get("qty") is not None else "",
+            round(row.get("sales_amt") or 0.0, 2),
+            round(row.get("cost_amt") or 0.0, 2),
+            round(row.get("profit_loss") or 0.0, 2),
+            row.get("ac_role") or "",
+            row.get("note") or "",
+        ])
+
+    base_name = entry["filename"].rsplit(".", 1)[0] if "." in entry["filename"] else entry["filename"]
+    # utf-8-sig BOM so Excel opens the ₹/non-ASCII text correctly on Windows.
+    csv_bytes = "\ufeff" + buffer.getvalue()
+    return Response(
+        content=csv_bytes.encode("utf-8"),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="cleaned_{base_name}.csv"'},
+    )
+
+
+@app.delete("/api/analytics/stage/{token}")
+def discard_staged_file(
+    token: str,
+    current_user: models.User = Depends(auth.require_roles("Admin")),
+):
+    ANALYTICS_STAGING.pop(token, None)
+    return {"message": "Discarded"}
+
+
+@app.post("/api/analytics/stage/{token}/commit")
+def commit_staged_file(
+    token: str,
+    current_user: models.User = Depends(auth.require_roles("Admin")),
+    db: Session = Depends(get_db),
+):
+    entry = _staging_get_or_404(token)
+    rows = entry["rows"]
+    filename = entry["filename"]
+
+    # Replace the previous dataset wholesale - this dashboard always reflects
+    # only the most recently committed file.
+    db.query(models.AnalyticsSalesRow).delete()
+    db.query(models.AnalyticsUpload).delete()
+    db.commit()
+
+    sheet_names = {r.get("source_sheet") for r in rows if r.get("source_sheet")}
+    dates = [r["sale_date"] for r in rows if r.get("sale_date")]
+
+    upload_record = models.AnalyticsUpload(
+        source_file=filename,
+        uploaded_by=current_user.id,
+        uploaded_by_username=current_user.username,
+        row_count=len(rows),
+        sheet_count=len(sheet_names) or 1,
+        date_from=min(dates) if dates else None,
+        date_to=max(dates) if dates else None,
+    )
+    db.add(upload_record)
+    db.commit()
+    db.refresh(upload_record)
+
+    insert_mappings = [
+        {
+            "upload_id": upload_record.id,
+            "sale_date": r["sale_date"],
+            "item": r["item"],
+            "division": r["division"],
+            "brand": r.get("brand"),
+            "qty": r.get("qty"),
+            "sales_amt": r.get("sales_amt") or 0.0,
+            "cost_amt": r.get("cost_amt") or 0.0,
+            "profit_loss": r.get("profit_loss") or 0.0,
+            "source_sheet": r.get("source_sheet"),
+            "source_file": r.get("source_file"),
+        }
+        for r in rows
+    ]
+    db.bulk_insert_mappings(models.AnalyticsSalesRow, insert_mappings)
+    db.commit()
+
+    ANALYTICS_STAGING.pop(token, None)
+
+    return {
+        "message": "File processed successfully",
+        "file_name": filename,
+        "rows_loaded": len(rows),
+        "sheets_read": len(sheet_names) or 1,
+        "date_from": upload_record.date_from,
+        "date_to": upload_record.date_to,
+    }
+
+
+@app.post("/api/analytics/upload")
+def upload_analytics_file(
+    file: UploadFile = File(...),
+    current_user: models.User = Depends(auth.require_roles("Admin")),
+    db: Session = Depends(get_db),
+):
+    filename = file.filename or "uploaded_file"
+    raw_content = file.file.read()
+    if not raw_content:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
+    parsed_rows = parse_analytics_file(filename, raw_content)
+    if not parsed_rows:
+        raise HTTPException(
+            status_code=400,
+            detail="No readable sales rows found. Ensure the file has columns for Date, Item, Sales Amt, Cost Amt and Profit/Loss (Division and Qty are optional).",
+        )
+
+    # Replace the previous dataset wholesale - this dashboard always reflects
+    # only the most recently uploaded file.
+    db.query(models.AnalyticsSalesRow).delete()
+    db.query(models.AnalyticsUpload).delete()
+    db.commit()
+
+    sheet_names = {r["source_sheet"] for r in parsed_rows if r["source_sheet"]}
+    dates = [r["sale_date"] for r in parsed_rows]
+
+    upload_record = models.AnalyticsUpload(
+        source_file=filename,
+        uploaded_by=current_user.id,
+        uploaded_by_username=current_user.username,
+        row_count=len(parsed_rows),
+        sheet_count=len(sheet_names) or 1,
+        date_from=min(dates) if dates else None,
+        date_to=max(dates) if dates else None,
+    )
+    db.add(upload_record)
+    db.commit()
+    db.refresh(upload_record)
+
+    for r in parsed_rows:
+        r["upload_id"] = upload_record.id
+    db.bulk_insert_mappings(models.AnalyticsSalesRow, parsed_rows)
+    db.commit()
+
+    return {
+        "message": "File processed successfully",
+        "file_name": filename,
+        "rows_loaded": len(parsed_rows),
+        "sheets_read": len(sheet_names) or 1,
+        "date_from": upload_record.date_from,
+        "date_to": upload_record.date_to,
+    }
+
+
+@app.get("/api/analytics/meta")
+def analytics_meta(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    upload_record = db.query(models.AnalyticsUpload).order_by(models.AnalyticsUpload.id.desc()).first()
+    divisions = [
+        row[0] for row in
+        db.query(models.AnalyticsSalesRow.division).distinct().order_by(models.AnalyticsSalesRow.division).all()
+        if row[0]
+    ]
+    if not upload_record:
+        return {"has_data": False, "divisions": [], "last_upload": None, "can_upload": current_user.role == "Admin"}
+
+    return {
+        "has_data": True,
+        "divisions": divisions,
+        "last_upload": {
+            "file_name": upload_record.source_file,
+            "uploaded_by": upload_record.uploaded_by_username,
+            "uploaded_at": upload_record.created_date,
+            "row_count": upload_record.row_count,
+            "sheet_count": upload_record.sheet_count,
+            "date_from": upload_record.date_from,
+            "date_to": upload_record.date_to,
+        },
+        "can_upload": current_user.role == "Admin",
+    }
+
+
+@app.get("/api/analytics/dashboard")
+def analytics_dashboard(
+    division: Optional[str] = Query(None),
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    query = db.query(models.AnalyticsSalesRow)
+    if division and division.upper() != "ALL":
+        query = query.filter(models.AnalyticsSalesRow.division == division.upper())
+    if start_date:
+        query = query.filter(models.AnalyticsSalesRow.sale_date >= start_date)
+    if end_date:
+        query = query.filter(models.AnalyticsSalesRow.sale_date <= end_date)
+
+    rows = query.all()
+    result = build_analytics_dashboard(rows)
+    result["filters"] = {
+        "division": division or "ALL",
+        "start_date": start_date,
+        "end_date": end_date,
+    }
+    return result
+
+
+@app.delete("/api/analytics/clear")
+def clear_analytics_data(
+    current_user: models.User = Depends(auth.require_roles("Admin")),
+    db: Session = Depends(get_db),
+):
+    deleted_count = db.query(models.AnalyticsSalesRow).delete()
+    db.query(models.AnalyticsUpload).delete()
+    db.commit()
+    return {"message": "AI Analysis data cleared", "deleted": deleted_count}

@@ -92,6 +92,16 @@ If extraction fails, or the document type isn't supported, or `ANTHROPIC_API_KEY
 
 To enable extraction, set `ANTHROPIC_API_KEY` on the web service (Render dashboard -> `idspl` -> Environment). Without it, document upload still works, but scheme fields must be entered manually.
 
+## AI Analysis dashboard
+
+After login, the **AI Analysis** tile on the home page opens `/analytics` - a profitability dashboard built from an uploaded sales export.
+
+- **Upload (Admin only):** drop or choose an Excel (`.xlsx`/`.xls`) or CSV file. Every sheet in a workbook is read, so one file with a tab per financial year works in a single upload. Column names are matched loosely and in any order - it looks for `Date`, `Item`, `Sales Amt`, `Cost Amt`, `Profit/Loss` (`Division` and `Qty` are optional extras that unlock the division breakdown and unit counts). Each new upload replaces the previous dataset - this is a current-snapshot dashboard, not a history of every file ever uploaded.
+- **Viewing:** any logged-in user can view the dashboard once data has been uploaded; only Admin can upload or clear it.
+- **What it shows:** KPI cards (total sales/cost/profit, margin %, transactions, item and division counts, date coverage), a yearly and monthly sales/profit trend, top 10 profitable items, profit share by division, loss-making items, and margin leaders/laggards - with a division and date-range filter that re-queries the same figures.
+- **Recommendations:** a rule-based panel (no external AI call) that flags the leading profit-driving division, year-over-year growth/decline per division, loss-making items worth a pricing review, high-revenue/low-margin items worth bundling with a scheme, seasonal best/worst months, and an overall margin health check. Every number quoted is computed directly from the uploaded data.
+- **Data quality note:** a "Bill-wise Profitability" export can include non-inventory lines (brand payouts, banners, incentives, commissions) alongside real product sales, and some line items may carry a cost with no matching sale value (e.g. transfers/write-offs) or a sale with no recorded cost. These pass through the rankings as-is rather than being silently filtered, since guessing which rows to exclude risks hiding real figures - review the Top Items and Loss-Making Items tables with that in mind.
+
 ## Scheme-matched sales (profitability report)
 
 In **Sales in your scope**, the **Profitability Report - Scheme Matched Sales** panel filters your uploaded profitability report (Interval Sales Analytics Upload - the Date/Vch No/Account/Item/Qty/Unit/Sales Amt/Cost/Profit-Loss/Profit% format exported from Busy) down to only the rows that:

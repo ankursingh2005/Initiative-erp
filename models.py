@@ -297,6 +297,45 @@ class ClaimStatusHistory(Base):
 
 
 # ============================================================
+# AI ANALYSIS DASHBOARD (home-page "AI Analysis" tile)
+# ============================================================
+
+class AnalyticsUpload(Base):
+    """One row per Excel/CSV file uploaded to the AI Analysis dashboard.
+    Only metadata about the upload - the actual sales rows it produced live
+    in AnalyticsSalesRow. Each new upload replaces the previous dataset."""
+    __tablename__ = "analytics_uploads"
+    id = Column(Integer, primary_key=True, index=True)
+    source_file = Column(String(255), nullable=True)
+    uploaded_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    uploaded_by_username = Column(String(100), nullable=True)
+    row_count = Column(Integer, default=0)
+    sheet_count = Column(Integer, default=0)
+    date_from = Column(Date, nullable=True)
+    date_to = Column(Date, nullable=True)
+    created_date = Column(DateTime, default=datetime.utcnow)
+
+
+class AnalyticsSalesRow(Base):
+    """One line-item row parsed out of an AI Analysis Excel/CSV upload
+    (Date / Item / Division / Qty / Sales Amt / Cost Amt / Profit-Loss).
+    Cleared and replaced wholesale on every new upload."""
+    __tablename__ = "analytics_sales_rows"
+    id = Column(Integer, primary_key=True, index=True)
+    upload_id = Column(Integer, ForeignKey("analytics_uploads.id"), nullable=True, index=True)
+    sale_date = Column(Date, nullable=False, index=True)
+    item = Column(String(255), nullable=True, index=True)
+    division = Column(String(100), nullable=True, index=True)
+    brand = Column(String(150), nullable=True, index=True)
+    qty = Column(Float, nullable=True)
+    sales_amt = Column(Float, default=0)
+    cost_amt = Column(Float, default=0)
+    profit_loss = Column(Float, default=0)
+    source_sheet = Column(String(100), nullable=True)
+    source_file = Column(String(255), nullable=True)
+
+
+# ============================================================
 # USERS & ROLE-BASED ACCESS
 # ============================================================
 
