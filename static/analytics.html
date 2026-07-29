@@ -129,14 +129,36 @@
     .pill.neg { background:#fdecea; color:var(--red); }
 
     /* Recommendations */
-    .rec-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; }
-    .rec-card { border-left: 4px solid var(--muted); background: #fafbfc; border-radius: 8px; padding: 14px 16px; }
-    .rec-card.priority-high { border-left-color: var(--red); }
-    .rec-card.priority-medium { border-left-color: var(--amber); }
-    .rec-card.priority-low { border-left-color: var(--green); }
-    .rec-card .rec-title { font-weight: 700; font-size: 14px; margin-bottom: 5px; display:flex; align-items:center; gap:8px; }
-    .rec-card .rec-detail { font-size: 13px; color: var(--muted); line-height: 1.5; }
-    .rec-icon { font-size: 15px; }
+    .rec-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 16px; }
+    .rec-card {
+      position: relative;
+      border-radius: 12px;
+      padding: 18px 20px 18px 18px;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-left: 5px solid var(--muted);
+      box-shadow: 0 2px 8px rgba(16,24,40,0.05);
+      transition: transform .15s ease, box-shadow .15s ease;
+      display: flex;
+      gap: 14px;
+    }
+    .rec-card:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(16,24,40,0.10); }
+    .rec-card.priority-high { border-left-color: var(--red); background: linear-gradient(135deg, #fff 0%, #fff8f7 100%); }
+    .rec-card.priority-medium { border-left-color: var(--amber); background: linear-gradient(135deg, #fff 0%, #fffaf0 100%); }
+    .rec-card.priority-low { border-left-color: var(--green); background: linear-gradient(135deg, #fff 0%, #f6fbf7 100%); }
+    .rec-icon-badge { flex-shrink: 0; width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 19px; }
+    .rec-card.priority-high .rec-icon-badge { background: #fdecea; }
+    .rec-card.priority-medium .rec-icon-badge { background: #fdf3de; }
+    .rec-card.priority-low .rec-icon-badge { background: #e6f4ea; }
+    .rec-body { flex: 1; min-width: 0; }
+    .rec-card .rec-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+    .rec-card .rec-title { font-weight: 800; font-size: 14.5px; color: var(--text); line-height: 1.35; }
+    .rec-priority-pill { flex-shrink: 0; font-size: 10px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+    .rec-card.priority-high .rec-priority-pill { background: var(--red); color: #fff; }
+    .rec-card.priority-medium .rec-priority-pill { background: var(--amber); color: #fff; }
+    .rec-card.priority-low .rec-priority-pill { background: var(--green); color: #fff; }
+    .rec-card .rec-detail { font-size: 13px; color: var(--muted); line-height: 1.55; }
+    .rec-card .rec-detail strong { color: var(--text); }
 
     /* Empty state */
     .empty-state { text-align: center; padding: 60px 20px; }
@@ -157,9 +179,12 @@
     .review-stat.danger .value { color: var(--red); }
     .review-stat.good .value { color: var(--green); }
 
-    .review-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; padding: 12px 14px; background: #f7f8fa; border-radius: 10px; }
+    .review-toolbar { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; justify-content: space-between; margin-bottom: 14px; padding: 14px 16px; background: #f7f8fa; border: 1px solid var(--border); border-radius: 10px; }
+    .review-toolbar-group { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+    .review-toolbar-group.action { padding-left: 14px; border-left: 2px solid #e2e5ea; }
+    .review-toolbar label.step-label { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
     .review-toolbar select { padding: 8px 10px; border: 1px solid #d3d9e2; border-radius: 8px; font-size: 13px; }
-    .review-toolbar .count-text { font-size: 12.5px; color: var(--muted); margin-left: auto; }
+    .review-toolbar .count-text { font-size: 12.5px; color: var(--ai-dark); font-weight: 700; background: #f1e8ff; padding: 4px 10px; border-radius: 999px; }
 
     .review-table-wrap { max-height: 480px; overflow: auto; border: 1px solid var(--border); border-radius: 10px; }
     table.review-table { font-size: 12.5px; }
@@ -172,6 +197,10 @@
     tr.row-flagged { background: #fff9e8; }
     .note-text { font-size: 11px; color: var(--muted); font-style: italic; }
     .review-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; justify-content: flex-end; }
+    .review-toast { max-height: 0; overflow: hidden; opacity: 0; border-radius: 8px; font-size: 13px; font-weight: 600; transition: all .25s ease; margin-bottom: 0; }
+    .review-toast.show { max-height: 60px; opacity: 1; padding: 10px 14px; margin-bottom: 14px; }
+    .review-toast.success { background: #e6f4ea; color: var(--green); }
+    .review-toast.error { background: #fdecea; color: var(--red); }
 
     @media (max-width: 1080px) {
       .kpi-grid { grid-template-columns: repeat(3, minmax(0,1fr)); }
@@ -242,17 +271,22 @@
       <div class="review-summary-grid" id="reviewSummaryGrid"></div>
 
       <div class="review-toolbar">
-        <button class="btn btn-ghost" onclick="toggleSelectAllReview()" id="selectAllBtn">Select all</button>
-        <select id="bulkDivisionSelect">
-          <option value="HA">Home Appliance</option>
-          <option value="HE">Home Entertainment</option>
-          <option value="MH">Mobile</option>
-          <option value="IT">Computer/IT</option>
-          <option value="DC">Digital Camera</option>
-          <option value="UNCATEGORIZED">Uncategorized</option>
-        </select>
-        <button class="btn btn-primary" onclick="applyBulkReassign()">Apply to selected</button>
-        <span class="count-text" id="reviewSelectedCount">0 selected</span>
+        <div class="review-toolbar-group">
+          <button class="btn btn-ghost" onclick="toggleSelectAllReview()" id="selectAllBtn">☑ Select all</button>
+          <span class="count-text" id="reviewSelectedCount">0 selected</span>
+        </div>
+        <div class="review-toolbar-group action">
+          <label class="step-label" for="bulkDivisionSelect">Move selected rows to</label>
+          <select id="bulkDivisionSelect">
+            <option value="HA">Home Appliance</option>
+            <option value="HE">Home Entertainment</option>
+            <option value="MH">Mobile</option>
+            <option value="IT">Computer/IT</option>
+            <option value="DC">Digital Camera</option>
+            <option value="UNCATEGORIZED">Uncategorized</option>
+          </select>
+          <button class="btn btn-primary" onclick="applyBulkReassign()" id="applyBulkBtn" disabled>Apply to selected</button>
+        </div>
       </div>
 
       <div class="review-table-wrap">
@@ -658,28 +692,58 @@
     function updateReviewSelectedCount() {
       const checked = document.querySelectorAll('.review-row-check:checked').length;
       document.getElementById('reviewSelectedCount').textContent = `${checked} selected`;
+      const applyBtn = document.getElementById('applyBulkBtn');
+      if (applyBtn) applyBtn.disabled = checked === 0;
     }
 
     function toggleSelectAllReview() {
       const boxes = document.querySelectorAll('.review-row-check');
       const allChecked = Array.from(boxes).every(b => b.checked);
       boxes.forEach(b => b.checked = !allChecked);
-      document.getElementById('selectAllBtn').textContent = allChecked ? 'Select all' : 'Deselect all';
+      document.getElementById('selectAllBtn').textContent = allChecked ? '☑ Select all' : '☐ Deselect all';
       updateReviewSelectedCount();
+    }
+
+    function showReviewToast(message, isError) {
+      let toast = document.getElementById('reviewToast');
+      if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'reviewToast';
+        toast.className = 'review-toast';
+        document.getElementById('reviewCard').insertBefore(toast, document.getElementById('reviewSummaryGrid'));
+      }
+      toast.textContent = message;
+      toast.className = 'review-toast show' + (isError ? ' error' : ' success');
+      clearTimeout(toast._hideTimer);
+      toast._hideTimer = setTimeout(() => toast.classList.remove('show'), 3500);
     }
 
     async function reassignRows(rowIds, division) {
       if (!reviewState.token || !rowIds.length) return;
-      const res = await authFetch(`/api/analytics/stage/${reviewState.token}/reassign`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ row_ids: rowIds, division })
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res || !res.ok) return;
-      reviewState.rows = data.rows;
-      renderReviewSummary(data.summary);
-      renderReviewTable(reviewState.rows);
+      try {
+        const res = await authFetch(`/api/analytics/stage/${reviewState.token}/reassign`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ row_ids: rowIds, division })
+        });
+        if (!res) {
+          showReviewToast('Your session expired - please log in again.', true);
+          return;
+        }
+        if (!res.ok) {
+          const errBody = await res.json().catch(() => ({}));
+          showReviewToast(errBody.detail || `Could not reassign rows (error ${res.status}). Please try again.`, true);
+          return;
+        }
+        const data = await res.json();
+        reviewState.rows = data.rows;
+        renderReviewSummary(data.summary);
+        renderReviewTable(reviewState.rows);
+        document.getElementById('selectAllBtn').textContent = '☑ Select all';
+        showReviewToast(data.message || `Reassigned ${rowIds.length} row(s).`, false);
+      } catch (e) {
+        showReviewToast('Something went wrong reassigning those rows - check your connection and try again.', true);
+      }
     }
 
     function reassignSingleRow(rowId, division) {
@@ -689,7 +753,10 @@
     function applyBulkReassign() {
       const rowIds = Array.from(document.querySelectorAll('.review-row-check:checked')).map(b => Number(b.dataset.rowId));
       const division = document.getElementById('bulkDivisionSelect').value;
-      if (!rowIds.length) return;
+      if (!rowIds.length) {
+        showReviewToast('Select at least one row first (tick the checkboxes on the left, or use "Select all").', true);
+        return;
+      }
       reassignRows(rowIds, division);
     }
 
@@ -733,18 +800,28 @@
     async function commitReview() {
       if (!reviewState.token) return;
       const msg = document.getElementById('uploadMsg');
-      const res = await authFetch(`/api/analytics/stage/${reviewState.token}/commit`, { method: 'POST' });
-      const data = await res.json().catch(() => ({}));
-      if (!res || !res.ok) {
+      try {
+        const res = await authFetch(`/api/analytics/stage/${reviewState.token}/commit`, { method: 'POST' });
+        if (!res) {
+          msg.className = 'upload-msg error';
+          msg.textContent = 'Your session expired - please log in again.';
+          return;
+        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          msg.className = 'upload-msg error';
+          msg.textContent = data.detail || 'Could not save to the dashboard';
+          return;
+        }
+        reviewState = { token: null, rows: [] };
+        document.getElementById('reviewCard').classList.add('hidden');
+        msg.className = 'upload-msg success';
+        msg.textContent = `Loaded ${data.rows_loaded.toLocaleString('en-IN')} rows from ${data.sheets_read} sheet(s).`;
+        await init();
+      } catch (e) {
         msg.className = 'upload-msg error';
-        msg.textContent = data.detail || 'Could not save to the dashboard';
-        return;
+        msg.textContent = 'Something went wrong saving to the dashboard - check your connection and try again.';
       }
-      reviewState = { token: null, rows: [] };
-      document.getElementById('reviewCard').classList.add('hidden');
-      msg.className = 'upload-msg success';
-      msg.textContent = `Loaded ${data.rows_loaded.toLocaleString('en-IN')} rows from ${data.sheets_read} sheet(s).`;
-      await init();
     }
 
     async function confirmClear() {
@@ -950,15 +1027,31 @@
     }
 
     const REC_ICONS = { opportunity: '💡', decline: '📉', growth: '📈', loss: '⚠️', seasonal: '📅' };
+    const REC_PRIORITY_LABEL = { high: 'High Priority', medium: 'Medium Priority', low: 'Low Priority' };
+
+    // Bolds the real ₹ amounts and percentages already present in the
+    // (already-escaped) recommendation text, so the actual computed figures
+    // stand out at a glance instead of being buried in a paragraph.
+    function highlightStats(escapedText) {
+      return escapedText
+        .replace(/₹-?[\d,]+(\.\d+)?/g, (m) => `<strong>${m}</strong>`)
+        .replace(/-?\d+(\.\d+)?%/g, (m) => `<strong>${m}</strong>`);
+    }
 
     function renderRecommendations(data) {
       const grid = document.getElementById('recGrid');
       grid.innerHTML = data.recommendations.map(r => `
         <div class="rec-card priority-${r.priority}">
-          <div class="rec-title"><span class="rec-icon">${REC_ICONS[r.type] || '•'}</span>${esc(r.title)}</div>
-          <div class="rec-detail">${esc(r.detail)}</div>
+          <div class="rec-icon-badge">${REC_ICONS[r.type] || '•'}</div>
+          <div class="rec-body">
+            <div class="rec-title-row">
+              <div class="rec-title">${esc(r.title)}</div>
+              <span class="rec-priority-pill">${REC_PRIORITY_LABEL[r.priority] || r.priority}</span>
+            </div>
+            <div class="rec-detail">${highlightStats(esc(r.detail))}</div>
+          </div>
         </div>
-      `).join('') || '<p class="sub">No recommendations yet.</p>';
+      `).join('') || '<p class="sub">No recommendations yet - upload a sales export to generate them.</p>';
     }
 
     function renderAll(data) {
