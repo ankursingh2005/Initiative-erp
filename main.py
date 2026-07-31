@@ -3009,6 +3009,544 @@ def interval_sales_scheme_matches(
     }
 
 
+
+
+def build_daily_profitability_workbook(merged_items: list, period_label: str) -> bytes:
+    """Builds the styled, formula-driven 'Sales Control Report' workbook
+    (same layout as the company's DAILY_PROFITIABILITY.xlsx template - one
+    section per category with Store/Item/Sale/Purchase/Margin/PL% columns
+    and a Gross Profit subtotal), plus a Dashboard sheet with KPIs, a
+    category chart, and Top Profitable / Loss-Making Items. Returns the
+    .xlsx file as bytes, ready to stream back in an HTTP response."""
+    import openpyxl as _openpyxl
+    from openpyxl.styles import Font as _Font, PatternFill as _PatternFill, Alignment as _Alignment, Border as _Border, Side as _Side
+    from openpyxl.chart import BarChart as _BarChart, Reference as _Reference
+    from collections import defaultdict as _defaultdict
+
+    COMPANY = "Initiative Data Systems Pvt Ltd"
+    FONT_TITLE = _Font(name='Times New Roman', size=18, bold=True)
+    FONT_SECTION = _Font(name='Times New Roman', size=14, bold=True)
+    FONT_HEADER = _Font(name='Calibri', size=11, bold=True, underline='single')
+    FONT_DATA = _Font(name='Calibri', size=11, bold=True)
+    FILL_YELLOW = _PatternFill('solid', fgColor='FFFFFF00')
+    THIN = _Side(style='thin')
+    BORDER_ALL = _Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
+    NUMFMT_ACC = '_ * #,##0_ ;_ * \\-#,##0_ ;_ * "-"??_ ;_ @_ '
+    NUMFMT_PCT = '0.0%'
+    COL_WIDTHS = {'A': 5.55, 'B': 15.44, 'C': 42.89, 'D': 12.33, 'E': 18.11,
+                  'F': 9.0, 'G': 8.44, 'H': 9.0, 'I': 11.33, 'J': 9.44}
+    HEADERS = ['S. No', 'Store', 'Item Name', 'Sale Amount', 'Purchase Price',
+               'Upfront Margin', 'Backend', 'Margin', 'PL %', 'Narration']
+
+    by_cat = _defaultdict(list)
+    for m in merged_items:
+        by_cat[m['category']].append(m)
+
+    wb = _openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'Daily Report'
+    for col, w in COL_WIDTHS.items():
+        ws.column_dimensions[col].width = w
+
+    r = 1
+    gross_profit_rows = []
+    for cat_label in ('HA', 'HE', 'Computer', 'Mobile'):
+        items = sorted(by_cat.get(cat_label, []), key=lambda x: x['item'].lower())
+        if not items:
+            continue
+
+        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=10)
+        c = ws.cell(row=r, column=1, value=COMPANY)
+        c.font = FONT_TITLE
+        c.alignment = _Alignment(horizontal='center')
+        ws.row_dimensions[r].height = 22.8
+        r += 1
+
+        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=10)
+        c = ws.cell(row=r, column=1, value=f"{cat_label} Sales Control Report {period_label}")
+        c.font = FONT_SECTION
+        c.alignment = _Alignment(horizontal='center')
+        ws.row_dimensions[r].height = 17.4
+        r += 1
+
+        ws.row_dimensions[r].height = 28.8
+        for ci, h in enumerate(HEADERS, start=1):
+            cell = ws.cell(row=r, column=ci, value=h)
+            cell.font = FONT_HEADER
+            cell.fill = FILL_YELLOW
+            cell.border = BORDER_ALL
+            if ci in (4, 5):
+                cell.alignment = _Alignment(horizontal='right', vertical='center')
+            elif ci in (6, 7, 8, 9):
+                cell.alignment = _Alignment(horizontal='center', vertical='center', wrap_text=True)
+            elif ci == 10:
+                cell.alignment = _Alignment(horizontal='center', vertical='center')
+            else:
+                cell.alignment = _Alignment(horizontal='left', vertical='center')
+        r += 1
+
+        first_data_row = r
+        for i, m in enumerate(items, start=1):
+            ws.cell(row=r, column=1, value=i).font = FONT_DATA
+            cell = ws.cell(row=r, column=2, value=m['store']); cell.font = FONT_DATA; cell.alignment = _Alignment(horizontal='center')
+            cell = ws.cell(row=r, column=3, value=m['item']); cell.font = FONT_DATA; cell.alignment = _Alignment(horizontal='left')
+            cell = ws.cell(row=r, column=4, value=round(m['sale'], 2)); cell.font = FONT_DATA; cell.alignment = _Alignment(horizontal='right'); cell.number_format = NUMFMT_ACC
+            cell = ws.cell(row=r, column=5, value=round(m['cost'], 2)); cell.font = FONT_DATA; cell.alignment = _Alignment(horizontal='right'); cell.number_format = NUMFMT_ACC
+            cell = ws.cell(row=r, column=6, value=f'=+D{r}-E{r}'); cell.font = FONT_DATA; cell.number_format = NUMFMT_ACC
+            ws.cell(row=r, column=7).number_format = NUMFMT_ACC
+            cell = ws.cell(row=r, column=8, value=f'=+G{r}+F{r}'); cell.font = FONT_DATA; cell.number_format = NUMFMT_ACC
+            cell = ws.cell(row=r, column=9, value=f'=+H{r}/E{r}'); cell.font = FONT_DATA; cell.number_format = NUMFMT_PCT
+            cell = ws.cell(row=r, column=10, value=m.get('note') or ''); cell.font = FONT_DATA; cell.alignment = _Alignment(horizontal='left')
+            for ci in range(1, 11):
+                ws.cell(row=r, column=ci).border = BORDER_ALL
+            r += 1
+        last_data_row = r - 1
+
+        ws.cell(row=r, column=3, value=f'Gross Profit {cat_label}')
+        ws.cell(row=r, column=4, value=f'=SUM(D{first_data_row}:D{last_data_row})')
+        ws.cell(row=r, column=5, value=f'=SUM(E{first_data_row}:E{last_data_row})')
+        ws.cell(row=r, column=6, value=f'=SUM(F{first_data_row}:F{last_data_row})')
+        ws.cell(row=r, column=8, value=f'=SUM(H{first_data_row}:H{last_data_row})')
+        ws.cell(row=r, column=9, value=f'=+H{r}/E{r}')
+        for ci in range(1, 11):
+            cell = ws.cell(row=r, column=ci)
+            cell.font = FONT_DATA
+            cell.fill = FILL_YELLOW
+            if ci == 3:
+                cell.number_format = '@'
+            elif ci == 9:
+                cell.number_format = NUMFMT_PCT
+            elif ci in (4, 5, 6, 7, 8):
+                cell.number_format = NUMFMT_ACC
+        gross_profit_rows.append((cat_label, r))
+        r += 2
+
+    if gross_profit_rows:
+        ws.cell(row=r, column=3, value='Total Gross Profit')
+        for col_idx, col_letter in ((4, 'D'), (5, 'E'), (6, 'F'), (7, 'G'), (8, 'H')):
+            formula = '+' + '+'.join(f'{col_letter}{gr}' for _, gr in gross_profit_rows)
+            ws.cell(row=r, column=col_idx, value=f'={formula}')
+        ws.cell(row=r, column=9, value=f'=+H{r}/E{r}')
+        for ci in range(1, 11):
+            cell = ws.cell(row=r, column=ci)
+            cell.font = FONT_DATA
+            if ci == 3:
+                cell.number_format = '@'
+            elif ci == 9:
+                cell.number_format = NUMFMT_PCT
+            elif ci in (4, 5, 6, 7, 8):
+                cell.number_format = NUMFMT_ACC
+
+    # ---- Dashboard sheet ----
+    dash = wb.create_sheet('Dashboard', 0)
+    FONT_KPI_LABEL = _Font(name='Calibri', size=10, bold=True, color='555555')
+    FONT_KPI_VALUE = _Font(name='Calibri', size=16, bold=True)
+    FONT_D_HEADER = _Font(name='Calibri', size=11, bold=True, color='FFFFFF')
+    FONT_D_DATA = _Font(name='Calibri', size=10)
+    FONT_D_LOSS = _Font(name='Calibri', size=10, color='C0392B', bold=True)
+    FILL_HEADER = _PatternFill('solid', fgColor='1F2D3F')
+    FILL_KPI = _PatternFill('solid', fgColor='F5F7FA')
+    FILL_LOSS_HEADER = _PatternFill('solid', fgColor='C0392B')
+    FILL_PROFIT_HEADER = _PatternFill('solid', fgColor='027A48')
+    THIN2 = _Side(style='thin', color='D6D6D6')
+    BORDER2 = _Border(left=THIN2, right=THIN2, top=THIN2, bottom=THIN2)
+
+    for col, w in {'A': 4, 'B': 10, 'C': 42, 'D': 14, 'E': 14, 'F': 14, 'G': 4,
+                    'H': 10, 'I': 40, 'J': 14, 'K': 14, 'L': 14}.items():
+        dash.column_dimensions[col].width = w
+
+    rr = 1
+    dash.merge_cells(start_row=rr, start_column=1, end_row=rr, end_column=12)
+    c = dash.cell(row=rr, column=1, value=COMPANY); c.font = FONT_TITLE; c.alignment = _Alignment(horizontal='center')
+    rr += 1
+    dash.merge_cells(start_row=rr, start_column=1, end_row=rr, end_column=12)
+    c = dash.cell(row=rr, column=1, value=f'Daily Profitability Dashboard - {period_label}')
+    c.font = FONT_SECTION; c.alignment = _Alignment(horizontal='center')
+    rr += 2
+
+    total_sale = sum(m['sale'] for m in merged_items)
+    total_cost = sum(m['cost'] for m in merged_items)
+    total_margin = total_sale - total_cost
+    margin_pct = (total_margin / total_cost) if total_cost else 0
+    loss_items_all = [m for m in merged_items if m['margin'] < 0]
+
+    kpis = [
+        ('Total Sales', total_sale, NUMFMT_ACC), ('Total Cost', total_cost, NUMFMT_ACC),
+        ('Total Margin', total_margin, NUMFMT_ACC), ('Margin %', margin_pct, NUMFMT_PCT),
+        ('Line Items', len(merged_items), '0'), ('Loss-Making Items', len(loss_items_all), '0'),
+    ]
+    kpi_col = 1
+    kpi_row = rr
+    for label, val, fmt in kpis:
+        cl = dash.cell(row=kpi_row, column=kpi_col, value=label); cl.font = FONT_KPI_LABEL; cl.fill = FILL_KPI; cl.alignment = _Alignment(horizontal='center')
+        cv = dash.cell(row=kpi_row + 1, column=kpi_col, value=val); cv.font = FONT_KPI_VALUE; cv.fill = FILL_KPI; cv.number_format = fmt; cv.alignment = _Alignment(horizontal='center')
+        for rrr in (kpi_row, kpi_row + 1):
+            dash.cell(row=rrr, column=kpi_col).border = BORDER2
+        kpi_col += 2
+    rr = kpi_row + 3
+
+    by_cat = _defaultdict(lambda: {'sale': 0, 'cost': 0, 'margin': 0})
+    for m in merged_items:
+        by_cat[m['category']]['sale'] += m['sale']
+        by_cat[m['category']]['cost'] += m['cost']
+        by_cat[m['category']]['margin'] += m['margin']
+
+    cat_table_row = rr
+    dash.cell(row=rr, column=1, value='Category').font = FONT_D_HEADER; dash.cell(row=rr, column=1).fill = FILL_HEADER
+    dash.cell(row=rr, column=2, value='Sales').font = FONT_D_HEADER; dash.cell(row=rr, column=2).fill = FILL_HEADER
+    dash.cell(row=rr, column=3, value='Margin').font = FONT_D_HEADER; dash.cell(row=rr, column=3).fill = FILL_HEADER
+    rr += 1
+    cat_first = rr
+    for cat in ('HA', 'HE', 'Computer', 'Mobile'):
+        d = by_cat.get(cat, {'sale': 0, 'cost': 0, 'margin': 0})
+        dash.cell(row=rr, column=1, value=cat).font = FONT_D_DATA
+        dash.cell(row=rr, column=2, value=round(d['sale'], 2)).number_format = NUMFMT_ACC
+        dash.cell(row=rr, column=3, value=round(d['margin'], 2)).number_format = NUMFMT_ACC
+        for ci in (1, 2, 3):
+            dash.cell(row=rr, column=ci).border = BORDER2
+        rr += 1
+    cat_last = rr - 1
+
+    chart = _BarChart()
+    chart.type = 'col'
+    chart.title = 'Sales & Margin by Category'
+    chart.y_axis.title = 'Amount (Rs.)'
+    chart.height = 7
+    chart.width = 14
+    data = _Reference(dash, min_col=2, max_col=3, min_row=cat_table_row, max_row=cat_last)
+    cats = _Reference(dash, min_col=1, min_row=cat_first, max_row=cat_last)
+    chart.add_data(data, titles_from_data=True)
+    chart.set_categories(cats)
+    dash.add_chart(chart, f'E{cat_table_row}')
+
+    rr = cat_last + 12
+
+    def write_item_table(start_row, title, item_rows, header_fill, is_loss):
+        rrr = start_row
+        dash.merge_cells(start_row=rrr, start_column=1, end_row=rrr, end_column=6)
+        c = dash.cell(row=rrr, column=1, value=title); c.font = _Font(name='Calibri', size=12, bold=True)
+        rrr += 1
+        for ci, h in enumerate(['#', 'Store', 'Item Name', 'Sale Amount', 'Margin', 'PL %'], start=1):
+            cell = dash.cell(row=rrr, column=ci, value=h)
+            cell.font = FONT_D_HEADER; cell.fill = header_fill; cell.border = BORDER2
+            cell.alignment = _Alignment(horizontal='center')
+        rrr += 1
+        for i, m in enumerate(item_rows, start=1):
+            dash.cell(row=rrr, column=1, value=i).font = FONT_D_DATA
+            dash.cell(row=rrr, column=2, value=m['store']).font = FONT_D_DATA
+            dash.cell(row=rrr, column=3, value=m['item']).font = FONT_D_DATA
+            cell = dash.cell(row=rrr, column=4, value=round(m['sale'], 2)); cell.font = FONT_D_DATA; cell.number_format = NUMFMT_ACC
+            cell = dash.cell(row=rrr, column=5, value=round(m['margin'], 2))
+            cell.font = FONT_D_LOSS if is_loss else FONT_D_DATA
+            cell.number_format = NUMFMT_ACC
+            cell = dash.cell(row=rrr, column=6, value=m['pl_pct'])
+            cell.font = FONT_D_LOSS if is_loss else FONT_D_DATA
+            cell.number_format = NUMFMT_PCT
+            for ci in range(1, 7):
+                dash.cell(row=rrr, column=ci).border = BORDER2
+            rrr += 1
+        return rrr + 2
+
+    top_profitable = sorted(merged_items, key=lambda m: -m['margin'])[:10]
+    loss_sorted = sorted(loss_items_all, key=lambda m: m['margin'])[:10]
+    rr = write_item_table(rr, f'Top 10 Profitable Items ({period_label})', top_profitable, FILL_PROFIT_HEADER, False)
+    if loss_sorted:
+        rr = write_item_table(rr, f'Loss-Making Items ({period_label})', loss_sorted, FILL_LOSS_HEADER, True)
+    else:
+        dash.cell(row=rr, column=1, value='No loss-making line items in this period.').font = _Font(bold=True, color='027A48')
+
+    wb.active = 0
+    buffer = BytesIO()
+    wb.save(buffer)
+    return buffer.getvalue()
+
+
+# ============================================================
+# DAILY PROFITABILITY REPORT (home-page "Daily Profitability" tile)
+# ============================================================
+# Builds a store/category-wise profitability report and dashboard directly
+# from the same data already uploaded via "Interval Sales Analytics Upload"
+# (Sales in your scope -> Date/Vch No/Account/Item/Qty/Sales Amt/Cost Amt
+# export from Busy). No separate upload flow: this reads whatever has been
+# uploaded there for the requested date range and reshapes it.
+#
+# Busy exports a split AC as multiple line items under one voucher (an
+# indoor-unit line carrying the sale value, plus outdoor-unit/panel lines
+# with zero sale value but real cost). Left as-is those zero-sale lines
+# would each show as a 100% loss, so they are merged into the priced line
+# from the same voucher before any report or dashboard figure is computed.
+# When a voucher has more than one priced line (several different products
+# bought together) an unpriced line is attributed to whichever priced item
+# shares the most name-tokens with it, and that attribution is listed in
+# "review_notes" so Admin can sanity-check anything non-obvious.
+
+DP_CATEGORIES = ["HA", "HE", "Computer", "Mobile"]
+
+
+def dp_extract_store(vch_no: Optional[str]) -> str:
+    if not vch_no or "/" not in vch_no:
+        return (vch_no or "UNK").strip().upper() or "UNK"
+    return vch_no.split("/")[0].strip().upper() or "UNK"
+
+
+def dp_tokens(name: Optional[str]) -> set:
+    return set(re.findall(r"[A-Za-z0-9]+", (name or "").upper()))
+
+
+def dp_categorize(item_name: Optional[str]) -> str:
+    n = (item_name or "").upper()
+    padded = f" {n} "
+    if "LED" in padded.split() or padded.startswith(" LED ") or "SOUNDBAR" in n:
+        return "HE"
+    if any(k in n for k in ("DELL", "LAPTOP", "BACK PACK", "BACKPACK")):
+        return "Computer"
+    ha_keywords = (
+        "SAC ", "WAC ", "CASSETTE AC", "AC 3T", " AC ", "PANEL", "CHEST FREEZER",
+        " REF ", "REF EON", "REF RD", "REF HRD", "REF SJ", "COOLER", "WATER PURIFIER",
+        "EXCELL PART", "GARMENT STEAMER", " MW ", "MICROWAVE",
+    )
+    if any(k in padded for k in ha_keywords):
+        return "HA"
+    return "Mobile"
+
+
+def dp_merge_rows(rows: List["models.IntervalSaleUpload"]) -> tuple:
+    """Groups raw Busy line items by voucher, merges zero-sale-value lines
+    (OD units, panels, bundled parts) into the priced line(s) of the same
+    voucher, then tags each merged item with its store code and category.
+    Returns (merged_items, review_notes)."""
+    groups = defaultdict(list)
+    for r in rows:
+        key = r.vch_no or f"__no_vch_{r.id}"
+        groups[key].append(r)
+
+    merged = []
+    review_notes = []
+
+    for vch, grp in groups.items():
+        priced = [r for r in grp if (r.sales_amt or 0) > 0]
+        zero = [r for r in grp if not (r.sales_amt or 0) > 0]
+        store = dp_extract_store(vch if not str(vch).startswith("__no_vch_") else None)
+
+        if not priced:
+            for r in grp:
+                merged.append({
+                    "vch": vch, "item": r.item or "Unknown Item", "sale": r.sales_amt or 0,
+                    "cost": r.cost_amt or 0, "store": store, "date": r.sale_date,
+                    "note": "Standalone (no sale value recorded)",
+                })
+            continue
+
+        if len(priced) == 1:
+            p = priced[0]
+            extra_cost = sum((r.cost_amt or 0) for r in zero)
+            components = ", ".join((r.item or "").strip() for r in zero if r.item)
+            note = f"Vch {vch}" + (f" (incl. cost of: {components})" if components else "")
+            merged.append({
+                "vch": vch, "item": p.item or "Unknown Item", "sale": p.sales_amt or 0,
+                "cost": (p.cost_amt or 0) + extra_cost, "store": store, "date": p.sale_date,
+                "note": note,
+            })
+            continue
+
+        # multiple priced lines in one voucher: attribute each zero-sale line
+        # to the priced line it shares the most name-tokens with.
+        bucket = {id(p): {"item": p.item, "sale": p.sales_amt or 0, "cost": p.cost_amt or 0, "date": p.sale_date} for p in priced}
+        for z in zero:
+            zt = dp_tokens(z.item)
+            best, best_score = None, -1
+            for p in priced:
+                score = len(zt & dp_tokens(p.item))
+                if score > best_score:
+                    best, best_score = p, score
+            if best_score <= 0:
+                review_notes.append(
+                    f"Vch {vch}: could not confidently match zero-value line "
+                    f"'{z.item}' (cost {z.cost_amt or 0:.2f}) to a product in the "
+                    f"same voucher - attributed to '{priced[0].item}' by default."
+                )
+                best = priced[0]
+            else:
+                review_notes.append(
+                    f"Vch {vch}: cost {z.cost_amt or 0:.2f} from '{z.item}' "
+                    f"attributed to '{best.item}' (matched by shared name tokens)."
+                )
+            bucket[id(best)]["cost"] += (z.cost_amt or 0)
+
+        for p in priced:
+            u = bucket[id(p)]
+            merged.append({
+                "vch": vch, "item": u["item"] or "Unknown Item", "sale": u["sale"],
+                "cost": u["cost"], "store": store, "date": u["date"], "note": f"Vch {vch}",
+            })
+
+    for m in merged:
+        m["category"] = dp_categorize(m["item"])
+        m["margin"] = m["sale"] - m["cost"]
+        m["pl_pct"] = (m["margin"] / m["cost"]) if m["cost"] else 0.0
+
+    return merged, review_notes
+
+
+def dp_filter_rows(db: Session, start_date: Optional[date], end_date: Optional[date]):
+    query = db.query(models.IntervalSaleUpload)
+    if start_date:
+        query = query.filter(models.IntervalSaleUpload.sale_date >= start_date)
+    if end_date:
+        query = query.filter(models.IntervalSaleUpload.sale_date <= end_date)
+    return query.order_by(models.IntervalSaleUpload.sale_date.asc(), models.IntervalSaleUpload.id.asc()).all()
+
+
+def dp_apply_filters(merged: List[dict], category: Optional[str], store: Optional[str]) -> List[dict]:
+    out = merged
+    if category and category.upper() != "ALL":
+        out = [m for m in out if m["category"].upper() == category.upper()]
+    if store and store.upper() != "ALL":
+        out = [m for m in out if m["store"].upper() == store.upper()]
+    return out
+
+
+def dp_serialize_item(m: dict) -> dict:
+    return {
+        "store": m["store"], "item": m["item"], "category": m["category"],
+        "sale": round(m["sale"], 2), "cost": round(m["cost"], 2), "margin": round(m["margin"], 2),
+        "pl_pct": round(m["pl_pct"] * 100, 2), "note": m["note"],
+    }
+
+
+@app.get("/api/daily-profitability/meta")
+def daily_profitability_meta(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    date_bounds = db.query(
+        func.min(models.IntervalSaleUpload.sale_date),
+        func.max(models.IntervalSaleUpload.sale_date),
+    ).first()
+    has_data = bool(date_bounds and date_bounds[0])
+    vch_numbers = [row[0] for row in db.query(models.IntervalSaleUpload.vch_no).distinct().all()]
+    stores = sorted({dp_extract_store(v) for v in vch_numbers if v})
+
+    return {
+        "has_data": has_data,
+        "date_from": date_bounds[0] if has_data else None,
+        "date_to": date_bounds[1] if has_data else None,
+        "categories": DP_CATEGORIES,
+        "stores": stores,
+        "can_upload": current_user.role == "Admin",
+    }
+
+
+@app.get("/api/daily-profitability/dashboard")
+def daily_profitability_dashboard(
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
+    category: Optional[str] = Query(None),
+    store: Optional[str] = Query(None),
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    rows = dp_filter_rows(db, start_date, end_date)
+    if not rows:
+        return {"has_data": False}
+
+    merged, review_notes = dp_merge_rows(rows)
+    merged = dp_apply_filters(merged, category, store)
+    if not merged:
+        return {"has_data": False}
+
+    total_sale = sum(m["sale"] for m in merged)
+    total_cost = sum(m["cost"] for m in merged)
+    total_margin = total_sale - total_cost
+
+    by_cat = defaultdict(lambda: {"sale": 0.0, "cost": 0.0, "margin": 0.0, "count": 0})
+    by_store = defaultdict(lambda: {"sale": 0.0, "cost": 0.0, "margin": 0.0, "count": 0})
+    for m in merged:
+        c = by_cat[m["category"]]
+        c["sale"] += m["sale"]; c["cost"] += m["cost"]; c["margin"] += m["margin"]; c["count"] += 1
+        s = by_store[m["store"]]
+        s["sale"] += m["sale"]; s["cost"] += m["cost"]; s["margin"] += m["margin"]; s["count"] += 1
+
+    loss_all = [m for m in merged if m["margin"] < 0]
+    top_profitable = sorted(merged, key=lambda m: -m["margin"])[:10]
+    loss_making = sorted(loss_all, key=lambda m: m["margin"])[:15]
+
+    return {
+        "has_data": True,
+        "kpis": {
+            "total_sale": round(total_sale, 2),
+            "total_cost": round(total_cost, 2),
+            "total_margin": round(total_margin, 2),
+            "margin_pct": round((total_margin / total_cost * 100) if total_cost else 0.0, 2),
+            "line_items": len(merged),
+            "loss_items": len(loss_all),
+            "stores": len(by_store),
+        },
+        "by_category": [
+            {"category": c, "sale": round(d["sale"], 2), "cost": round(d["cost"], 2),
+             "margin": round(d["margin"], 2), "count": d["count"]}
+            for c, d in sorted(by_cat.items())
+        ],
+        "by_store": [
+            {"store": s, "sale": round(d["sale"], 2), "cost": round(d["cost"], 2),
+             "margin": round(d["margin"], 2), "count": d["count"]}
+            for s, d in sorted(by_store.items())
+        ],
+        "top_profitable": [dp_serialize_item(m) for m in top_profitable],
+        "loss_making": [dp_serialize_item(m) for m in loss_making],
+        "review_notes": review_notes[:20],
+        "filters": {
+            "start_date": start_date.isoformat() if start_date else None,
+            "end_date": end_date.isoformat() if end_date else None,
+            "category": category or "ALL",
+            "store": store or "ALL",
+        },
+    }
+
+
+@app.get("/api/daily-profitability/download")
+def daily_profitability_download(
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
+    category: Optional[str] = Query(None),
+    store: Optional[str] = Query(None),
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    rows = dp_filter_rows(db, start_date, end_date)
+    if not rows:
+        raise HTTPException(status_code=404, detail="No data available for the selected range. Upload a Busy export first (Sales in your scope -> Interval Sales Analytics Upload).")
+
+    merged, _ = dp_merge_rows(rows)
+    merged = dp_apply_filters(merged, category, store)
+    if not merged:
+        raise HTTPException(status_code=404, detail="No rows match the selected filters.")
+
+    if start_date and end_date:
+        label = f"{start_date.strftime('%d-%b-%Y')} to {end_date.strftime('%d-%b-%Y')}" if start_date != end_date else start_date.strftime("%d-%b-%Y")
+    else:
+        dates = [m["date"] for m in merged if m.get("date")]
+        label = f"{min(dates).strftime('%d-%b-%Y')} to {max(dates).strftime('%d-%b-%Y')}" if dates else "All Dates"
+
+    workbook_bytes = build_daily_profitability_workbook(merged, label)
+
+    fname_bit = f"{start_date}_{end_date}" if (start_date or end_date) else "all"
+    filename = f"Daily_Profitability_{fname_bit}.xlsx"
+    return Response(
+        content=workbook_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/daily-profitability")
+@app.get("/daily-profitability.html")
+def daily_profitability_page():
+    return serve_html("static/daily_profitability.html")
+
+
+
+
 # ============================================================
 # CLAIMS
 # ============================================================

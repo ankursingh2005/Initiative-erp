@@ -1,8 +1,8 @@
-// Bumped to v9: added the new /analytics (AI Analysis) page to the core
+// Bumped to v10: added the new /daily-profitability page to the core
 // asset list. Bumping the cache name forces every existing install to drop
 // its old cache on the next activate, so the new page shell gets prefetched
 // too instead of only being cached the first time a user happens to visit it.
-const CACHE_NAME = 'initiative-erp-v9';
+const CACHE_NAME = 'initiative-erp-v10';
 const CORE_ASSETS = [
   '/login',
   '/signup',
@@ -10,6 +10,7 @@ const CORE_ASSETS = [
   '/dashboard',
   '/purchase-orders',
   '/analytics',
+  '/daily-profitability',
   '/manifest.webmanifest',
   '/static/Initiative%20logo.png'
 ];

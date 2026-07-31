@@ -167,6 +167,11 @@
     .empty-state p { color: var(--muted); max-width: 460px; margin: 0 auto 20px; font-size: 14px; line-height: 1.6; }
 
     .hidden { display: none !important; }
+    .chart-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+    .chart-type-toggle { display: flex; gap: 4px; background: #f1f2f5; border-radius: 8px; padding: 3px; flex-shrink: 0; }
+    .chart-type-toggle button { border: none; background: transparent; padding: 5px 9px; border-radius: 6px; font-size: 11px;
+      font-weight: 700; color: var(--muted); cursor: pointer; }
+    .chart-type-toggle button.active { background: #fff; color: var(--ai-dark); box-shadow: 0 1px 3px rgba(16,24,40,.15); }
     .loading-overlay { text-align: center; padding: 40px; color: var(--muted); font-size: 14px; }
 
     /* Review & Clean panel (shown after Analyze, before the data is
@@ -354,9 +359,32 @@
           <div class="chart-box"><canvas id="yearlyChart"></canvas></div>
         </div>
         <div class="card">
-          <h2>Profit Share by Division</h2>
-          <p class="sub">Which divisions drive your profit.</p>
+          <div class="chart-card-head">
+            <div>
+              <h2>Profit Share by Division</h2>
+              <p class="sub">Which divisions drive your profit - a division running at a loss is marked (Loss).</p>
+            </div>
+            <div class="chart-type-toggle" id="divisionChartToggle">
+              <button data-type="bar" class="active">Bar</button>
+              <button data-type="doughnut">Donut</button>
+              <button data-type="pie">Pie</button>
+              <button data-type="polarArea">Polar</button>
+            </div>
+          </div>
           <div class="chart-box"><canvas id="divisionChart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="charts-grid">
+        <div class="card">
+          <h2>Division Margin Comparison</h2>
+          <p class="sub">Margin % across every division, at a glance.</p>
+          <div class="chart-box"><canvas id="divisionRadarChart"></canvas></div>
+        </div>
+        <div class="card">
+          <h2>Sales vs Cost by Division</h2>
+          <p class="sub">How much of each division's revenue gets eaten by cost.</p>
+          <div class="chart-box"><canvas id="divisionSalesCostChart"></canvas></div>
         </div>
       </div>
 
@@ -862,21 +890,95 @@
       });
     }
 
-    function renderDivisionChart(data) {
+    let lastDashboardData = null;
+    let divisionChartType = 'bar';
+
+    function renderDivisionChart(data, type) {
+      type = type || divisionChartType;
+      divisionChartType = type;
       const ctx = document.getElementById('divisionChart');
       const divs = data.division_breakdown.slice(0, 8);
+      const colors = divs.map((d, i) => CHART_COLORS[i % CHART_COLORS.length]);
+      const isSlice = (type === 'doughnut' || type === 'pie' || type === 'polarArea');
+
+      const labels = divs.map(d => d.division + (d.profit < 0 ? ' (Loss)' : ''));
+      const values = isSlice ? divs.map(d => Math.abs(d.profit)) : divs.map(d => d.profit);
+
+      const tooltipLabel = (item) => {
+        const d = divs[item.dataIndex];
+        const share = (d.profit_share_percent != null) ? `${d.profit_share_percent}% of total profit` : '';
+        return `${inr(d.profit)}${share ? '  ·  ' + share : ''}`;
+      };
+
+      const options = {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: isSlice, position: 'right', labels: { boxWidth: 12, font: { size: 11 } } },
+          tooltip: { callbacks: { label: tooltipLabel } },
+        },
+      };
+      if (!isSlice) {
+        options.scales = { y: { ticks: { callback: v => inr(v) } }, x: { ticks: { autoSkip: false, font: { size: 11 } } } };
+      }
+
       charts.division = new Chart(ctx, {
-        type: 'doughnut',
+        type: type,
+        data: { labels, datasets: [{ label: 'Profit', data: values, backgroundColor: colors, borderRadius: type === 'bar' ? 6 : 0 }] },
+        options,
+      });
+    }
+
+    function renderDivisionRadarChart(data) {
+      const ctx = document.getElementById('divisionRadarChart');
+      const divs = data.division_breakdown.slice(0, 8);
+      charts.divisionRadar = new Chart(ctx, {
+        type: 'radar',
         data: {
           labels: divs.map(d => d.division),
-          datasets: [{ data: divs.map(d => Math.max(d.profit, 0)), backgroundColor: CHART_COLORS }]
+          datasets: [{
+            label: 'Margin %',
+            data: divs.map(d => d.margin_percent),
+            backgroundColor: 'rgba(124,58,237,0.18)',
+            borderColor: '#7c3aed',
+            pointBackgroundColor: '#7c3aed',
+          }],
         },
         options: {
           responsive: true, maintainAspectRatio: false,
-          plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: { size: 11 } } } }
-        }
+          plugins: { legend: { display: false } },
+          scales: { r: { ticks: { callback: v => v + '%' }, beginAtZero: true } },
+        },
       });
     }
+
+    function renderDivisionSalesCostChart(data) {
+      const ctx = document.getElementById('divisionSalesCostChart');
+      const divs = data.division_breakdown.slice(0, 8);
+      charts.divisionSalesCost = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: divs.map(d => d.division),
+          datasets: [
+            { label: 'Sales', data: divs.map(d => d.sales), backgroundColor: '#155eef', borderRadius: 5 },
+            { label: 'Cost', data: divs.map(d => d.cost), backgroundColor: '#d95f00', borderRadius: 5 },
+          ],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { position: 'bottom' } },
+          scales: { y: { ticks: { callback: v => inr(v) } } },
+        },
+      });
+    }
+
+    document.getElementById('divisionChartToggle').addEventListener('click', function (e) {
+      const btn = e.target.closest('button[data-type]');
+      if (!btn || !lastDashboardData) return;
+      this.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      if (charts.division) charts.division.destroy();
+      renderDivisionChart(lastDashboardData, btn.dataset.type);
+    });
 
     function renderMonthlyChart(data) {
       const ctx = document.getElementById('monthlyChart');
@@ -1055,10 +1157,13 @@
     }
 
     function renderAll(data) {
+      lastDashboardData = data;
       destroyCharts();
       renderKpis(data);
       renderYearlyChart(data);
       renderDivisionChart(data);
+      renderDivisionRadarChart(data);
+      renderDivisionSalesCostChart(data);
       renderMonthlyChart(data);
       renderTopItemsChart(data);
       renderDivisionTable(data);

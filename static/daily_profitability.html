@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#000000" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <title>Initiative ERP - Daily Profitability</title>
+  <link rel="icon" href="static/Initiative%20logo.png" type="image/png" />
+  <style>
+    :root {
+      --dp: #0f9d84;
+      --dp-dark: #0a6b5a;
+      --dp-glow: #e3f7f2;
+      --green: #2e7d32;
+      --red: #c0392b;
+      --bg: #f4f6f8;
+      --card: #ffffff;
+      --text: #23384d;
+      --muted: #6b7a90;
+      --border: #e6ebf1;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Arial, sans-serif; background: var(--bg); color: var(--text); }
+
+    header {
+      background: linear-gradient(90deg, #181818 0%, #000000 100%);
+      color: white; padding: 18px 24px; display: flex; justify-content: space-between; align-items: center;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.12); position: sticky; top: 0; z-index: 40;
+    }
+    .brand { font-size: 20px; font-weight: bold; }
+    .badge { display: inline-block; margin-left: 10px; background: rgba(15,157,132,0.35); padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; letter-spacing: 0.4px; }
+    .header-actions { display: flex; align-items: center; gap: 10px; }
+    .back-btn { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,0.55); padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: 600; }
+    .back-btn:hover { background: rgba(255,255,255,0.12); border-color: #fff; }
+    .logout-btn { background: white; color: #111; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: 600; }
+    .logout-btn:hover { background: #f0f3f7; }
+
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(11,22,39,0.55); display: none; align-items: center; justify-content: center; padding: 20px; z-index: 9999; }
+    .modal-backdrop.show { display: flex; }
+    .modal { background: #fff; border-radius: 12px; padding: 22px 24px; max-width: 360px; width: 100%; box-shadow: 0 24px 60px rgba(16,24,40,.35); }
+    .modal h3 { margin: 0 0 8px; }
+    .modal p { margin: 0 0 16px; color: var(--muted); font-size: 14px; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
+    .modal-cancel { background: #eef1f5; border: none; padding: 9px 14px; border-radius: 6px; cursor: pointer; font-weight: 600; }
+    .modal-confirm { background: var(--red); color: #fff; border: none; padding: 9px 14px; border-radius: 6px; cursor: pointer; font-weight: 600; }
+
+    main { max-width: 1240px; margin: 0 auto; padding: 24px 20px 70px; }
+
+    .intro {
+      background: radial-gradient(circle at 15% 20%, rgba(15,157,132,0.20) 0%, transparent 45%),
+                  linear-gradient(135deg, #0b1f1c 0%, #0f2b26 60%, #0b1f1c 100%);
+      color: #fff; border-radius: 16px; padding: 26px 28px; margin-bottom: 20px;
+      display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap;
+    }
+    .intro h1 { margin: 0 0 6px; font-size: 24px; }
+    .intro p { margin: 0; color: #bfe9df; font-size: 14px; max-width: 620px; line-height: 1.5; }
+    .intro .eyebrow { display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#d7f5ee; background:rgba(15,157,132,0.28); border:1px solid rgba(15,157,132,0.5); padding:5px 10px; border-radius:999px; margin-bottom: 10px; }
+
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px 22px; margin-bottom: 20px; box-shadow: 0 2px 10px rgba(16,24,40,0.04); }
+    .card h2 { margin: 0 0 4px; font-size: 16px; }
+    .card .sub { color: var(--muted); font-size: 12.5px; margin: 0 0 16px; }
+
+    .status-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+    .status-text { font-size: 13.5px; color: var(--muted); }
+    .status-text strong { color: var(--text); }
+    .upload-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .dropzone {
+      border: 2px dashed #a8ddd0; border-radius: 10px; padding: 14px 18px; background: #f2fbf8;
+      display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 13.5px; color: var(--dp-dark); font-weight: 600;
+      transition: border-color .15s ease, background .15s ease;
+    }
+    .dropzone:hover, .dropzone.dragover { border-color: var(--dp); background: #e7f8f2; }
+    .dropzone input { display: none; }
+    .btn { border: none; border-radius: 8px; padding: 10px 16px; font-weight: 700; font-size: 13.5px; cursor: pointer; }
+    .btn-primary { background: var(--dp); color: #fff; }
+    .btn-primary:hover { background: var(--dp-dark); }
+    .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-ghost { background: #eef1f5; color: var(--text); }
+    .btn-ghost:hover { background: #e2e7ee; }
+    .btn-danger { background: #fdecea; color: var(--red); }
+    .btn-danger:hover { background: #fbdad7; }
+    .upload-msg { margin-top: 10px; font-size: 13px; }
+    .upload-msg.error { color: var(--red); }
+    .upload-msg.success { color: var(--green); }
+
+    .filter-bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+    .filter-field { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; color: var(--muted); font-weight: 700; }
+    .filter-field select, .filter-field input { padding: 9px 10px; border: 1px solid #d3d9e2; border-radius: 8px; font-size: 13.5px; min-width: 150px; }
+
+    .kpi-grid { display: grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap: 14px; margin-bottom: 20px; }
+    .kpi { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 16px; box-shadow: 0 2px 8px rgba(16,24,40,0.04); }
+    .kpi .label { font-size: 11.5px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .03em; margin-bottom: 6px; }
+    .kpi .value { font-size: 19px; font-weight: 800; color: var(--text); }
+    .kpi .value.good { color: var(--green); }
+    .kpi .value.bad { color: var(--red); }
+
+    .charts-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 20px; margin-bottom: 20px; }
+    .chart-box { position: relative; height: 300px; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: .03em; }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    tr.loss td { color: var(--red); font-weight: 700; }
+    tr.profit-row td.margin-cell { color: var(--green); font-weight: 700; }
+
+    .tables-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .empty-state { text-align: center; padding: 40px 20px; color: var(--muted); }
+    .empty-state .icon { font-size: 40px; margin-bottom: 10px; }
+    .note-list { font-size: 12.5px; color: var(--muted); margin: 8px 0 0; padding-left: 18px; }
+    .note-list li { margin-bottom: 4px; }
+
+    @media (max-width: 920px) {
+      .kpi-grid { grid-template-columns: repeat(3, minmax(0,1fr)); }
+      .charts-grid, .tables-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 620px) {
+      .kpi-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      main { padding: 16px 12px 60px; }
+      .intro { padding: 20px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">Initiative ERP <span class="badge">Daily Profitability</span></div>
+    <div class="header-actions">
+      <button class="back-btn" onclick="location.href = appUrl('/home')">&larr; Back</button>
+      <button class="logout-btn" onclick="openLogoutModal()">Logout</button>
+    </div>
+  </header>
+
+  <div id="logoutModal" class="modal-backdrop" onclick="if (event.target === this) closeLogoutModal()">
+    <div class="modal">
+      <h3>Logout system?</h3>
+      <p>This will clear your session and return you to the login page.</p>
+      <div class="modal-actions">
+        <button type="button" class="modal-cancel" onclick="closeLogoutModal()">Cancel</button>
+        <button type="button" class="modal-confirm" onclick="confirmLogout()">Logout</button>
+      </div>
+    </div>
+  </div>
+
+  <main>
+    <div class="intro">
+      <div>
+        <span class="eyebrow">Daily Profitability</span>
+        <h1>Store &amp; category-wise profitability report</h1>
+        <p>Reads whatever has been uploaded via <strong>Sales in your scope &rarr; Interval Sales Analytics Upload</strong> (the same daily/weekly/monthly Busy export). Pick a date range below to see the dashboard, or download the formatted report.</p>
+      </div>
+    </div>
+
+    <div class="card" id="uploadCard" style="display:none;">
+      <h2>Upload a Busy export</h2>
+      <p class="sub">Excel, CSV, PDF, or JPG with Date/Vch No/Item/Sales Amt/Cost Amt columns. This feeds the same dataset used by Scheme-Matched Sales.</p>
+      <div class="status-row">
+        <div class="upload-controls">
+          <label class="dropzone" id="dropzone">
+            <span id="fileLabel">Choose file...</span>
+            <input id="fileInput" type="file" accept=".xlsx,.xls,.csv,.pdf,.jpg,.jpeg,.png" />
+          </label>
+          <button class="btn btn-primary" id="uploadBtn" onclick="uploadFile()" disabled>Upload &amp; Process</button>
+          <button class="btn btn-danger" onclick="openClearModal()">Clear Data</button>
+        </div>
+        <div class="upload-controls">
+          <span class="status-text" id="lastUploadText"></span>
+        </div>
+      </div>
+      <div class="upload-msg" id="uploadMsg"></div>
+    </div>
+
+    <div id="clearModal" class="modal-backdrop" onclick="if (event.target === this) closeClearModal()">
+      <div class="modal">
+        <h3>Clear all uploaded data?</h3>
+        <p>This removes every row currently uploaded via Interval Sales Analytics Upload - across all dates, not just the range you're viewing. It also clears the data behind Scheme-Matched Sales. Upload your new file right after.</p>
+        <div class="modal-actions">
+          <button type="button" class="modal-cancel" onclick="closeClearModal()">Cancel</button>
+          <button type="button" class="modal-confirm" onclick="confirmClear()">Clear data</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Filters</h2>
+      <p class="sub">Choose a period, or pick a quick preset. Category and Store narrow the same period further.</p>
+      <div class="filter-bar">
+        <div class="filter-field">
+          <label>Quick range</label>
+          <select id="presetSelect" onchange="applyPreset()">
+            <option value="today">Today</option>
+            <option value="week">This Week</option>
+            <option value="month">This Month</option>
+            <option value="custom" selected>Custom</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <label>Start Date</label>
+          <input id="startDate" type="date" onchange="document.getElementById('presetSelect').value='custom'; loadDashboard();" />
+        </div>
+        <div class="filter-field">
+          <label>End Date</label>
+          <input id="endDate" type="date" onchange="document.getElementById('presetSelect').value='custom'; loadDashboard();" />
+        </div>
+        <div class="filter-field">
+          <label>Category</label>
+          <select id="categorySelect" onchange="loadDashboard()">
+            <option value="ALL">All Categories</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <label>Store</label>
+          <select id="storeSelect" onchange="loadDashboard()">
+            <option value="ALL">All Stores</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <label>&nbsp;</label>
+          <button class="btn btn-primary" onclick="downloadReport()">&#8681; Download Report</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="dashboardArea">
+      <div class="card"><div class="empty-state"><div class="icon">&#128202;</div>Loading...</div></div>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+
+  <script>
+    function appUrl(path) {
+      const currentPath = window.location.pathname;
+      const appBasePath = currentPath === '/erp' || currentPath.startsWith('/erp/') ? '/erp' : '';
+      if (!path) return appBasePath || '/';
+      if (/^https?:\/\//i.test(path)) return path;
+      return path.startsWith('/') ? `${appBasePath}${path}` : `${appBasePath}/${path}`;
+    }
+
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register(appUrl('/sw.js')).catch(() => {});
+      });
+    }
+
+    const token = localStorage.getItem('token');
+    if (!token) window.location.href = appUrl('/login');
+
+    function logout() { localStorage.clear(); window.location.href = appUrl('/login'); }
+    function openLogoutModal() { document.getElementById('logoutModal').classList.add('show'); }
+    function closeLogoutModal() { document.getElementById('logoutModal').classList.remove('show'); }
+    function confirmLogout() { logout(); }
+    function openClearModal() { document.getElementById('clearModal').classList.add('show'); }
+    function closeClearModal() { document.getElementById('clearModal').classList.remove('show'); }
+
+    async function confirmClear() {
+      closeClearModal();
+      const msg = document.getElementById('uploadMsg');
+      msg.className = 'upload-msg';
+      msg.textContent = 'Clearing previous data...';
+
+      const res = await authFetch('/admin/interval-sales/clear', { method: 'DELETE' });
+      if (!res) return;
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        msg.classList.add('error');
+        msg.textContent = data.detail || 'Failed to clear data.';
+        return;
+      }
+      msg.classList.add('success');
+      msg.textContent = `Cleared ${data.deleted ?? 0} row(s). Upload your new file now.`;
+      await loadMeta();
+      await loadDashboard();
+    }
+
+    async function authFetch(url, options = {}) {
+      const response = await fetch(appUrl(url), {
+        ...options,
+        cache: 'no-store',
+        headers: { ...(options.headers || {}), Authorization: 'Bearer ' + token }
+      });
+      if (response.status === 401) { logout(); return null; }
+      return response;
+    }
+
+    function inr(value) {
+      const n = Number(value) || 0;
+      return '₹' + n.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+    }
+    function pct(value) { return (Number(value) || 0).toFixed(1) + '%'; }
+    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+    function fmtDate(d) { const p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; }
+
+    let categoryChart = null;
+
+    function applyPreset() {
+      const preset = document.getElementById('presetSelect').value;
+      const today = new Date();
+      let start = new Date(today), end = new Date(today);
+      if (preset === 'week') {
+        const day = today.getDay();
+        start = new Date(today); start.setDate(today.getDate() - day);
+      } else if (preset === 'month') {
+        start = new Date(today.getFullYear(), today.getMonth(), 1);
+      } else if (preset === 'custom') {
+        return;
+      }
+      document.getElementById('startDate').value = fmtDate(start);
+      document.getElementById('endDate').value = fmtDate(end);
+      loadDashboard();
+    }
+
+    async function loadMeta() {
+      const res = await authFetch('/api/daily-profitability/meta');
+      if (!res) return;
+      const meta = await res.json();
+
+      document.getElementById('uploadCard').style.display = meta.can_upload ? 'block' : 'none';
+
+      const catSelect = document.getElementById('categorySelect');
+      catSelect.innerHTML = '<option value="ALL">All Categories</option>' +
+        meta.categories.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+
+      const storeSelect = document.getElementById('storeSelect');
+      storeSelect.innerHTML = '<option value="ALL">All Stores</option>' +
+        meta.stores.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+
+      if (meta.has_data && meta.date_to) {
+        document.getElementById('endDate').value = meta.date_to;
+        document.getElementById('startDate').value = meta.date_to;
+        document.getElementById('presetSelect').value = 'custom';
+      }
+
+      if (meta.has_data) {
+        document.getElementById('lastUploadText').textContent =
+          `Data available from ${meta.date_from} to ${meta.date_to}`;
+      }
+    }
+
+    function buildQuery() {
+      const params = new URLSearchParams();
+      const start = document.getElementById('startDate').value;
+      const end = document.getElementById('endDate').value;
+      const category = document.getElementById('categorySelect').value;
+      const store = document.getElementById('storeSelect').value;
+      if (start) params.set('start_date', start);
+      if (end) params.set('end_date', end);
+      if (category && category !== 'ALL') params.set('category', category);
+      if (store && store !== 'ALL') params.set('store', store);
+      return params.toString();
+    }
+
+    function renderEmpty(area, message) {
+      area.innerHTML = `<div class="card"><div class="empty-state"><div class="icon">&#128203;</div>${esc(message)}</div></div>`;
+    }
+
+    async function loadDashboard() {
+      const area = document.getElementById('dashboardArea');
+      const res = await authFetch(`/api/daily-profitability/dashboard?${buildQuery()}`);
+      if (!res) return;
+      const data = await res.json();
+
+      if (!data.has_data) {
+        renderEmpty(area, 'No data for this range/filter yet. Upload a Busy export above, or widen the date range.');
+        return;
+      }
+
+      const k = data.kpis;
+      const marginClass = k.total_margin < 0 ? 'bad' : 'good';
+
+      area.innerHTML = `
+        <div class="kpi-grid">
+          <div class="kpi"><div class="label">Total Sales</div><div class="value">${inr(k.total_sale)}</div></div>
+          <div class="kpi"><div class="label">Total Cost</div><div class="value">${inr(k.total_cost)}</div></div>
+          <div class="kpi"><div class="label">Total Margin</div><div class="value ${marginClass}">${inr(k.total_margin)}</div></div>
+          <div class="kpi"><div class="label">Margin %</div><div class="value ${marginClass}">${pct(k.margin_pct)}</div></div>
+          <div class="kpi"><div class="label">Line Items</div><div class="value">${k.line_items}</div></div>
+          <div class="kpi"><div class="label">Loss-Making Items</div><div class="value ${k.loss_items ? 'bad' : ''}">${k.loss_items}</div></div>
+        </div>
+
+        <div class="charts-grid">
+          <div class="card">
+            <h2>Sales &amp; Margin by Category</h2>
+            <p class="sub">HA / HE / Computer / Mobile - derived from item keywords; sanity-check against your product list.</p>
+            <div class="chart-box"><canvas id="categoryChart"></canvas></div>
+          </div>
+          <div class="card">
+            <h2>By Store</h2>
+            <p class="sub">Margin contribution per store for this period.</p>
+            <table>
+              <thead><tr><th>Store</th><th class="num">Sales</th><th class="num">Margin</th><th class="num">Items</th></tr></thead>
+              <tbody>
+                ${data.by_store.map(s => `<tr><td>${esc(s.store)}</td><td class="num">${inr(s.sale)}</td><td class="num">${inr(s.margin)}</td><td class="num">${s.count}</td></tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="tables-grid">
+          <div class="card">
+            <h2>Top Profitable Items</h2>
+            <p class="sub">Highest margin line items in this period.</p>
+            <table>
+              <thead><tr><th>Item</th><th>Store</th><th class="num">Sale</th><th class="num">Margin</th><th class="num">PL %</th></tr></thead>
+              <tbody>
+                ${data.top_profitable.map(m => `<tr class="profit-row"><td>${esc(m.item)}</td><td>${esc(m.store)}</td><td class="num">${inr(m.sale)}</td><td class="num margin-cell">${inr(m.margin)}</td><td class="num">${pct(m.pl_pct)}</td></tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+          <div class="card">
+            <h2>Loss-Making Items</h2>
+            <p class="sub">Line items where cost exceeded sale value in this period.</p>
+            ${data.loss_making.length ? `
+            <table>
+              <thead><tr><th>Item</th><th>Store</th><th class="num">Sale</th><th class="num">Margin</th><th class="num">PL %</th></tr></thead>
+              <tbody>
+                ${data.loss_making.map(m => `<tr class="loss"><td>${esc(m.item)}</td><td>${esc(m.store)}</td><td class="num">${inr(m.sale)}</td><td class="num">${inr(m.margin)}</td><td class="num">${pct(m.pl_pct)}</td></tr>`).join('')}
+              </tbody>
+            </table>` : `<div class="empty-state" style="padding:20px;">No loss-making line items in this period.</div>`}
+          </div>
+        </div>
+
+        ${data.review_notes && data.review_notes.length ? `
+        <div class="card">
+          <h2>Review notes</h2>
+          <p class="sub">Vouchers with more than one priced product plus an unpriced part/spare line - cost was attributed by matching item names. Worth a quick sanity check.</p>
+          <ul class="note-list">${data.review_notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul>
+        </div>` : ''}
+      `;
+
+      if (categoryChart) categoryChart.destroy();
+      const ctx = document.getElementById('categoryChart').getContext('2d');
+      categoryChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: data.by_category.map(c => c.category),
+          datasets: [
+            { label: 'Sales', data: data.by_category.map(c => c.sale), backgroundColor: '#0f9d84' },
+            { label: 'Margin', data: data.by_category.map(c => c.margin), backgroundColor: '#0a6b5a' },
+          ]
+        },
+        options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+      });
+    }
+
+    async function downloadReport() {
+      const res = await authFetch(`/api/daily-profitability/download?${buildQuery()}`);
+      if (!res) return;
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.detail || 'No data available to download for this selection.');
+        return;
+      }
+      const blob = await res.blob();
+      const disposition = res.headers.get('Content-Disposition') || '';
+      const match = disposition.match(/filename="?([^"]+)"?/);
+      const filename = match ? match[1] : 'Daily_Profitability.xlsx';
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      window.URL.revokeObjectURL(url);
+    }
+
+    document.getElementById('fileInput').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      document.getElementById('fileLabel').textContent = file ? file.name : 'Choose file...';
+      document.getElementById('uploadBtn').disabled = !file;
+    });
+
+    async function uploadFile() {
+      const fileInput = document.getElementById('fileInput');
+      const file = fileInput.files[0];
+      if (!file) return;
+      const msg = document.getElementById('uploadMsg');
+      msg.className = 'upload-msg';
+      msg.textContent = 'Uploading and processing...';
+
+      const form = new FormData();
+      form.append('file', file);
+
+      const res = await authFetch('/admin/interval-sales/upload', { method: 'POST', body: form });
+      if (!res) return;
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        msg.classList.add('error');
+        msg.textContent = data.detail || 'Upload failed.';
+        return;
+      }
+      msg.classList.add('success');
+      msg.textContent = `Processed ${file.name}: ${data.inserted} row(s) loaded${data.skipped ? `, ${data.skipped} skipped` : ''}.`;
+      fileInput.value = '';
+      document.getElementById('fileLabel').textContent = 'Choose file...';
+      document.getElementById('uploadBtn').disabled = true;
+      await loadMeta();
+      await loadDashboard();
+    }
+
+    (async function init() {
+      await loadMeta();
+      await loadDashboard();
+    })();
+  </script>
+</body>
+</html>

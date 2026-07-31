@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#000000" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <title>Initiative ERP - Business Growth</title>
+  <link rel="icon" href="static/Initiative%20logo.png" type="image/png" />
+  <style>
+    :root {
+      --navy: #1a3c6e;
+      --navy-dark: #14305a;
+      --ai: #7c3aed;
+      --ai-dark: #5b21b6;
+      --ai-glow: #f1e8ff;
+      --green: #2e7d32;
+      --red: #c0392b;
+      --amber: #b8860b;
+      --bg: #f4f6f8;
+      --card: #ffffff;
+      --text: #23384d;
+      --muted: #6b7a90;
+      --border: #e6ebf1;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Arial, sans-serif; background: var(--bg); color: var(--text); }
+
+    header {
+      background: linear-gradient(90deg, #181818 0%, #000000 100%);
+      color: white; padding: 18px 24px; display: flex; justify-content: space-between; align-items: center;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.12); position: sticky; top: 0; z-index: 40;
+    }
+    .brand { font-size: 20px; font-weight: bold; }
+    .badge { display: inline-block; margin-left: 10px; background: rgba(124,58,237,0.35); padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; letter-spacing: 0.4px; }
+    .header-actions { display: flex; align-items: center; gap: 10px; }
+    .back-btn { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,0.55); padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: 600; }
+    .back-btn:hover { background: rgba(255,255,255,0.12); border-color: #fff; }
+    .logout-btn { background: white; color: #111; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: 600; }
+    .logout-btn:hover { background: #f0f3f7; }
+
+    main { max-width: 1280px; margin: 0 auto; padding: 24px 20px 70px; }
+
+    .intro {
+      background: radial-gradient(circle at 15% 20%, rgba(124,58,237,0.16) 0%, transparent 45%),
+                  linear-gradient(135deg, #17102b 0%, #241541 60%, #17102b 100%);
+      color: #fff; border-radius: 16px; padding: 26px 28px; margin-bottom: 20px;
+      display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap;
+    }
+    .intro h1 { margin: 0 0 6px; font-size: 24px; }
+    .intro p { margin: 0; color: #cbb8f5; font-size: 14px; max-width: 620px; line-height: 1.5; }
+    .intro .eyebrow { display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#e4d4ff; background:rgba(124,58,237,0.25); border:1px solid rgba(124,58,237,0.45); padding:5px 10px; border-radius:999px; margin-bottom: 10px; }
+
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px 22px; margin-bottom: 20px; box-shadow: 0 2px 10px rgba(16,24,40,0.04); }
+    .card h2 { margin: 0 0 4px; font-size: 16px; }
+    .card .sub { color: var(--muted); font-size: 12.5px; margin: 0 0 16px; }
+
+    .btn { border: none; border-radius: 8px; padding: 10px 16px; font-weight: 700; font-size: 13.5px; cursor: pointer; }
+    .btn-primary { background: var(--ai); color: #fff; }
+    .btn-primary:hover { background: var(--ai-dark); }
+    .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-ghost { background: #eef1f5; color: var(--text); }
+    .btn-ghost:hover { background: #e2e7ee; }
+
+    .dropzone {
+      border: 2px dashed #c9b6f0; border-radius: 10px; padding: 14px 18px; background: #faf7ff;
+      display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 13.5px; color: var(--ai-dark); font-weight: 600;
+    }
+    .dropzone:hover { border-color: var(--ai); background: #f3ebff; }
+    .dropzone input { display: none; }
+    .upload-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .upload-msg { margin-top: 10px; font-size: 13px; }
+    .upload-msg.success { color: var(--green); }
+    .upload-msg.error { color: var(--red); }
+
+    .year-chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    .year-chip { display: inline-flex; align-items: center; gap: 8px; background: #f1e8ff; color: var(--ai-dark); border-radius: 999px; padding: 6px 8px 6px 14px; font-size: 12.5px; font-weight: 700; }
+    .year-chip button { background: rgba(124,58,237,0.15); border: none; color: var(--ai-dark); width: 20px; height: 20px; border-radius: 50%; cursor: pointer; font-size: 12px; line-height: 1; }
+    .year-chip button:hover { background: rgba(124,58,237,0.3); }
+    .year-chip .sales { font-weight: 500; color: #6b46c1; }
+
+    .range-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .range-btn { border: 1px solid var(--border); background: #fff; color: var(--text); padding: 8px 14px; border-radius: 999px; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+    .range-btn.active { background: var(--ai); color: #fff; border-color: var(--ai); }
+    .range-btn:hover:not(.active) { background: #f7f4ff; border-color: #c9b6f0; }
+
+    .kpi-grid { display: grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap: 14px; margin-bottom: 20px; }
+    .kpi { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 16px; box-shadow: 0 2px 8px rgba(16,24,40,0.04); }
+    .kpi .label { font-size: 11.5px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .03em; margin-bottom: 6px; }
+    .kpi .value { font-size: 19px; font-weight: 800; color: var(--text); }
+    .kpi .value.good { color: var(--green); }
+    .kpi .value.bad { color: var(--red); }
+
+    .boardroom-card { background: linear-gradient(160deg, #ffffff 0%, #faf8ff 100%); border: 1px solid #e8ddfa; }
+    .boardroom-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+    .boardroom-list li { display: flex; gap: 14px; align-items: flex-start; font-size: 15px; line-height: 1.6; color: var(--text); }
+    .boardroom-num { flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%; background: var(--ai); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px; }
+    .boardroom-list li.warn .boardroom-num { background: var(--red); }
+
+    .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .chart-box { position: relative; height: 320px; }
+    .tables-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 700; font-size: 11.5px; text-transform: uppercase; letter-spacing: .02em; }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    tr.loss-row td { color: var(--red); }
+    .table-scroll { max-height: 360px; overflow: auto; }
+
+    .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); }
+    .empty-state .icon { font-size: 40px; margin-bottom: 12px; }
+    .hidden { display: none !important; }
+
+    @media (max-width: 1100px) { .kpi-grid { grid-template-columns: repeat(3, minmax(0,1fr)); } .charts-grid, .tables-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 600px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+
+    @media print {
+      header, .upload-card, .years-card, .range-row, .no-print { display: none !important; }
+      body { background: #fff; }
+      .card { box-shadow: none; border: 1px solid #ccc; break-inside: avoid; }
+      main { max-width: 100%; padding: 0; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div><span class="brand">Initiative ERP</span><span class="badge">Business Growth</span></div>
+    <div class="header-actions">
+      <button class="back-btn" onclick="location.href = appUrl('/home')">← Home</button>
+      <button class="back-btn no-print" onclick="window.print()">🖨 Print / Export</button>
+      <button class="logout-btn" onclick="logout()">Log out</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="intro">
+      <div>
+        <span class="eyebrow">Multi-Year Analysis</span>
+        <h1>Business Growth Dashboard</h1>
+        <p>Compare 1, 5, 10, 20+ years of financial history side by side - revenue trend, profit CAGR, and which division actually drives growth. Built to hand straight to management.</p>
+      </div>
+    </div>
+
+    <div class="card upload-card" id="uploadCard">
+      <h2>Upload financial years</h2>
+      <p class="sub">Upload one file per year, or a single workbook with a sheet per year - each row's date is used to auto-detect its financial year (Apr-Mar). Re-uploading a year replaces only that year; every other year already loaded stays untouched.</p>
+      <div class="upload-row">
+        <label class="dropzone" id="dropzone">
+          📁 <span id="dropzoneLabel">Choose Excel/CSV file(s)</span>
+          <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" />
+        </label>
+        <button class="btn btn-primary" id="analyzeBtn" onclick="doUpload()" disabled>Upload &amp; Analyze</button>
+      </div>
+      <div id="uploadMsg" class="upload-msg"></div>
+    </div>
+
+    <div class="card years-card" id="yearsCard">
+      <h2>Years loaded</h2>
+      <p class="sub">Every financial year currently available for comparison.</p>
+      <div class="year-chip-row" id="yearChipRow"></div>
+    </div>
+
+    <div class="card" id="rangeCard">
+      <h2>Compare</h2>
+      <p class="sub">Choose how far back to look.</p>
+      <div class="range-row" id="rangeRow"></div>
+    </div>
+
+    <div id="emptyState" class="empty-state hidden">
+      <div class="icon">📊</div>
+      <div>Upload at least one financial year above to build the dashboard.</div>
+    </div>
+
+    <div id="dashboardContent" class="hidden">
+      <div class="kpi-grid" id="kpiGrid"></div>
+
+      <div class="card boardroom-card">
+        <h2>📋 Boardroom Summary</h2>
+        <p class="sub">Plain-English, numbers-only findings - ready to present.</p>
+        <ul class="boardroom-list" id="boardroomList"></ul>
+      </div>
+
+      <div class="charts-grid">
+        <div class="card">
+          <h2>Revenue &amp; Profit Trend</h2>
+          <p class="sub">Across every year selected.</p>
+          <div class="chart-box"><canvas id="trendChart"></canvas></div>
+        </div>
+        <div class="card">
+          <h2>Year-over-Year Growth</h2>
+          <p class="sub">% change in sales and profit vs the prior year shown.</p>
+          <div class="chart-box"><canvas id="yoyChart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="charts-grid">
+        <div class="card">
+          <h2>Division Profit, Year by Year</h2>
+          <p class="sub">Which division actually drives profit, and how that's shifted.</p>
+          <div class="chart-box"><canvas id="divisionTrendChart"></canvas></div>
+        </div>
+        <div class="card">
+          <h2>Division Growth Ranking (CAGR)</h2>
+          <p class="sub">Fastest-growing to fastest-declining, by profit CAGR.</p>
+          <div class="chart-box"><canvas id="divisionCagrChart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="tables-grid">
+        <div class="card">
+          <h2>Year-by-Year Summary</h2>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>Year</th><th class="num">Sales</th><th class="num">Profit</th><th class="num">Margin</th><th class="num">Sales Growth</th></tr></thead>
+              <tbody id="yearlyTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Division Summary (Selected Period)</h2>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>Division</th><th class="num">Total Profit</th><th class="num">Margin</th><th class="num">Profit CAGR</th></tr></thead>
+              <tbody id="divisionSummaryBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Division Profit by Year (Matrix)</h2>
+        <p class="sub">Every division's profit, every year - the detailed record behind the charts above.</p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr id="matrixHeadRow"><th>Division</th></tr></thead>
+            <tbody id="matrixBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Top Brands (Selected Period)</h2>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Brand</th><th class="num">Sales</th><th class="num">Profit</th></tr></thead>
+            <tbody id="brandTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <script>
+    function appUrl(path) {
+      const currentPath = window.location.pathname;
+      const appBasePath = currentPath === '/erp' || currentPath.startsWith('/erp/') ? '/erp' : '';
+      if (!path) return appBasePath || '/';
+      if (/^https?:\/\//i.test(path)) return path;
+      return path.startsWith('/') ? `${appBasePath}${path}` : `${appBasePath}/${path}`;
+    }
+
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => { navigator.serviceWorker.register(appUrl('/sw.js')).catch(() => {}); });
+    }
+
+    const token = localStorage.getItem('token');
+    if (!token) window.location.href = appUrl('/login');
+    function logout() { localStorage.clear(); window.location.href = appUrl('/login'); }
+
+    async function authFetch(url, options = {}) {
+      const response = await fetch(appUrl(url), {
+        ...options, cache: 'no-store', headers: { ...(options.headers || {}), Authorization: 'Bearer ' + token }
+      });
+      if (response.status === 401) { logout(); return null; }
+      return response;
+    }
+
+    function inr(value) { const n = Number(value) || 0; return '₹' + n.toLocaleString('en-IN', { maximumFractionDigits: 0 }); }
+    function pct(value) { return value == null ? '—' : (Number(value) >= 0 ? '+' : '') + Number(value).toFixed(1) + '%'; }
+    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+    const CHART_COLORS = ['#7c3aed', '#155eef', '#d95f00', '#2e7d32', '#c0392b', '#0e7490', '#b8860b', '#9333ea', '#0f766e', '#be185d'];
+
+    let charts = {};
+    function destroyCharts() { Object.values(charts).forEach(c => c && c.destroy()); charts = {}; }
+
+    let currentRange = '5';
+    let yearsAvailableCount = 0;
+
+    // ---------------- Upload ----------------
+    const fileInput = document.getElementById('fileInput');
+    const dropzoneLabel = document.getElementById('dropzoneLabel');
+    fileInput.addEventListener('change', () => {
+      document.getElementById('analyzeBtn').disabled = !fileInput.files.length;
+      dropzoneLabel.textContent = fileInput.files.length ? fileInput.files[0].name : 'Choose Excel/CSV file(s)';
+    });
+
+    async function doUpload() {
+      const file = fileInput.files[0];
+      if (!file) return;
+      const msg = document.getElementById('uploadMsg');
+      const btn = document.getElementById('analyzeBtn');
+      msg.className = 'upload-msg';
+      msg.textContent = 'Uploading and analyzing...';
+      btn.disabled = true;
+
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await authFetch('/api/growth/upload', { method: 'POST', body: formData });
+      const data = await res?.json().catch(() => ({})) || {};
+      btn.disabled = false;
+
+      if (!res || !res.ok) {
+        msg.className = 'upload-msg error';
+        msg.textContent = data.detail || 'Upload failed.';
+        return;
+      }
+      msg.className = 'upload-msg success';
+      const yearList = (data.years || []).map(y => `${y.financial_year} (${y.rows_loaded.toLocaleString('en-IN')} rows${y.replaced_existing ? ', replaced' : ''})`).join(', ');
+      msg.textContent = `${data.message} ${yearList}`;
+      fileInput.value = '';
+      dropzoneLabel.textContent = 'Choose Excel/CSV file(s)';
+      document.getElementById('analyzeBtn').disabled = true;
+      await loadYears();
+    }
+
+    // ---------------- Years available + range selector ----------------
+    async function loadYears() {
+      const res = await authFetch('/api/growth/years');
+      const data = await res?.json().catch(() => ({})) || {};
+      const years = data.years || [];
+      yearsAvailableCount = years.length;
+
+      const chipRow = document.getElementById('yearChipRow');
+      chipRow.innerHTML = years.length
+        ? years.map(y => `
+            <span class="year-chip">
+              ${esc(y.financial_year)} <span class="sales">${inr(y.total_sales)}</span>
+              ${data.can_upload ? `<button onclick="removeYear('${esc(y.financial_year)}')" title="Remove this year">✕</button>` : ''}
+            </span>`).join('')
+        : '<span style="color:var(--muted); font-size:13px;">No years loaded yet.</span>';
+
+      buildRangeRow(years.length);
+
+      if (!years.length) {
+        document.getElementById('emptyState').classList.remove('hidden');
+        document.getElementById('dashboardContent').classList.add('hidden');
+        return;
+      }
+      document.getElementById('emptyState').classList.add('hidden');
+      await loadDashboard();
+    }
+
+    async function removeYear(fy) {
+      if (!confirm(`Remove all data for ${fy}? This can't be undone.`)) return;
+      await authFetch(`/api/growth/years/${encodeURIComponent(fy)}`, { method: 'DELETE' });
+      await loadYears();
+    }
+
+    function buildRangeRow(totalYears) {
+      const row = document.getElementById('rangeRow');
+      const candidates = [1, 2, 3, 4, 5, 10, 15, 20].filter(n => n <= totalYears);
+      if (!candidates.length && totalYears) candidates.push(totalYears);
+      let buttons = candidates.map(n => `<button class="range-btn" data-range="${n}">Last ${n} year${n > 1 ? 's' : ''}</button>`).join('');
+      buttons += `<button class="range-btn" data-range="ALL">All ${totalYears} years</button>`;
+      row.innerHTML = buttons;
+      if (!candidates.includes(Number(currentRange)) && currentRange !== 'ALL') currentRange = String(candidates[candidates.length - 1] || 'ALL');
+      row.querySelectorAll('.range-btn').forEach(btn => {
+        if (btn.dataset.range === currentRange) btn.classList.add('active');
+        btn.addEventListener('click', () => {
+          currentRange = btn.dataset.range;
+          row.querySelectorAll('.range-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          loadDashboard();
+        });
+      });
+    }
+
+    // ---------------- Dashboard ----------------
+    async function loadDashboard() {
+      const res = await authFetch(`/api/growth/dashboard?years=${encodeURIComponent(currentRange)}`);
+      const data = await res?.json().catch(() => ({})) || {};
+      if (!data.has_data) {
+        document.getElementById('emptyState').classList.remove('hidden');
+        document.getElementById('dashboardContent').classList.add('hidden');
+        return;
+      }
+      document.getElementById('emptyState').classList.add('hidden');
+      document.getElementById('dashboardContent').classList.remove('hidden');
+      destroyCharts();
+      renderKpis(data);
+      renderBoardroom(data);
+      renderTrendChart(data);
+      renderYoyChart(data);
+      renderDivisionTrendChart(data);
+      renderDivisionCagrChart(data);
+      renderYearlyTable(data);
+      renderDivisionSummaryTable(data);
+      renderMatrix(data);
+      renderBrandTable(data);
+    }
+
+    function renderKpis(data) {
+      const k = data.kpis;
+      const grid = document.getElementById('kpiGrid');
+      grid.innerHTML = `
+        <div class="kpi"><div class="label">Total Sales</div><div class="value">${inr(k.total_sales)}</div></div>
+        <div class="kpi"><div class="label">Total Profit</div><div class="value ${k.total_profit >= 0 ? 'good' : 'bad'}">${inr(k.total_profit)}</div></div>
+        <div class="kpi"><div class="label">Sales CAGR</div><div class="value">${k.sales_cagr_percent != null ? pct(k.sales_cagr_percent) : '—'}</div></div>
+        <div class="kpi"><div class="label">Profit CAGR</div><div class="value">${k.profit_cagr_percent != null ? pct(k.profit_cagr_percent) : '—'}</div></div>
+        <div class="kpi"><div class="label">Best Year</div><div class="value">${esc(k.best_year || '—')}</div></div>
+        <div class="kpi"><div class="label">Top Division</div><div class="value">${esc(k.top_division || '—')}</div></div>
+      `;
+    }
+
+    function renderBoardroom(data) {
+      const list = document.getElementById('boardroomList');
+      list.innerHTML = (data.boardroom_summary || []).map((point, i) => {
+        const isWarn = point.startsWith('⚠');
+        return `<li class="${isWarn ? 'warn' : ''}"><span class="boardroom-num">${isWarn ? '!' : i + 1}</span><span>${esc(point.replace('⚠ ', ''))}</span></li>`;
+      }).join('') || '<li>Not enough data yet to generate findings.</li>';
+    }
+
+    function renderTrendChart(data) {
+      const ctx = document.getElementById('trendChart');
+      const series = data.yearly_series;
+      charts.trend = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: series.map(y => y.financial_year),
+          datasets: [
+            { label: 'Sales', data: series.map(y => y.sales), borderColor: '#155eef', backgroundColor: 'rgba(21,94,239,0.08)', fill: true, tension: 0.25 },
+            { label: 'Profit', data: series.map(y => y.profit), borderColor: '#7c3aed', backgroundColor: 'rgba(124,58,237,0.10)', fill: true, tension: 0.25 },
+          ]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } }, scales: { y: { ticks: { callback: v => inr(v) } } } }
+      });
+    }
+
+    function renderYoyChart(data) {
+      const ctx = document.getElementById('yoyChart');
+      const series = data.yearly_series;
+      charts.yoy = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: series.map(y => y.financial_year),
+          datasets: [
+            { label: 'Sales Growth %', data: series.map(y => y.sales_growth_percent), backgroundColor: '#155eef', borderRadius: 5 },
+            { label: 'Profit Growth %', data: series.map(y => y.profit_growth_percent), backgroundColor: '#7c3aed', borderRadius: 5 },
+          ]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } }, scales: { y: { ticks: { callback: v => v + '%' } } } }
+      });
+    }
+
+    function renderDivisionTrendChart(data) {
+      const ctx = document.getElementById('divisionTrendChart');
+      const years = data.years_selected;
+      const matrix = data.division_matrix;
+      charts.divisionTrend = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: years,
+          datasets: matrix.map((d, i) => ({
+            label: d.division,
+            data: d.profit_by_year,
+            backgroundColor: CHART_COLORS[i % CHART_COLORS.length],
+            borderRadius: 4,
+          }))
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } }, scales: { y: { ticks: { callback: v => inr(v) } } } }
+      });
+    }
+
+    function renderDivisionCagrChart(data) {
+      const ctx = document.getElementById('divisionCagrChart');
+      const ranked = [...data.division_summary].filter(d => d.profit_cagr_percent != null).sort((a, b) => b.profit_cagr_percent - a.profit_cagr_percent);
+      charts.divisionCagr = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: ranked.map(d => d.division),
+          datasets: [{ label: 'Profit CAGR %', data: ranked.map(d => d.profit_cagr_percent), backgroundColor: ranked.map(d => d.profit_cagr_percent >= 0 ? '#2e7d32' : '#c0392b'), borderRadius: 5 }]
+        },
+        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { callback: v => v + '%' } } } }
+      });
+    }
+
+    function renderYearlyTable(data) {
+      document.getElementById('yearlyTableBody').innerHTML = data.yearly_series.map(y => `
+        <tr class="${y.profit < 0 ? 'loss-row' : ''}">
+          <td>${esc(y.financial_year)}</td>
+          <td class="num">${inr(y.sales)}</td>
+          <td class="num">${inr(y.profit)}</td>
+          <td class="num">${pct(y.margin_percent)}</td>
+          <td class="num">${y.sales_growth_percent != null ? pct(y.sales_growth_percent) : '—'}</td>
+        </tr>
+      `).join('') || '<tr><td colspan="5">No data</td></tr>';
+    }
+
+    function renderDivisionSummaryTable(data) {
+      document.getElementById('divisionSummaryBody').innerHTML = data.division_summary.map(d => `
+        <tr class="${d.fell_into_loss ? 'loss-row' : ''}">
+          <td>${esc(d.division)}${d.fell_into_loss ? ' ⚠' : ''}</td>
+          <td class="num">${inr(d.total_profit)}</td>
+          <td class="num">${pct(d.margin_percent)}</td>
+          <td class="num">${d.profit_cagr_percent != null ? pct(d.profit_cagr_percent) : '—'}</td>
+        </tr>
+      `).join('') || '<tr><td colspan="4">No data</td></tr>';
+    }
+
+    function renderMatrix(data) {
+      const headRow = document.getElementById('matrixHeadRow');
+      headRow.innerHTML = '<th>Division</th>' + data.years_selected.map(y => `<th class="num">${esc(y)}</th>`).join('');
+      document.getElementById('matrixBody').innerHTML = data.division_matrix.map(d => `
+        <tr>
+          <td>${esc(d.division)}</td>
+          ${d.profit_by_year.map(v => `<td class="num ${v < 0 ? 'loss-row' : ''}">${inr(v)}</td>`).join('')}
+        </tr>
+      `).join('') || '<tr><td>No data</td></tr>';
+    }
+
+    function renderBrandTable(data) {
+      document.getElementById('brandTableBody').innerHTML = (data.top_brands || []).map(b => `
+        <tr><td>${esc(b.brand)}</td><td class="num">${inr(b.sales)}</td><td class="num">${inr(b.profit)}</td></tr>
+      `).join('') || '<tr><td colspan="3">No brand data</td></tr>';
+    }
+
+    loadYears();
+  </script>
+</body>
+</html>
