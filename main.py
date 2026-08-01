@@ -3312,6 +3312,7 @@ DP_ACCESSORY_KEYWORDS = (
     "SPEAKER", "HDMI", "POWER BANK", "POWERBANK", "EARPHONE", "HEADPHONE",
     "SMART WATCH", "SMARTWATCH", "TEMPERED GLASS", "SCREEN GUARD",
     "MOBILE COVER", "BACK COVER", "PENDRIVE", "MEMORY CARD", "OTG",
+    "KEYBOARD", "MOUSE", "PRINTER",
 )
 
 
@@ -3320,7 +3321,17 @@ def dp_categorize(item_name: Optional[str]) -> str:
     padded = f" {n} "
     if "LED" in padded.split() or padded.startswith(" LED ") or "SOUNDBAR" in n:
         return "HE"
-    if any(k in n for k in ("DELL", "LAPTOP", "BACK PACK", "BACKPACK")):
+    # Accessories/peripherals are excluded before any brand-based check below,
+    # so e.g. an HP keyboard or a Lenovo mouse never gets swept into Computer
+    # just because the brand also makes laptops.
+    if any(k in n for k in DP_ACCESSORY_KEYWORDS):
+        return "Other"
+    laptop_keywords = (
+        "DELL", "LAPTOP", "BACK PACK", "BACKPACK", "LENOVO", "ASUS", "ACER",
+        "MSI", "MACBOOK", "THINKPAD", "IDEAPAD", "VIVOBOOK", "CHROMEBOOK",
+        "NOTEBOOK", "GIGABYTE",
+    )
+    if any(k in n for k in laptop_keywords) or re.search(r"\bHP\b", n):
         return "Computer"
     ha_keywords = (
         "SAC ", "WAC ", "CASSETTE AC", "AC 3T", " AC ", "PANEL", "CHEST FREEZER",
@@ -3330,8 +3341,6 @@ def dp_categorize(item_name: Optional[str]) -> str:
     )
     if any(k in padded for k in ha_keywords):
         return "HA"
-    if any(k in n for k in DP_ACCESSORY_KEYWORDS):
-        return "Other"
     # Phones/tablets consistently carry a RAM+Storage config in the name
     # (e.g. "8+128", "4 + 64", "6+256") regardless of brand - this catches
     # new/unlisted phone brands without needing a brand keyword for each one.
