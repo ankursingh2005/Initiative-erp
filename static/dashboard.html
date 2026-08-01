@@ -1908,7 +1908,7 @@
     }
 
     function canEditSales() {
-      return hasRole('Admin');
+      return hasRole('Admin', 'CategoryManager');
     }
 
     function normalizeCategoryCode(code) {

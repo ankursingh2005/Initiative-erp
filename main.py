@@ -2650,12 +2650,23 @@ def update_sale(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    if current_user.role not in ("Admin", "MISExecutive"):
+    if current_user.role not in ("Admin", "MISExecutive", "CategoryManager"):
         raise HTTPException(status_code=403, detail="You are not allowed to edit sales")
 
     db_sale = db.query(models.Sale).filter(models.Sale.id == sale_id).first()
     if not db_sale:
         raise HTTPException(status_code=404, detail="Sale not found")
+
+    # Category Manager can only edit sales already inside their own assigned
+    # category (same scope rule used for "Sales in your scope" viewing and
+    # for delete), and can't use an edit to move a sale into someone else's
+    # category either.
+    if current_user.role == "CategoryManager":
+        if not can_user_access_sale(db, current_user, db_sale):
+            raise HTTPException(status_code=403, detail="You can only edit sales in your access scope")
+        sale_category = db.query(models.Category).filter(models.Category.id == sale.category_id).first()
+        if not sale_category or sale_category.code != current_user.category_code:
+            raise HTTPException(status_code=403, detail="You can only edit sales into your assigned category")
 
     duplicate_invoice = (
         db.query(models.Sale)
