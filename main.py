@@ -3319,40 +3319,71 @@ DP_ACCESSORY_KEYWORDS = (
 def dp_categorize(item_name: Optional[str]) -> str:
     n = (item_name or "").upper()
     padded = f" {n} "
-    if "LED" in padded.split() or padded.startswith(" LED ") or "SOUNDBAR" in n:
+
+    # --- Mobile phones, first, before anything else can steal them ---
+    # ASUS/dual-purpose brands make both laptops and phones, so a phone
+    # model name (ROG Phone, Zenfone) must win over the laptop check below.
+    phone_brand_overrides = ("ROG PHONE", "ZENFONE")
+    if any(k in n for k in phone_brand_overrides):
+        return "Mobile"
+
+    # --- Home Entertainment (TVs, soundbars) ---
+    # "LED" alone (exact word) still counts, but so do OLED/QLED/Neo QLED/
+    # Mini-LED and other current TV panel tech that contain "LED" as a
+    # substring rather than a standalone word - the old check required an
+    # exact "LED" token and silently missed all of these.
+    he_keywords = (
+        "LED", "OLED", "QLED", "MINI LED", "MINILED", "SOUNDBAR",
+        "TELEVISION", "SMART TV", "HOME THEATRE", "HOME THEATER",
+    )
+    if any(k in n for k in he_keywords) or re.search(r"\bTV\b", n):
         return "HE"
+
     # Accessories/peripherals are excluded before any brand-based check below,
     # so e.g. an HP keyboard or a Lenovo mouse never gets swept into Computer
     # just because the brand also makes laptops.
     if any(k in n for k in DP_ACCESSORY_KEYWORDS):
         return "Other"
+
     laptop_keywords = (
         "DELL", "LAPTOP", "BACK PACK", "BACKPACK", "LENOVO", "ASUS", "ACER",
-        "MSI", "MACBOOK", "THINKPAD", "IDEAPAD", "VIVOBOOK", "CHROMEBOOK",
-        "NOTEBOOK", "GIGABYTE",
+        "MSI", "MACBOOK", "IMAC", "THINKPAD", "IDEAPAD", "VIVOBOOK",
+        "CHROMEBOOK", "NOTEBOOK", "GIGABYTE", "DESKTOP", "CPU CABINET",
+        "MONITOR", "ALL IN ONE PC",
     )
     if any(k in n for k in laptop_keywords) or re.search(r"\bHP\b", n):
         return "Computer"
+
     ha_keywords = (
-        "SAC ", "WAC ", "CASSETTE AC", "AC 3T", " AC ", "PANEL", "CHEST FREEZER",
-        " REF ", "REF EON", "REF RD", "REF HRD", "REF SJ", "COOLER", "WATER PURIFIER",
+        "SAC ", "WAC ", "CASSETTE AC", "AC 3T", " AC ", " TON ", "SPLIT AC",
+        "WINDOW AC", "INVERTER AC", "PANEL", "CHEST FREEZER", "DEEP FREEZER",
+        " REF ", "REF EON", "REF RD", "REF HRD", "REF SJ", "REFRIGERATOR",
+        "FRIDGE", "COOLER", "WATER PURIFIER", "WATER HEATER", "GEYSER",
         "EXCELL PART", "GARMENT STEAMER", " MW ", "MICROWAVE", " FAN ",
-        " WM ", "WASHING MACHINE", "MIXER GRINDER",
+        " WM ", "WASHING MACHINE", "MIXER GRINDER", "INDUCTION", "CHIMNEY",
+        "DISHWASHER", "VACUUM CLEANER", "AIR PURIFIER", "ROOM HEATER",
+        "IRON BOX", "STEAM IRON",
     )
     if any(k in padded for k in ha_keywords):
         return "HA"
+
     # Phones/tablets consistently carry a RAM+Storage config in the name
     # (e.g. "8+128", "4 + 64", "6+256") regardless of brand - this catches
     # new/unlisted phone brands without needing a brand keyword for each one.
     if re.search(r"\b\d{1,2}\s*\+\s*\d{2,3}\b", n):
         return "Mobile"
+
     mobile_keywords = (
         "IPHONE", "VIVO", "OPPO", "REALME", "REDMI", "MOTOROLA", "ONEPLUS",
-        "POCO", "NOTHING", " TAB ", " PAD ", "SAMSUNG Z FOLD",
+        "POCO", "NOTHING", " TAB ", " PAD ", "SAMSUNG Z FOLD", "PIXEL",
+        "NOKIA", "HONOR", "INFINIX", "TECNO", "MICROMAX", "LAVA", "ITEL",
+        "IQOO", "KARBONN", "GIONEE", "SAMSUNG GALAXY",
     )
     if any(k in padded for k in mobile_keywords):
         return "Mobile"
     if "SAMSUNG" in n and re.search(r"\bF\d{2,3}[A-Z]?\b", n):
+        return "Mobile"
+    if "SAMSUNG" in n and re.search(r"\b[AMS]\d{2,3}[A-Z]?\b", n):
         return "Mobile"
     return "Other"
 
