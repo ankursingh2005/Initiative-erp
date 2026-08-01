@@ -3033,9 +3033,9 @@ def build_daily_profitability_workbook(merged_items: list, period_label: str) ->
     BORDER_ALL = _Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
     NUMFMT_ACC = '_ * #,##0_ ;_ * \\-#,##0_ ;_ * "-"??_ ;_ @_ '
     NUMFMT_PCT = '0.0%'
-    COL_WIDTHS = {'A': 5.55, 'B': 15.44, 'C': 42.89, 'D': 12.33, 'E': 18.11,
+    COL_WIDTHS = {'A': 5.55, 'B': 20.0, 'C': 42.89, 'D': 12.33, 'E': 18.11,
                   'F': 9.0, 'G': 8.44, 'H': 9.0, 'I': 11.33, 'J': 9.44}
-    HEADERS = ['S. No', 'Store', 'Item Name', 'Sale Amount', 'Purchase Price',
+    HEADERS = ['S. No', 'Vch. No.', 'Item Name', 'Sale Amount', 'Purchase Price',
                'Upfront Margin', 'Backend', 'Margin', 'PL %', 'Narration']
 
     by_cat = _defaultdict(list)
@@ -3050,7 +3050,7 @@ def build_daily_profitability_workbook(merged_items: list, period_label: str) ->
 
     r = 1
     gross_profit_rows = []
-    for cat_label in ('HA', 'HE', 'Computer', 'Mobile'):
+    for cat_label in ('HA', 'HE', 'Computer', 'Mobile', 'Other'):
         items = sorted(by_cat.get(cat_label, []), key=lambda x: x['item'].lower())
         if not items:
             continue
@@ -3088,7 +3088,7 @@ def build_daily_profitability_workbook(merged_items: list, period_label: str) ->
         first_data_row = r
         for i, m in enumerate(items, start=1):
             ws.cell(row=r, column=1, value=i).font = FONT_DATA
-            cell = ws.cell(row=r, column=2, value=m['store']); cell.font = FONT_DATA; cell.alignment = _Alignment(horizontal='center')
+            cell = ws.cell(row=r, column=2, value=m['vch']); cell.font = FONT_DATA; cell.alignment = _Alignment(horizontal='center')
             cell = ws.cell(row=r, column=3, value=m['item']); cell.font = FONT_DATA; cell.alignment = _Alignment(horizontal='left')
             cell = ws.cell(row=r, column=4, value=round(m['sale'], 2)); cell.font = FONT_DATA; cell.alignment = _Alignment(horizontal='right'); cell.number_format = NUMFMT_ACC
             cell = ws.cell(row=r, column=5, value=round(m['cost'], 2)); cell.font = FONT_DATA; cell.alignment = _Alignment(horizontal='right'); cell.number_format = NUMFMT_ACC
@@ -3151,7 +3151,7 @@ def build_daily_profitability_workbook(merged_items: list, period_label: str) ->
     THIN2 = _Side(style='thin', color='D6D6D6')
     BORDER2 = _Border(left=THIN2, right=THIN2, top=THIN2, bottom=THIN2)
 
-    for col, w in {'A': 4, 'B': 10, 'C': 42, 'D': 14, 'E': 14, 'F': 14, 'G': 4,
+    for col, w in {'A': 4, 'B': 18, 'C': 42, 'D': 14, 'E': 14, 'F': 14, 'G': 4,
                     'H': 10, 'I': 40, 'J': 14, 'K': 14, 'L': 14}.items():
         dash.column_dimensions[col].width = w
 
@@ -3197,7 +3197,7 @@ def build_daily_profitability_workbook(merged_items: list, period_label: str) ->
     dash.cell(row=rr, column=3, value='Margin').font = FONT_D_HEADER; dash.cell(row=rr, column=3).fill = FILL_HEADER
     rr += 1
     cat_first = rr
-    for cat in ('HA', 'HE', 'Computer', 'Mobile'):
+    for cat in ('HA', 'HE', 'Computer', 'Mobile', 'Other'):
         d = by_cat.get(cat, {'sale': 0, 'cost': 0, 'margin': 0})
         dash.cell(row=rr, column=1, value=cat).font = FONT_D_DATA
         dash.cell(row=rr, column=2, value=round(d['sale'], 2)).number_format = NUMFMT_ACC
@@ -3226,14 +3226,14 @@ def build_daily_profitability_workbook(merged_items: list, period_label: str) ->
         dash.merge_cells(start_row=rrr, start_column=1, end_row=rrr, end_column=6)
         c = dash.cell(row=rrr, column=1, value=title); c.font = _Font(name='Calibri', size=12, bold=True)
         rrr += 1
-        for ci, h in enumerate(['#', 'Store', 'Item Name', 'Sale Amount', 'Margin', 'PL %'], start=1):
+        for ci, h in enumerate(['#', 'Vch. No.', 'Item Name', 'Sale Amount', 'Margin', 'PL %'], start=1):
             cell = dash.cell(row=rrr, column=ci, value=h)
             cell.font = FONT_D_HEADER; cell.fill = header_fill; cell.border = BORDER2
             cell.alignment = _Alignment(horizontal='center')
         rrr += 1
         for i, m in enumerate(item_rows, start=1):
             dash.cell(row=rrr, column=1, value=i).font = FONT_D_DATA
-            dash.cell(row=rrr, column=2, value=m['store']).font = FONT_D_DATA
+            dash.cell(row=rrr, column=2, value=m['vch']).font = FONT_D_DATA
             dash.cell(row=rrr, column=3, value=m['item']).font = FONT_D_DATA
             cell = dash.cell(row=rrr, column=4, value=round(m['sale'], 2)); cell.font = FONT_D_DATA; cell.number_format = NUMFMT_ACC
             cell = dash.cell(row=rrr, column=5, value=round(m['margin'], 2))
@@ -3280,7 +3280,15 @@ def build_daily_profitability_workbook(merged_items: list, period_label: str) ->
 # shares the most name-tokens with it, and that attribution is listed in
 # "review_notes" so Admin can sanity-check anything non-obvious.
 
-DP_CATEGORIES = ["HA", "HE", "Computer", "Mobile"]
+DP_CATEGORIES = ["HA", "HE", "Computer", "Mobile", "Other"]
+
+# Busy's Bill-wise Profitability export is GST-exclusive. Every Sale Amount
+# and Purchase Price in the Daily Profitability report/dashboard is grossed
+# up by this rate so the figures match real (GST-inclusive) invoice amounts.
+# Margin scales with it accordingly; PL% (margin/cost) is unaffected since
+# both sides of that ratio scale by the same factor.
+DP_GST_RATE = 0.18
+DP_GST_FACTOR = 1 + DP_GST_RATE
 
 
 def dp_extract_store(vch_no: Optional[str]) -> str:
@@ -3293,6 +3301,18 @@ def dp_tokens(name: Optional[str]) -> set:
     return set(re.findall(r"[A-Za-z0-9]+", (name or "").upper()))
 
 
+# Accessories that ride along with a Mobile-category sale but are not a
+# phone/tablet themselves - adapters, cables, converters, speakers, etc.
+# These are pulled out into "Other" so the Mobile section only ever holds
+# actual handsets/tablets, never their accessories.
+DP_ACCESSORY_KEYWORDS = (
+    "ADAPTER", "ADAPTOR", "CABLE", "CONVERTER", "CONVERTOR", "CHARGER",
+    "SPEAKER", "HDMI", "POWER BANK", "POWERBANK", "EARPHONE", "HEADPHONE",
+    "SMART WATCH", "SMARTWATCH", "TEMPERED GLASS", "SCREEN GUARD",
+    "MOBILE COVER", "BACK COVER", "PENDRIVE", "MEMORY CARD", "OTG",
+)
+
+
 def dp_categorize(item_name: Optional[str]) -> str:
     n = (item_name or "").upper()
     padded = f" {n} "
@@ -3303,11 +3323,21 @@ def dp_categorize(item_name: Optional[str]) -> str:
     ha_keywords = (
         "SAC ", "WAC ", "CASSETTE AC", "AC 3T", " AC ", "PANEL", "CHEST FREEZER",
         " REF ", "REF EON", "REF RD", "REF HRD", "REF SJ", "COOLER", "WATER PURIFIER",
-        "EXCELL PART", "GARMENT STEAMER", " MW ", "MICROWAVE",
+        "EXCELL PART", "GARMENT STEAMER", " MW ", "MICROWAVE", " FAN ",
     )
     if any(k in padded for k in ha_keywords):
         return "HA"
-    return "Mobile"
+    if any(k in n for k in DP_ACCESSORY_KEYWORDS):
+        return "Other"
+    mobile_keywords = (
+        "IPHONE", "VIVO", "OPPO", "REALME", "REDMI", "MOTOROLA", "ONEPLUS",
+        "POCO", "NOTHING PHONE", " TAB ", " PAD ", "SAMSUNG Z FOLD",
+    )
+    if any(k in padded for k in mobile_keywords):
+        return "Mobile"
+    if "SAMSUNG" in n and re.search(r"\bF\d{2,3}[A-Z]?\b", n):
+        return "Mobile"
+    return "Other"
 
 
 def dp_merge_rows(rows: List["models.IntervalSaleUpload"]) -> tuple:
@@ -3341,7 +3371,7 @@ def dp_merge_rows(rows: List["models.IntervalSaleUpload"]) -> tuple:
             p = priced[0]
             extra_cost = sum((r.cost_amt or 0) for r in zero)
             components = ", ".join((r.item or "").strip() for r in zero if r.item)
-            note = f"Vch {vch}" + (f" (incl. cost of: {components})" if components else "")
+            note = f"incl. cost of: {components}" if components else ""
             merged.append({
                 "vch": vch, "item": p.item or "Unknown Item", "sale": p.sales_amt or 0,
                 "cost": (p.cost_amt or 0) + extra_cost, "store": store, "date": p.sale_date,
@@ -3351,7 +3381,7 @@ def dp_merge_rows(rows: List["models.IntervalSaleUpload"]) -> tuple:
 
         # multiple priced lines in one voucher: attribute each zero-sale line
         # to the priced line it shares the most name-tokens with.
-        bucket = {id(p): {"item": p.item, "sale": p.sales_amt or 0, "cost": p.cost_amt or 0, "date": p.sale_date} for p in priced}
+        bucket = {id(p): {"item": p.item, "sale": p.sales_amt or 0, "cost": p.cost_amt or 0, "date": p.sale_date, "components": []} for p in priced}
         for z in zero:
             zt = dp_tokens(z.item)
             best, best_score = None, -1
@@ -3372,16 +3402,21 @@ def dp_merge_rows(rows: List["models.IntervalSaleUpload"]) -> tuple:
                     f"attributed to '{best.item}' (matched by shared name tokens)."
                 )
             bucket[id(best)]["cost"] += (z.cost_amt or 0)
+            if z.item:
+                bucket[id(best)]["components"].append(z.item.strip())
 
         for p in priced:
             u = bucket[id(p)]
+            note = f"incl. cost of: {', '.join(u['components'])}" if u["components"] else ""
             merged.append({
                 "vch": vch, "item": u["item"] or "Unknown Item", "sale": u["sale"],
-                "cost": u["cost"], "store": store, "date": u["date"], "note": f"Vch {vch}",
+                "cost": u["cost"], "store": store, "date": u["date"], "note": note,
             })
 
     for m in merged:
         m["category"] = dp_categorize(m["item"])
+        m["sale"] = m["sale"] * DP_GST_FACTOR
+        m["cost"] = m["cost"] * DP_GST_FACTOR
         m["margin"] = m["sale"] - m["cost"]
         m["pl_pct"] = (m["margin"] / m["cost"]) if m["cost"] else 0.0
 
@@ -3408,7 +3443,7 @@ def dp_apply_filters(merged: List[dict], category: Optional[str], store: Optiona
 
 def dp_serialize_item(m: dict) -> dict:
     return {
-        "store": m["store"], "item": m["item"], "category": m["category"],
+        "store": m["store"], "vch_no": m["vch"], "item": m["item"], "category": m["category"],
         "sale": round(m["sale"], 2), "cost": round(m["cost"], 2), "margin": round(m["margin"], 2),
         "pl_pct": round(m["pl_pct"] * 100, 2), "note": m["note"],
     }

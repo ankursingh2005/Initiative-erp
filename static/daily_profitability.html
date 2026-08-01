@@ -147,8 +147,8 @@
     <div class="intro">
       <div>
         <span class="eyebrow">Daily Profitability</span>
-        <h1>Store &amp; category-wise profitability report</h1>
-        <p>Reads whatever has been uploaded via <strong>Sales in your scope &rarr; Interval Sales Analytics Upload</strong> (the same daily/weekly/monthly Busy export). Pick a date range below to see the dashboard, or download the formatted report.</p>
+        <h1>Category-wise profitability report</h1>
+        <p>Reads whatever has been uploaded via <strong>Sales in your scope &rarr; Interval Sales Analytics Upload</strong> (the same daily/weekly/monthly Busy export). All Sale/Purchase figures here include an estimated 18% GST (Busy exports the pre-GST value). Pick a date range below to see the dashboard, or download the formatted report.</p>
       </div>
     </div>
 
@@ -382,7 +382,7 @@
         <div class="charts-grid">
           <div class="card">
             <h2>Sales &amp; Margin by Category</h2>
-            <p class="sub">HA / HE / Computer / Mobile - derived from item keywords; sanity-check against your product list.</p>
+            <p class="sub">HA / HE / Computer / Mobile / Other - derived from item keywords (figures include 18% GST); sanity-check against your product list.</p>
             <div class="chart-box"><canvas id="categoryChart"></canvas></div>
           </div>
           <div class="card">
@@ -402,9 +402,9 @@
             <h2>Top Profitable Items</h2>
             <p class="sub">Highest margin line items in this period.</p>
             <table>
-              <thead><tr><th>Item</th><th>Store</th><th class="num">Sale</th><th class="num">Margin</th><th class="num">PL %</th></tr></thead>
+              <thead><tr><th>Item</th><th>Vch. No.</th><th class="num">Sale</th><th class="num">Margin</th><th class="num">PL %</th></tr></thead>
               <tbody>
-                ${data.top_profitable.map(m => `<tr class="profit-row"><td>${esc(m.item)}</td><td>${esc(m.store)}</td><td class="num">${inr(m.sale)}</td><td class="num margin-cell">${inr(m.margin)}</td><td class="num">${pct(m.pl_pct)}</td></tr>`).join('')}
+                ${data.top_profitable.map(m => `<tr class="profit-row"><td>${esc(m.item)}</td><td>${esc(m.vch_no)}</td><td class="num">${inr(m.sale)}</td><td class="num margin-cell">${inr(m.margin)}</td><td class="num">${pct(m.pl_pct)}</td></tr>`).join('')}
               </tbody>
             </table>
           </div>
@@ -413,9 +413,9 @@
             <p class="sub">Line items where cost exceeded sale value in this period.</p>
             ${data.loss_making.length ? `
             <table>
-              <thead><tr><th>Item</th><th>Store</th><th class="num">Sale</th><th class="num">Margin</th><th class="num">PL %</th></tr></thead>
+              <thead><tr><th>Item</th><th>Vch. No.</th><th class="num">Sale</th><th class="num">Margin</th><th class="num">PL %</th></tr></thead>
               <tbody>
-                ${data.loss_making.map(m => `<tr class="loss"><td>${esc(m.item)}</td><td>${esc(m.store)}</td><td class="num">${inr(m.sale)}</td><td class="num">${inr(m.margin)}</td><td class="num">${pct(m.pl_pct)}</td></tr>`).join('')}
+                ${data.loss_making.map(m => `<tr class="loss"><td>${esc(m.item)}</td><td>${esc(m.vch_no)}</td><td class="num">${inr(m.sale)}</td><td class="num">${inr(m.margin)}</td><td class="num">${pct(m.pl_pct)}</td></tr>`).join('')}
               </tbody>
             </table>` : `<div class="empty-state" style="padding:20px;">No loss-making line items in this period.</div>`}
           </div>
