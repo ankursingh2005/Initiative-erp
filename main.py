@@ -2782,7 +2782,9 @@ def upload_interval_sales_file(
     if not parsed_rows:
         raise HTTPException(status_code=400, detail="No readable sales rows found. Ensure columns include Date, Vch No, Item, Qty, Sales Amt, Cost Amt, Profit/Loss, Profit %")
 
-    inserted_count = 0
+    # First pass: parse every row's fields (without inserting yet) so we know
+    # the full date range covered by this file up front.
+    prepared_rows = []
     skipped_rows = []
     for idx, row in enumerate(parsed_rows, start=1):
         try:
@@ -2799,26 +2801,50 @@ def upload_interval_sales_file(
                 row.get("profit_percent"),
                 fallback=((profit_loss / sales_amt) * 100.0 if sales_amt else 0.0),
             )
-
-            db.add(
-                models.IntervalSaleUpload(
-                    sale_date=sale_date,
-                    vch_no=vch_no,
-                    account=account,
-                    item=item,
-                    qty=qty,
-                    unit=unit,
-                    sales_amt=sales_amt,
-                    cost_amt=cost_amt,
-                    profit_loss=profit_loss,
-                    profit_percent=profit_percent,
-                    source_file=filename,
-                    uploaded_by=current_user.id,
-                )
-            )
-            inserted_count += 1
+            prepared_rows.append({
+                "sale_date": sale_date, "vch_no": vch_no, "account": account, "item": item,
+                "qty": qty, "unit": unit, "sales_amt": sales_amt, "cost_amt": cost_amt,
+                "profit_loss": profit_loss, "profit_percent": profit_percent,
+            })
         except Exception as exc:
             skipped_rows.append({"row": idx, "reason": str(exc)})
+
+    # Re-uploading a file that covers dates already in the system (e.g. a
+    # corrected export re-sent after fixing a cost error) used to just pile
+    # the new rows on top of the old ones with no de-duplication, silently
+    # double-counting/merging stale + corrected line items in every report
+    # that reads this table (Daily Profitability, Scheme-Matched Sales,
+    # Interval Sales Analytics). Replace only the dates this file actually
+    # covers - other dates already stored are left untouched.
+    dates_in_file = [r["sale_date"] for r in prepared_rows if r["sale_date"]]
+    replaced_count = 0
+    if dates_in_file:
+        replaced_count = (
+            db.query(models.IntervalSaleUpload)
+            .filter(models.IntervalSaleUpload.sale_date >= min(dates_in_file))
+            .filter(models.IntervalSaleUpload.sale_date <= max(dates_in_file))
+            .delete()
+        )
+
+    inserted_count = 0
+    for r in prepared_rows:
+        db.add(
+            models.IntervalSaleUpload(
+                sale_date=r["sale_date"],
+                vch_no=r["vch_no"],
+                account=r["account"],
+                item=r["item"],
+                qty=r["qty"],
+                unit=r["unit"],
+                sales_amt=r["sales_amt"],
+                cost_amt=r["cost_amt"],
+                profit_loss=r["profit_loss"],
+                profit_percent=r["profit_percent"],
+                source_file=filename,
+                uploaded_by=current_user.id,
+            )
+        )
+        inserted_count += 1
 
     db.commit()
 
@@ -2827,6 +2853,7 @@ def upload_interval_sales_file(
         "file_name": filename,
         "inserted": inserted_count,
         "skipped": len(skipped_rows),
+        "replaced": replaced_count,
         "errors_preview": skipped_rows[:10],
     }
 
