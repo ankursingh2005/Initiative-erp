@@ -217,10 +217,16 @@
         </div>
         <div class="filter-field">
           <label>&nbsp;</label>
+          <button class="btn btn-ghost" id="viewItemsBtn" onclick="toggleItemsView()">&#128065; View Items</button>
+        </div>
+        <div class="filter-field">
+          <label>&nbsp;</label>
           <button class="btn btn-primary" onclick="downloadReport()">&#8681; Download Report</button>
         </div>
       </div>
     </div>
+
+    <div id="itemsViewCard" style="display:none;"></div>
 
     <div id="dashboardArea">
       <div class="card"><div class="empty-state"><div class="icon">&#128202;</div>Loading...</div></div>
@@ -293,6 +299,7 @@
     function fmtDate(d) { const p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; }
 
     let categoryChart = null;
+    let itemsViewOpen = false;
 
     function applyPreset() {
       const preset = document.getElementById('presetSelect').value;
@@ -442,6 +449,46 @@
         },
         options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
       });
+
+      if (itemsViewOpen) loadItemsView();
+    }
+
+    function toggleItemsView() {
+      itemsViewOpen = !itemsViewOpen;
+      const card = document.getElementById('itemsViewCard');
+      const btn = document.getElementById('viewItemsBtn');
+      if (itemsViewOpen) {
+        card.style.display = 'block';
+        btn.textContent = '\u{1F441} Hide Items';
+        loadItemsView();
+      } else {
+        card.style.display = 'none';
+        btn.textContent = '\u{1F441} View Items';
+      }
+    }
+
+    async function loadItemsView() {
+      const card = document.getElementById('itemsViewCard');
+      card.innerHTML = `<div class="card"><div class="empty-state">Loading items...</div></div>`;
+      const res = await authFetch(`/api/daily-profitability/items?${buildQuery()}`);
+      if (!res) return;
+      const data = await res.json();
+
+      if (!data.has_data || !data.items.length) {
+        card.innerHTML = `<div class="card"><h2>Item Details</h2><div class="empty-state">No items match the current filters.</div></div>`;
+        return;
+      }
+
+      card.innerHTML = `
+        <div class="card">
+          <h2>Item Details <span style="font-weight:400;color:var(--muted);font-size:13px;">(${data.count} item${data.count === 1 ? '' : 's'} for the current filters - loss-making rows in red)</span></h2>
+          <table>
+            <thead><tr><th>Item</th><th>Category</th><th>Vch. No.</th><th class="num">Sale</th><th class="num">Cost</th><th class="num">Margin</th><th class="num">PL %</th></tr></thead>
+            <tbody>
+              ${data.items.map(m => `<tr class="${m.margin < 0 ? 'loss' : ''}"><td>${esc(m.item)}</td><td>${esc(m.category)}</td><td>${esc(m.vch_no)}</td><td class="num">${inr(m.sale)}</td><td class="num">${inr(m.cost)}</td><td class="num">${inr(m.margin)}</td><td class="num">${pct(m.pl_pct)}</td></tr>`).join('')}
+            </tbody>
+          </table>
+        </div>`;
     }
 
     async function downloadReport() {

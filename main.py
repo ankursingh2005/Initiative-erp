@@ -3028,6 +3028,7 @@ def build_daily_profitability_workbook(merged_items: list, period_label: str) ->
     FONT_SECTION = _Font(name='Times New Roman', size=14, bold=True)
     FONT_HEADER = _Font(name='Calibri', size=11, bold=True, underline='single')
     FONT_DATA = _Font(name='Calibri', size=11, bold=True)
+    FONT_DATA_LOSS = _Font(name='Calibri', size=11, bold=True, color='C0392B')
     FILL_YELLOW = _PatternFill('solid', fgColor='FFFFFF00')
     THIN = _Side(style='thin')
     BORDER_ALL = _Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
@@ -3087,16 +3088,17 @@ def build_daily_profitability_workbook(merged_items: list, period_label: str) ->
 
         first_data_row = r
         for i, m in enumerate(items, start=1):
-            ws.cell(row=r, column=1, value=i).font = FONT_DATA
-            cell = ws.cell(row=r, column=2, value=m['vch']); cell.font = FONT_DATA; cell.alignment = _Alignment(horizontal='center')
-            cell = ws.cell(row=r, column=3, value=m['item']); cell.font = FONT_DATA; cell.alignment = _Alignment(horizontal='left')
-            cell = ws.cell(row=r, column=4, value=round(m['sale'], 2)); cell.font = FONT_DATA; cell.alignment = _Alignment(horizontal='right'); cell.number_format = NUMFMT_ACC
-            cell = ws.cell(row=r, column=5, value=round(m['cost'], 2)); cell.font = FONT_DATA; cell.alignment = _Alignment(horizontal='right'); cell.number_format = NUMFMT_ACC
-            cell = ws.cell(row=r, column=6, value=f'=+D{r}-E{r}'); cell.font = FONT_DATA; cell.number_format = NUMFMT_ACC
+            row_font = FONT_DATA_LOSS if m.get('margin', m['sale'] - m['cost']) < 0 else FONT_DATA
+            ws.cell(row=r, column=1, value=i).font = row_font
+            cell = ws.cell(row=r, column=2, value=m['vch']); cell.font = row_font; cell.alignment = _Alignment(horizontal='center')
+            cell = ws.cell(row=r, column=3, value=m['item']); cell.font = row_font; cell.alignment = _Alignment(horizontal='left')
+            cell = ws.cell(row=r, column=4, value=round(m['sale'], 2)); cell.font = row_font; cell.alignment = _Alignment(horizontal='right'); cell.number_format = NUMFMT_ACC
+            cell = ws.cell(row=r, column=5, value=round(m['cost'], 2)); cell.font = row_font; cell.alignment = _Alignment(horizontal='right'); cell.number_format = NUMFMT_ACC
+            cell = ws.cell(row=r, column=6, value=f'=+D{r}-E{r}'); cell.font = row_font; cell.number_format = NUMFMT_ACC
             ws.cell(row=r, column=7).number_format = NUMFMT_ACC
-            cell = ws.cell(row=r, column=8, value=f'=+G{r}+F{r}'); cell.font = FONT_DATA; cell.number_format = NUMFMT_ACC
-            cell = ws.cell(row=r, column=9, value=f'=+H{r}/E{r}'); cell.font = FONT_DATA; cell.number_format = NUMFMT_PCT
-            cell = ws.cell(row=r, column=10, value=m.get('note') or ''); cell.font = FONT_DATA; cell.alignment = _Alignment(horizontal='left')
+            cell = ws.cell(row=r, column=8, value=f'=+G{r}+F{r}'); cell.font = row_font; cell.number_format = NUMFMT_ACC
+            cell = ws.cell(row=r, column=9, value=f'=+H{r}/E{r}'); cell.font = row_font; cell.number_format = NUMFMT_PCT
+            cell = ws.cell(row=r, column=10, value=m.get('note') or ''); cell.font = row_font; cell.alignment = _Alignment(horizontal='left')
             for ci in range(1, 11):
                 ws.cell(row=r, column=ci).border = BORDER_ALL
             r += 1
@@ -3324,14 +3326,20 @@ def dp_categorize(item_name: Optional[str]) -> str:
         "SAC ", "WAC ", "CASSETTE AC", "AC 3T", " AC ", "PANEL", "CHEST FREEZER",
         " REF ", "REF EON", "REF RD", "REF HRD", "REF SJ", "COOLER", "WATER PURIFIER",
         "EXCELL PART", "GARMENT STEAMER", " MW ", "MICROWAVE", " FAN ",
+        " WM ", "WASHING MACHINE", "MIXER GRINDER",
     )
     if any(k in padded for k in ha_keywords):
         return "HA"
     if any(k in n for k in DP_ACCESSORY_KEYWORDS):
         return "Other"
+    # Phones/tablets consistently carry a RAM+Storage config in the name
+    # (e.g. "8+128", "4 + 64", "6+256") regardless of brand - this catches
+    # new/unlisted phone brands without needing a brand keyword for each one.
+    if re.search(r"\b\d{1,2}\s*\+\s*\d{2,3}\b", n):
+        return "Mobile"
     mobile_keywords = (
         "IPHONE", "VIVO", "OPPO", "REALME", "REDMI", "MOTOROLA", "ONEPLUS",
-        "POCO", "NOTHING PHONE", " TAB ", " PAD ", "SAMSUNG Z FOLD",
+        "POCO", "NOTHING", " TAB ", " PAD ", "SAMSUNG Z FOLD",
     )
     if any(k in padded for k in mobile_keywords):
         return "Mobile"
@@ -3536,6 +3544,35 @@ def daily_profitability_dashboard(
             "category": category or "ALL",
             "store": store or "ALL",
         },
+    }
+
+
+@app.get("/api/daily-profitability/items")
+def daily_profitability_items(
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
+    category: Optional[str] = Query(None),
+    store: Optional[str] = Query(None),
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Full (not top-10) list of line items for the current filters - backs
+    the "View Items" button so Admin can see every sale in a category/store,
+    not just the highlights on the main dashboard."""
+    rows = dp_filter_rows(db, start_date, end_date)
+    if not rows:
+        return {"has_data": False, "items": [], "count": 0}
+
+    merged, _ = dp_merge_rows(rows)
+    merged = dp_apply_filters(merged, category, store)
+    if not merged:
+        return {"has_data": False, "items": [], "count": 0}
+
+    items_sorted = sorted(merged, key=lambda m: m['item'].lower())
+    return {
+        "has_data": True,
+        "count": len(items_sorted),
+        "items": [dp_serialize_item(m) for m in items_sorted],
     }
 
 
