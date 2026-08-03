@@ -3348,7 +3348,7 @@ def dp_tokens(name: Optional[str]) -> set:
 DP_ACCESSORY_KEYWORDS = (
     "ADAPTER", "ADAPTOR", "CABLE", "CONVERTER", "CONVERTOR", "CHARGER",
     "HDMI", "POWER BANK", "POWERBANK", "EARPHONE", "HEADPHONE",
-    "EARBUD", "EARBUDS", "BUDS",
+    "EARBUD", "EARBUDS", "BUDS", "BATTERY",
     "SMART WATCH", "SMARTWATCH", "TEMPERED GLASS", "SCREEN GUARD",
     "MOBILE COVER", "BACK COVER", "PENDRIVE", "MEMORY CARD", "OTG",
     "KEYBOARD", "MOUSE",
@@ -3517,7 +3517,14 @@ def dp_merge_rows(rows: List["models.IntervalSaleUpload"]) -> tuple:
             })
 
     for m in merged:
-        m["category"] = dp_categorize(m["item"])
+        # Vouchers billed under the "PW" branch/series code (e.g.
+        # "PW/34/26-27") are always Other, regardless of what the item
+        # itself is - these are project/wholesale-type bills, not regular
+        # retail category sales.
+        if m["store"] == "PW":
+            m["category"] = "Other"
+        else:
+            m["category"] = dp_categorize(m["item"])
         m["sale"] = m["sale"] * DP_GST_FACTOR
         m["cost"] = m["cost"] * DP_GST_FACTOR
         m["margin"] = m["sale"] - m["cost"]
