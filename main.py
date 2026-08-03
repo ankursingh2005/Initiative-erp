@@ -3347,16 +3347,22 @@ def dp_tokens(name: Optional[str]) -> set:
 # actual handsets/tablets, never their accessories.
 DP_ACCESSORY_KEYWORDS = (
     "ADAPTER", "ADAPTOR", "CABLE", "CONVERTER", "CONVERTOR", "CHARGER",
-    "SPEAKER", "HDMI", "POWER BANK", "POWERBANK", "EARPHONE", "HEADPHONE",
+    "HDMI", "POWER BANK", "POWERBANK", "EARPHONE", "HEADPHONE",
     "SMART WATCH", "SMARTWATCH", "TEMPERED GLASS", "SCREEN GUARD",
     "MOBILE COVER", "BACK COVER", "PENDRIVE", "MEMORY CARD", "OTG",
-    "KEYBOARD", "MOUSE", "PRINTER",
+    "KEYBOARD", "MOUSE",
 )
 
 
 def dp_categorize(item_name: Optional[str]) -> str:
     n = (item_name or "").upper()
     padded = f" {n} "
+
+    # Brand payouts/incentives (e.g. "Lenovo Payout") are not actual product
+    # sales - route to Other before any brand keyword below (LENOVO, HP,
+    # SAMSUNG, etc.) can sweep them into that brand's product category.
+    if "PAYOUT" in n:
+        return "Other"
 
     # --- Mobile phones, first, before anything else can steal them ---
     # ASUS/dual-purpose brands make both laptops and phones, so a phone
@@ -3373,6 +3379,9 @@ def dp_categorize(item_name: Optional[str]) -> str:
     he_keywords = (
         "LED", "OLED", "QLED", "MINI LED", "MINILED", "SOUNDBAR",
         "TELEVISION", "SMART TV", "HOME THEATRE", "HOME THEATER",
+        # Standalone speakers (any brand) - JBL Party Box, Bluetooth
+        # speakers, etc. are their own HE product, not a phone accessory.
+        "SPEAKER", "PARTY BOX", "PARTYBOX",
     )
     if any(k in n for k in he_keywords) or re.search(r"\bTV\b", n):
         return "HE"
@@ -3388,8 +3397,11 @@ def dp_categorize(item_name: Optional[str]) -> str:
         "MSI", "MACBOOK", "IMAC", "THINKPAD", "IDEAPAD", "VIVOBOOK",
         "CHROMEBOOK", "NOTEBOOK", "GIGABYTE", "DESKTOP", "CPU CABINET",
         "MONITOR", "ALL IN ONE PC",
+        # Printers (any brand) - PRINTER as a substring catches Laserjet/
+        # Inkjet/MFP model names too (e.g. "HP Printer Laserjet MFP...").
+        "PRINTER", "LASERJET", "INKJET",
     )
-    if any(k in n for k in laptop_keywords) or re.search(r"\bHP\b", n):
+    if any(k in n for k in laptop_keywords) or re.search(r"\bHP\b", n) or re.search(r"\bMBA\b", n):
         return "Computer"
 
     ha_keywords = (
@@ -3397,10 +3409,10 @@ def dp_categorize(item_name: Optional[str]) -> str:
         "WINDOW AC", "INVERTER AC", "PANEL", "CHEST FREEZER", "DEEP FREEZER",
         " REF ", "REF EON", "REF RD", "REF HRD", "REF SJ", "REFRIGERATOR",
         "FRIDGE", "COOLER", "WATER PURIFIER", "WATER HEATER", "GEYSER",
-        "EXCELL PART", "GARMENT STEAMER", " MW ", "MICROWAVE", " FAN ",
-        " WM ", "WASHING MACHINE", "MIXER GRINDER", "INDUCTION", "CHIMNEY",
-        "DISHWASHER", "VACUUM CLEANER", "AIR PURIFIER", "ROOM HEATER",
-        "IRON BOX", "STEAM IRON",
+        "EXCELL PART", "GARMENT STEAMER", " MW ", "MICROWAVE", "MWO",
+        " FAN ", " WM ", "WASHING MACHINE", "MIXER GRINDER", "INDUCTION",
+        "IN ICT", "CHIMNEY", "DISHWASHER", "VACUUM CLEANER", "AIR PURIFIER",
+        "ROOM HEATER", "IRON BOX", "STEAM IRON", "AQUAGUARD", " RO ",
     )
     if any(k in padded for k in ha_keywords):
         return "HA"
@@ -3408,7 +3420,9 @@ def dp_categorize(item_name: Optional[str]) -> str:
     # Phones/tablets consistently carry a RAM+Storage config in the name
     # (e.g. "8+128", "4 + 64", "6+256") regardless of brand - this catches
     # new/unlisted phone brands without needing a brand keyword for each one.
-    if re.search(r"\b\d{1,2}\s*\+\s*\d{2,3}\b", n):
+    # High-end foldables sometimes list storage in TB rather than GB (e.g.
+    # "16+1TB"), so a single low-order digit followed by TB counts too.
+    if re.search(r"\b\d{1,2}\s*\+\s*\d{2,3}\b", n) or re.search(r"\b\d{1,2}\s*\+\s*\d{1,2}\s*TB\b", n):
         return "Mobile"
 
     mobile_keywords = (
@@ -3416,6 +3430,8 @@ def dp_categorize(item_name: Optional[str]) -> str:
         "POCO", "NOTHING", " TAB ", " PAD ", "SAMSUNG Z FOLD", "PIXEL",
         "NOKIA", "HONOR", "INFINIX", "TECNO", "MICROMAX", "LAVA", "ITEL",
         "IQOO", "KARBONN", "GIONEE", "SAMSUNG GALAXY",
+        # Foldable phones (any brand) - Fold/Flip model names.
+        " FOLD ", " FLIP ",
     )
     if any(k in padded for k in mobile_keywords):
         return "Mobile"
