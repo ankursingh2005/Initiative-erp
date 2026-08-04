@@ -3443,6 +3443,15 @@ def dp_categorize(item_name: Optional[str]) -> str:
     return "Other"
 
 
+def dp_is_ac_od_component(item_name: Optional[str]) -> bool:
+    """True for AC outdoor-unit line items (e.g. 'Daikin SAC OD RKC 50
+    XV16UKA', 'Daikin Cassette AC OD RGVF48CRY16') whose cost gets merged
+    into the indoor unit but should no longer be spelled out by name in
+    the 'incl. cost of:' narration - their cost is already reflected
+    correctly in the merged figures without needing to be named."""
+    return "AC OD" in (item_name or "").upper()
+
+
 def dp_merge_rows(rows: List["models.IntervalSaleUpload"]) -> tuple:
     """Groups raw Busy line items by voucher, merges zero-sale-value lines
     (OD units, panels, bundled parts) into the priced line(s) of the same
@@ -3473,7 +3482,10 @@ def dp_merge_rows(rows: List["models.IntervalSaleUpload"]) -> tuple:
         if len(priced) == 1:
             p = priced[0]
             extra_cost = sum((r.cost_amt or 0) for r in zero)
-            components = ", ".join((r.item or "").strip() for r in zero if r.item)
+            components = ", ".join(
+                (r.item or "").strip() for r in zero
+                if r.item and not dp_is_ac_od_component(r.item)
+            )
             note = f"incl. cost of: {components}" if components else ""
             merged.append({
                 "vch": vch, "item": p.item or "Unknown Item", "sale": p.sales_amt or 0,
@@ -3505,7 +3517,7 @@ def dp_merge_rows(rows: List["models.IntervalSaleUpload"]) -> tuple:
                     f"attributed to '{best.item}' (matched by shared name tokens)."
                 )
             bucket[id(best)]["cost"] += (z.cost_amt or 0)
-            if z.item:
+            if z.item and not dp_is_ac_od_component(z.item):
                 bucket[id(best)]["components"].append(z.item.strip())
 
         for p in priced:
@@ -3517,11 +3529,10 @@ def dp_merge_rows(rows: List["models.IntervalSaleUpload"]) -> tuple:
             })
 
     for m in merged:
-        # Vouchers billed under the "PW" branch/series code (e.g.
-        # "PW/34/26-27") are always Other, regardless of what the item
-        # itself is - these are project/wholesale-type bills, not regular
-        # retail category sales.
-        if m["store"] == "PW":
+        # Any voucher whose number contains "PW" (e.g. "PW/34/26-27") is
+        # always Other, regardless of what the item itself is - these are
+        # project/wholesale-type bills, not regular retail category sales.
+        if "PW" in str(m["vch"] or "").upper():
             m["category"] = "Other"
         else:
             m["category"] = dp_categorize(m["item"])
@@ -4698,3 +4709,12 @@ def clear_analytics_data(
     db.query(models.AnalyticsUpload).delete()
     db.commit()
     return {"message": "AI Analysis data cleared", "deleted": deleted_count}
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    host = os.getenv("HOST", "127.0.0.1")
+    port = int(os.getenv("PORT", "8000"))
+    reload_enabled = os.getenv("UVICORN_RELOAD", "1").strip().lower() in {"1", "true", "yes", "on"}
+    uvicorn.run("main:app", host=host, port=port, reload=reload_enabled)
