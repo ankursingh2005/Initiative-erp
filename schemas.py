@@ -342,6 +342,9 @@ class PriceListItemCreate(BaseModel):
     """Admin/Accounts/MISExecutive: add one item by hand."""
     brand_id: int
     item_details: str
+    model_no: Optional[str] = None
+    serial_no: Optional[str] = None
+    imei: Optional[str] = None
     total_stock: Optional[int] = None
     purchase_price: Optional[float] = None
     msp: Optional[float] = None
@@ -351,6 +354,9 @@ class PriceListItemCreate(BaseModel):
 class PriceListItemUpdate(BaseModel):
     """Admin/Accounts/MISExecutive: edit any subset of fields on one item."""
     item_details: Optional[str] = None
+    model_no: Optional[str] = None
+    serial_no: Optional[str] = None
+    imei: Optional[str] = None
     total_stock: Optional[int] = None
     purchase_price: Optional[float] = None
     msp: Optional[float] = None
@@ -364,6 +370,9 @@ class PriceListItemOut(BaseModel):
     brand_id: int
     brand_name: str
     item_details: str
+    model_no: Optional[str] = None
+    serial_no: Optional[str] = None
+    imei: Optional[str] = None
     total_stock: Optional[int] = None
     purchase_price: Optional[float] = None
     msp: Optional[float] = None
@@ -382,6 +391,9 @@ class PriceListItemViewerOut(BaseModel):
     brand_id: int
     brand_name: str
     item_details: str
+    model_no: Optional[str] = None
+    serial_no: Optional[str] = None
+    imei: Optional[str] = None
     msp: Optional[float] = None
     isp: Optional[float] = None
     updated_date: datetime

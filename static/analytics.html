@@ -285,10 +285,9 @@
           <select id="bulkDivisionSelect">
             <option value="HA">Home Appliance</option>
             <option value="HE">Home Entertainment</option>
-            <option value="MH">Mobile</option>
-            <option value="IT">Computer/IT</option>
-            <option value="DC">Digital Camera</option>
-            <option value="UNCATEGORIZED">Uncategorized</option>
+            <option value="Computer">Computer / IT</option>
+            <option value="Mobile">Mobile</option>
+            <option value="Other">Other</option>
           </select>
           <button class="btn btn-primary" onclick="applyBulkReassign()" id="applyBulkBtn" disabled>Apply to selected</button>
         </div>
@@ -331,24 +330,46 @@
     <div id="dashboardContent" class="hidden">
       <div class="card">
         <h2>Filters</h2>
-        <p class="sub">Narrow the dashboard to a division or date range. Charts and recommendations update to match.</p>
+        <p class="sub">Choose a period, or pick a quick preset. Category and Store narrow the same period further - charts and recommendations update instantly.</p>
         <div class="filter-bar">
           <div class="filter-field">
-            <label for="divisionFilter">Division</label>
-            <select id="divisionFilter"><option value="ALL">All Divisions</option></select>
+            <label for="presetSelect">Quick range</label>
+            <select id="presetSelect" onchange="applyPreset()">
+              <option value="today">Today</option>
+              <option value="week">This Week</option>
+              <option value="month">This Month</option>
+              <option value="custom" selected>Custom</option>
+            </select>
           </div>
           <div class="filter-field">
-            <label for="startDateFilter">From</label>
-            <input type="date" id="startDateFilter" />
+            <label for="startDateFilter">Start Date</label>
+            <input type="date" id="startDateFilter" onchange="document.getElementById('presetSelect').value='custom'; refreshDashboard();" />
           </div>
           <div class="filter-field">
-            <label for="endDateFilter">To</label>
-            <input type="date" id="endDateFilter" />
+            <label for="endDateFilter">End Date</label>
+            <input type="date" id="endDateFilter" onchange="document.getElementById('presetSelect').value='custom'; refreshDashboard();" />
           </div>
-          <button class="btn btn-primary" onclick="applyFilters()">Apply</button>
-          <button class="btn btn-ghost" onclick="resetFilters()">Reset</button>
+          <div class="filter-field">
+            <label for="divisionFilter">Category</label>
+            <select id="divisionFilter" onchange="refreshDashboard()"><option value="ALL">All Categories</option></select>
+          </div>
+          <div class="filter-field">
+            <label for="storeFilter">Store</label>
+            <select id="storeFilter" onchange="refreshDashboard()"><option value="ALL">All Stores</option></select>
+          </div>
+          <div class="filter-field">
+            <label>&nbsp;</label>
+            <button class="btn btn-ghost" id="viewItemsBtn" onclick="toggleItemsView()">&#128065; View Items</button>
+          </div>
+          <div class="filter-field">
+            <label>&nbsp;</label>
+            <button class="btn btn-ghost" onclick="resetFilters()">Reset</button>
+          </div>
         </div>
       </div>
+
+      <div id="itemsViewCard" class="card hidden"></div>
+
 
       <div class="kpi-grid" id="kpiGrid"></div>
 
@@ -556,6 +577,7 @@
     }
     function pct(value) { return (Number(value) || 0).toFixed(1) + '%'; }
     function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+    function fmtDate(d) { const p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; }
 
     let charts = {};
     function destroyCharts() { Object.values(charts).forEach(c => c && c.destroy()); charts = {}; }
@@ -571,6 +593,7 @@
     async function loadDashboard(params = {}) {
       const query = new URLSearchParams();
       if (params.division && params.division !== 'ALL') query.set('division', params.division);
+      if (params.store && params.store !== 'ALL') query.set('store', params.store);
       if (params.start_date) query.set('start_date', params.start_date);
       if (params.end_date) query.set('end_date', params.end_date);
       const qs = query.toString();
@@ -632,7 +655,7 @@
     // the dashboard tables (or /discard + a fresh upload throws it away).
     let reviewState = { token: null, rows: [] };
 
-    const DIVISION_LABELS = { HA: 'Home Appliance', HE: 'Home Entertainment', MH: 'Mobile', IT: 'Computer/IT', DC: 'Digital Camera', UNCATEGORIZED: 'Uncategorized' };
+    const DIVISION_LABELS = { HA: 'Home Appliance', HE: 'Home Entertainment', Computer: 'Computer / IT', Mobile: 'Mobile', Other: 'Other' };
 
     async function doUpload() {
       const fileInput = document.getElementById('fileInput');
@@ -690,7 +713,7 @@
     function renderReviewTable(rows) {
       const body = document.getElementById('reviewTableBody');
       body.innerHTML = rows.map(r => {
-        const rowClass = r.merged ? 'row-merged' : (r.division === 'UNCATEGORIZED' ? 'row-uncategorized' : (r.note ? 'row-flagged' : ''));
+        const rowClass = r.merged ? 'row-merged' : (r.division === 'Other' ? 'row-uncategorized' : (r.note ? 'row-flagged' : ''));
         const options = Object.keys(DIVISION_LABELS).map(code =>
           `<option value="${code}" ${r.division === code ? 'selected' : ''}>${DIVISION_LABELS[code]}</option>`
         ).join('');
@@ -1178,26 +1201,128 @@
       renderRecommendations(data);
     }
 
-    function populateDivisionFilter(divisions) {
-      const select = document.getElementById('divisionFilter');
-      const current = select.value;
-      select.innerHTML = '<option value="ALL">All Divisions</option>' + divisions.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join('');
-      if (divisions.includes(current)) select.value = current;
+    function populateFilterOptions(meta) {
+      const catSelect = document.getElementById('divisionFilter');
+      const currentCat = catSelect.value;
+      catSelect.innerHTML = '<option value="ALL">All Categories</option>' +
+        (meta.categories || []).map(c => `<option value="${esc(c)}">${esc(DIVISION_LABELS[c] || c)}</option>`).join('');
+      if ((meta.categories || []).includes(currentCat)) catSelect.value = currentCat;
+
+      const storeSelect = document.getElementById('storeFilter');
+      const currentStore = storeSelect.value;
+      storeSelect.innerHTML = '<option value="ALL">All Stores</option>' +
+        (meta.stores || []).map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+      if ((meta.stores || []).includes(currentStore)) storeSelect.value = currentStore;
     }
 
-    async function applyFilters() {
-      const division = document.getElementById('divisionFilter').value;
-      const start_date = document.getElementById('startDateFilter').value;
-      const end_date = document.getElementById('endDateFilter').value;
-      const data = await loadDashboard({ division, start_date, end_date });
-      if (data && data.has_data) renderAll(data);
+    function currentFilterParams() {
+      return {
+        division: document.getElementById('divisionFilter').value,
+        store: document.getElementById('storeFilter').value,
+        start_date: document.getElementById('startDateFilter').value,
+        end_date: document.getElementById('endDateFilter').value,
+      };
+    }
+
+    function applyPreset() {
+      const preset = document.getElementById('presetSelect').value;
+      if (preset === 'custom') return;
+      const today = new Date();
+      let start = new Date(today), end = new Date(today);
+      if (preset === 'week') {
+        const day = today.getDay();
+        start = new Date(today); start.setDate(today.getDate() - day);
+      } else if (preset === 'month') {
+        start = new Date(today.getFullYear(), today.getMonth(), 1);
+      }
+      document.getElementById('startDateFilter').value = fmtDate(start);
+      document.getElementById('endDateFilter').value = fmtDate(end);
+      refreshDashboard();
+    }
+
+    async function refreshDashboard() {
+      const params = currentFilterParams();
+      const data = await loadDashboard(params);
+      if (data && data.has_data) {
+        document.getElementById('emptyState').classList.add('hidden');
+        document.getElementById('dashboardContent').classList.remove('hidden');
+        renderAll(data);
+      } else {
+        document.getElementById('dashboardContent').classList.add('hidden');
+        document.getElementById('emptyStateText').textContent = 'No sales rows match the selected filters.';
+        document.getElementById('emptyState').classList.remove('hidden');
+      }
+      if (itemsViewOpen) await loadItemsView();
     }
 
     function resetFilters() {
+      document.getElementById('presetSelect').value = 'custom';
       document.getElementById('divisionFilter').value = 'ALL';
+      document.getElementById('storeFilter').value = 'ALL';
       document.getElementById('startDateFilter').value = '';
       document.getElementById('endDateFilter').value = '';
-      applyFilters();
+      refreshDashboard();
+    }
+
+    let itemsViewOpen = false;
+
+    function itemsTableHtml(items) {
+      if (!items.length) {
+        return `<div class="empty-state"><div class="icon">&#128203;</div>No items match the selected filters.</div>`;
+      }
+      const rows = items.map(it => `
+        <tr>
+          <td>${esc(it.sale_date || '')}</td>
+          <td>${esc(it.item || '')}</td>
+          <td>${esc(DIVISION_LABELS[it.division] || it.division || '')}</td>
+          <td>${esc(it.store || '')}</td>
+          <td>${esc(it.brand || '')}</td>
+          <td class="num">${it.qty ?? ''}</td>
+          <td class="num">${inr(it.sales_amt)}</td>
+          <td class="num">${inr(it.cost_amt)}</td>
+          <td class="num">${inr(it.profit_loss)}</td>
+        </tr>`).join('');
+      return `
+        <h2>Items (${items.length})</h2>
+        <p class="sub">Every line item matching the current filters.</p>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr><th>Date</th><th class="item-cell">Item</th><th>Category</th><th>Store</th><th>Brand</th>
+                  <th class="num">Qty</th><th class="num">Sales</th><th class="num">Cost</th><th class="num">Profit</th></tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
+    }
+
+    async function loadItemsView() {
+      const card = document.getElementById('itemsViewCard');
+      card.innerHTML = `<div class="empty-state"><div class="icon">&#128202;</div>Loading items...</div>`;
+      const params = currentFilterParams();
+      const query = new URLSearchParams();
+      if (params.division && params.division !== 'ALL') query.set('division', params.division);
+      if (params.store && params.store !== 'ALL') query.set('store', params.store);
+      if (params.start_date) query.set('start_date', params.start_date);
+      if (params.end_date) query.set('end_date', params.end_date);
+      const res = await authFetch('/api/analytics/items' + (query.toString() ? '?' + query.toString() : ''));
+      if (!res) return;
+      const data = await res.json();
+      card.innerHTML = itemsTableHtml(data.items || []);
+    }
+
+    async function toggleItemsView() {
+      itemsViewOpen = !itemsViewOpen;
+      const card = document.getElementById('itemsViewCard');
+      const btn = document.getElementById('viewItemsBtn');
+      if (itemsViewOpen) {
+        card.classList.remove('hidden');
+        btn.textContent = '\u{1F441} Hide Items';
+        await loadItemsView();
+      } else {
+        card.classList.add('hidden');
+        btn.textContent = '\u{1F441} View Items';
+      }
     }
 
     async function init() {
@@ -1220,7 +1345,7 @@
         return;
       }
 
-      populateDivisionFilter(meta.divisions);
+      populateFilterOptions(meta);
       const data = await loadDashboard();
       if (data && data.has_data) {
         document.getElementById('dashboardContent').classList.remove('hidden');

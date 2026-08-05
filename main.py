@@ -3,7 +3,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from sqlalchemy import inspect, text, func
+from sqlalchemy import inspect, text, func, or_
 from typing import List, Optional
 from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, date, timedelta
@@ -21,6 +21,7 @@ import base64
 import smtplib
 from email.mime.text import MIMEText
 from dotenv import load_dotenv
+from openpyxl import load_workbook
 
 load_dotenv()  # reads a local .env file (if present) into os.environ before
                 # anything below calls os.getenv() - e.g. SMTP_*, SECRET_KEY.
@@ -102,6 +103,9 @@ def ensure_database_schema():
     ensure_column("purchase_orders", "exported_to_busy_at", "TIMESTAMP")
     ensure_column("purchase_orders", "approved_by_user_id", "INTEGER")
     ensure_column("purchase_orders", "approved_date", "TIMESTAMP")
+    ensure_column("price_list_items", "model_no", "VARCHAR(100)")
+    ensure_column("price_list_items", "serial_no", "VARCHAR(100)")
+    ensure_column("price_list_items", "imei", "VARCHAR(100)")
     ensure_column("analytics_sales_rows", "brand", "VARCHAR(150)")
     ensure_column("schemes", "offer_value", "FLOAT")
     ensure_column("schemes", "calculation_method", "VARCHAR(50)")
@@ -903,6 +907,176 @@ def serve_html(path: str):
     return FileResponse(path)
 
 
+def _get_price_list_access_scope(current_user: models.User, db: Session):
+    if current_user.role in {"Admin", "Accounts", "MISExecutive"}:
+        return None
+    if current_user.role in {"BrandManager", "BrandPartner"}:
+        brand_ids = [user_brand.brand_id for user_brand in (getattr(current_user, "brands", []) or [])]
+        return {"brand_ids": brand_ids}
+    if current_user.role == "CategoryManager":
+        category_code = (current_user.category_code or "").strip().upper()
+        if not category_code:
+            return {"brand_ids": []}
+        brand_rows = (
+            db.query(models.Brand.id)
+            .join(models.SubCategory, models.Brand.subcategory_id == models.SubCategory.id)
+            .join(models.Category, models.SubCategory.category_id == models.Category.id)
+            .filter(func.upper(models.Category.code) == category_code)
+            .all()
+        )
+        return {"brand_ids": [brand_id for (brand_id,) in brand_rows]}
+    return {"brand_ids": []}
+
+
+def _apply_price_list_visibility(query, current_user: models.User, db: Session):
+    scope = _get_price_list_access_scope(current_user, db)
+    if scope is None:
+        return query
+    brand_ids = scope.get("brand_ids") or []
+    if not brand_ids:
+        return query.filter(models.PriceListItem.id.is_(None))
+    return query.filter(models.PriceListItem.brand_id.in_(brand_ids))
+
+
+def _filter_price_list_query(query, search: Optional[str]):
+    search_text = (search or "").strip()
+    if not search_text:
+        return query
+    like_term = f"%{search_text.lower()}%"
+    return query.outerjoin(models.Brand, models.PriceListItem.brand_id == models.Brand.id).filter(
+        or_(
+            func.lower(models.PriceListItem.item_details).like(like_term),
+            func.lower(models.PriceListItem.model_no).like(like_term),
+            func.lower(models.PriceListItem.serial_no).like(like_term),
+            func.lower(models.PriceListItem.imei).like(like_term),
+            func.lower(models.Brand.name).like(like_term),
+        )
+    )
+
+
+def _serialize_price_list_item(item: models.PriceListItem, current_user: models.User) -> dict:
+    full_access = current_user.role in {"Admin", "Accounts", "MISExecutive"}
+    brand = getattr(item, "brand", None)
+    return {
+        "id": item.id,
+        "brand_id": item.brand_id,
+        "brand_name": getattr(brand, "name", None) or "",
+        "item_details": item.item_details,
+        "model_no": item.model_no,
+        "serial_no": item.serial_no,
+        "imei": item.imei,
+        "total_stock": item.total_stock if full_access else None,
+        "purchase_price": item.purchase_price if full_access else None,
+        "msp": item.msp,
+        "isp": item.isp,
+        "updated_by_username": item.updated_by_username,
+        "updated_date": item.updated_date,
+    }
+
+
+def _parse_price_list_upload(file_bytes: bytes, filename: str):
+    workbook = load_workbook(BytesIO(file_bytes), data_only=True, read_only=True)
+    parsed_items = []
+    try:
+        for sheet in workbook.worksheets:
+            rows = list(sheet.iter_rows(values_only=True))
+            header_index = None
+            header_keywords = {"itemdetails", "item", "model", "modelname", "itemname", "stock", "totalstock", "qty", "purchase", "purchaseprice", "cost", "msp", "ids", "idsprice", "isp", "mrp", "saleprice"}
+            for idx, row in enumerate(rows):
+                normalized = [_normalize_price_list_header(v) for v in row or []]
+                if not any(normalized):
+                    continue
+                match_count = 0
+                for value in normalized:
+                    if value in {"itemdetails", "item", "model", "modelname", "itemname", "stock", "totalstock", "qty", "purchase", "purchaseprice", "cost", "msp", "ids", "idsprice", "isp", "mrp", "saleprice"}:
+                        match_count += 1
+                if match_count >= 3:
+                    header_index = idx
+                    break
+            if header_index is None:
+                continue
+
+            header_row = rows[header_index]
+            header_map = {}
+            for index, value in enumerate(header_row or []):
+                key = _normalize_price_list_header(value)
+                if key in {"itemdetails", "item", "model", "modelname", "itemname"}:
+                    header_map["item"] = index
+                elif key in {"modelno", "modelnumber"}:
+                    header_map["model_no"] = index
+                elif key in {"serialno", "serialnumber"}:
+                    header_map["serial_no"] = index
+                elif key in {"imei", "imeino"}:
+                    header_map["imei"] = index
+                elif key in {"stock", "totalstock", "qty"}:
+                    header_map["stock"] = index
+                elif key in {"purchase", "purchaseprice", "cost"}:
+                    header_map["purchase"] = index
+                elif key in {"msp", "ids", "idsprice"}:
+                    header_map["msp"] = index
+                elif key in {"isp", "mrp", "saleprice"}:
+                    header_map["isp"] = index
+
+            current_brand = None
+            for row in rows[header_index + 1:]:
+                if not row:
+                    continue
+                values = ["" if value is None else str(value).strip() for value in row]
+                if not any(values):
+                    continue
+
+                item_value = values[header_map.get("item", 0)] if header_map.get("item") is not None and header_map.get("item") < len(values) else ""
+                model_no_value = values[header_map.get("model_no", 0)] if header_map.get("model_no") is not None and header_map.get("model_no") < len(values) else ""
+                serial_no_value = values[header_map.get("serial_no", 0)] if header_map.get("serial_no") is not None and header_map.get("serial_no") < len(values) else ""
+                imei_value = values[header_map.get("imei", 0)] if header_map.get("imei") is not None and header_map.get("imei") < len(values) else ""
+                stock_value = values[header_map.get("stock", 0)] if header_map.get("stock") is not None and header_map.get("stock") < len(values) else ""
+                purchase_value = values[header_map.get("purchase", 0)] if header_map.get("purchase") is not None and header_map.get("purchase") < len(values) else ""
+                msp_value = values[header_map.get("msp", 0)] if header_map.get("msp") is not None and header_map.get("msp") < len(values) else ""
+                isp_value = values[header_map.get("isp", 0)] if header_map.get("isp") is not None and header_map.get("isp") < len(values) else ""
+
+                if not item_value and not stock_value and not purchase_value and not msp_value and not isp_value:
+                    if values[0]:
+                        current_brand = values[0]
+                    continue
+
+                if not item_value:
+                    continue
+
+                parsed_items.append({
+                    "brand_name": current_brand or sheet.title or "Unknown",
+                    "item_details": item_value,
+                    "model_no": model_no_value or None,
+                    "serial_no": serial_no_value or None,
+                    "imei": imei_value or None,
+                    "total_stock": _parse_price_list_numeric(stock_value),
+                    "purchase_price": _parse_price_list_numeric(purchase_value),
+                    "msp": _parse_price_list_numeric(msp_value),
+                    "isp": _parse_price_list_numeric(isp_value),
+                    "source_file": filename,
+                })
+    finally:
+        workbook.close()
+    return parsed_items
+
+
+def _normalize_price_list_header(value) -> str:
+    if value is None:
+        return ""
+    return re.sub(r"[^a-z0-9]+", "", str(value).strip().lower())
+
+
+def _parse_price_list_numeric(value) -> Optional[float]:
+    if value is None:
+        return None
+    text = str(value).strip().replace(",", "")
+    if not text:
+        return None
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
 @app.get("/")
 @app.get("/login")
 @app.get("/login.html")
@@ -928,6 +1102,12 @@ def app_home_page():
     return serve_html("static/home.html")
 
 
+@app.get("/price-list")
+@app.get("/price-list.html")
+def price_list_page():
+    return serve_html("static/price_list.html")
+
+
 @app.get("/purchase-orders")
 @app.get("/purchase-orders.html")
 def purchase_orders_page():
@@ -944,6 +1124,197 @@ def analytics_page():
 @app.get("/privacy.html")
 def privacy_page():
     return serve_html("static/privacy.html")
+
+
+@app.get("/api/price-list/brands")
+def list_price_list_brands(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    scope = _get_price_list_access_scope(current_user, db)
+    if scope is None:
+        brands = db.query(models.Brand).order_by(models.Brand.name).all()
+    else:
+        brand_ids = scope.get("brand_ids") or []
+        if not brand_ids:
+            brands = []
+        else:
+            brands = db.query(models.Brand).filter(models.Brand.id.in_(brand_ids)).order_by(models.Brand.name).all()
+    return [{"id": brand.id, "name": brand.name} for brand in brands]
+
+
+@app.get("/api/price-list", response_model=List[schemas.PriceListItemOut])
+def list_price_list_items(
+    brand_id: Optional[int] = Query(None),
+    search: Optional[str] = Query(None),
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    query = db.query(models.PriceListItem).options()
+    query = _apply_price_list_visibility(query, current_user, db)
+    if brand_id is not None:
+        query = query.filter(models.PriceListItem.brand_id == brand_id)
+    query = _filter_price_list_query(query, search)
+    items = query.order_by(models.PriceListItem.updated_date.desc(), models.PriceListItem.item_details.asc()).all()
+    return [_serialize_price_list_item(item, current_user) for item in items]
+
+
+@app.post("/api/price-list", response_model=schemas.PriceListItemOut)
+def create_price_list_item(
+    payload: schemas.PriceListItemCreate,
+    current_user: models.User = Depends(auth.require_roles("Admin", "Accounts", "MISExecutive")),
+    db: Session = Depends(get_db),
+):
+    brand = db.query(models.Brand).filter(models.Brand.id == payload.brand_id).first()
+    if not brand:
+        raise HTTPException(status_code=404, detail="Brand not found")
+
+    item = models.PriceListItem(
+        brand_id=payload.brand_id,
+        item_details=(payload.item_details or "").strip(),
+        model_no=(payload.model_no or "").strip() or None,
+        serial_no=(payload.serial_no or "").strip() or None,
+        imei=(payload.imei or "").strip() or None,
+        total_stock=payload.total_stock,
+        purchase_price=payload.purchase_price,
+        msp=payload.msp,
+        isp=payload.isp,
+        updated_by_user_id=current_user.id,
+        updated_by_username=current_user.username,
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return _serialize_price_list_item(item, current_user)
+
+
+@app.put("/api/price-list/{item_id}", response_model=schemas.PriceListItemOut)
+def update_price_list_item(
+    item_id: int,
+    payload: schemas.PriceListItemUpdate,
+    current_user: models.User = Depends(auth.require_roles("Admin", "Accounts", "MISExecutive")),
+    db: Session = Depends(get_db),
+):
+    item = db.query(models.PriceListItem).filter(models.PriceListItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    if payload.item_details is not None:
+        item.item_details = payload.item_details.strip()
+    if payload.model_no is not None:
+        item.model_no = (payload.model_no or "").strip() or None
+    if payload.serial_no is not None:
+        item.serial_no = (payload.serial_no or "").strip() or None
+    if payload.imei is not None:
+        item.imei = (payload.imei or "").strip() or None
+    if payload.total_stock is not None:
+        item.total_stock = payload.total_stock
+    if payload.purchase_price is not None:
+        item.purchase_price = payload.purchase_price
+    if payload.msp is not None:
+        item.msp = payload.msp
+    if payload.isp is not None:
+        item.isp = payload.isp
+
+    item.updated_by_user_id = current_user.id
+    item.updated_by_username = current_user.username
+    db.commit()
+    db.refresh(item)
+    return _serialize_price_list_item(item, current_user)
+
+
+@app.delete("/api/price-list/{item_id}")
+def delete_price_list_item(
+    item_id: int,
+    current_user: models.User = Depends(auth.require_roles("Admin")),
+    db: Session = Depends(get_db),
+):
+    item = db.query(models.PriceListItem).filter(models.PriceListItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    db.delete(item)
+    db.commit()
+    return {"message": "Item deleted"}
+
+
+@app.post("/api/price-list/upload")
+def upload_price_list_items(
+    file: UploadFile = File(...),
+    current_user: models.User = Depends(auth.require_roles("Admin", "Accounts", "MISExecutive")),
+    db: Session = Depends(get_db),
+):
+    raw_bytes = file.file.read()
+    if not raw_bytes:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
+    try:
+        parsed_rows = _parse_price_list_upload(raw_bytes, file.filename or "price-list.xlsx")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Unable to read Excel file: {exc}") from exc
+
+    inserted = 0
+    updated = 0
+    skipped = 0
+    created_brands = []
+
+    for row in parsed_rows:
+        item_details = (row.get("item_details") or "").strip()
+        if not item_details:
+            skipped += 1
+            continue
+
+        brand = db.query(models.Brand).filter(func.lower(models.Brand.name) == row["brand_name"].strip().lower()).first()
+        if not brand:
+            brand = models.Brand(name=row["brand_name"].strip(), subcategory_id=None)
+            db.add(brand)
+            db.commit()
+            db.refresh(brand)
+            created_brands.append(brand.name)
+
+        existing = (
+            db.query(models.PriceListItem)
+            .filter(models.PriceListItem.brand_id == brand.id)
+            .filter(func.lower(models.PriceListItem.item_details) == item_details.lower())
+            .first()
+        )
+        if existing:
+            existing.model_no = (row.get("model_no") or "").strip() or None
+            existing.serial_no = (row.get("serial_no") or "").strip() or None
+            existing.imei = (row.get("imei") or "").strip() or None
+            existing.total_stock = row.get("total_stock")
+            existing.purchase_price = row.get("purchase_price")
+            existing.msp = row.get("msp")
+            existing.isp = row.get("isp")
+            existing.updated_by_user_id = current_user.id
+            existing.updated_by_username = current_user.username
+            existing.source_file = row.get("source_file")
+            existing.updated_date = datetime.utcnow()
+            updated += 1
+        else:
+            db.add(models.PriceListItem(
+                brand_id=brand.id,
+                item_details=item_details,
+                model_no=(row.get("model_no") or "").strip() or None,
+                serial_no=(row.get("serial_no") or "").strip() or None,
+                imei=(row.get("imei") or "").strip() or None,
+                total_stock=row.get("total_stock"),
+                purchase_price=row.get("purchase_price"),
+                msp=row.get("msp"),
+                isp=row.get("isp"),
+                source_file=row.get("source_file"),
+                updated_by_user_id=current_user.id,
+                updated_by_username=current_user.username,
+            ))
+            inserted += 1
+
+    db.commit()
+    return {
+        "message": "Price list uploaded successfully",
+        "inserted": inserted,
+        "updated": updated,
+        "skipped": skipped,
+        "brands_created": created_brands,
+    }
 
 
 @app.get("/manifest.webmanifest")
@@ -3415,10 +3786,6 @@ def dp_categorize(item_name: Optional[str]) -> str:
         " FAN ", " WM ", "WASHING MACHINE", "MIXER GRINDER", "INDUCTION",
         "IN ICT", "CHIMNEY", "DISHWASHER", "VACUUM CLEANER", "AIR PURIFIER",
         "ROOM HEATER", "IRON BOX", "STEAM IRON", "AQUAGUARD", " RO ",
-        # Irons and other personal-care/grooming small appliances (any brand)
-        " IRON ", "DRY IRON", "CURLING IRON", "HAIR DRYER", "HAIR STRAIGHTENER",
-        "HAIR CURLER", "HAIR STYLER", "AIRWRAP", "EPILATOR", "FOOT SPA",
-        "FOOT MASSAGER", " TRIMMER", " SHAVER",
     )
     if any(k in padded for k in ha_keywords):
         return "HA"

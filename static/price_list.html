@@ -96,7 +96,7 @@
 
     <div class="card">
       <div class="filters">
-        <input class="search-box" id="searchInput" type="text" placeholder="Search item / model name..." oninput="debouncedLoad()" />
+        <input class="search-box" id="searchInput" type="text" placeholder="Search by item / model / serial / IMEI..." oninput="debouncedLoad()" />
         <select id="brandFilter" onchange="loadItems()"><option value="">All brands</option></select>
       </div>
       <div class="section-head">
@@ -111,10 +111,11 @@
             <tr id="tableHeadRow">
               <th>Brand</th>
               <th>Item Details</th>
+              <th>Model / Serial / IMEI</th>
               <th class="num full-access-col hidden">Stock</th>
               <th class="num full-access-col hidden">Purchase Price</th>
-              <th class="num">MSP</th>
-              <th class="num">ISP</th>
+              <th class="num">IDS Price</th>
+              <th class="num">MRP</th>
               <th class="full-access-col hidden">Updated By</th>
               <th class="full-access-col hidden">Actions</th>
             </tr>
@@ -141,6 +142,18 @@
           <input id="itemDetailsInput" type="text" placeholder="e.g. Blue Star SAC ID 1.5T IA318EXU" />
         </div>
         <div>
+          <label for="itemModelInput">Model No.</label>
+          <input id="itemModelInput" type="text" />
+        </div>
+        <div>
+          <label for="itemSerialInput">Serial No.</label>
+          <input id="itemSerialInput" type="text" />
+        </div>
+        <div>
+          <label for="itemImeiInput">IMEI No.</label>
+          <input id="itemImeiInput" type="text" />
+        </div>
+        <div>
           <label for="itemStockInput">Total Stock</label>
           <input id="itemStockInput" type="number" step="1" />
         </div>
@@ -149,11 +162,11 @@
           <input id="itemPurchasePriceInput" type="number" step="0.01" />
         </div>
         <div>
-          <label for="itemMspInput">MSP</label>
+          <label for="itemMspInput">IDS Price</label>
           <input id="itemMspInput" type="number" step="0.01" />
         </div>
         <div>
-          <label for="itemIspInput">ISP</label>
+          <label for="itemIspInput">MRP</label>
           <input id="itemIspInput" type="number" step="0.01" />
         </div>
       </div>
@@ -261,7 +274,8 @@
 
       for (const item of items) {
         const tr = document.createElement('tr');
-        let rowHtml = `<td class="brand-cell">${item.brand_name}</td><td>${item.item_details}</td>`;
+        const identifierText = [item.model_no, item.serial_no, item.imei].filter(Boolean).join(' / ') || '—';
+        let rowHtml = `<td class="brand-cell">${item.brand_name}</td><td>${item.item_details}</td><td>${identifierText}</td>`;
         if (isFullAccess) {
           rowHtml += `<td class="num">${item.total_stock ?? '—'}</td><td class="num">${fmtMoney(item.purchase_price)}</td>`;
         }
@@ -282,6 +296,9 @@
       document.getElementById('itemBrandSelect').disabled = false;
       document.getElementById('itemBrandSelect').value = allBrands[0]?.id || '';
       document.getElementById('itemDetailsInput').value = '';
+      document.getElementById('itemModelInput').value = '';
+      document.getElementById('itemSerialInput').value = '';
+      document.getElementById('itemImeiInput').value = '';
       document.getElementById('itemStockInput').value = '';
       document.getElementById('itemPurchasePriceInput').value = '';
       document.getElementById('itemMspInput').value = '';
@@ -300,6 +317,9 @@
       document.getElementById('itemBrandSelect').value = item.brand_id;
       document.getElementById('itemBrandSelect').disabled = true;
       document.getElementById('itemDetailsInput').value = item.item_details;
+      document.getElementById('itemModelInput').value = item.model_no ?? '';
+      document.getElementById('itemSerialInput').value = item.serial_no ?? '';
+      document.getElementById('itemImeiInput').value = item.imei ?? '';
       document.getElementById('itemStockInput').value = item.total_stock ?? '';
       document.getElementById('itemPurchasePriceInput').value = item.purchase_price ?? '';
       document.getElementById('itemMspInput').value = item.msp ?? '';
@@ -319,6 +339,9 @@
 
       const payload = {
         item_details: itemDetails,
+        model_no: document.getElementById('itemModelInput').value.trim() || null,
+        serial_no: document.getElementById('itemSerialInput').value.trim() || null,
+        imei: document.getElementById('itemImeiInput').value.trim() || null,
         total_stock: document.getElementById('itemStockInput').value === '' ? null : Number(document.getElementById('itemStockInput').value),
         purchase_price: document.getElementById('itemPurchasePriceInput').value === '' ? null : Number(document.getElementById('itemPurchasePriceInput').value),
         msp: document.getElementById('itemMspInput').value === '' ? null : Number(document.getElementById('itemMspInput').value),
