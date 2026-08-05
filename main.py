@@ -3415,6 +3415,10 @@ def dp_categorize(item_name: Optional[str]) -> str:
         " FAN ", " WM ", "WASHING MACHINE", "MIXER GRINDER", "INDUCTION",
         "IN ICT", "CHIMNEY", "DISHWASHER", "VACUUM CLEANER", "AIR PURIFIER",
         "ROOM HEATER", "IRON BOX", "STEAM IRON", "AQUAGUARD", " RO ",
+        # Irons and other personal-care/grooming small appliances (any brand)
+        " IRON ", "DRY IRON", "CURLING IRON", "HAIR DRYER", "HAIR STRAIGHTENER",
+        "HAIR CURLER", "HAIR STYLER", "AIRWRAP", "EPILATOR", "FOOT SPA",
+        "FOOT MASSAGER", " TRIMMER", " SHAVER",
     )
     if any(k in padded for k in ha_keywords):
         return "HA"
