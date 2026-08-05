@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#000000" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <title>Initiative ERP - IDS Price System</title>
+  <link rel="icon" href="static/Initiative%20logo.png" type="image/png" />
+  <style>
+    :root { --ink:#1d2939; --muted:#667085; --line:#d0d5dd; --bg:#f5f7fa; --card:#fff; --brand:#155eef; --accent:#d95f00; --good:#027a48; --danger:#b42318; }
+    * { box-sizing:border-box; } body { margin:0; font-family:Arial,sans-serif; background:var(--bg); color:var(--ink); }
+    header { background:linear-gradient(90deg, #181818 0%, #000000 100%); color:#fff; padding:16px clamp(16px,3vw,42px); display:flex; gap:16px; align-items:center; justify-content:space-between; box-shadow:0 2px 10px rgba(0,0,0,0.12); }
+    .brand { font-weight:700; letter-spacing:0.2px; font-size:16px; } .header-right { display:flex; align-items:center; gap:12px; color:#d0d5dd; font-size:14px; }
+    button { font:inherit; cursor:pointer; border:0; border-radius:6px; font-weight:700; }
+    .btn { padding:10px 14px; background:var(--brand); color:#fff; } .btn:hover { background:#004eeb; }
+    .btn-light { background:#fff; color:#111111; border:1px solid transparent; }
+    .btn-danger { background:var(--danger); color:#fff; } .btn-outline { background:#fff; color:var(--brand); border:1px solid var(--brand); padding:8px 12px; font-size:13px; }
+    .back-btn { background:transparent; color:#fff; border:1px solid rgba(255,255,255,0.5); padding:10px 14px; } .back-btn:hover { background:rgba(255,255,255,0.12); border-color:#fff; }
+    main { max-width:1320px; margin:0 auto; padding:26px 22px 48px; }
+    .title-row { display:flex; justify-content:space-between; align-items:flex-end; gap:20px; margin-bottom:22px; flex-wrap:wrap; }
+    h1 { margin:0; font-size:27px; } .subtitle { margin:6px 0 0; color:var(--muted); }
+    .card { background:var(--card); border:1px solid #e4e7ec; border-radius:8px; padding:20px; box-shadow:0 1px 2px rgba(16,24,40,.04); margin-bottom:20px; }
+    label { display:block; margin:0 0 6px; font-size:12px; color:var(--muted); font-weight:700; }
+    input, select { width:100%; min-height:39px; height:39px; border:1px solid var(--line); border-radius:6px; padding:9px 10px; font:inherit; color:var(--ink); background:#fff; box-sizing:border-box; }
+    select {
+      background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23667085' stroke-width='1.6'><path d='M5 7.5L10 12.5L15 7.5'/></svg>");
+      background-repeat:no-repeat; background-position:right 10px center; background-size:14px; padding-right:32px; appearance:none;
+    }
+    .filters { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:6px; }
+    .filters .search-box { min-width:220px; flex:1 1 220px; } .filters select { width:auto; min-width:170px; }
+    .actions-row { display:flex; gap:10px; flex-wrap:wrap; }
+    .section-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; gap:12px; flex-wrap:wrap; }
+    .section-head p { margin:4px 0 0; color:var(--muted); font-size:13px; }
+    .table-wrap { overflow-x:auto; border:1px solid #e4e7ec; border-radius:6px; }
+    table { width:100%; min-width:640px; border-collapse:collapse; }
+    th, td { padding:9px 8px; border-bottom:1px solid #eaecf0; text-align:left; font-size:13px; vertical-align:top; }
+    th { background:#f9fafb; color:#475467; font-size:12px; white-space:nowrap; }
+    td.num, th.num { text-align:right; white-space:nowrap; }
+    .brand-cell { font-weight:700; }
+    .row-actions { display:flex; gap:6px; flex-wrap:nowrap; }
+    .row-actions button { padding:6px 9px; font-size:12px; }
+    .empty-state { padding:34px 20px; text-align:center; color:var(--muted); }
+    .badge { display:inline-block; padding:3px 9px; border-radius:999px; font-size:11.5px; font-weight:700; background:#eff8ff; color:#175cd3; }
+    dialog { width:min(560px,calc(100% - 32px)); max-height:90vh; overflow-y:auto; border:0; border-radius:8px; padding:0; box-shadow:0 20px 50px rgba(16,24,40,.28); }
+    dialog::backdrop { background:rgba(16,24,40,.55); }
+    .modal { padding:20px; } .modal h2 { margin:0 0 4px; font-size:19px; } .modal .subtitle { margin-bottom:16px; }
+    .form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; } .span-2 { grid-column:span 2; }
+    .modal .actions { display:flex; justify-content:flex-end; gap:10px; margin-top:18px; }
+    .message { min-height:20px; margin-top:12px; font-size:13px; color:var(--danger); } .message.success { color:var(--good); }
+    .hidden { display:none !important; }
+    .upload-drop { border:1.5px dashed var(--line); border-radius:8px; padding:22px; text-align:center; color:var(--muted); font-size:13.5px; }
+    .upload-summary { margin-top:14px; font-size:13px; line-height:1.6; }
+    .upload-summary b { color:var(--ink); }
+    @media(max-width:700px) {
+      header { padding:14px 16px; } .card { padding:14px; }
+      input, select { min-height:44px; } .btn, .btn-light, .back-btn, .btn-danger { min-height:44px; }
+      .form-grid { grid-template-columns:1fr; } .span-2 { grid-column:span 1; }
+      th, td { padding:8px 6px; font-size:12.5px; }
+    }
+    @media(max-width:540px) {
+      header { align-items:flex-start; flex-direction:column; } .header-right { width:100%; justify-content:space-between; }
+      .actions-row { width:100%; } .actions-row button { flex:1; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">INITIATIVE DATA SYSTEMS (P) LTD.</div>
+    <div class="header-right"><span id="userName"></span><button class="back-btn" onclick="go('/home')">&larr; Back</button><button class="btn-light" onclick="openLogoutModal()">Log out</button></div>
+  </header>
+
+  <div id="logoutModal" style="display:none; position:fixed; inset:0; z-index:60; align-items:center; justify-content:center; background:rgba(16,24,40,.55);" onclick="if (event.target === this) closeLogoutModal()">
+    <div style="background:#fff; border-radius:14px; padding:26px 28px; max-width:340px; width:90vw; box-shadow:0 24px 60px rgba(16,24,40,.35);">
+      <h3 style="margin:0 0 8px; font-size:17px;">Log out?</h3>
+      <p style="margin:0 0 18px; font-size:13px; color:var(--muted);">This will end your session and return you to the login page.</p>
+      <div style="display:flex; gap:10px; justify-content:flex-end;">
+        <button type="button" class="btn-light" onclick="closeLogoutModal()">Cancel</button>
+        <button type="button" class="btn-danger" onclick="logout()">Log out</button>
+      </div>
+    </div>
+  </div>
+
+  <main>
+    <div class="title-row">
+      <div>
+        <h1>IDS Price System</h1>
+        <p class="subtitle" id="pageSubtitle">Selling prices by brand and item.</p>
+      </div>
+      <div class="actions-row" id="fullAccessActions" style="display:none;">
+        <button class="btn-outline" onclick="openUploadModal()">Upload Price List</button>
+        <button class="btn" onclick="openAddModal()">+ Add Item</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="filters">
+        <input class="search-box" id="searchInput" type="text" placeholder="Search item / model name..." oninput="debouncedLoad()" />
+        <select id="brandFilter" onchange="loadItems()"><option value="">All brands</option></select>
+      </div>
+      <div class="section-head">
+        <div>
+          <h2 style="margin:0; font-size:16px;">Items</h2>
+          <p id="rowCount"></p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr id="tableHeadRow">
+              <th>Brand</th>
+              <th>Item Details</th>
+              <th class="num full-access-col hidden">Stock</th>
+              <th class="num full-access-col hidden">Purchase Price</th>
+              <th class="num">MSP</th>
+              <th class="num">ISP</th>
+              <th class="full-access-col hidden">Updated By</th>
+              <th class="full-access-col hidden">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+      <div id="emptyState" class="empty-state hidden">No items found.</div>
+    </div>
+  </main>
+
+  <!-- Add / Edit item modal -->
+  <dialog id="itemDialog">
+    <div class="modal">
+      <h2 id="itemDialogTitle">Add Item</h2>
+      <p class="subtitle" id="itemDialogSubtitle">Prices set here are visible to Category Managers and Brand Promoters immediately.</p>
+      <div class="form-grid">
+        <div class="span-2">
+          <label for="itemBrandSelect">Brand</label>
+          <select id="itemBrandSelect"></select>
+        </div>
+        <div class="span-2">
+          <label for="itemDetailsInput">Item Details (model name)</label>
+          <input id="itemDetailsInput" type="text" placeholder="e.g. Blue Star SAC ID 1.5T IA318EXU" />
+        </div>
+        <div>
+          <label for="itemStockInput">Total Stock</label>
+          <input id="itemStockInput" type="number" step="1" />
+        </div>
+        <div>
+          <label for="itemPurchasePriceInput">Purchase Price</label>
+          <input id="itemPurchasePriceInput" type="number" step="0.01" />
+        </div>
+        <div>
+          <label for="itemMspInput">MSP</label>
+          <input id="itemMspInput" type="number" step="0.01" />
+        </div>
+        <div>
+          <label for="itemIspInput">ISP</label>
+          <input id="itemIspInput" type="number" step="0.01" />
+        </div>
+      </div>
+      <div id="itemDialogMessage" class="message"></div>
+      <div class="actions">
+        <button type="button" class="btn-danger hidden" id="itemDeleteBtn" onclick="deleteCurrentItem()">Delete</button>
+        <button type="button" class="btn-light" onclick="closeItemDialog()">Cancel</button>
+        <button type="button" class="btn" onclick="saveItem()">Save</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Bulk upload modal -->
+  <dialog id="uploadDialog">
+    <div class="modal">
+      <h2>Upload Price List</h2>
+      <p class="subtitle">Upload an Excel file (.xlsx) with brand section headers (e.g. "Bluestar", "Daikin") each followed by an Item Details / Total Stock / Purchase Price / MSP / ISP table - the same layout as your current price sheets. Existing items are updated by brand + item name; new items are added; brands not yet in the system are created automatically.</p>
+      <div class="upload-drop">
+        <input type="file" id="uploadFileInput" accept=".xlsx,.xls" />
+      </div>
+      <div id="uploadMessage" class="message"></div>
+      <div id="uploadSummary" class="upload-summary hidden"></div>
+      <div class="actions">
+        <button type="button" class="btn-light" onclick="closeUploadModal()">Close</button>
+        <button type="button" class="btn" id="uploadSubmitBtn" onclick="submitUpload()">Upload</button>
+      </div>
+    </div>
+  </dialog>
+
+  <script>
+    function appUrl(path) { const p = location.pathname; const base = p === '/erp' || p.startsWith('/erp/') ? '/erp' : ''; return `${base}${path}`; }
+
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => { navigator.serviceWorker.register(appUrl('/sw.js')).catch(() => {}); });
+    }
+
+    const token = localStorage.getItem('token'); const role = localStorage.getItem('role') || ''; const username = localStorage.getItem('username') || '';
+    if (!token) location.href = appUrl('/login');
+    document.getElementById('userName').textContent = username;
+
+    const FULL_ACCESS_ROLES = ['Admin', 'Accounts', 'MISExecutive'];
+    const isFullAccess = FULL_ACCESS_ROLES.includes(role);
+
+    function go(path) { location.href = appUrl(path); }
+    function logout() { localStorage.clear(); location.href = appUrl('/login'); }
+    function openLogoutModal() { document.getElementById('logoutModal').style.display = 'flex'; }
+    function closeLogoutModal() { document.getElementById('logoutModal').style.display = 'none'; }
+
+    async function api(path, options = {}) {
+      const response = await fetch(appUrl(path), { ...options, headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', ...(options.headers || {}) } });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.detail || 'Request failed');
+      return data;
+    }
+
+    let allBrands = [];
+    let currentItemId = null;
+
+    function fmtMoney(v) { return (v === null || v === undefined) ? '—' : Number(v).toLocaleString('en-IN', { maximumFractionDigits: 2 }); }
+
+    async function init() {
+      if (isFullAccess) {
+        document.getElementById('fullAccessActions').style.display = 'flex';
+        document.querySelectorAll('.full-access-col').forEach(el => el.classList.remove('hidden'));
+        document.getElementById('pageSubtitle').textContent = 'Brand-wise item prices - add, bulk-upload, or edit. Changes are visible to Category Managers and Brand Promoters immediately.';
+      } else {
+        document.getElementById('pageSubtitle').textContent = 'Selling prices (MSP / ISP) for your assigned brand(s) / category.';
+      }
+      await loadBrandFilter();
+      await loadItems();
+    }
+
+    async function loadBrandFilter() {
+      try {
+        allBrands = await api('/api/price-list/brands');
+      } catch (e) { allBrands = []; }
+      const select = document.getElementById('brandFilter');
+      select.innerHTML = '<option value="">All brands</option>' + allBrands.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+
+      const itemBrandSelect = document.getElementById('itemBrandSelect');
+      itemBrandSelect.innerHTML = allBrands.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+    }
+
+    let debounceTimer = null;
+    function debouncedLoad() { clearTimeout(debounceTimer); debounceTimer = setTimeout(loadItems, 300); }
+
+    async function loadItems() {
+      const brandId = document.getElementById('brandFilter').value;
+      const search = document.getElementById('searchInput').value.trim();
+      const params = new URLSearchParams();
+      if (brandId) params.set('brand_id', brandId);
+      if (search) params.set('search', search);
+
+      let items = [];
+      try {
+        items = await api(`/api/price-list?${params.toString()}`);
+      } catch (e) {
+        document.getElementById('rowCount').textContent = 'Unable to load items.';
+      }
+
+      const tbody = document.getElementById('tableBody');
+      tbody.innerHTML = '';
+      document.getElementById('rowCount').textContent = `${items.length} item${items.length === 1 ? '' : 's'}`;
+      document.getElementById('emptyState').classList.toggle('hidden', items.length > 0);
+
+      for (const item of items) {
+        const tr = document.createElement('tr');
+        let rowHtml = `<td class="brand-cell">${item.brand_name}</td><td>${item.item_details}</td>`;
+        if (isFullAccess) {
+          rowHtml += `<td class="num">${item.total_stock ?? '—'}</td><td class="num">${fmtMoney(item.purchase_price)}</td>`;
+        }
+        rowHtml += `<td class="num">${fmtMoney(item.msp)}</td><td class="num">${fmtMoney(item.isp)}</td>`;
+        if (isFullAccess) {
+          rowHtml += `<td>${item.updated_by_username || '—'}</td><td class="row-actions"><button class="btn-outline" onclick="openEditModal(${item.id})">Edit</button></td>`;
+        }
+        tr.innerHTML = rowHtml;
+        tbody.appendChild(tr);
+      }
+    }
+
+    // ---- Add / Edit item modal ----
+    function openAddModal() {
+      currentItemId = null;
+      document.getElementById('itemDialogTitle').textContent = 'Add Item';
+      document.getElementById('itemDeleteBtn').classList.add('hidden');
+      document.getElementById('itemBrandSelect').disabled = false;
+      document.getElementById('itemBrandSelect').value = allBrands[0]?.id || '';
+      document.getElementById('itemDetailsInput').value = '';
+      document.getElementById('itemStockInput').value = '';
+      document.getElementById('itemPurchasePriceInput').value = '';
+      document.getElementById('itemMspInput').value = '';
+      document.getElementById('itemIspInput').value = '';
+      document.getElementById('itemDialogMessage').textContent = '';
+      document.getElementById('itemDialog').showModal();
+    }
+
+    async function openEditModal(itemId) {
+      currentItemId = itemId;
+      const items = await api('/api/price-list');
+      const item = items.find(i => i.id === itemId);
+      if (!item) return;
+      document.getElementById('itemDialogTitle').textContent = 'Edit Item';
+      document.getElementById('itemDeleteBtn').classList.toggle('hidden', role !== 'Admin');
+      document.getElementById('itemBrandSelect').value = item.brand_id;
+      document.getElementById('itemBrandSelect').disabled = true;
+      document.getElementById('itemDetailsInput').value = item.item_details;
+      document.getElementById('itemStockInput').value = item.total_stock ?? '';
+      document.getElementById('itemPurchasePriceInput').value = item.purchase_price ?? '';
+      document.getElementById('itemMspInput').value = item.msp ?? '';
+      document.getElementById('itemIspInput').value = item.isp ?? '';
+      document.getElementById('itemDialogMessage').textContent = '';
+      document.getElementById('itemDialog').showModal();
+    }
+
+    function closeItemDialog() { document.getElementById('itemDialog').close(); }
+
+    async function saveItem() {
+      const msg = document.getElementById('itemDialogMessage');
+      msg.className = 'message'; msg.textContent = '';
+
+      const itemDetails = document.getElementById('itemDetailsInput').value.trim();
+      if (!itemDetails) { msg.textContent = 'Item details is required.'; return; }
+
+      const payload = {
+        item_details: itemDetails,
+        total_stock: document.getElementById('itemStockInput').value === '' ? null : Number(document.getElementById('itemStockInput').value),
+        purchase_price: document.getElementById('itemPurchasePriceInput').value === '' ? null : Number(document.getElementById('itemPurchasePriceInput').value),
+        msp: document.getElementById('itemMspInput').value === '' ? null : Number(document.getElementById('itemMspInput').value),
+        isp: document.getElementById('itemIspInput').value === '' ? null : Number(document.getElementById('itemIspInput').value),
+      };
+
+      try {
+        if (currentItemId) {
+          await api(`/api/price-list/${currentItemId}`, { method: 'PUT', body: JSON.stringify(payload) });
+        } else {
+          payload.brand_id = Number(document.getElementById('itemBrandSelect').value);
+          await api('/api/price-list', { method: 'POST', body: JSON.stringify(payload) });
+        }
+        closeItemDialog();
+        await loadItems();
+      } catch (e) {
+        msg.textContent = e.message || 'Unable to save item';
+      }
+    }
+
+    async function deleteCurrentItem() {
+      if (!currentItemId) return;
+      if (!confirm('Delete this item? This cannot be undone.')) return;
+      try {
+        await api(`/api/price-list/${currentItemId}`, { method: 'DELETE' });
+        closeItemDialog();
+        await loadItems();
+      } catch (e) {
+        document.getElementById('itemDialogMessage').textContent = e.message || 'Unable to delete item';
+      }
+    }
+
+    // ---- Bulk upload modal ----
+    function openUploadModal() {
+      document.getElementById('uploadFileInput').value = '';
+      document.getElementById('uploadMessage').textContent = '';
+      document.getElementById('uploadSummary').classList.add('hidden');
+      document.getElementById('uploadDialog').showModal();
+    }
+    function closeUploadModal() { document.getElementById('uploadDialog').close(); loadItems(); loadBrandFilter(); }
+
+    async function submitUpload() {
+      const msg = document.getElementById('uploadMessage');
+      const fileInput = document.getElementById('uploadFileInput');
+      msg.className = 'message'; msg.textContent = '';
+
+      if (!fileInput.files.length) { msg.textContent = 'Choose an Excel file first.'; return; }
+
+      const submitBtn = document.getElementById('uploadSubmitBtn');
+      submitBtn.disabled = true; submitBtn.textContent = 'Uploading...';
+
+      const formData = new FormData();
+      formData.append('file', fileInput.files[0]);
+
+      try {
+        const response = await fetch(appUrl('/api/price-list/upload'), {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+          body: formData,
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.detail || 'Upload failed');
+
+        msg.classList.add('success');
+        msg.textContent = data.message;
+        const summary = document.getElementById('uploadSummary');
+        summary.classList.remove('hidden');
+        summary.innerHTML = `<div><b>${data.inserted}</b> new item(s) added, <b>${data.updated}</b> updated, <b>${data.skipped}</b> row(s) skipped.</div>` +
+          (data.brands_created.length ? `<div style="margin-top:6px;">New brands created: ${data.brands_created.join(', ')}</div>` : '');
+      } catch (e) {
+        msg.textContent = e.message || 'Upload failed';
+      } finally {
+        submitBtn.disabled = false; submitBtn.textContent = 'Upload';
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>

@@ -338,6 +338,68 @@ class UserAssignmentUpdate(BaseModel):
     brand_ids: Optional[List[int]] = None
 
 
+class PriceListItemCreate(BaseModel):
+    """Admin/Accounts/MISExecutive: add one item by hand."""
+    brand_id: int
+    item_details: str
+    total_stock: Optional[int] = None
+    purchase_price: Optional[float] = None
+    msp: Optional[float] = None
+    isp: Optional[float] = None
+
+
+class PriceListItemUpdate(BaseModel):
+    """Admin/Accounts/MISExecutive: edit any subset of fields on one item."""
+    item_details: Optional[str] = None
+    total_stock: Optional[int] = None
+    purchase_price: Optional[float] = None
+    msp: Optional[float] = None
+    isp: Optional[float] = None
+
+
+class PriceListItemOut(BaseModel):
+    """Full view - Admin/Accounts/MISExecutive only. Includes purchase price
+    and stock, which CategoryManager/BrandManager/BrandPartner never see."""
+    id: int
+    brand_id: int
+    brand_name: str
+    item_details: str
+    total_stock: Optional[int] = None
+    purchase_price: Optional[float] = None
+    msp: Optional[float] = None
+    isp: Optional[float] = None
+    updated_by_username: Optional[str] = None
+    updated_date: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class PriceListItemViewerOut(BaseModel):
+    """Restricted view - CategoryManager/BrandManager/BrandPartner. Selling
+    price only: no purchase price, no stock count."""
+    id: int
+    brand_id: int
+    brand_name: str
+    item_details: str
+    msp: Optional[float] = None
+    isp: Optional[float] = None
+    updated_date: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class PriceListUploadResult(BaseModel):
+    message: str
+    file_name: str
+    inserted: int
+    updated: int
+    skipped: int
+    brands_created: List[str] = []
+    errors_preview: List[dict] = []
+
+
 class BrandSupplierEmailCreate(BaseModel):
     brand_name: str
     email: str

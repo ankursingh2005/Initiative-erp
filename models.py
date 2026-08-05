@@ -454,6 +454,33 @@ class BrandCategoryVisibility(Base):
 
 
 # ============================================================
+# IDS PRICE SYSTEM (brand-wise item price master)
+# One row per (brand, item/model). Admin/Accounts/MISExecutive can create,
+# bulk-upload, and edit every field. CategoryManager/BrandManager/BrandPartner
+# can only VIEW rows scoped to their category/brand(s), and the API only
+# returns msp/isp to them - purchase_price and total_stock are stripped
+# server-side, never just hidden in the UI.
+# ============================================================
+
+class PriceListItem(Base):
+    __tablename__ = "price_list_items"
+    id = Column(Integer, primary_key=True, index=True)
+    brand_id = Column(Integer, ForeignKey("brands.id"), nullable=False, index=True)
+    item_details = Column(String(255), nullable=False, index=True)
+    total_stock = Column(Integer, nullable=True)
+    purchase_price = Column(Float, nullable=True)
+    msp = Column(Float, nullable=True)
+    isp = Column(Float, nullable=True)
+    source_file = Column(String(255), nullable=True)
+    updated_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    updated_by_username = Column(String(100), nullable=True)
+    created_date = Column(DateTime, default=datetime.utcnow)
+    updated_date = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    brand = relationship("Brand")
+
+
+# ============================================================
 # BRAND SUPPLIER EMAIL BOOK
 # (Pre-fed contact emails per brand so Admin/MIS can send a PO to every
 #  distributor contact for that brand in one click, and add more over time.)

@@ -1,8 +1,9 @@
-// Bumped to v10: added the new /daily-profitability page to the core
-// asset list. Bumping the cache name forces every existing install to drop
-// its old cache on the next activate, so the new page shell gets prefetched
-// too instead of only being cached the first time a user happens to visit it.
-const CACHE_NAME = 'initiative-erp-v10';
+// Bumped to v11: added the new /price-list (IDS Price System) page to the
+// core asset list. Bumping the cache name forces every existing install to
+// drop its old cache on the next activate, so the new page shell gets
+// prefetched too instead of only being cached the first time a user
+// happens to visit it.
+const CACHE_NAME = 'initiative-erp-v11';
 const CORE_ASSETS = [
   '/login',
   '/signup',
@@ -11,6 +12,7 @@ const CORE_ASSETS = [
   '/purchase-orders',
   '/analytics',
   '/daily-profitability',
+  '/price-list',
   '/manifest.webmanifest',
   '/static/Initiative%20logo.png'
 ];

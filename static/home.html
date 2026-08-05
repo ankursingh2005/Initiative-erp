@@ -12,6 +12,7 @@
       --accent:#d95f00; --accent-dark:#a94800; --accent-glow:#fff1e6;
       --ai:#7c3aed; --ai-dark:#5b21b6; --ai-glow:#f1e8ff;
       --dp:#0f9d84; --dp-dark:#0a6b5a; --dp-glow:#e3f7f2;
+      --price:#b7791f; --price-dark:#8a5a12; --price-glow:#fdf3e3;
       --good:#027a48;
     }
     * { box-sizing:border-box; }
@@ -58,17 +59,20 @@
     .tile.po::before { background:linear-gradient(90deg, var(--accent), var(--accent-dark)); }
     .tile.ai::before { background:linear-gradient(90deg, var(--ai), var(--ai-dark)); }
     .tile.dp::before { background:linear-gradient(90deg, var(--dp), var(--dp-dark)); }
+    .tile.price::before { background:linear-gradient(90deg, var(--price), var(--price-dark)); }
     .tile-glow { position:absolute; top:-60px; right:-60px; width:180px; height:180px; border-radius:50%; filter:blur(10px); opacity:.55; animation:pulse 5s ease-in-out infinite; pointer-events:none; }
     .tile.schemes .tile-glow { background:radial-gradient(circle, var(--brand-glow), transparent 70%); }
     .tile.po .tile-glow { background:radial-gradient(circle, var(--accent-glow), transparent 70%); }
     .tile.ai .tile-glow { background:radial-gradient(circle, var(--ai-glow), transparent 70%); }
     .tile.dp .tile-glow { background:radial-gradient(circle, var(--dp-glow), transparent 70%); }
+    .tile.price .tile-glow { background:radial-gradient(circle, var(--price-glow), transparent 70%); }
 
     .icon-badge { position:relative; width:56px; height:56px; border-radius:14px; display:flex; align-items:center; justify-content:center; margin-bottom:20px; }
     .tile.schemes .icon-badge { background:linear-gradient(135deg, var(--brand), var(--brand-dark)); box-shadow:0 8px 18px rgba(21,94,239,.28); }
     .tile.po .icon-badge { background:linear-gradient(135deg, var(--accent), var(--accent-dark)); box-shadow:0 8px 18px rgba(217,95,0,.28); }
     .tile.ai .icon-badge { background:linear-gradient(135deg, var(--ai), var(--ai-dark)); box-shadow:0 8px 18px rgba(124,58,237,.28); }
     .tile.dp .icon-badge { background:linear-gradient(135deg, var(--dp), var(--dp-dark)); box-shadow:0 8px 18px rgba(15,157,132,.28); }
+    .tile.price .icon-badge { background:linear-gradient(135deg, var(--price), var(--price-dark)); box-shadow:0 8px 18px rgba(183,121,31,.28); }
     .icon-badge svg { width:28px; height:28px; }
 
     .tile h2 { margin:0 0 8px; font-size:19px; }
@@ -82,6 +86,8 @@
     .tile.ai .tile-btn:hover { background:var(--ai-dark); gap:11px; }
     .tile.dp .tile-btn { background:var(--dp); }
     .tile.dp .tile-btn:hover { background:var(--dp-dark); gap:11px; }
+    .tile.price .tile-btn { background:var(--price); }
+    .tile.price .tile-btn:hover { background:var(--price-dark); gap:11px; }
     .tile-btn svg { width:14px; height:14px; }
 
     @keyframes riseIn { to { opacity:1; transform:translateY(0); } }
@@ -215,6 +221,20 @@
         <h2>Daily Profitability</h2>
         <p class="desc">Upload the day's Busy export and get a store/category-wise profitability report and dashboard - with a downloadable report.</p>
         <a class="tile-btn" href="/daily-profitability">Open Daily Profitability
+          <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>
+        </a>
+      </article>
+
+      <article class="tile price">
+        <div class="tile-glow"></div>
+        <div class="icon-badge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2v20"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H7"></path>
+          </svg>
+        </div>
+        <h2>IDS Price System</h2>
+        <p class="desc">Brand-wise item prices - Category Managers and Brand Promoters see the latest MSP/ISP for every model.</p>
+        <a class="tile-btn" href="/price-list">Open Price System
           <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>
         </a>
       </article>

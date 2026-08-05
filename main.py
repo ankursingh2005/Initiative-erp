@@ -4202,6 +4202,11 @@ DIVISION_KEYWORD_RULES = [
         r"\bgeyser\b", r"water\s*heater", r"immersion\s*rod", r"air\s*purifier",
         # Personal care / other small appliances
         r"hair\s*dryer", r"\btrimmer\b", r"\bshaver\b",
+        r"\biron\b", r"dry\s*iron", r"steam\s*iron", r"\biron\s*box\b",
+        r"garment\s*steamer", r"\bsteamer\b",
+        r"hair\s*straightener", r"hair\s*curler", r"hair\s*styler", r"\bairwrap\b",
+        r"\bepilator\b", r"foot\s*spa", r"foot\s*massager", r"\bmassager\b",
+        r"curling\s*iron", r"\bcurler\b",
         # Comfort / power
         r"room\s*heater", r"\bheater\b", r"\bblower\b",
         r"\binverter\b", r"\bups\b", r"stabili[sz]er", r"\bgenerator\b",
@@ -4240,6 +4245,7 @@ BRAND_LIST = [
     "Maharaja Whiteline", "Faber", "Glen", "Electrolux", "Kelvinator", "V-Guard",
     "Khaitan", "Borosil", "Pigeon", "Philips", "Luminous", "Su-Kam", "Sukam",
     "Exide", "Amaron", "Orient Fans", "Atomberg", "Polycab",
+    "Dyson", "Braun", "Remington", "VLCC", "Nova", "AGARO", "Syska", "Vega",
     "Vivo", "Oppo", "Realme", "Redmi", "Xiaomi", "iPhone", "Apple", "Motorola", "IQOO",
     "Nothing", "Google Pixel", "Google", "OnePlus", "Poco", "Tecno", "Infinix", "Itel", "Honor",
     "HP", "Dell", "Lenovo", "Acer", "Asus", "Canon", "Nikon", "GoPro", "Fujifilm", "Epson",
