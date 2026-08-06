@@ -92,6 +92,27 @@ If extraction fails, or the document type isn't supported, or `ANTHROPIC_API_KEY
 
 To enable extraction, set `ANTHROPIC_API_KEY` on the web service (Render dashboard -> `idspl` -> Environment). Without it, document upload still works, but scheme fields must be entered manually.
 
+## IDS Price System - price list upload (Excel, or AI-read image/PDF)
+
+Under **IDS Price System**, Admin/Accounts/MISExecutive can bulk-upload the price list via **Upload Price List**, in either of two ways:
+
+1. **Excel (`.xlsx`/`.xls`)** - the same brand-section-header layout as the existing price sheets (a brand name row followed by an Item Details / Total Stock / Purchase Price / MSP / ISP table). Parsed directly, no AI involved.
+2. **Photo/scan (`.jpg`/`.jpeg`/`.png`/`.webp`) or PDF** - an AI vision model reads the brand sections and item rows directly from the image/PDF and returns the same row shape as the Excel parser.
+
+Either path updates existing items (matched by brand + item name), adds new items, and creates any brand not yet in the system - exactly the same insert/update logic either way.
+
+**Any one of these three keys enables the image/PDF path** - whichever is set on the web service is used automatically, checked in this order (override with `VISION_PROVIDER=anthropic|xai|openai` if more than one happens to be set):
+
+| Env var | Provider | Images | PDFs |
+|---|---|---|---|
+| `ANTHROPIC_API_KEY` | Claude | Yes | Yes |
+| `XAI_API_KEY` | Grok (xAI) | Yes | No - use an image or Excel instead |
+| `OPENAI_API_KEY` | OpenAI | Yes | No - use an image or Excel instead |
+
+If none of these three keys are set, the Excel upload still works exactly as before - only the image/PDF option is disabled, with a message pointing the user at Excel or an Admin.
+
+AI-read values can occasionally misread a digit or a column, especially from a blurry photo - review the upload summary (new/updated/skipped counts and which provider read it) and spot-check a few items after an image/PDF upload.
+
 ## AI Analysis dashboard
 
 After login, the **AI Analysis** tile on the home page opens `/analytics` - a profitability dashboard built from an uploaded sales export.
@@ -177,4 +198,3 @@ Redeploy (or just save the environment changes - Render restarts the service aut
 - For Oracle Cloud Free Tier, deploy this app on an Ubuntu VM with `systemd` and `nginx`.
 - Use SQLite for a small single-server setup, or PostgreSQL on the VM for better reliability.
 - Full setup instructions are in `ORACLE_CLOUD_FREE_TIER_SETUP.md`.
-

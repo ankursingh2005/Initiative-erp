@@ -1077,6 +1077,269 @@ def _parse_price_list_numeric(value) -> Optional[float]:
         return None
 
 
+# ------------------------------------------------------------------
+# PRICE LIST UPLOAD FROM IMAGE / PDF (AI vision extraction)
+# Same idea as the scheme-document extraction above: a photographed or
+# scanned price list sheet is sent to an AI vision model, which reads the
+# brand headers and item table(s) and returns rows in the same shape
+# produced by _parse_price_list_upload() for Excel files, so both paths
+# feed the same insert/update logic in the upload endpoint below.
+#
+# Provider-agnostic: whichever key is set on the server is used, checked
+# in this priority order (or forced with VISION_PROVIDER=anthropic|xai|openai
+# if more than one key happens to be set):
+#   1. ANTHROPIC_API_KEY  - Claude. Reads images AND PDFs natively.
+#   2. XAI_API_KEY        - Grok (xAI). Images only (jpg/png); PDFs are
+#                            rejected with a message pointing at Excel/Claude.
+#   3. OPENAI_API_KEY     - OpenAI (e.g. gpt-4o-mini). Images only, same as xAI.
+# Model names can be overridden via PRICE_LIST_ANTHROPIC_MODEL /
+# PRICE_LIST_XAI_MODEL / PRICE_LIST_OPENAI_MODEL if xAI/OpenAI retire or
+# rename a model - defaults below are current as of this writing.
+# ------------------------------------------------------------------
+
+VISION_PROVIDER_ENV_KEYS = {
+    "anthropic": "ANTHROPIC_API_KEY",
+    "xai": "XAI_API_KEY",
+    "openai": "OPENAI_API_KEY",
+}
+VISION_PROVIDER_PRIORITY = ["anthropic", "xai", "openai"]
+
+
+def _get_available_vision_provider() -> Optional[str]:
+    """Which AI vision provider to use for price-list image/PDF extraction,
+    based on whichever API key(s) are set on the server. If more than one
+    key is set, VISION_PROVIDER can force a specific one; otherwise the
+    first configured key wins in VISION_PROVIDER_PRIORITY order."""
+    forced = (os.getenv("VISION_PROVIDER") or "").strip().lower()
+    if forced in VISION_PROVIDER_ENV_KEYS and os.getenv(VISION_PROVIDER_ENV_KEYS[forced]):
+        return forced
+    for provider in VISION_PROVIDER_PRIORITY:
+        if os.getenv(VISION_PROVIDER_ENV_KEYS[provider]):
+            return provider
+    return None
+
+
+def _price_list_extraction_instructions() -> str:
+    return (
+        "You are reading a photographed or scanned price list / rate list sheet "
+        "for an electronics retail ERP. It has brand section headers (e.g. "
+        "\"Bluestar\", \"Daikin\") each followed by a table of items, typically "
+        "with columns similar to Item Details / Model No / Total Stock / "
+        "Purchase Price / MSP / ISP - column names, order, and presence can vary "
+        "(MSP may be labelled IDS Price, ISP may be labelled MRP or Sale Price, "
+        "and some columns may be missing entirely). Read every row across every "
+        "brand section in the document/image and reply with ONLY a JSON array - "
+        "no prose, no markdown fences. Each element:\n"
+        "{\n"
+        '  "brand_name": string (the brand section this item is under),\n'
+        '  "item_details": string (the item / model name / description),\n'
+        '  "model_no": string or null,\n'
+        '  "serial_no": string or null,\n'
+        '  "imei": string or null,\n'
+        '  "total_stock": number or null,\n'
+        '  "purchase_price": number or null,\n'
+        '  "msp": number or null,\n'
+        '  "isp": number or null\n'
+        "}\n"
+        "Only include rows that clearly have an item name. Use null for anything "
+        "not present or not legible - never invent or guess a value."
+    )
+
+
+def _call_anthropic_vision(content_block: dict, instructions: str) -> str:
+    """Sends one image/PDF content block to the Claude API and returns the
+    raw text of its reply (expected to be a JSON array, as instructed)."""
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    model = os.getenv("PRICE_LIST_ANTHROPIC_MODEL", "claude-sonnet-5")
+
+    payload = json.dumps({
+        "model": model,
+        "max_tokens": 4096,
+        "messages": [
+            {"role": "user", "content": [content_block, {"type": "text", "text": instructions}]}
+        ],
+    }).encode("utf-8")
+
+    request = Request(
+        "https://api.anthropic.com/v1/messages",
+        data=payload,
+        headers={
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with urlopen(request, timeout=60) as response:
+            response_data = json.loads(response.read().decode("utf-8"))
+    except (HTTPError, URLError, TimeoutError) as exc:
+        raise RuntimeError(f"Claude API request failed: {exc}") from exc
+    except Exception as exc:
+        raise RuntimeError(f"Unexpected error calling Claude API: {exc}") from exc
+
+    try:
+        text_blocks = [block["text"] for block in response_data.get("content", []) if block.get("type") == "text"]
+        return "\n".join(text_blocks).strip()
+    except Exception as exc:
+        raise RuntimeError(f"Unexpected response format from Claude API: {exc}") from exc
+
+
+def _call_openai_compatible_vision(api_key: str, base_url: str, model: str, image_b64: str,
+                                    media_type: str, instructions: str, provider_label: str) -> str:
+    """Sends one base64 image to an OpenAI-compatible /chat/completions
+    endpoint (used for both xAI/Grok and OpenAI itself, since xAI's API
+    mirrors OpenAI's request/response shape) and returns the raw reply text."""
+    payload = json.dumps({
+        "model": model,
+        "max_tokens": 4096,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": instructions},
+                    {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{image_b64}"}},
+                ],
+            }
+        ],
+    }).encode("utf-8")
+
+    request = Request(
+        base_url,
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with urlopen(request, timeout=60) as response:
+            response_data = json.loads(response.read().decode("utf-8"))
+    except (HTTPError, URLError, TimeoutError) as exc:
+        raise RuntimeError(f"{provider_label} API request failed: {exc}") from exc
+    except Exception as exc:
+        raise RuntimeError(f"Unexpected error calling {provider_label} API: {exc}") from exc
+
+    try:
+        return response_data["choices"][0]["message"]["content"] or ""
+    except Exception as exc:
+        raise RuntimeError(f"Unexpected response format from {provider_label} API: {exc}") from exc
+
+
+def _image_bytes_to_supported_b64(filename: str, content_type: str, raw_bytes: bytes) -> tuple:
+    """xAI/OpenAI's vision endpoints accept jpg/png reliably; webp is
+    converted to PNG with Pillow (already a project dependency) so users
+    don't have to know which provider is configured to know which image
+    formats are safe to upload. Returns (base64_str, media_type)."""
+    ext = "." + filename.lower().split(".")[-1] if "." in filename else ""
+    if ext == ".webp":
+        try:
+            from PIL import Image
+            image = Image.open(BytesIO(raw_bytes)).convert("RGB")
+            buffer = BytesIO()
+            image.save(buffer, format="PNG")
+            raw_bytes = buffer.getvalue()
+            media_type = "image/png"
+        except Exception as exc:
+            raise RuntimeError(f"Could not convert WEBP image for AI extraction: {exc}") from exc
+    elif ext in {".jpg", ".jpeg"}:
+        media_type = content_type or "image/jpeg"
+    elif ext == ".png":
+        media_type = content_type or "image/png"
+    else:
+        raise RuntimeError("Unsupported image type for AI price list extraction.")
+    return base64.b64encode(raw_bytes).decode("ascii"), media_type
+
+
+def _extract_price_list_rows_from_document(filename: str, content_type: str, raw_bytes: bytes) -> list:
+    """Reads a price list image or PDF via whichever AI vision provider is
+    configured on the server and returns a list of row dicts shaped like
+    _parse_price_list_upload()'s output. Raises RuntimeError with a
+    user-facing message on any failure (no key configured, unsupported
+    file for that provider, bad/unparseable response) - the upload
+    endpoint catches this and reports it back to the user."""
+    provider = _get_available_vision_provider()
+    if provider is None:
+        raise RuntimeError(
+            "Reading a price list from an image or PDF requires one AI vision API key "
+            "to be configured on the server - any one of ANTHROPIC_API_KEY, XAI_API_KEY, "
+            "or OPENAI_API_KEY. Upload an Excel (.xlsx/.xls) file instead, or ask an Admin "
+            "to set one of those keys."
+        )
+
+    ext = "." + filename.lower().split(".")[-1] if "." in filename else ""
+    instructions = _price_list_extraction_instructions()
+
+    if provider == "anthropic":
+        content_block = _document_to_llm_content_block(filename, content_type, raw_bytes)
+        if not content_block or content_block.get("type") not in ("image", "document"):
+            raise RuntimeError("Unsupported file type for image/PDF price list extraction.")
+        raw_text = _call_anthropic_vision(content_block, instructions)
+    else:
+        if ext == ".pdf":
+            raise RuntimeError(
+                "Reading a PDF price list currently requires ANTHROPIC_API_KEY - the "
+                f"{'XAI_API_KEY' if provider == 'xai' else 'OPENAI_API_KEY'} configured on this "
+                "server can only read images (.jpg/.jpeg/.png/.webp). Upload a photo/scan "
+                "instead, or use an Excel file."
+            )
+        image_b64, media_type = _image_bytes_to_supported_b64(filename, content_type, raw_bytes)
+        if provider == "xai":
+            raw_text = _call_openai_compatible_vision(
+                api_key=os.getenv("XAI_API_KEY"),
+                base_url="https://api.x.ai/v1/chat/completions",
+                model=os.getenv("PRICE_LIST_XAI_MODEL", "grok-4.5"),
+                image_b64=image_b64,
+                media_type=media_type,
+                instructions=instructions,
+                provider_label="xAI (Grok)",
+            )
+        else:  # openai
+            raw_text = _call_openai_compatible_vision(
+                api_key=os.getenv("OPENAI_API_KEY"),
+                base_url="https://api.openai.com/v1/chat/completions",
+                model=os.getenv("PRICE_LIST_OPENAI_MODEL", "gpt-4o-mini"),
+                image_b64=image_b64,
+                media_type=media_type,
+                instructions=instructions,
+                provider_label="OpenAI",
+            )
+
+    try:
+        cleaned_text = re.sub(r"^```(json)?|```$", "", raw_text.strip(), flags=re.MULTILINE).strip()
+        extracted = json.loads(cleaned_text)
+    except Exception as exc:
+        raise RuntimeError(f"Could not parse the AI's response as JSON: {exc}") from exc
+
+    if not isinstance(extracted, list):
+        raise RuntimeError("The AI's response was not a list of price list rows as expected.")
+
+    parsed_items = []
+    for row in extracted:
+        if not isinstance(row, dict):
+            continue
+        item_details = (row.get("item_details") or "").strip()
+        if not item_details:
+            continue
+        brand_name = (row.get("brand_name") or "").strip() or "Unknown"
+        parsed_items.append({
+            "brand_name": brand_name,
+            "item_details": item_details,
+            "model_no": (str(row.get("model_no")).strip() if row.get("model_no") else None),
+            "serial_no": (str(row.get("serial_no")).strip() if row.get("serial_no") else None),
+            "imei": (str(row.get("imei")).strip() if row.get("imei") else None),
+            "total_stock": _parse_price_list_numeric(row.get("total_stock")),
+            "purchase_price": _parse_price_list_numeric(row.get("purchase_price")),
+            "msp": _parse_price_list_numeric(row.get("msp")),
+            "isp": _parse_price_list_numeric(row.get("isp")),
+            "source_file": filename,
+        })
+    return parsed_items
+
+
 @app.get("/")
 @app.get("/login")
 @app.get("/login.html")
@@ -1237,6 +1500,10 @@ def delete_price_list_item(
     return {"message": "Item deleted"}
 
 
+PRICE_LIST_EXCEL_EXTENSIONS = {".xlsx", ".xls"}
+PRICE_LIST_IMAGE_PDF_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".pdf"}
+
+
 @app.post("/api/price-list/upload")
 def upload_price_list_items(
     file: UploadFile = File(...),
@@ -1247,10 +1514,41 @@ def upload_price_list_items(
     if not raw_bytes:
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
 
+    filename = file.filename or "price-list"
+    ext = "." + filename.lower().split(".")[-1] if "." in filename else ""
+
+    extraction_method = None
+    vision_provider = None
     try:
-        parsed_rows = _parse_price_list_upload(raw_bytes, file.filename or "price-list.xlsx")
+        if ext in PRICE_LIST_EXCEL_EXTENSIONS:
+            parsed_rows = _parse_price_list_upload(raw_bytes, filename)
+            extraction_method = "excel"
+        elif ext in PRICE_LIST_IMAGE_PDF_EXTENSIONS:
+            vision_provider = _get_available_vision_provider()
+            parsed_rows = _extract_price_list_rows_from_document(filename, file.content_type, raw_bytes)
+            extraction_method = "ai_vision"
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Unsupported file type. Upload an Excel file (.xlsx/.xls), an image "
+                       "(.jpg/.jpeg/.png/.webp), or a PDF.",
+            )
+    except HTTPException:
+        raise
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Unable to read Excel file: {exc}") from exc
+        label = "Excel file" if ext in PRICE_LIST_EXCEL_EXTENSIONS else "file"
+        raise HTTPException(status_code=400, detail=f"Unable to read {label}: {exc}") from exc
+
+    if not parsed_rows:
+        no_rows_detail = (
+            "No price list items could be read from this image/PDF. Try a clearer photo "
+            "or scan, or use an Excel file instead."
+            if extraction_method == "ai_vision"
+            else "No price list items could be found in this file."
+        )
+        raise HTTPException(status_code=400, detail=no_rows_detail)
 
     inserted = 0
     updated = 0
@@ -1308,8 +1606,16 @@ def upload_price_list_items(
             inserted += 1
 
     db.commit()
+    message = (
+        "Price list read from image/PDF and uploaded. AI-read values can occasionally "
+        "misread a digit or column - please spot-check the items below."
+        if extraction_method == "ai_vision"
+        else "Price list uploaded successfully"
+    )
     return {
-        "message": "Price list uploaded successfully",
+        "message": message,
+        "method": extraction_method,
+        "provider": vision_provider,
         "inserted": inserted,
         "updated": updated,
         "skipped": skipped,

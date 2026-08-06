@@ -53,6 +53,8 @@
     .upload-drop { border:1.5px dashed var(--line); border-radius:8px; padding:22px; text-align:center; color:var(--muted); font-size:13.5px; }
     .upload-summary { margin-top:14px; font-size:13px; line-height:1.6; }
     .upload-summary b { color:var(--ink); }
+    .upload-tab-btn { flex:1; padding:9px 10px; font-size:13px; }
+    .upload-tab-btn.active { background:var(--ink); color:#fff; border-color:var(--ink); }
     @media(max-width:700px) {
       header { padding:14px 16px; } .card { padding:14px; }
       input, select { min-height:44px; } .btn, .btn-light, .back-btn, .btn-danger { min-height:44px; }
@@ -183,9 +185,14 @@
   <dialog id="uploadDialog">
     <div class="modal">
       <h2>Upload Price List</h2>
-      <p class="subtitle">Upload an Excel file (.xlsx) with brand section headers (e.g. "Bluestar", "Daikin") each followed by an Item Details / Total Stock / Purchase Price / MSP / ISP table - the same layout as your current price sheets. Existing items are updated by brand + item name; new items are added; brands not yet in the system are created automatically.</p>
+      <p class="subtitle">Upload an Excel file (.xlsx/.xls) with brand section headers (e.g. "Bluestar", "Daikin") each followed by an Item Details / Total Stock / Purchase Price / MSP / ISP table - the same layout as your current price sheets. Or upload a photo/scan (.jpg/.png/.webp) or PDF of a price list and AI will read the brand sections and item rows automatically. Existing items are updated by brand + item name; new items are added; brands not yet in the system are created automatically.</p>
+      <div class="upload-tabs" style="display:flex; gap:8px; margin-bottom:12px;">
+        <button type="button" class="btn-outline upload-tab-btn" id="uploadTabExcel" onclick="setUploadMode('excel')">Excel Sheet</button>
+        <button type="button" class="btn-outline upload-tab-btn" id="uploadTabImage" onclick="setUploadMode('image')">Photo / PDF</button>
+      </div>
       <div class="upload-drop">
         <input type="file" id="uploadFileInput" accept=".xlsx,.xls" />
+        <div id="uploadHint" style="margin-top:10px; font-size:12px; color:var(--muted);">Excel files (.xlsx, .xls)</div>
       </div>
       <div id="uploadMessage" class="message"></div>
       <div id="uploadSummary" class="upload-summary hidden"></div>
@@ -375,10 +382,28 @@
     }
 
     // ---- Bulk upload modal ----
+    let uploadMode = 'excel';
+
+    function setUploadMode(mode) {
+      uploadMode = mode;
+      const fileInput = document.getElementById('uploadFileInput');
+      const hint = document.getElementById('uploadHint');
+      fileInput.value = '';
+      if (mode === 'image') {
+        fileInput.accept = '.jpg,.jpeg,.png,.webp,.pdf';
+        hint.textContent = 'Photo/scan of a price list (.jpg, .png, .webp) or a PDF - AI reads the brand sections and item rows for you. (PDF support needs an Anthropic key specifically; images work with any configured provider.)';
+      } else {
+        fileInput.accept = '.xlsx,.xls';
+        hint.textContent = 'Excel files (.xlsx, .xls)';
+      }
+      document.getElementById('uploadTabExcel').classList.toggle('active', mode === 'excel');
+      document.getElementById('uploadTabImage').classList.toggle('active', mode === 'image');
+    }
+
     function openUploadModal() {
-      document.getElementById('uploadFileInput').value = '';
       document.getElementById('uploadMessage').textContent = '';
       document.getElementById('uploadSummary').classList.add('hidden');
+      setUploadMode('excel');
       document.getElementById('uploadDialog').showModal();
     }
     function closeUploadModal() { document.getElementById('uploadDialog').close(); loadItems(); loadBrandFilter(); }
@@ -388,10 +413,14 @@
       const fileInput = document.getElementById('uploadFileInput');
       msg.className = 'message'; msg.textContent = '';
 
-      if (!fileInput.files.length) { msg.textContent = 'Choose an Excel file first.'; return; }
+      if (!fileInput.files.length) {
+        msg.textContent = uploadMode === 'image' ? 'Choose a photo, scan, or PDF first.' : 'Choose an Excel file first.';
+        return;
+      }
 
       const submitBtn = document.getElementById('uploadSubmitBtn');
-      submitBtn.disabled = true; submitBtn.textContent = 'Uploading...';
+      submitBtn.disabled = true;
+      submitBtn.textContent = uploadMode === 'image' ? 'Reading with AI...' : 'Uploading...';
 
       const formData = new FormData();
       formData.append('file', fileInput.files[0]);
@@ -410,11 +439,13 @@
         const summary = document.getElementById('uploadSummary');
         summary.classList.remove('hidden');
         summary.innerHTML = `<div><b>${data.inserted}</b> new item(s) added, <b>${data.updated}</b> updated, <b>${data.skipped}</b> row(s) skipped.</div>` +
-          (data.brands_created.length ? `<div style="margin-top:6px;">New brands created: ${data.brands_created.join(', ')}</div>` : '');
+          (data.brands_created.length ? `<div style="margin-top:6px;">New brands created: ${data.brands_created.join(', ')}</div>` : '') +
+          (data.method === 'ai_vision' ? `<div style="margin-top:6px; color:var(--muted);">Read via AI${data.provider ? ' (' + data.provider + ')' : ''} from your photo/PDF - please review the updated items for accuracy.</div>` : '');
       } catch (e) {
         msg.textContent = e.message || 'Upload failed';
       } finally {
-        submitBtn.disabled = false; submitBtn.textContent = 'Upload';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Upload';
       }
     }
 

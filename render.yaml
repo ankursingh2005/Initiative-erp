@@ -20,11 +20,23 @@ services:
       - key: SMTP_PASSWORD
         sync: false
       # Anthropic API key used to read attached scheme documents
-      # (image/PDF/Excel) and pre-fill Scheme Maintenance drafts. Optional:
-      # if left unset, document upload still works but scheme fields must be
-      # filled in manually instead of being auto-extracted. See README.md
-      # "Scheme documents (OCR + LLM extraction)" section.
+      # (image/PDF/Excel) and pre-fill Scheme Maintenance drafts, and also
+      # used for the IDS Price System's image/PDF price list upload if set.
+      # Optional: if left unset, scheme document upload still works but
+      # fields must be filled in manually instead of being auto-extracted.
+      # See README.md "Scheme documents (OCR + LLM extraction)" section.
       - key: ANTHROPIC_API_KEY
+        sync: false
+      # Optional alternative AI vision keys for the IDS Price System's
+      # image/PDF price list upload ONLY (scheme document extraction above
+      # always uses Anthropic). Any one of ANTHROPIC_API_KEY, XAI_API_KEY,
+      # or OPENAI_API_KEY is enough to enable reading a price list photo or
+      # PDF; Anthropic is tried first if more than one is set (override
+      # with VISION_PROVIDER). Images only for these two - PDF price lists
+      # still need ANTHROPIC_API_KEY specifically.
+      - key: XAI_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
         sync: false
 
 databases:
