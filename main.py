@@ -3766,7 +3766,7 @@ def build_daily_profitability_workbook(merged_items: list, period_label: str) ->
 
     r = 1
     gross_profit_rows = []
-    for cat_label in ('HA', 'HE', 'Computer', 'Mobile', 'Other'):
+    for cat_label in DP_CATEGORIES:
         items = sorted(by_cat.get(cat_label, []), key=lambda x: x['item'].lower())
         if not items:
             continue
@@ -3914,7 +3914,7 @@ def build_daily_profitability_workbook(merged_items: list, period_label: str) ->
     dash.cell(row=rr, column=3, value='Margin').font = FONT_D_HEADER; dash.cell(row=rr, column=3).fill = FILL_HEADER
     rr += 1
     cat_first = rr
-    for cat in ('HA', 'HE', 'Computer', 'Mobile', 'Other'):
+    for cat in DP_CATEGORIES:
         d = by_cat.get(cat, {'sale': 0, 'cost': 0, 'margin': 0})
         dash.cell(row=rr, column=1, value=cat).font = FONT_D_DATA
         dash.cell(row=rr, column=2, value=round(d['sale'], 2)).number_format = NUMFMT_ACC
@@ -3997,7 +3997,7 @@ def build_daily_profitability_workbook(merged_items: list, period_label: str) ->
 # shares the most name-tokens with it, and that attribution is listed in
 # "review_notes" so Admin can sanity-check anything non-obvious.
 
-DP_CATEGORIES = ["HA", "HE", "Computer", "Mobile", "Other"]
+DP_CATEGORIES = ["HA", "HE", "Computer", "Mobile", "Digital Camera", "Other"]
 
 # Busy's Bill-wise Profitability export is GST-exclusive. Every Sale Amount
 # and Purchase Price in the Daily Profitability report/dashboard is grossed
@@ -4092,9 +4092,21 @@ def dp_categorize(item_name: Optional[str]) -> str:
         " FAN ", " WM ", "WASHING MACHINE", "MIXER GRINDER", "INDUCTION",
         "IN ICT", "CHIMNEY", "DISHWASHER", "VACUUM CLEANER", "AIR PURIFIER",
         "ROOM HEATER", "IRON BOX", "STEAM IRON", "AQUAGUARD", " RO ",
+        # Bare "IRON" (any brand - dry iron, steam iron, curling iron,
+        # garment iron, etc.) as a standalone word, not just the two
+        # specific compounds above.
+        " IRON ",
     )
     if any(k in padded for k in ha_keywords):
         return "HA"
+
+    # --- Digital Camera (any brand) ---
+    dc_keywords = (
+        "CAMERA", "DSLR", "MIRRORLESS", "GOPRO", "CAMCORDER",
+        "ACTION CAM", "GIMBAL", "GO PRO",
+    )
+    if any(k in n for k in dc_keywords) or re.search(r"\bLENS\b", n):
+        return "Digital Camera"
 
     # Phones/tablets consistently carry a RAM+Storage config in the name
     # (e.g. "8+128", "4 + 64", "6+256") regardless of brand - this catches

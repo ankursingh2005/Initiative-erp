@@ -39,6 +39,7 @@
     th { background:#f9fafb; color:#475467; font-size:12px; white-space:nowrap; }
     td.num, th.num { text-align:right; white-space:nowrap; }
     .brand-cell { font-weight:700; }
+    .brand-group-row td { background:#f2f4f7; font-weight:700; color:#1d2939; padding:8px 8px; border-bottom:1px solid #e4e7ec; }
     .row-actions { display:flex; gap:6px; flex-wrap:nowrap; }
     .row-actions button { padding:6px 9px; font-size:12px; }
     .empty-state { padding:34px 20px; text-align:center; color:var(--muted); }
@@ -88,7 +89,7 @@
     <div class="title-row">
       <div>
         <h1>IDS Price System</h1>
-        <p class="subtitle" id="pageSubtitle">Selling prices by brand and item.</p>
+        <p class="subtitle" id="pageSubtitle">Search by brand or model no. to look up prices.</p>
       </div>
       <div class="actions-row" id="fullAccessActions" style="display:none;">
         <button class="btn-outline" onclick="openUploadModal()">Upload Price List</button>
@@ -98,7 +99,7 @@
 
     <div class="card">
       <div class="filters">
-        <input class="search-box" id="searchInput" type="text" placeholder="Search by item / model / serial / IMEI..." oninput="debouncedLoad()" />
+        <input class="search-box" id="searchInput" type="text" placeholder="Search by brand name or model no..." oninput="debouncedLoad()" />
         <select id="brandFilter" onchange="loadItems()"><option value="">All brands</option></select>
       </div>
       <div class="section-head">
@@ -111,10 +112,8 @@
         <table>
           <thead>
             <tr id="tableHeadRow">
-              <th>Brand</th>
               <th>Item Details</th>
-              <th>Model / Serial / IMEI</th>
-              <th class="num full-access-col hidden">Stock</th>
+              <th>Model</th>
               <th class="num full-access-col hidden">Purchase Price</th>
               <th class="num">IDS Price</th>
               <th class="num">MRP</th>
@@ -126,6 +125,7 @@
         </table>
       </div>
       <div id="emptyState" class="empty-state hidden">No items found.</div>
+      <div id="searchPrompt" class="empty-state">Search by brand name or model no. (or pick a brand above) to see items.</div>
     </div>
   </main>
 
@@ -146,14 +146,6 @@
         <div>
           <label for="itemModelInput">Model No.</label>
           <input id="itemModelInput" type="text" />
-        </div>
-        <div>
-          <label for="itemSerialInput">Serial No.</label>
-          <input id="itemSerialInput" type="text" />
-        </div>
-        <div>
-          <label for="itemImeiInput">IMEI No.</label>
-          <input id="itemImeiInput" type="text" />
         </div>
         <div>
           <label for="itemStockInput">Total Stock</label>
@@ -238,9 +230,9 @@
       if (isFullAccess) {
         document.getElementById('fullAccessActions').style.display = 'flex';
         document.querySelectorAll('.full-access-col').forEach(el => el.classList.remove('hidden'));
-        document.getElementById('pageSubtitle').textContent = 'Brand-wise item prices - add, bulk-upload, or edit. Changes are visible to Category Managers and Brand Promoters immediately.';
+        document.getElementById('pageSubtitle').textContent = 'Search by brand or model no. to look up, add, bulk-upload, or edit prices. Changes are visible to Category Managers and Brand Promoters immediately.';
       } else {
-        document.getElementById('pageSubtitle').textContent = 'Selling prices (MSP / ISP) for your assigned brand(s) / category.';
+        document.getElementById('pageSubtitle').textContent = 'Search by brand or model no. for selling prices (MSP / ISP) in your assigned brand(s) / category.';
       }
       await loadBrandFilter();
       await loadItems();
@@ -260,9 +252,30 @@
     let debounceTimer = null;
     function debouncedLoad() { clearTimeout(debounceTimer); debounceTimer = setTimeout(loadItems, 300); }
 
+    function colSpanCount() {
+      // Item Details, Model, [Purchase Price], IDS Price, MRP, [Updated By, Actions]
+      return isFullAccess ? 7 : 4;
+    }
+
     async function loadItems() {
       const brandId = document.getElementById('brandFilter').value;
       const search = document.getElementById('searchInput').value.trim();
+      const tbody = document.getElementById('tableBody');
+      const searchPrompt = document.getElementById('searchPrompt');
+      const emptyState = document.getElementById('emptyState');
+
+      // Nothing is shown until the user has searched by brand/model or
+      // picked a specific brand - browsing the full price list unfiltered
+      // isn't the point of this screen.
+      if (!brandId && !search) {
+        tbody.innerHTML = '';
+        document.getElementById('rowCount').textContent = '';
+        emptyState.classList.add('hidden');
+        searchPrompt.classList.remove('hidden');
+        return;
+      }
+      searchPrompt.classList.add('hidden');
+
       const params = new URLSearchParams();
       if (brandId) params.set('brand_id', brandId);
       if (search) params.set('search', search);
@@ -274,24 +287,39 @@
         document.getElementById('rowCount').textContent = 'Unable to load items.';
       }
 
-      const tbody = document.getElementById('tableBody');
       tbody.innerHTML = '';
       document.getElementById('rowCount').textContent = `${items.length} item${items.length === 1 ? '' : 's'}`;
-      document.getElementById('emptyState').classList.toggle('hidden', items.length > 0);
+      emptyState.classList.toggle('hidden', items.length > 0);
 
+      // Group by brand: a bold section row per brand, then its items with
+      // no brand column on every row.
+      const groups = new Map();
       for (const item of items) {
-        const tr = document.createElement('tr');
-        const identifierText = [item.model_no, item.serial_no, item.imei].filter(Boolean).join(' / ') || '—';
-        let rowHtml = `<td class="brand-cell">${item.brand_name}</td><td>${item.item_details}</td><td>${identifierText}</td>`;
-        if (isFullAccess) {
-          rowHtml += `<td class="num">${item.total_stock ?? '—'}</td><td class="num">${fmtMoney(item.purchase_price)}</td>`;
+        const key = item.brand_name || 'Unknown';
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(item);
+      }
+      const sortedBrandNames = Array.from(groups.keys()).sort((a, b) => a.localeCompare(b));
+
+      for (const brandName of sortedBrandNames) {
+        const groupRow = document.createElement('tr');
+        groupRow.className = 'brand-group-row';
+        groupRow.innerHTML = `<td colspan="${colSpanCount()}">${brandName}</td>`;
+        tbody.appendChild(groupRow);
+
+        for (const item of groups.get(brandName)) {
+          const tr = document.createElement('tr');
+          let rowHtml = `<td>${item.item_details}</td><td>${item.model_no || '—'}</td>`;
+          if (isFullAccess) {
+            rowHtml += `<td class="num">${fmtMoney(item.purchase_price)}</td>`;
+          }
+          rowHtml += `<td class="num">${fmtMoney(item.msp)}</td><td class="num">${fmtMoney(item.isp)}</td>`;
+          if (isFullAccess) {
+            rowHtml += `<td>${item.updated_by_username || '—'}</td><td class="row-actions"><button class="btn-outline" onclick="openEditModal(${item.id})">Edit</button></td>`;
+          }
+          tr.innerHTML = rowHtml;
+          tbody.appendChild(tr);
         }
-        rowHtml += `<td class="num">${fmtMoney(item.msp)}</td><td class="num">${fmtMoney(item.isp)}</td>`;
-        if (isFullAccess) {
-          rowHtml += `<td>${item.updated_by_username || '—'}</td><td class="row-actions"><button class="btn-outline" onclick="openEditModal(${item.id})">Edit</button></td>`;
-        }
-        tr.innerHTML = rowHtml;
-        tbody.appendChild(tr);
       }
     }
 
@@ -304,8 +332,6 @@
       document.getElementById('itemBrandSelect').value = allBrands[0]?.id || '';
       document.getElementById('itemDetailsInput').value = '';
       document.getElementById('itemModelInput').value = '';
-      document.getElementById('itemSerialInput').value = '';
-      document.getElementById('itemImeiInput').value = '';
       document.getElementById('itemStockInput').value = '';
       document.getElementById('itemPurchasePriceInput').value = '';
       document.getElementById('itemMspInput').value = '';
@@ -325,8 +351,6 @@
       document.getElementById('itemBrandSelect').disabled = true;
       document.getElementById('itemDetailsInput').value = item.item_details;
       document.getElementById('itemModelInput').value = item.model_no ?? '';
-      document.getElementById('itemSerialInput').value = item.serial_no ?? '';
-      document.getElementById('itemImeiInput').value = item.imei ?? '';
       document.getElementById('itemStockInput').value = item.total_stock ?? '';
       document.getElementById('itemPurchasePriceInput').value = item.purchase_price ?? '';
       document.getElementById('itemMspInput').value = item.msp ?? '';
@@ -347,8 +371,6 @@
       const payload = {
         item_details: itemDetails,
         model_no: document.getElementById('itemModelInput').value.trim() || null,
-        serial_no: document.getElementById('itemSerialInput').value.trim() || null,
-        imei: document.getElementById('itemImeiInput').value.trim() || null,
         total_stock: document.getElementById('itemStockInput').value === '' ? null : Number(document.getElementById('itemStockInput').value),
         purchase_price: document.getElementById('itemPurchasePriceInput').value === '' ? null : Number(document.getElementById('itemPurchasePriceInput').value),
         msp: document.getElementById('itemMspInput').value === '' ? null : Number(document.getElementById('itemMspInput').value),
