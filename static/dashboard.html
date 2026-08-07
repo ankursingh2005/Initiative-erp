@@ -3158,11 +3158,11 @@
             intervalUploadForm.dataset.bound = 'true';
           }
 
-          if (!hasRole('Admin')) {
+          if (!hasRole('Admin', 'MISExecutive')) {
             intervalUploadBtn.disabled = true;
             intervalFile.disabled = true;
             intervalFile.removeAttribute('required');
-            document.getElementById('intervalUploadMsg').textContent = 'Upload is enabled for Admin role. You can still view analytics.';
+            document.getElementById('intervalUploadMsg').textContent = 'Upload is enabled for Admin and MIS Executive roles. You can still view analytics.';
           }
 
           await loadIntervalSalesSummary();

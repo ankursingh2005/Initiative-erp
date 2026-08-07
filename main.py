@@ -133,6 +133,9 @@ def ensure_database_schema():
     ensure_column("claim_headers", "payment_amount", "FLOAT")
     ensure_column("claim_headers", "balance", "FLOAT")
     ensure_column("claim_headers", "created_date", "TIMESTAMP")
+    ensure_column("claim_headers", "submission_date", "DATE")
+    ensure_column("claim_headers", "approval_date", "DATE")
+    ensure_column("claim_headers", "received_date", "DATE")
 
 
 ensure_database_schema()
@@ -197,6 +200,7 @@ def ensure_default_master_data():
                 "Dish Washer",
                 "Geyser",
                 "Fan",
+                "iron",
                 "Heat Convector",
                 "Oil Filled Radiator (OFR)",
                 "Refrigerator",
@@ -321,60 +325,112 @@ def ensure_default_master_data():
             if not exists:
                 db.add(models.BrandCategoryVisibility(brand_id=brand.id, category_id=category.id))
 
-        mh_category = categories_by_code.get("MH")
-        if mh_category:
-            mobile_brand_names = [
-                "Apple",
-                "Samsung",
-                "Vivo",
-                "iQOO",
-                "Realme",
-                "Oppo",
-                "Motorola",
-                "Nothing",
-                "Google Pixel",
-                "Mi",
-                "Redmi",
+        # Brand list per category for IDS Price System (and the rest of the
+        # ERP, since Brand is a single shared table). Order matters here:
+        # HA has no legacy brands to clean up, HE is processed before MH so
+        # brands shared between them (e.g. "Mi") already have HE's visibility
+        # recorded by the time MH's stale entries are swept, and IT is last.
+        CATEGORY_BRAND_LISTS = {
+            "HA": [
+                "Aisen", "Amaze", "AO Smith", "Bajaj", "Bluestar", "Bosch", "Carrier",
+                "Champion", "Daikin", "Dyson", "Elice", "Eurek", "Faber", "General",
+                "Goderaj", "Haier", "Havells", "Hitachi", "IFB", "Kent", "LG",
+                "Liebherr", "Liugurd", "Lloyd", "Luminous", "Marc", "Microtech",
+                "Mitsubishi", "Philips", "Sharp", "Sunflame", "TCL", "Vgaurd",
+                "Voltas", "Xiaomi",
+            ],
+            "HE": [
+                "Aisen", "Haier", "Hisense", "LG", "Lloyd", "Mi", "OnePlus",
+                "Panasonic", "Samsung", "Sony", "TCL",
+            ],
+            "MH": [
+                "Apple", "Google", "iQOO", "Motorola", "Nothing", "OnePlus", "Oppo",
+                "Realme", "Readmi", "Samsung", "Vivo", "Philips", "Lenovo Tablet",
+                "Samsung Tablet", "Xiaomi Tablet",
+            ],
+            "IT": [
+                "Apple iMac", "Apple iPad", "Apple MacBook", "Dell", "HP", "Lenovo",
+            ],
+        }
+
+        def brand_reference_count(brand_id: int) -> int:
+            """Rows anywhere in the ERP still pointing at this brand - if any
+            exist, the brand is real transactional/master data and is only
+            unassigned from a category below, never deleted outright."""
+            return (
+                db.query(models.Product).filter(models.Product.brand_id == brand_id).count()
+                + db.query(models.Sale).filter(models.Sale.brand_id == brand_id).count()
+                + db.query(models.ClaimHeader).filter(models.ClaimHeader.brand_id == brand_id).count()
+                + db.query(models.UserBrand).filter(models.UserBrand.brand_id == brand_id).count()
+                + db.query(models.PriceListItem).filter(models.PriceListItem.brand_id == brand_id).count()
+                + db.query(models.Scheme).filter(models.Scheme.brand_id == brand_id).count()
+            )
+
+        for category_code, brand_names in CATEGORY_BRAND_LISTS.items():
+            category = categories_by_code.get(category_code)
+            if not category:
+                continue
+
+            desired_names_lower = {name.strip().lower() for name in brand_names}
+            category_subcategory_ids = [
+                row[0] for row in db.query(models.SubCategory.id)
+                .filter(models.SubCategory.category_id == category.id)
+                .all()
             ]
-            mobile_subcategories = (
-                db.query(models.SubCategory)
-                .filter(models.SubCategory.category_id == mh_category.id)
+
+            # Every brand currently attached to this category, either as its
+            # primary subcategory home or via the visibility table.
+            existing_brand_ids = set()
+            if category_subcategory_ids:
+                existing_brand_ids.update(
+                    b.id for b in db.query(models.Brand)
+                    .filter(models.Brand.subcategory_id.in_(category_subcategory_ids))
+                    .all()
+                )
+            existing_brand_ids.update(
+                bcv.brand_id for bcv in db.query(models.BrandCategoryVisibility)
+                .filter(models.BrandCategoryVisibility.category_id == category.id)
                 .all()
             )
-            if mobile_subcategories:
-                for index, brand_name in enumerate(mobile_brand_names):
-                    target_subcategory = mobile_subcategories[index % len(mobile_subcategories)]
-                    brand = get_or_create_brand(brand_name, target_subcategory.id)
-                    make_brand_visible_in_category(brand, mh_category)
-                db.commit()
 
-        he_category = categories_by_code.get("HE")
-        if he_category:
-            led_tv_subcategory = (
-                db.query(models.SubCategory)
-                .filter(models.SubCategory.category_id == he_category.id, models.SubCategory.name == "LED TV")
-                .first()
-            )
-            if led_tv_subcategory:
-                led_tv_brands = ["Sony", "Samsung", "LG", "Haier", "TCL", "Hisense", "Mi"]
-                for brand_name in led_tv_brands:
-                    brand = get_or_create_brand(brand_name, led_tv_subcategory.id)
-                    make_brand_visible_in_category(brand, he_category)
-                db.commit()
+            # Remove every brand no longer in this category's list - the
+            # "remove previous brands" part of the reseed. A brand still used
+            # elsewhere (or still visible in another category) is unassigned
+            # here rather than deleted.
+            for brand_id in existing_brand_ids:
+                brand = db.query(models.Brand).filter(models.Brand.id == brand_id).first()
+                if not brand or brand.name.strip().lower() in desired_names_lower:
+                    continue
+                db.query(models.BrandCategoryVisibility).filter(
+                    models.BrandCategoryVisibility.brand_id == brand.id,
+                    models.BrandCategoryVisibility.category_id == category.id,
+                ).delete()
+                if brand.subcategory_id in category_subcategory_ids:
+                    brand.subcategory_id = None
+                db.flush()
+                if brand_reference_count(brand.id) == 0 and brand.subcategory_id is None:
+                    remaining_visibility = (
+                        db.query(models.BrandCategoryVisibility)
+                        .filter(models.BrandCategoryVisibility.brand_id == brand.id)
+                        .count()
+                    )
+                    if not remaining_visibility:
+                        db.delete(brand)
+            db.commit()
 
-        it_category = categories_by_code.get("IT")
-        if it_category:
-            laptop_subcategory = (
+            subcategories_in_category = (
                 db.query(models.SubCategory)
-                .filter(models.SubCategory.category_id == it_category.id, models.SubCategory.name == "Laptop")
-                .first()
+                .filter(models.SubCategory.category_id == category.id)
+                .all()
             )
-            if laptop_subcategory:
-                laptop_brands = ["HP", "Dell", "Lenovo"]
-                for brand_name in laptop_brands:
-                    brand = get_or_create_brand(brand_name, laptop_subcategory.id)
-                    make_brand_visible_in_category(brand, it_category)
-                db.commit()
+            for index, brand_name in enumerate(brand_names):
+                fallback_subcategory_id = (
+                    subcategories_in_category[index % len(subcategories_in_category)].id
+                    if subcategories_in_category else None
+                )
+                brand = get_or_create_brand(brand_name, fallback_subcategory_id)
+                make_brand_visible_in_category(brand, category)
+            db.commit()
 
 
 ensure_default_branches()
@@ -3457,7 +3513,7 @@ def dashboard_stats(db: Session = Depends(get_db)):
 @app.post("/admin/interval-sales/upload")
 def upload_interval_sales_file(
     file: UploadFile = File(...),
-    current_user: models.User = Depends(auth.require_roles("Admin")),
+    current_user: models.User = Depends(auth.require_roles("Admin", "MISExecutive")),
     db: Session = Depends(get_db),
 ):
     filename = file.filename or "uploaded_file"
@@ -4119,8 +4175,7 @@ def dp_categorize(item_name: Optional[str]) -> str:
     mobile_keywords = (
         "IPHONE", "VIVO", "OPPO", "REALME", "REDMI", "MOTOROLA", "ONEPLUS",
         "POCO", "NOTHING", " TAB ", " PAD ", "SAMSUNG Z FOLD", "PIXEL",
-        "NOKIA", "HONOR", "INFINIX", "TECNO", "MICROMAX", "LAVA", "ITEL",
-        "IQOO", "KARBONN", "GIONEE", "SAMSUNG GALAXY",
+        "IQOO", "SAMSUNG GALAXY",
         # Foldable phones (any brand) - Fold/Flip model names.
         " FOLD ", " FLIP ",
     )
@@ -4279,7 +4334,7 @@ def daily_profitability_meta(
         "date_to": date_bounds[1] if has_data else None,
         "categories": DP_CATEGORIES,
         "stores": stores,
-        "can_upload": current_user.role == "Admin",
+        "can_upload": current_user.role in ("Admin", "MISExecutive"),
     }
 
 
@@ -4927,18 +4982,12 @@ DIVISION_NAMES = {
 }
 
 BRAND_LIST = [
-    "Daikin", "Blue Star", "O General", "Voltas", "Hitachi", "LG", "Samsung", "Whirlpool",
-    "Godrej", "Haier", "Panasonic", "Sony", "Onida", "Videocon", "Mitashi", "IFB", "Bosch",
-    "Carrier", "Lloyd", "Micromax", "Kenstar", "Symphony", "Crompton", "Usha", "Bajaj",
-    "Orient Electric", "Orient", "Havells", "Eureka Forbes", "Kent", "Livpure", "AO Smith", "Racold",
-    "Prestige", "Butterfly", "Preethi", "Inalsa", "Wonderchef", "Morphy Richards",
-    "Maharaja Whiteline", "Faber", "Glen", "Electrolux", "Kelvinator", "V-Guard",
-    "Khaitan", "Borosil", "Pigeon", "Philips", "Luminous", "Su-Kam", "Sukam",
-    "Exide", "Amaron", "Orient Fans", "Atomberg", "Polycab",
-    "Dyson", "Braun", "Remington", "VLCC", "Nova", "AGARO", "Syska", "Vega",
-    "Vivo", "Oppo", "Realme", "Redmi", "Xiaomi", "iPhone", "Apple", "Motorola", "IQOO",
+    "Daikin", "Blue Star", "O General", "Voltas", "Hitachi", "LG", "Samsung",
+    "Godrej", "Haier", "Panasonic", "Sony", "Mitashi", "IFB", "Bosch",
+    "Carrier", "Lloyd", "Bajaj","Havells", "Kent", 
+    "Faber", "V-Guard", "Philips", "Luminous", "Dyson", "Vivo", "Oppo", "Realme", "Redmi", "Xiaomi", "iPhone", "Apple", "Motorola", "IQOO",
     "Nothing", "Google Pixel", "Google", "OnePlus", "Poco", "Tecno", "Infinix", "Itel", "Honor",
-    "HP", "Dell", "Lenovo", "Acer", "Asus", "Canon", "Nikon", "GoPro", "Fujifilm", "Epson",
+    "HP", "Dell", "Lenovo", "Acer", "Nikon"
 ]
 # Longest names first, so e.g. "Google Pixel" matches before bare "Google".
 BRAND_LIST.sort(key=len, reverse=True)
