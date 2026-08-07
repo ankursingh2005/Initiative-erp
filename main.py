@@ -3604,7 +3604,7 @@ def upload_interval_sales_file(
 
 @app.delete("/admin/interval-sales/clear")
 def clear_interval_sales_data(
-    current_user: models.User = Depends(auth.require_roles("Admin")),
+    current_user: models.User = Depends(auth.require_roles("Admin", "MISExecutive")),
     db: Session = Depends(get_db),
 ):
     deleted_count = db.query(models.IntervalSaleUpload).delete()
