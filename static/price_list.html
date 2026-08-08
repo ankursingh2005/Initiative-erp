@@ -3,64 +3,156 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#000000" />
+  <meta name="theme-color" content="#0b0e16" />
   <meta name="mobile-web-app-capable" content="yes" />
   <link rel="manifest" href="manifest.webmanifest" />
   <title>Initiative ERP - IDS Price System</title>
   <link rel="icon" href="static/Initiative%20logo.png" type="image/png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    :root { --ink:#1d2939; --muted:#667085; --line:#d0d5dd; --bg:#f5f7fa; --card:#fff; --brand:#155eef; --accent:#d95f00; --good:#027a48; --danger:#b42318; }
-    * { box-sizing:border-box; } body { margin:0; font-family:Arial,sans-serif; background:var(--bg); color:var(--ink); }
-    header { background:linear-gradient(90deg, #181818 0%, #000000 100%); color:#fff; padding:16px clamp(16px,3vw,42px); display:flex; gap:16px; align-items:center; justify-content:space-between; box-shadow:0 2px 10px rgba(0,0,0,0.12); }
-    .brand { font-weight:700; letter-spacing:0.2px; font-size:16px; } .header-right { display:flex; align-items:center; gap:12px; color:#d0d5dd; font-size:14px; }
-    button { font:inherit; cursor:pointer; border:0; border-radius:6px; font-weight:700; }
-    .btn { padding:10px 14px; background:var(--brand); color:#fff; } .btn:hover { background:#004eeb; }
-    .btn-light { background:#fff; color:#111111; border:1px solid transparent; }
-    .btn-danger { background:var(--danger); color:#fff; } .btn-outline { background:#fff; color:var(--brand); border:1px solid var(--brand); padding:8px 12px; font-size:13px; }
-    .back-btn { background:transparent; color:#fff; border:1px solid rgba(255,255,255,0.5); padding:10px 14px; } .back-btn:hover { background:rgba(255,255,255,0.12); border-color:#fff; }
-    main { max-width:1320px; margin:0 auto; padding:26px 22px 48px; }
-    .title-row { display:flex; justify-content:space-between; align-items:flex-end; gap:20px; margin-bottom:22px; flex-wrap:wrap; }
-    h1 { margin:0; font-size:27px; } .subtitle { margin:6px 0 0; color:var(--muted); }
-    .card { background:var(--card); border:1px solid #e4e7ec; border-radius:8px; padding:20px; box-shadow:0 1px 2px rgba(16,24,40,.04); margin-bottom:20px; }
-    label { display:block; margin:0 0 6px; font-size:12px; color:var(--muted); font-weight:700; }
-    input, select { width:100%; min-height:39px; height:39px; border:1px solid var(--line); border-radius:6px; padding:9px 10px; font:inherit; color:var(--ink); background:#fff; box-sizing:border-box; }
-    select {
-      background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23667085' stroke-width='1.6'><path d='M5 7.5L10 12.5L15 7.5'/></svg>");
-      background-repeat:no-repeat; background-position:right 10px center; background-size:14px; padding-right:32px; appearance:none;
+    :root {
+      --bg:#f4f6f8; --grid-line:rgba(59,91,253,0.05);
+      --panel:#ffffff; --panel-2:#f3f5f9; --panel-3:#eaeff8;
+      --line:#dde3ec; --line-soft:#e8ecf3;
+      --ink:#121826; --muted:#5b6675; --muted-2:#8b93a3;
+      --accent:#3b5bfd; --accent-bright:#5b7bff; --accent-dim:#e3e8fe;
+      --good:#12a37a; --danger:#d6483f;
+      --font-display:'Space Grotesk',sans-serif; --font-body:'Inter',sans-serif; --font-mono:'IBM Plex Mono',monospace;
     }
-    .filters { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:6px; }
-    .filters .search-box { min-width:220px; flex:1 1 220px; } .filters select { width:auto; min-width:170px; }
+    * { box-sizing:border-box; }
+    body {
+      margin:0; font-family:var(--font-body); background:var(--bg); color:var(--ink);
+      background-image:
+        radial-gradient(circle, var(--grid-line) 1px, transparent 1px);
+      background-size:28px 28px;
+      min-height:100vh;
+    }
+
+    header {
+      background:linear-gradient(90deg, #141824 0%, #05070c 100%);
+      color:#fff; padding:16px clamp(16px,3vw,42px); display:flex; gap:16px; align-items:center; justify-content:space-between;
+      border-bottom:2px solid var(--accent); position:sticky; top:0; z-index:40;
+    }
+    .brand { font-family:var(--font-mono); font-weight:600; letter-spacing:0.6px; font-size:13.5px; color:var(--accent-bright); }
+    .brand::before { content:'// '; color:#5b6675; }
+    .header-right { display:flex; align-items:center; gap:12px; color:#d8dce6; font-size:14px; }
+    #userName { font-family:var(--font-mono); font-size:12.5px; color:#9aa3b5; }
+
+    button { font:inherit; cursor:pointer; border:0; border-radius:8px; font-weight:600; transition:transform .12s ease, box-shadow .12s ease, background .15s ease, border-color .15s ease; }
+    button:active { transform:translateY(1px); }
+    .btn { padding:11px 18px; background:linear-gradient(135deg, var(--accent-bright), var(--accent)); color:#fff; box-shadow:0 4px 14px rgba(59,91,253,.24); }
+    .btn:hover { box-shadow:0 6px 18px rgba(59,91,253,.36); filter:brightness(1.04); }
+    .btn-light { background:transparent; color:#fff; border:1px solid rgba(255,255,255,0.22); }
+    .btn-light:hover { border-color:rgba(255,255,255,0.5); background:rgba(255,255,255,0.06); }
+    .btn-danger { background:var(--danger); color:#fff; }
+    .btn-danger:hover { filter:brightness(1.08); }
+    .btn-outline { background:#fff; color:var(--accent); border:1px solid var(--accent-dim); padding:9px 14px; font-size:13px; }
+    .btn-outline:hover { border-color:var(--accent); background:var(--accent-dim); }
+    .back-btn { background:transparent; color:#e9ecf3; border:1px solid rgba(255,255,255,0.18); padding:10px 14px; font-size:13.5px; }
+    .back-btn:hover { background:rgba(255,255,255,0.08); border-color:rgba(255,255,255,0.4); }
+
+    main { max-width:1320px; margin:0 auto; padding:34px 22px 56px; }
+
+    .title-row { display:flex; justify-content:space-between; align-items:flex-end; gap:20px; margin-bottom:26px; flex-wrap:wrap; }
+    .eyebrow { display:flex; align-items:center; gap:8px; font-family:var(--font-mono); font-size:11.5px; letter-spacing:1.6px; color:var(--accent); text-transform:uppercase; margin-bottom:10px; }
+    .pulse-dot { width:7px; height:7px; border-radius:50%; background:var(--good); box-shadow:0 0 0 0 rgba(18,163,122,.6); animation:pulse 2s infinite; flex-shrink:0; }
+    @keyframes pulse { 0% { box-shadow:0 0 0 0 rgba(18,163,122,.5);} 70% { box-shadow:0 0 0 7px rgba(18,163,122,0);} 100% { box-shadow:0 0 0 0 rgba(18,163,122,0);} }
+    h1 { margin:0; font-family:var(--font-display); font-weight:700; font-size:32px; letter-spacing:-0.3px; color:var(--ink); }
+    .subtitle { margin:8px 0 0; color:var(--muted); font-size:14px; max-width:640px; line-height:1.55; }
     .actions-row { display:flex; gap:10px; flex-wrap:wrap; }
-    .section-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; gap:12px; flex-wrap:wrap; }
-    .section-head p { margin:4px 0 0; color:var(--muted); font-size:13px; }
-    .table-wrap { overflow-x:auto; border:1px solid #e4e7ec; border-radius:6px; }
+
+    .card {
+      background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:22px;
+      box-shadow:0 1px 0 rgba(255,255,255,.6) inset, 0 16px 32px -24px rgba(18,24,38,.18); margin-bottom:20px;
+      position:relative;
+    }
+    /* Scanner-frame corner marks - a nod to the AI vision extraction this
+       system actually does on uploaded price-list photos/PDFs. */
+    .card::before, .card::after,
+    .table-wrap::before, .table-wrap::after { content:''; position:absolute; width:14px; height:14px; pointer-events:none; opacity:.55; }
+    .card::before { top:-1px; left:-1px; border-top:2px solid var(--accent); border-left:2px solid var(--accent); border-radius:14px 0 0 0; }
+    .card::after { top:-1px; right:-1px; border-top:2px solid var(--accent); border-right:2px solid var(--accent); border-radius:0 14px 0 0; }
+
+    label { display:block; margin:0 0 7px; font-size:11px; color:var(--muted); font-weight:600; font-family:var(--font-mono); letter-spacing:0.4px; text-transform:uppercase; }
+    input, select {
+      width:100%; min-height:41px; height:41px; border:1px solid var(--line); border-radius:8px; padding:9px 12px;
+      font:inherit; color:var(--ink); background:var(--panel-2); box-sizing:border-box; font-family:var(--font-body);
+      transition:border-color .15s ease, box-shadow .15s ease;
+    }
+    input::placeholder { color:var(--muted-2); }
+    input:focus, select:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(59,91,253,.15); }
+    select {
+      background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%235b6675' stroke-width='1.6'><path d='M5 7.5L10 12.5L15 7.5'/></svg>");
+      background-repeat:no-repeat; background-position:right 12px center; background-size:14px; padding-right:34px; appearance:none;
+    }
+
+    .filters { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:16px; }
+    .filters .search-box-wrap { min-width:240px; flex:1 1 240px; position:relative; }
+    .filters .search-box-wrap::before {
+      content:'>'; position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--accent); font-family:var(--font-mono); font-weight:600; pointer-events:none;
+    }
+    .filters .search-box { padding-left:26px; font-family:var(--font-mono); font-size:13.5px; }
+    .filters select { width:auto; min-width:180px; }
+
+    .section-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; gap:12px; flex-wrap:wrap; padding-top:14px; border-top:1px dashed var(--line-soft); }
+    .section-head h2 { margin:0; font-family:var(--font-display); font-size:15px; letter-spacing:0.2px; color:var(--ink); }
+    .section-head p { margin:4px 0 0; color:var(--muted); font-size:12.5px; font-family:var(--font-mono); }
+
+    .table-wrap { overflow-x:auto; border:1px solid var(--line); border-radius:10px; }
     table { width:100%; min-width:640px; border-collapse:collapse; }
-    th, td { padding:9px 8px; border-bottom:1px solid #eaecf0; text-align:left; font-size:13px; vertical-align:top; }
-    th { background:#f9fafb; color:#475467; font-size:12px; white-space:nowrap; }
-    td.num, th.num { text-align:right; white-space:nowrap; }
+    th, td { padding:12px 10px; border-bottom:1px solid var(--line-soft); text-align:left; font-size:13px; vertical-align:top; }
+    th {
+      background:var(--panel-2); color:var(--muted); font-size:10.5px; white-space:nowrap; font-family:var(--font-mono);
+      letter-spacing:0.8px; text-transform:uppercase; font-weight:600; position:sticky; top:65px; z-index:2;
+    }
+    td { color:#232b3a; }
+    td.num, th.num { text-align:right; white-space:nowrap; font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
+    .price-ids { color:var(--accent); font-weight:600; }
+    .price-mrp { color:var(--muted); }
+    tbody tr:not(.brand-group-row):hover { background:var(--accent-dim); }
     .brand-cell { font-weight:700; }
-    .brand-group-row td { background:#f2f4f7; font-weight:700; color:#1d2939; padding:8px 8px; border-bottom:1px solid #e4e7ec; }
+    .brand-group-row td {
+      background:var(--panel-3); font-weight:600; color:var(--ink); padding:9px 10px; border-bottom:1px solid var(--line);
+      border-top:1px solid var(--line);
+    }
+    .brand-tag { font-family:var(--font-mono); font-size:11.5px; letter-spacing:1.2px; text-transform:uppercase; color:var(--accent); }
+    .brand-tag::before { content:'\25B8  '; color:var(--accent-bright); }
     .row-actions { display:flex; gap:6px; flex-wrap:nowrap; }
-    .row-actions button { padding:6px 9px; font-size:12px; }
-    .empty-state { padding:34px 20px; text-align:center; color:var(--muted); }
-    .badge { display:inline-block; padding:3px 9px; border-radius:999px; font-size:11.5px; font-weight:700; background:#eff8ff; color:#175cd3; }
-    dialog { width:min(560px,calc(100% - 32px)); max-height:90vh; overflow-y:auto; border:0; border-radius:8px; padding:0; box-shadow:0 20px 50px rgba(16,24,40,.28); }
-    dialog::backdrop { background:rgba(16,24,40,.55); }
-    .modal { padding:20px; } .modal h2 { margin:0 0 4px; font-size:19px; } .modal .subtitle { margin-bottom:16px; }
-    .form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; } .span-2 { grid-column:span 2; }
-    .modal .actions { display:flex; justify-content:flex-end; gap:10px; margin-top:18px; }
-    .message { min-height:20px; margin-top:12px; font-size:13px; color:var(--danger); } .message.success { color:var(--good); }
+    .row-actions button { padding:6px 10px; font-size:11.5px; }
+    .empty-state { padding:42px 20px; text-align:center; color:var(--muted); font-family:var(--font-mono); font-size:13px; }
+    .badge { display:inline-block; padding:3px 9px; border-radius:999px; font-size:11.5px; font-weight:700; background:var(--accent-dim); color:var(--accent); }
+
+    dialog {
+      width:min(560px,calc(100% - 32px)); max-height:90vh; overflow-y:auto; border:1px solid var(--line); border-radius:14px;
+      padding:0; box-shadow:0 30px 70px rgba(18,24,38,.22); background:var(--panel); color:var(--ink);
+    }
+    dialog::backdrop { background:rgba(15,20,30,.5); backdrop-filter:blur(2px); }
+    .modal { padding:24px; }
+    .modal h2 { margin:0 0 4px; font-family:var(--font-display); font-size:19px; color:var(--ink); }
+    .modal .subtitle { margin-bottom:18px; font-size:13px; }
+    .form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+    .span-2 { grid-column:span 2; }
+    .modal .actions { display:flex; justify-content:flex-end; gap:10px; margin-top:20px; }
+    .message { min-height:20px; margin-top:12px; font-size:13px; color:var(--danger); font-family:var(--font-mono); }
+    .message.success { color:var(--good); }
     .hidden { display:none !important; }
-    .upload-drop { border:1.5px dashed var(--line); border-radius:8px; padding:22px; text-align:center; color:var(--muted); font-size:13.5px; }
-    .upload-summary { margin-top:14px; font-size:13px; line-height:1.6; }
-    .upload-summary b { color:var(--ink); }
-    .upload-tab-btn { flex:1; padding:9px 10px; font-size:13px; }
-    .upload-tab-btn.active { background:var(--ink); color:#fff; border-color:var(--ink); }
+
+    .upload-drop { border:1.5px dashed var(--line); border-radius:10px; padding:24px; text-align:center; color:var(--muted); font-size:13.5px; background:var(--panel-2); }
+    .upload-drop input[type="file"] { color:var(--ink); }
+    .upload-summary { margin-top:14px; font-size:13px; line-height:1.6; font-family:var(--font-mono); color:#3a4353; }
+    .upload-summary b { color:var(--accent); }
+    .upload-tab-btn { flex:1; padding:9px 10px; font-size:12.5px; font-family:var(--font-mono); letter-spacing:0.3px; }
+    .upload-tab-btn.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+
     @media(max-width:700px) {
-      header { padding:14px 16px; } .card { padding:14px; }
+      header { padding:14px 16px; } .card { padding:16px; }
       input, select { min-height:44px; } .btn, .btn-light, .back-btn, .btn-danger { min-height:44px; }
       .form-grid { grid-template-columns:1fr; } .span-2 { grid-column:span 1; }
-      th, td { padding:8px 6px; font-size:12.5px; }
+      th, td { padding:9px 7px; font-size:12.5px; }
+      h1 { font-size:25px; }
+      th { position:static; }
     }
     @media(max-width:540px) {
       header { align-items:flex-start; flex-direction:column; } .header-right { width:100%; justify-content:space-between; }
@@ -74,13 +166,26 @@
     <div class="header-right"><span id="userName"></span><button class="back-btn" onclick="go('/home')">&larr; Back</button><button class="btn-light" onclick="openLogoutModal()">Log out</button></div>
   </header>
 
-  <div id="logoutModal" style="display:none; position:fixed; inset:0; z-index:60; align-items:center; justify-content:center; background:rgba(16,24,40,.55);" onclick="if (event.target === this) closeLogoutModal()">
-    <div style="background:#fff; border-radius:14px; padding:26px 28px; max-width:340px; width:90vw; box-shadow:0 24px 60px rgba(16,24,40,.35);">
-      <h3 style="margin:0 0 8px; font-size:17px;">Log out?</h3>
-      <p style="margin:0 0 18px; font-size:13px; color:var(--muted);">This will end your session and return you to the login page.</p>
+  <div id="logoutModal" style="display:none; position:fixed; inset:0; z-index:60; align-items:center; justify-content:center; background:rgba(15,20,30,.5);" onclick="if (event.target === this) closeLogoutModal()">
+    <div style="background:#ffffff; border:1px solid #dde3ec; border-radius:14px; padding:26px 28px; max-width:340px; width:90vw; box-shadow:0 24px 60px rgba(18,24,38,.22); color:#121826;">
+      <h3 style="margin:0 0 8px; font-size:17px; font-family:'Space Grotesk',sans-serif;">Log out?</h3>
+      <p style="margin:0 0 18px; font-size:13px; color:#5b6675;">This will end your session and return you to the login page.</p>
       <div style="display:flex; gap:10px; justify-content:flex-end;">
-        <button type="button" class="btn-light" onclick="closeLogoutModal()">Cancel</button>
+        <button type="button" class="btn-outline" onclick="closeLogoutModal()">Cancel</button>
         <button type="button" class="btn-danger" onclick="logout()">Log out</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete item confirmation -->
+  <div id="deleteConfirmModal" style="display:none; position:fixed; inset:0; z-index:70; align-items:center; justify-content:center; background:rgba(15,20,30,.5);" onclick="if (event.target === this) closeDeleteConfirm()">
+    <div style="background:#ffffff; border:1px solid #dde3ec; border-radius:14px; padding:26px 28px; max-width:360px; width:90vw; box-shadow:0 24px 60px rgba(18,24,38,.22); color:#121826;">
+      <h3 style="margin:0 0 8px; font-size:17px; font-family:'Space Grotesk',sans-serif;">Delete this item?</h3>
+      <p style="margin:0 0 18px; font-size:13px; color:#5b6675;">This cannot be undone. The item will be removed from the price list immediately.</p>
+      <div id="deleteConfirmMessage" class="message"></div>
+      <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:6px;">
+        <button type="button" class="btn-outline" onclick="closeDeleteConfirm()">Cancel</button>
+        <button type="button" class="btn-danger" id="deleteConfirmBtn" onclick="confirmDeleteItem()">Delete</button>
       </div>
     </div>
   </div>
@@ -88,6 +193,7 @@
   <main>
     <div class="title-row">
       <div>
+        <div class="eyebrow"><span class="pulse-dot"></span>Live price data · brand-scoped</div>
         <h1>IDS Price System</h1>
         <p class="subtitle" id="pageSubtitle">Search by brand or model no. to look up prices.</p>
       </div>
@@ -99,12 +205,14 @@
 
     <div class="card">
       <div class="filters">
-        <input class="search-box" id="searchInput" type="text" placeholder="Search by brand name or model no..." oninput="debouncedLoad()" />
+        <div class="search-box-wrap">
+          <input class="search-box" id="searchInput" type="text" placeholder="search brand or model no..." oninput="debouncedLoad()" />
+        </div>
         <select id="brandFilter" onchange="loadItems()"><option value="">All brands</option></select>
       </div>
       <div class="section-head">
         <div>
-          <h2 style="margin:0; font-size:16px;">Items</h2>
+          <h2>Items</h2>
           <p id="rowCount"></p>
         </div>
       </div>
@@ -115,8 +223,8 @@
               <th>Item Details</th>
               <th>Model</th>
               <th class="num full-access-col hidden">Purchase Price</th>
-              <th class="num">IDS Price</th>
-              <th class="num">MRP</th>
+              <th class="num price-ids">IDS Price</th>
+              <th class="num price-mrp">MRP</th>
               <th class="full-access-col hidden">Updated By</th>
               <th class="full-access-col hidden">Actions</th>
             </tr>
@@ -184,7 +292,7 @@
       </div>
       <div class="upload-drop">
         <input type="file" id="uploadFileInput" accept=".xlsx,.xls" />
-        <div id="uploadHint" style="margin-top:10px; font-size:12px; color:var(--muted);">Excel files (.xlsx, .xls)</div>
+        <div id="uploadHint" style="margin-top:10px; font-size:12px; color:var(--muted); font-family:'IBM Plex Mono',monospace;">Excel files (.xlsx, .xls)</div>
       </div>
       <div id="uploadMessage" class="message"></div>
       <div id="uploadSummary" class="upload-summary hidden"></div>
@@ -304,7 +412,7 @@
       for (const brandName of sortedBrandNames) {
         const groupRow = document.createElement('tr');
         groupRow.className = 'brand-group-row';
-        groupRow.innerHTML = `<td colspan="${colSpanCount()}">${brandName}</td>`;
+        groupRow.innerHTML = `<td colspan="${colSpanCount()}"><span class="brand-tag">${brandName}</span></td>`;
         tbody.appendChild(groupRow);
 
         for (const item of groups.get(brandName)) {
@@ -313,7 +421,7 @@
           if (isFullAccess) {
             rowHtml += `<td class="num">${fmtMoney(item.purchase_price)}</td>`;
           }
-          rowHtml += `<td class="num">${fmtMoney(item.msp)}</td><td class="num">${fmtMoney(item.isp)}</td>`;
+          rowHtml += `<td class="num price-ids">${fmtMoney(item.msp)}</td><td class="num price-mrp">${fmtMoney(item.isp)}</td>`;
           if (isFullAccess) {
             rowHtml += `<td>${item.updated_by_username || '—'}</td><td class="row-actions"><button class="btn-outline" onclick="openEditModal(${item.id})">Edit</button></td>`;
           }
@@ -391,15 +499,34 @@
       }
     }
 
-    async function deleteCurrentItem() {
+    function deleteCurrentItem() {
       if (!currentItemId) return;
-      if (!confirm('Delete this item? This cannot be undone.')) return;
+      document.getElementById('itemDialog').close();
+      document.getElementById('deleteConfirmMessage').textContent = '';
+      document.getElementById('deleteConfirmModal').style.display = 'flex';
+    }
+
+    function closeDeleteConfirm() {
+      document.getElementById('deleteConfirmModal').style.display = 'none';
+      if (currentItemId) document.getElementById('itemDialog').showModal();
+    }
+
+    async function confirmDeleteItem() {
+      if (!currentItemId) return;
+      const msg = document.getElementById('deleteConfirmMessage');
+      const btn = document.getElementById('deleteConfirmBtn');
+      msg.className = 'message'; msg.textContent = '';
+      btn.disabled = true;
       try {
         await api(`/api/price-list/${currentItemId}`, { method: 'DELETE' });
-        closeItemDialog();
+        btn.disabled = false;
+        document.getElementById('deleteConfirmModal').style.display = 'none';
+        currentItemId = null;
+        document.getElementById('itemDialog').close();
         await loadItems();
       } catch (e) {
-        document.getElementById('itemDialogMessage').textContent = e.message || 'Unable to delete item';
+        btn.disabled = false;
+        msg.textContent = e.message || 'Unable to delete item';
       }
     }
 
