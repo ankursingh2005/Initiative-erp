@@ -104,13 +104,12 @@
       overflow:auto; -webkit-overflow-scrolling:touch; touch-action:pan-x pan-y; overscroll-behavior:contain;
       border:1px solid var(--line); border-radius:10px; max-height:68vh; position:relative;
     }
-    table { width:100%; min-width:960px; border-collapse:collapse; table-layout:fixed; }
-    col.col-item { width:24%; }
-    col.col-model { width:12%; }
-    col.col-purchase { width:15%; }
-    col.col-ids { width:14%; }
-    col.col-mrp { width:13%; }
-    col.col-updated { width:12%; }
+    table { width:100%; min-width:860px; border-collapse:collapse; table-layout:fixed; }
+    col.col-item { width:32%; }
+    col.col-purchase { width:16%; }
+    col.col-ids { width:15%; }
+    col.col-mrp { width:14%; }
+    col.col-updated { width:13%; }
     col.col-actions { width:10%; }
     th, td {
       padding:15px 14px; border-bottom:1px solid var(--line-soft); text-align:left; font-size:15px; vertical-align:middle;
@@ -154,6 +153,27 @@
     .message { min-height:20px; margin-top:12px; font-size:13px; color:var(--danger); font-family:var(--font-mono); }
     .message.success { color:var(--good); }
     .hidden { display:none !important; }
+
+    .upload-success-toast {
+      display:flex; flex-direction:column; align-items:center; text-align:center;
+      padding:10px 0 2px; opacity:0; transform:translateY(-6px) scale(0.96);
+      animation:toastIn .35s cubic-bezier(.34,1.56,.64,1) forwards;
+    }
+    .upload-success-toast.fade-out { animation:toastOut .5s ease forwards; }
+    .upload-success-toast .success-circle { width:46px; height:46px; margin-bottom:8px; }
+    .upload-success-toast .success-circle-bg {
+      stroke:var(--good); stroke-width:3; stroke-dasharray:145; stroke-dashoffset:145;
+      animation:circleDraw .55s ease-out forwards;
+    }
+    .upload-success-toast .success-check {
+      stroke:var(--good); stroke-width:4; stroke-linecap:round; stroke-linejoin:round;
+      stroke-dasharray:36; stroke-dashoffset:36; animation:checkDraw .3s ease-out .5s forwards;
+    }
+    .upload-success-toast span { font-size:14px; font-weight:700; color:var(--good); font-family:var(--font-body); }
+    @keyframes toastIn { to { opacity:1; transform:translateY(0) scale(1); } }
+    @keyframes toastOut { to { opacity:0; transform:translateY(-8px) scale(0.97); } }
+    @keyframes circleDraw { to { stroke-dashoffset:0; } }
+    @keyframes checkDraw { to { stroke-dashoffset:0; } }
 
     .upload-drop { border:1.5px dashed var(--line); border-radius:10px; padding:24px; text-align:center; color:var(--muted); font-size:13.5px; background:var(--panel-2); }
     .upload-drop input[type="file"] { color:var(--ink); }
@@ -238,7 +258,6 @@
         <table>
           <colgroup>
             <col class="col-item" />
-            <col class="col-model" />
             <col class="col-purchase full-access-col hidden" />
             <col class="col-ids" />
             <col class="col-mrp" />
@@ -248,7 +267,6 @@
           <thead>
             <tr id="tableHeadRow">
               <th>Item Details</th>
-              <th>Model</th>
               <th class="num full-access-col hidden">Purchase Price</th>
               <th class="num price-ids">IDS Price</th>
               <th class="num price-mrp">MRP</th>
@@ -278,10 +296,6 @@
         <div class="span-2">
           <label for="itemDetailsInput">Item Details (model name)</label>
           <input id="itemDetailsInput" type="text" placeholder="e.g. Blue Star SAC ID 1.5T IA318EXU" />
-        </div>
-        <div>
-          <label for="itemModelInput">Model No.</label>
-          <input id="itemModelInput" type="text" />
         </div>
         <div>
           <label for="itemStockInput">Total Stock</label>
@@ -322,10 +336,17 @@
         <input type="file" id="uploadFileInput" accept=".xlsx,.xls" />
         <div id="uploadHint" style="margin-top:10px; font-size:12px; color:var(--muted); font-family:'IBM Plex Mono',monospace;">Excel files (.xlsx, .xls)</div>
       </div>
+      <div id="uploadSuccessToast" class="upload-success-toast hidden">
+        <svg class="success-circle" viewBox="0 0 52 52" aria-hidden="true">
+          <circle class="success-circle-bg" cx="26" cy="26" r="23" fill="none" />
+          <path class="success-check" fill="none" d="M14 27l7 7 16-16" />
+        </svg>
+        <span id="uploadSuccessText"></span>
+      </div>
       <div id="uploadMessage" class="message"></div>
       <div id="uploadSummary" class="upload-summary hidden"></div>
       <div class="actions">
-        <button type="button" class="btn-light" onclick="closeUploadModal()">Close</button>
+        <button type="button" class="btn-light" onclick="closeUploadModal()">Cancel</button>
         <button type="button" class="btn" id="uploadSubmitBtn" onclick="submitUpload()">Upload</button>
       </div>
     </div>
@@ -389,8 +410,10 @@
     function debouncedLoad() { clearTimeout(debounceTimer); debounceTimer = setTimeout(loadItems, 300); }
 
     function colSpanCount() {
-      // Item Details, Model, [Purchase Price], IDS Price, MRP, [Updated By, Actions]
-      return isFullAccess ? 7 : 4;
+      // Item Details, [Purchase Price], IDS Price, MRP, [Updated By, Actions]
+      // Model is intentionally not a separate column - it's already part of
+      // Item Details, so showing it again as its own column was redundant.
+      return isFullAccess ? 6 : 3;
     }
 
     async function loadItems() {
@@ -445,7 +468,7 @@
 
         for (const item of groups.get(brandName)) {
           const tr = document.createElement('tr');
-          let rowHtml = `<td>${item.item_details}</td><td>${item.model_no || '—'}</td>`;
+          let rowHtml = `<td>${item.item_details}</td>`;
           if (isFullAccess) {
             rowHtml += `<td class="num">${fmtMoney(item.purchase_price)}</td>`;
           }
@@ -467,7 +490,6 @@
       document.getElementById('itemBrandSelect').disabled = false;
       document.getElementById('itemBrandSelect').value = allBrands[0]?.id || '';
       document.getElementById('itemDetailsInput').value = '';
-      document.getElementById('itemModelInput').value = '';
       document.getElementById('itemStockInput').value = '';
       document.getElementById('itemPurchasePriceInput').value = '';
       document.getElementById('itemMspInput').value = '';
@@ -486,7 +508,6 @@
       document.getElementById('itemBrandSelect').value = item.brand_id;
       document.getElementById('itemBrandSelect').disabled = true;
       document.getElementById('itemDetailsInput').value = item.item_details;
-      document.getElementById('itemModelInput').value = item.model_no ?? '';
       document.getElementById('itemStockInput').value = item.total_stock ?? '';
       document.getElementById('itemPurchasePriceInput').value = item.purchase_price ?? '';
       document.getElementById('itemMspInput').value = item.msp ?? '';
@@ -506,7 +527,6 @@
 
       const payload = {
         item_details: itemDetails,
-        model_no: document.getElementById('itemModelInput').value.trim() || null,
         total_stock: document.getElementById('itemStockInput').value === '' ? null : Number(document.getElementById('itemStockInput').value),
         purchase_price: document.getElementById('itemPurchasePriceInput').value === '' ? null : Number(document.getElementById('itemPurchasePriceInput').value),
         msp: document.getElementById('itemMspInput').value === '' ? null : Number(document.getElementById('itemMspInput').value),
@@ -580,15 +600,39 @@
     function openUploadModal() {
       document.getElementById('uploadMessage').textContent = '';
       document.getElementById('uploadSummary').classList.add('hidden');
+      const toast = document.getElementById('uploadSuccessToast');
+      toast.classList.add('hidden');
+      toast.classList.remove('fade-out');
+      const submitBtn = document.getElementById('uploadSubmitBtn');
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Upload';
       setUploadMode('excel');
       document.getElementById('uploadDialog').showModal();
     }
     function closeUploadModal() { document.getElementById('uploadDialog').close(); loadItems(); loadBrandFilter(); }
 
+    function showUploadSuccessToast(text, onDone) {
+      const toast = document.getElementById('uploadSuccessToast');
+      toast.classList.remove('hidden', 'fade-out');
+      document.getElementById('uploadSuccessText').textContent = text;
+      // Restart the draw-in animation even if the toast was already shown once this session.
+      toast.style.animation = 'none';
+      void toast.offsetWidth;
+      toast.style.animation = '';
+      setTimeout(() => {
+        toast.classList.add('fade-out');
+        setTimeout(() => {
+          toast.classList.add('hidden');
+          if (onDone) onDone();
+        }, 500);
+      }, 2200);
+    }
+
     async function submitUpload() {
       const msg = document.getElementById('uploadMessage');
       const fileInput = document.getElementById('uploadFileInput');
       msg.className = 'message'; msg.textContent = '';
+      document.getElementById('uploadSuccessToast').classList.add('hidden');
 
       if (!fileInput.files.length) {
         msg.textContent = uploadMode === 'image' ? 'Choose a photo, scan, or PDF first.' : 'Choose an Excel file first.';
@@ -611,19 +655,27 @@
         const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(data.detail || 'Upload failed');
 
-        msg.classList.add('success');
-        msg.textContent = data.message;
         const summary = document.getElementById('uploadSummary');
         summary.classList.remove('hidden');
         summary.innerHTML = `<div><b>${data.inserted}</b> new item(s) added, <b>${data.updated}</b> updated, <b>${data.skipped}</b> row(s) skipped.</div>` +
           (data.brands_created.length ? `<div style="margin-top:6px;">New brands created: ${data.brands_created.join(', ')}</div>` : '') +
           (data.method === 'ai_vision' ? `<div style="margin-top:6px; color:var(--muted);">Read via AI${data.provider ? ' (' + data.provider + ')' : ''} from your photo/PDF - please review the updated items for accuracy.</div>` : '');
+
+        showUploadSuccessToast(data.message || 'Price list uploaded successfully', () => {
+          // Auto-close the whole modal once the success animation finishes,
+          // dropping the user back on the price list / search page with the
+          // freshly uploaded items already loaded.
+          closeUploadModal();
+        });
       } catch (e) {
         msg.textContent = e.message || 'Upload failed';
-      } finally {
         submitBtn.disabled = false;
         submitBtn.textContent = 'Upload';
+        return;
       }
+      // On success, leave the button disabled - the modal is auto-closing in
+      // a couple of seconds anyway, and this avoids an accidental re-submit
+      // of the same file during that window.
     }
 
     init();
