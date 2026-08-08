@@ -100,28 +100,44 @@
     .section-head h2 { margin:0; font-family:var(--font-display); font-size:15px; letter-spacing:0.2px; color:var(--ink); }
     .section-head p { margin:4px 0 0; color:var(--muted); font-size:12.5px; font-family:var(--font-mono); }
 
-    .table-wrap { overflow-x:auto; border:1px solid var(--line); border-radius:10px; }
-    table { width:100%; min-width:640px; border-collapse:collapse; }
-    th, td { padding:12px 10px; border-bottom:1px solid var(--line-soft); text-align:left; font-size:13px; vertical-align:top; }
+    .table-wrap {
+      overflow:auto; -webkit-overflow-scrolling:touch; touch-action:pan-x pan-y; overscroll-behavior:contain;
+      border:1px solid var(--line); border-radius:10px; max-height:68vh; position:relative;
+    }
+    table { width:100%; min-width:960px; border-collapse:collapse; table-layout:fixed; }
+    col.col-item { width:24%; }
+    col.col-model { width:12%; }
+    col.col-purchase { width:15%; }
+    col.col-ids { width:14%; }
+    col.col-mrp { width:13%; }
+    col.col-updated { width:12%; }
+    col.col-actions { width:10%; }
+    th, td {
+      padding:15px 14px; border-bottom:1px solid var(--line-soft); text-align:left; font-size:15px; vertical-align:middle;
+      overflow:hidden; text-overflow:ellipsis;
+    }
     th {
-      background:var(--panel-2); color:var(--muted); font-size:10.5px; white-space:nowrap; font-family:var(--font-mono);
-      letter-spacing:0.8px; text-transform:uppercase; font-weight:600; position:sticky; top:65px; z-index:2;
+      background:var(--panel-2); color:var(--muted); font-size:12px; white-space:nowrap; font-family:var(--font-mono);
+      letter-spacing:0.4px; text-transform:uppercase; font-weight:700;
+      border-bottom:2px solid var(--line); position:sticky; top:0; z-index:2;
     }
     td { color:#232b3a; }
-    td.num, th.num { text-align:right; white-space:nowrap; font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
-    .price-ids { color:var(--accent); font-weight:600; }
-    .price-mrp { color:var(--muted); }
+    td.num, th.num { text-align:right; white-space:nowrap; font-family:var(--font-mono); font-variant-numeric:tabular-nums; font-size:15.5px; }
+    .price-ids { color:var(--accent); font-weight:700; }
+    .price-mrp { color:var(--muted); font-weight:500; }
+    tbody tr:not(.brand-group-row):nth-child(even) { background:#fafbfd; }
     tbody tr:not(.brand-group-row):hover { background:var(--accent-dim); }
     .brand-cell { font-weight:700; }
     .brand-group-row td {
-      background:var(--panel-3); font-weight:600; color:var(--ink); padding:9px 10px; border-bottom:1px solid var(--line);
-      border-top:1px solid var(--line);
+      background:var(--panel-3); font-weight:700; color:var(--ink); padding:11px 14px; border-bottom:1px solid var(--line);
+      border-top:1px solid var(--line); font-size:14px;
     }
     .brand-tag { font-family:var(--font-mono); font-size:11.5px; letter-spacing:1.2px; text-transform:uppercase; color:var(--accent); }
     .brand-tag::before { content:'\25B8  '; color:var(--accent-bright); }
     .row-actions { display:flex; gap:6px; flex-wrap:nowrap; }
     .row-actions button { padding:6px 10px; font-size:11.5px; }
     .empty-state { padding:42px 20px; text-align:center; color:var(--muted); font-family:var(--font-mono); font-size:13px; }
+    .scroll-hint { display:none; text-align:center; font-size:11.5px; color:var(--muted-2); font-family:var(--font-mono); margin-top:8px; letter-spacing:0.2px; }
     .badge { display:inline-block; padding:3px 9px; border-radius:999px; font-size:11.5px; font-weight:700; background:var(--accent-dim); color:var(--accent); }
 
     dialog {
@@ -150,9 +166,11 @@
       header { padding:14px 16px; } .card { padding:16px; }
       input, select { min-height:44px; } .btn, .btn-light, .back-btn, .btn-danger { min-height:44px; }
       .form-grid { grid-template-columns:1fr; } .span-2 { grid-column:span 1; }
-      th, td { padding:9px 7px; font-size:12.5px; }
+      th, td { padding:11px 9px; font-size:13.5px; }
+      td.num, th.num { font-size:14px; }
       h1 { font-size:25px; }
-      th { position:static; }
+      .table-wrap { max-height:58vh; }
+      .scroll-hint { display:block; }
     }
     @media(max-width:540px) {
       header { align-items:flex-start; flex-direction:column; } .header-right { width:100%; justify-content:space-between; }
@@ -218,6 +236,15 @@
       </div>
       <div class="table-wrap">
         <table>
+          <colgroup>
+            <col class="col-item" />
+            <col class="col-model" />
+            <col class="col-purchase full-access-col hidden" />
+            <col class="col-ids" />
+            <col class="col-mrp" />
+            <col class="col-updated full-access-col hidden" />
+            <col class="col-actions full-access-col hidden" />
+          </colgroup>
           <thead>
             <tr id="tableHeadRow">
               <th>Item Details</th>
@@ -232,6 +259,7 @@
           <tbody id="tableBody"></tbody>
         </table>
       </div>
+      <div class="scroll-hint">↔ Swipe sideways to see all columns &nbsp;•&nbsp; ↕ Scroll to see more rows</div>
       <div id="emptyState" class="empty-state hidden">No items found.</div>
       <div id="searchPrompt" class="empty-state">Search by brand name or model no. (or pick a brand above) to see items.</div>
     </div>
