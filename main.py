@@ -1053,9 +1053,22 @@ def _parse_price_list_upload(file_bytes: bytes, filename: str):
                 continue
 
             header_row = rows[header_index]
+            normalized_headers = [(index, _normalize_price_list_header(value)) for index, value in enumerate(header_row or [])]
+
+            # Most price lists have only ONE selling-price column, labelled
+            # either "ISP", "MRP", or "Sale Price" - those are historically
+            # treated as interchangeable and mapped to the same field below.
+            # Some brand sheets (e.g. iQOO) instead have BOTH a literal
+            # "ISP" column and a literal "MRP" column as two distinct
+            # prices. When both are present on the same header row, don't
+            # collapse them into one field - map ISP to IDS Price (msp) and
+            # MRP to the MRP field (isp) so neither is discarded.
+            has_literal_isp = any(key == "isp" for _, key in normalized_headers)
+            has_literal_mrp = any(key in {"mrp", "saleprice"} for _, key in normalized_headers)
+            isp_and_mrp_both_present = has_literal_isp and has_literal_mrp
+
             header_map = {}
-            for index, value in enumerate(header_row or []):
-                key = _normalize_price_list_header(value)
+            for index, key in normalized_headers:
                 if key in {"itemdetails", "item", "model", "modelname", "itemname"}:
                     header_map["item"] = index
                 elif key in {"modelno", "modelnumber"}:
@@ -1070,7 +1083,9 @@ def _parse_price_list_upload(file_bytes: bytes, filename: str):
                     header_map["purchase"] = index
                 elif key in {"msp", "ids", "idsprice"}:
                     header_map["msp"] = index
-                elif key in {"isp", "mrp", "saleprice"}:
+                elif key == "isp":
+                    header_map["msp" if isp_and_mrp_both_present else "isp"] = index
+                elif key in {"mrp", "saleprice"}:
                     header_map["isp"] = index
 
             current_brand = None
