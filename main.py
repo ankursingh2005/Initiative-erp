@@ -4187,6 +4187,10 @@ def dp_categorize(item_name: Optional[str]) -> str:
         # "GRINDER", so it fell through to Other before this).
         " MIXER ", "JUICER", "BLENDER", "FOOD PROCESSOR", "SANDWICH MAKER",
         "RICE COOKER", "PRESSURE COOKER", " OTG ", "HAND BLENDER",
+        # Hair care appliances (any brand) - e.g. "Dyson Corrale Straightener
+        # BC/BN", "Dyson Airstrait HT01 BN/BC", hair dryers/curlers.
+        "STRAIGHTENER", "CORRALE", "AIRSTRAIT", "HAIR DRYER", "HAIR STYLER",
+        "HAIR CURLER", "AIRWRAP",
     )
     if any(k in padded for k in ha_keywords):
         return "HA"
