@@ -4143,6 +4143,10 @@ def dp_categorize(item_name: Optional[str]) -> str:
         # Standalone speakers (any brand) - JBL Party Box, Bluetooth
         # speakers, etc. are their own HE product, not a phone accessory.
         "SPEAKER", "PARTY BOX", "PARTYBOX",
+        # Gaming consoles (any brand) - e.g. "Sony PS5 CFI-2116 Std E
+        # Chassis ARV", Xbox Series X/S, Nintendo Switch.
+        "PLAYSTATION", "PS5", "PS4", "PS3", "GAMING CONSOLE",
+        "XBOX", "NINTENDO SWITCH", "NINTENDO",
     )
     if any(k in n for k in he_keywords) or re.search(r"\bTV\b", n):
         return "HE"
@@ -4183,11 +4187,6 @@ def dp_categorize(item_name: Optional[str]) -> str:
         # "GRINDER", so it fell through to Other before this).
         " MIXER ", "JUICER", "BLENDER", "FOOD PROCESSOR", "SANDWICH MAKER",
         "RICE COOKER", "PRESSURE COOKER", " OTG ", "HAND BLENDER",
-        # Gaming consoles (any brand) - e.g. "Sony PS5 CFI-2116 Std E
-        # Chassis ARV", Xbox Series X/S, Nintendo Switch. Kept in HA per
-        # store convention rather than falling through to "Other".
-        "PLAYSTATION", "PS5", "PS4", "PS3", "GAMING CONSOLE",
-        "XBOX", "NINTENDO SWITCH", "NINTENDO",
     )
     if any(k in padded for k in ha_keywords):
         return "HA"
