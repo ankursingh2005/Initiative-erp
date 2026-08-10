@@ -998,16 +998,27 @@ def _filter_price_list_query(query, search: Optional[str]):
     search_text = (search or "").strip()
     if not search_text:
         return query
-    like_term = f"%{search_text.lower()}%"
-    return query.outerjoin(models.Brand, models.PriceListItem.brand_id == models.Brand.id).filter(
-        or_(
-            func.lower(models.PriceListItem.item_details).like(like_term),
-            func.lower(models.PriceListItem.model_no).like(like_term),
-            func.lower(models.PriceListItem.serial_no).like(like_term),
-            func.lower(models.PriceListItem.imei).like(like_term),
-            func.lower(models.Brand.name).like(like_term),
+    # Split into words and require EVERY word to match somewhere (any
+    # field, and different words may match different fields) rather than
+    # requiring the whole typed phrase to appear literally in one field.
+    # That's what let a combined "brand + model" search like "oppo f33"
+    # fail before: "Oppo" only lives in the brand name column and "F33"
+    # only lives in item_details, so no single column ever contained the
+    # literal phrase "oppo f33" together.
+    words = search_text.lower().split()
+    query = query.outerjoin(models.Brand, models.PriceListItem.brand_id == models.Brand.id)
+    for word in words:
+        like_term = f"%{word}%"
+        query = query.filter(
+            or_(
+                func.lower(models.PriceListItem.item_details).like(like_term),
+                func.lower(models.PriceListItem.model_no).like(like_term),
+                func.lower(models.PriceListItem.serial_no).like(like_term),
+                func.lower(models.PriceListItem.imei).like(like_term),
+                func.lower(models.Brand.name).like(like_term),
+            )
         )
-    )
+    return query
 
 
 def _serialize_price_list_item(item: models.PriceListItem, current_user: models.User) -> dict:
@@ -4167,6 +4178,16 @@ def dp_categorize(item_name: Optional[str]) -> str:
         # garment iron, etc.) as a standalone word, not just the two
         # specific compounds above.
         " IRON ",
+        # Kitchen appliances that weren't covered by "MIXER GRINDER" alone
+        # (e.g. "Faber Juicer Mixer FSJ 200BK" has neither word next to
+        # "GRINDER", so it fell through to Other before this).
+        " MIXER ", "JUICER", "BLENDER", "FOOD PROCESSOR", "SANDWICH MAKER",
+        "RICE COOKER", "PRESSURE COOKER", " OTG ", "HAND BLENDER",
+        # Gaming consoles (any brand) - e.g. "Sony PS5 CFI-2116 Std E
+        # Chassis ARV", Xbox Series X/S, Nintendo Switch. Kept in HA per
+        # store convention rather than falling through to "Other".
+        "PLAYSTATION", "PS5", "PS4", "PS3", "GAMING CONSOLE",
+        "XBOX", "NINTENDO SWITCH", "NINTENDO",
     )
     if any(k in padded for k in ha_keywords):
         return "HA"

@@ -105,12 +105,46 @@
       border:1px solid var(--line); border-radius:10px; max-height:68vh; position:relative;
     }
     table { width:100%; min-width:860px; border-collapse:collapse; table-layout:fixed; }
-    col.col-item { width:32%; }
-    col.col-purchase { width:16%; }
-    col.col-ids { width:15%; }
-    col.col-mrp { width:14%; }
-    col.col-updated { width:13%; }
-    col.col-actions { width:10%; }
+    col.col-item { width:34%; }
+    col.col-purchase { width:20%; }
+    col.col-ids { width:11%; }
+    col.col-mrp { width:10%; }
+    col.col-updated { width:17%; }
+    col.col-actions { width:8%; }
+    /* Admin/Accounts/MIS view: tighten the Item Details <-> Purchase
+       Price boundary specifically (they're the two widest columns, so
+       the base 14px padding on each side reads as a big gap between
+       them). */
+    .table-wrap:not(.viewer-mode) th:nth-child(1), .table-wrap:not(.viewer-mode) td:nth-child(1) { padding-right:10px; }
+    .table-wrap:not(.viewer-mode) th:nth-child(2), .table-wrap:not(.viewer-mode) td:nth-child(2) { padding-left:10px; }
+    /* Restricted role view (Item Details / IDS Price / MRP only, no
+       Purchase Price / Updated By / Actions columns): give these 3
+       columns their own tight fixed widths instead of reusing the
+       6-column percentages (which left huge gaps) or auto-layout (which
+       let Item Details balloon to whatever its longest row needed,
+       pushing IDS Price away on every shorter row). Purchase
+       Price/Updated By/Actions are still in the DOM (just hidden), so
+       IDS Price is the table's 3rd child - target it directly. */
+    .table-wrap.viewer-mode table { min-width:0; table-layout:fixed; }
+    .table-wrap.viewer-mode col.col-item { width:56%; }
+    .table-wrap.viewer-mode col.col-ids { width:22%; }
+    .table-wrap.viewer-mode col.col-mrp { width:22%; }
+    .table-wrap.viewer-mode th, .table-wrap.viewer-mode td { padding-left:10px; padding-right:10px; }
+    .table-wrap.viewer-mode th.num, .table-wrap.viewer-mode td.num { padding-left:8px; white-space:nowrap; }
+    .table-wrap.viewer-mode th:nth-child(1), .table-wrap.viewer-mode td:nth-child(1) { padding-right:8px; }
+    .table-wrap.viewer-mode th:nth-child(3), .table-wrap.viewer-mode td:nth-child(3) { padding-left:6px; }
+    .table-wrap.viewer-mode + .scroll-hint { display:none !important; }
+    /* Full-access (Admin/Accounts/MIS) table: IDS Price, MRP, Updated By,
+       and Actions all hold short content that was sitting inside wide
+       fixed-% columns, leaving big visual gaps between them. The widths
+       above already shifted the reclaimed space to Item Details/Purchase
+       Price; this tightens their padding so the 4 columns sit close. */
+    .table-wrap:not(.viewer-mode) th:nth-child(n+3), .table-wrap:not(.viewer-mode) td:nth-child(n+3) {
+      padding-left:10px; padding-right:10px;
+    }
+    .table-wrap:not(.viewer-mode) th.num:nth-child(n+3), .table-wrap:not(.viewer-mode) td.num:nth-child(n+3) {
+      padding-right:12px;
+    }
     th, td {
       padding:15px 14px; border-bottom:1px solid var(--line-soft); text-align:left; font-size:15px; vertical-align:middle;
       overflow:hidden; text-overflow:ellipsis;
@@ -244,9 +278,9 @@
     <div class="card">
       <div class="filters">
         <div class="search-box-wrap">
-          <input class="search-box" id="searchInput" type="text" placeholder="search brand or model no..." oninput="debouncedLoad()" />
+          <input class="search-box" id="searchInput" type="text" placeholder="search by brand, model no., or both..." oninput="debouncedLoad()" />
         </div>
-        <select id="brandFilter" onchange="loadItems()"><option value="">All brands</option></select>
+        <select id="brandFilter" onchange="onBrandFilterChange()"><option value="">All brands</option></select>
       </div>
       <div class="section-head">
         <div>
@@ -254,7 +288,7 @@
           <p id="rowCount"></p>
         </div>
       </div>
-      <div class="table-wrap">
+      <div class="table-wrap" id="tableWrap">
         <table>
           <colgroup>
             <col class="col-item" />
@@ -390,6 +424,7 @@
         document.getElementById('pageSubtitle').textContent = 'Search by brand or model no. to look up, add, bulk-upload, or edit prices. Changes are visible to Category Managers and Brand Promoters immediately.';
       } else {
         document.getElementById('pageSubtitle').textContent = 'Search by brand or model no. for selling prices (MSP / ISP) in your assigned brand(s) / category.';
+        document.getElementById('tableWrap').classList.add('viewer-mode');
       }
       await loadBrandFilter();
       await loadItems();
@@ -407,7 +442,72 @@
     }
 
     let debounceTimer = null;
-    function debouncedLoad() { clearTimeout(debounceTimer); debounceTimer = setTimeout(loadItems, 300); }
+    function normalizeText(value) { return (value || '').toLowerCase().trim(); }
+
+    // Finds the brand (from the loaded brand list) that best matches typed
+    // search text - e.g. typing "iqoo neo10r" or just "iqoo" or even "iqo"
+    // should all resolve to the iQOO brand.
+    function findBrandMatch(text) {
+      const needle = normalizeText(text);
+      if (!needle) return null;
+      return allBrands.find(b => needle.startsWith(normalizeText(b.name)))
+        || allBrands.find(b => needle.includes(normalizeText(b.name)))
+        || allBrands.find(b => normalizeText(b.name).startsWith(needle))
+        || null;
+    }
+
+    // Keeps the brand dropdown in step with whatever the user types, so a
+    // search box value and an unrelated leftover dropdown selection can
+    // never silently cancel each other out into a 0-result search.
+    function syncBrandFilterFromSearch() {
+      const brandSelect = document.getElementById('brandFilter');
+      const search = document.getElementById('searchInput').value;
+      const matched = findBrandMatch(search);
+      if (matched) {
+        if (brandSelect.value !== String(matched.id)) brandSelect.value = String(matched.id);
+        return;
+      }
+      // Typed text didn't match any brand name - it's most likely a model
+      // no./serial/IMEI search. If a specific brand is still selected from
+      // an earlier search and has nothing to do with the new text, drop
+      // back to "All brands" instead of scoping the model search to a
+      // brand that can't possibly contain it.
+      const selectedId = brandSelect.value;
+      if (!selectedId) return;
+      const selectedBrand = allBrands.find(b => String(b.id) === selectedId);
+      const needle = normalizeText(search);
+      if (selectedBrand && needle) {
+        const brandName = normalizeText(selectedBrand.name);
+        if (!needle.includes(brandName) && !brandName.includes(needle)) {
+          brandSelect.value = '';
+        }
+      }
+    }
+
+    // Mirrors a dropdown brand pick into the search box, so both controls
+    // always agree (and so the "Items" section actually has something to
+    // search on, matching the "no items until you search/pick" behaviour).
+    function onBrandFilterChange() {
+      const brandSelect = document.getElementById('brandFilter');
+      const searchInput = document.getElementById('searchInput');
+      const selectedId = brandSelect.value;
+      if (selectedId) {
+        const selectedBrand = allBrands.find(b => String(b.id) === selectedId);
+        if (selectedBrand) {
+          const needle = normalizeText(searchInput.value);
+          const brandName = normalizeText(selectedBrand.name);
+          if (!needle || (!needle.includes(brandName) && !brandName.includes(needle))) {
+            searchInput.value = selectedBrand.name;
+          }
+        }
+      }
+      loadItems();
+    }
+
+    function debouncedLoad() {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => { syncBrandFilterFromSearch(); loadItems(); }, 300);
+    }
 
     function colSpanCount() {
       // Item Details, [Purchase Price], IDS Price, MRP, [Updated By, Actions]
