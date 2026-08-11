@@ -56,6 +56,7 @@ def ensure_database_schema():
     ensure_column("sub_categories", "category_id", "INTEGER")
     ensure_column("sub_categories", "name", "VARCHAR(100)")
     ensure_column("brands", "subcategory_id", "INTEGER")
+    ensure_column("brands", "is_seeded_default", "BOOLEAN DEFAULT FALSE")
     ensure_column("products", "brand_id", "INTEGER")
     ensure_column("products", "name", "VARCHAR(150)")
     ensure_column("variants", "product_id", "INTEGER")
@@ -308,7 +309,11 @@ def ensure_default_master_data():
             existing = db.query(models.Brand).filter(models.Brand.name.ilike(name)).first()
             if existing:
                 return existing
-            brand = models.Brand(name=name, subcategory_id=fallback_subcategory_id)
+            brand = models.Brand(
+                name=name,
+                subcategory_id=fallback_subcategory_id,
+                is_seeded_default=True,
+            )
             db.add(brand)
             db.flush()
             return brand
@@ -396,10 +401,17 @@ def ensure_default_master_data():
             # Remove every brand no longer in this category's list - the
             # "remove previous brands" part of the reseed. A brand still used
             # elsewhere (or still visible in another category) is unassigned
-            # here rather than deleted.
+            # here rather than deleted. IMPORTANT: this cleanup only ever
+            # touches brands this same reseed function created
+            # (is_seeded_default=True). A brand a real user added through
+            # the UI/API is never swept here, even if it happens to share a
+            # subcategory or category-visibility row with a seeded one -
+            # otherwise every restart could silently delete brands a user
+            # just added and hadn't attached any sales/price-list data to
+            # yet.
             for brand_id in existing_brand_ids:
                 brand = db.query(models.Brand).filter(models.Brand.id == brand_id).first()
-                if not brand or brand.name.strip().lower() in desired_names_lower:
+                if not brand or not brand.is_seeded_default or brand.name.strip().lower() in desired_names_lower:
                     continue
                 db.query(models.BrandCategoryVisibility).filter(
                     models.BrandCategoryVisibility.brand_id == brand.id,
@@ -1469,6 +1481,12 @@ def analytics_page():
 @app.get("/privacy.html")
 def privacy_page():
     return serve_html("static/privacy.html")
+
+
+@app.get("/ageing-stock")
+@app.get("/ageing-stock.html")
+def ageing_stock_page():
+    return serve_html("static/ageing_stock.html")
 
 
 @app.get("/api/price-list/brands")
@@ -5308,6 +5326,499 @@ def discard_staged_file(
 ):
     ANALYTICS_STAGING.pop(token, None)
     return {"message": "Discarded"}
+
+
+# ============================================================
+# AGEING STOCK ANALYSIS
+# Upload a workbook with an "All Data" sheet (every item, ageing-bucketed)
+# plus one sheet per physical location. We parse "All Data" as the master
+# item list, then match each item by name against every location sheet to
+# work out where it's physically sitting, and classify it into
+# Category/Brand for the report.
+# ============================================================
+
+# Canonical location code -> (display name, sheet-title aliases to match).
+# Matching is done on the normalized (lowercased, non-alnum-stripped) sheet
+# title, so "MWH 1", "MWH1", "Warehouse" etc. all resolve to MWH.
+AGEING_LOCATION_DEFINITIONS = {
+    "ALM": {"name": "Alambagh", "aliases": {"alm", "alambagh"}},
+    "HZT": {"name": "Hazratganj", "aliases": {"hzt", "hazratganj"}},
+    "ASH": {"name": "Ashiyana", "aliases": {"ash", "ashiyana"}},
+    "GNG": {"name": "Gomtinagar", "aliases": {"gng", "gomtinagar"}},
+    "VKN": {"name": "Vikas Nagar", "aliases": {"vkn", "vikasnagar"}},
+    "MWH": {"name": "Warehouse", "aliases": {"mwh", "mwh1", "warehouse", "mainwarehouse"}},
+    "PWH": {"name": "PWH", "aliases": {"pwh", "purchasewarehouse", "pwh1"}},
+    "VAULT": {"name": "Vault", "aliases": {"vault"}},
+}
+AGEING_ALL_DATA_SHEET_ALIASES = {"alldata", "all", "master", "masterdata"}
+
+# Header aliases for the "All Data" (and location) sheets - matched the
+# same way as ANALYTICS_HEADER_ALIASES above, via normalize_header_name().
+AGEING_HEADER_ALIASES = {
+    "item_details": {"itemdetails", "item", "itemname", "description", "product"},
+    "closing_qty": {"closingqty", "closingquantity", "qty", "quantity"},
+    "unit": {"unit", "uom"},
+    "age_0_60": {"060days", "060", "0to60days"},
+    "age_61_90": {"6190days", "6190", "61to90days"},
+    "age_91_150": {"91150days", "91150", "91to150days"},
+    "age_151_180": {"151180days", "151180", "151to180days"},
+    "age_181_365": {"181365days", "181365", "181to365days"},
+    "age_366_plus": {"366days", "366plusdays", "366", "gte366days", "morethan365days", "above365days"},
+}
+
+
+def ageing_canonical_column(normalized_header: str) -> Optional[str]:
+    for canonical, aliases in AGEING_HEADER_ALIASES.items():
+        if normalized_header in aliases:
+            return canonical
+    return None
+
+
+def normalize_ageing_item_key(value) -> str:
+    """Normalizes an Item Details string for cross-sheet matching: upper-
+    cased, punctuation/extra-whitespace collapsed. Two sheets writing the
+    same item slightly differently (extra spaces, a stray hyphen) still
+    match; genuinely different items still don't."""
+    text = re.sub(r"[^A-Z0-9]+", " ", str(value or "").upper()).strip()
+    return re.sub(r"\s+", " ", text)
+
+
+def find_ageing_header_row(table_rows: List[List]) -> tuple:
+    scan_limit = min(len(table_rows), 15)
+    best_index, best_score = 0, -1
+    for row_index in range(scan_limit):
+        row = table_rows[row_index] or []
+        normalized = [normalize_header_name(cell) for cell in row]
+        canonicals = {ageing_canonical_column(name) for name in normalized if ageing_canonical_column(name)}
+        canonicals.discard(None)
+        score = len(canonicals)
+        if "item_details" in canonicals:
+            score += 2
+        if "closing_qty" in canonicals:
+            score += 1
+        if score > best_score:
+            best_index, best_score = row_index, score
+    return best_index, best_score
+
+
+def read_ageing_sheet_rows(worksheet) -> List[dict]:
+    """Reads one worksheet (All Data or a location sheet) into row dicts
+    keyed by the canonical AGEING_HEADER_ALIASES names. Returns [] if the
+    sheet doesn't look like an ageing-stock table at all."""
+    raw_rows = [list(row) for row in worksheet.iter_rows(values_only=True)]
+    if not raw_rows:
+        return []
+    header_index, score = find_ageing_header_row(raw_rows)
+    if score < 2:
+        return []
+    headers = [normalize_header_name(cell) for cell in raw_rows[header_index]]
+    canonical_headers = [ageing_canonical_column(h) for h in headers]
+    if "item_details" not in canonical_headers:
+        return []
+
+    out = []
+    for row in raw_rows[header_index + 1:]:
+        row_dict = {}
+        for idx, canonical in enumerate(canonical_headers):
+            if canonical:
+                row_dict[canonical] = row[idx] if idx < len(row) else None
+        item_details = str(row_dict.get("item_details") or "").strip()
+        # Skip blank rows and the sheet's own "Total"/"Grand Total" rows.
+        if not item_details or item_details.strip().lower() in {"total", "grand total"}:
+            continue
+        out.append(row_dict)
+    return out
+
+
+# Category classification keyword rules, checked in this order. Each is
+# (category_code, category_name, [substrings to look for in the
+# normalized/uppercased item text]). Matched top-down - HE/IT/HA product-
+# type keywords are checked before falling back to a brand's usual
+# category, since the same brand (e.g. Samsung, Lenovo) sells across
+# multiple categories and the product name is the more reliable signal.
+AGEING_CATEGORY_KEYWORD_RULES = [
+    ("HE", "Home Entertainment", [
+        " LED ", "LED ", " TV ", "TELEVISION", "HOME THEATRE", "HOME THEATER",
+        "SOUNDBAR", " QLED", "OLED ", " REMOTE",
+    ]),
+    ("IT", "Information Technology", [
+        "LAPTOP", "DESKTOP", "MACBOOK", " MBA ", " MBP ", "NOTEBOOK",
+        "PRINTER", "MONITOR", " AIO ", "IPAD", "I PAD",
+    ]),
+    ("HA", "Home Appliances", [
+        "REFRIGERATOR", "FRIDGE", "WASHING MACHINE", "MICROWAVE", "AIR CONDITIONER",
+        " AC ", "OVEN", "DISHWASHER", "CHIMNEY", "GEYSER", "WATER HEATER", "COOLER",
+    ]),
+    ("MH", "Mobiles / Handset", [
+        "IPHONE", " TAB ", " PAD ", "SMARTPHONE",
+    ]),
+]
+
+# Brands treated as Mobile Phone by default when no product-type keyword
+# above matched (covers plain phone-model rows like "Samsung A17 5G...").
+AGEING_MOBILE_BRAND_HINTS = {
+    "IPHONE", "IQOO", "LENOVO", "MOTOROLA", "NOTHING", "ONEPLUS", "OPPO",
+    "REALME", "SAMSUNG", "VIVO", "XIAOMI", "REDMI", "CMF",
+}
+# Brands treated as Computer/IT by default when no product-type keyword
+# above matched.
+AGEING_COMPUTER_BRAND_HINTS = {"ASUS", "DELL", "HP", "EPSON", "ACER"}
+
+
+def build_ageing_brand_lookup(db: Session) -> List[tuple]:
+    """(normalized brand name, brand.name, category_code, category_name)
+    for every existing Brand, longest name first so 'Samsung Galaxy' style
+    multi-word brands (if any) match before a shorter brand substring
+    would. Used as a secondary signal after the keyword rules."""
+    rows = (
+        db.query(models.Brand, models.Category)
+        .outerjoin(models.SubCategory, models.Brand.subcategory_id == models.SubCategory.id)
+        .outerjoin(models.Category, models.SubCategory.category_id == models.Category.id)
+        .all()
+    )
+    lookup = []
+    for brand, category in rows:
+        normalized = normalize_ageing_item_key(brand.name)
+        if not normalized:
+            continue
+        lookup.append((normalized, brand.name, category.code if category else None, category.name if category else None))
+    lookup.sort(key=lambda entry: len(entry[0]), reverse=True)
+    return lookup
+
+
+def classify_ageing_item(item_details: str, brand_lookup: List[tuple]) -> dict:
+    normalized = normalize_ageing_item_key(item_details)
+    padded = f" {normalized} "
+
+    for code, name, keywords in AGEING_CATEGORY_KEYWORD_RULES:
+        if any(keyword in padded for keyword in keywords):
+            brand_name = None
+            for brand_key, original_name, _cat_code, _cat_name in brand_lookup:
+                if brand_key and padded.startswith(f" {brand_key} "):
+                    brand_name = original_name
+                    break
+            if not brand_name:
+                brand_name = normalized.split(" ")[0].title() if normalized else None
+            return {
+                "category_code": code, "category_name": name,
+                "brand_name": brand_name, "classification_source": "Keyword",
+            }
+
+    # No product-type keyword matched - fall back to brand-based defaults.
+    first_word = normalized.split(" ")[0] if normalized else ""
+    if first_word in AGEING_MOBILE_BRAND_HINTS:
+        return {
+            "category_code": "MH", "category_name": "Mobiles / Handset",
+            "brand_name": first_word.title(), "classification_source": "Keyword",
+        }
+    if first_word in AGEING_COMPUTER_BRAND_HINTS:
+        return {
+            "category_code": "IT", "category_name": "Information Technology",
+            "brand_name": first_word.title() if first_word != "HP" else "HP",
+            "classification_source": "Keyword",
+        }
+
+    # Last resort - match the existing Brand master by longest-prefix.
+    for brand_key, original_name, cat_code, cat_name in brand_lookup:
+        if brand_key and padded.startswith(f" {brand_key} "):
+            return {
+                "category_code": cat_code, "category_name": cat_name,
+                "brand_name": original_name,
+                "classification_source": "Brand Master" if cat_code else "Unclassified",
+            }
+
+    return {
+        "category_code": None, "category_name": "Uncategorized",
+        "brand_name": first_word.title() if first_word else None,
+        "classification_source": "Unclassified",
+    }
+
+
+def parse_ageing_stock_workbook(content: bytes, db: Session) -> tuple:
+    """Returns (item_rows, location_sheets_found, unclassified_count) or
+    raises HTTPException on a workbook that doesn't look right."""
+    try:
+        workbook = load_workbook(filename=BytesIO(content), data_only=True, read_only=True)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Could not read the Excel file: {exc}") from exc
+
+    all_data_rows = None
+    location_row_maps: dict = {}  # location code -> {normalized item key: qty}
+    location_sheets_found = []
+
+    for worksheet in workbook.worksheets:
+        title_normalized = re.sub(r"[^a-z0-9]", "", str(worksheet.title or "").lower())
+
+        if title_normalized in AGEING_ALL_DATA_SHEET_ALIASES:
+            all_data_rows = read_ageing_sheet_rows(worksheet)
+            continue
+
+        matched_code = None
+        for code, definition in AGEING_LOCATION_DEFINITIONS.items():
+            if title_normalized in definition["aliases"]:
+                matched_code = code
+                break
+        if not matched_code:
+            continue
+
+        rows = read_ageing_sheet_rows(worksheet)
+        if not rows:
+            continue
+        location_sheets_found.append(matched_code)
+        qty_map = {}
+        for row in rows:
+            key = normalize_ageing_item_key(row.get("item_details"))
+            if not key:
+                continue
+            qty = parse_float_value(row.get("closing_qty"), fallback=None)
+            if qty is None:
+                # Some location sheets may only carry ageing buckets, no
+                # Closing Qty column - fall back to their sum.
+                qty = sum(
+                    parse_float_value(row.get(bucket), fallback=0.0)
+                    for bucket in ("age_0_60", "age_61_90", "age_91_150", "age_151_180", "age_181_365", "age_366_plus")
+                )
+            qty_map[key] = qty_map.get(key, 0.0) + qty
+        location_row_maps[matched_code] = qty_map
+
+    if all_data_rows is None:
+        raise HTTPException(
+            status_code=400,
+            detail="No 'All Data' sheet found. Rename the master sheet (with every item) to 'All Data' and re-upload.",
+        )
+    if not all_data_rows:
+        raise HTTPException(status_code=400, detail="The 'All Data' sheet has no readable item rows.")
+
+    brand_lookup = build_ageing_brand_lookup(db)
+    location_columns = {
+        "ALM": "qty_alm", "HZT": "qty_hzt", "ASH": "qty_ash", "GNG": "qty_gng",
+        "VKN": "qty_vkn", "MWH": "qty_mwh", "PWH": "qty_pwh", "VAULT": "qty_vault",
+    }
+
+    item_rows = []
+    unclassified_count = 0
+    for row in all_data_rows:
+        item_details = str(row.get("item_details") or "").strip()
+        item_key = normalize_ageing_item_key(item_details)
+
+        classification = classify_ageing_item(item_details, brand_lookup)
+        if classification["classification_source"] == "Unclassified":
+            unclassified_count += 1
+
+        built = {
+            "item_details": item_details,
+            "unit": str(row.get("unit") or "").strip() or None,
+            "closing_qty": parse_float_value(row.get("closing_qty"), fallback=0.0),
+            "age_0_60": parse_float_value(row.get("age_0_60"), fallback=0.0),
+            "age_61_90": parse_float_value(row.get("age_61_90"), fallback=0.0),
+            "age_91_150": parse_float_value(row.get("age_91_150"), fallback=0.0),
+            "age_151_180": parse_float_value(row.get("age_151_180"), fallback=0.0),
+            "age_181_365": parse_float_value(row.get("age_181_365"), fallback=0.0),
+            "age_366_plus": parse_float_value(row.get("age_366_plus"), fallback=0.0),
+            "category_code": classification["category_code"],
+            "category_name": classification["category_name"],
+            "brand_name": classification["brand_name"],
+            "classification_source": classification["classification_source"],
+            "qty_alm": 0.0, "qty_hzt": 0.0, "qty_ash": 0.0, "qty_gng": 0.0,
+            "qty_vkn": 0.0, "qty_mwh": 0.0, "qty_pwh": 0.0, "qty_vault": 0.0,
+        }
+
+        present_at = []
+        for code, column in location_columns.items():
+            qty_map = location_row_maps.get(code)
+            if not qty_map:
+                continue
+            qty_here = qty_map.get(item_key)
+            if qty_here:
+                built[column] = qty_here
+                present_at.append(code)
+        built["locations_present"] = ", ".join(present_at) if present_at else None
+
+        item_rows.append(built)
+
+    return item_rows, location_sheets_found, unclassified_count
+
+
+@app.post("/api/ageing-stock/upload")
+def upload_ageing_stock_file(
+    file: UploadFile = File(...),
+    current_user: models.User = Depends(auth.require_roles("Admin")),
+    db: Session = Depends(get_db),
+):
+    filename = file.filename or "uploaded_file"
+    if not filename.lower().endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="Upload an Excel (.xlsx/.xls) workbook with an 'All Data' sheet plus one sheet per location.")
+
+    raw_content = file.file.read()
+    if not raw_content:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
+    item_rows, location_sheets_found, unclassified_count = parse_ageing_stock_workbook(raw_content, db)
+
+    # Replace the previous dataset wholesale - this report always reflects
+    # only the most recently uploaded workbook.
+    db.query(models.AgeingStockItem).delete()
+    db.query(models.AgeingStockUpload).delete()
+    db.commit()
+
+    upload_record = models.AgeingStockUpload(
+        source_file=filename,
+        uploaded_by=current_user.id,
+        uploaded_by_username=current_user.username,
+        item_count=len(item_rows),
+        location_sheets_found=",".join(location_sheets_found),
+        unclassified_count=unclassified_count,
+    )
+    db.add(upload_record)
+    db.commit()
+    db.refresh(upload_record)
+
+    for r in item_rows:
+        r["upload_id"] = upload_record.id
+        r["source_file"] = filename
+    db.bulk_insert_mappings(models.AgeingStockItem, item_rows)
+    db.commit()
+
+    missing_locations = [code for code in AGEING_LOCATION_DEFINITIONS if code not in location_sheets_found]
+
+    return {
+        "message": "File processed successfully",
+        "file_name": filename,
+        "items_loaded": len(item_rows),
+        "location_sheets_found": location_sheets_found,
+        "location_sheets_missing": missing_locations,
+        "unclassified_count": unclassified_count,
+    }
+
+
+@app.get("/api/ageing-stock/meta")
+def ageing_stock_meta(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    upload_record = db.query(models.AgeingStockUpload).order_by(models.AgeingStockUpload.id.desc()).first()
+    if not upload_record:
+        return {"has_data": False, "last_upload": None, "can_upload": current_user.role == "Admin"}
+
+    return {
+        "has_data": True,
+        "last_upload": {
+            "file_name": upload_record.source_file,
+            "uploaded_by": upload_record.uploaded_by_username,
+            "uploaded_at": upload_record.created_date,
+            "item_count": upload_record.item_count,
+            "location_sheets_found": (upload_record.location_sheets_found or "").split(",") if upload_record.location_sheets_found else [],
+            "unclassified_count": upload_record.unclassified_count,
+        },
+        "can_upload": current_user.role == "Admin",
+    }
+
+
+@app.get("/api/ageing-stock/report")
+def ageing_stock_report(
+    category: Optional[str] = Query(None),
+    brand: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    query = db.query(models.AgeingStockItem)
+    if category and category.upper() != "ALL":
+        if category.upper() == "UNCATEGORIZED":
+            query = query.filter(models.AgeingStockItem.category_code.is_(None))
+        else:
+            query = query.filter(models.AgeingStockItem.category_code == category.upper())
+    if brand:
+        query = query.filter(models.AgeingStockItem.brand_name == brand)
+    if search:
+        query = query.filter(models.AgeingStockItem.item_details.ilike(f"%{search}%"))
+
+    items = query.order_by(models.AgeingStockItem.category_name, models.AgeingStockItem.brand_name, models.AgeingStockItem.item_details).all()
+
+    age_fields = ["age_0_60", "age_61_90", "age_91_150", "age_151_180", "age_181_365", "age_366_plus"]
+    location_fields = ["qty_alm", "qty_hzt", "qty_ash", "qty_gng", "qty_vkn", "qty_mwh", "qty_pwh", "qty_vault"]
+
+    def empty_totals():
+        return {f: 0.0 for f in age_fields + location_fields + ["closing_qty"]}
+
+    def add_into(totals, item):
+        for f in age_fields + location_fields:
+            totals[f] += getattr(item, f) or 0.0
+        totals["closing_qty"] += item.closing_qty or 0.0
+
+    categories_out = {}
+    grand_total = empty_totals()
+    grand_total_items = 0
+
+    for item in items:
+        cat_key = item.category_name or "Uncategorized"
+        cat = categories_out.setdefault(cat_key, {
+            "category_name": cat_key,
+            "category_code": item.category_code,
+            "brands": {},
+            "totals": empty_totals(),
+            "item_count": 0,
+        })
+        brand_key = item.brand_name or "Unbranded"
+        brand_bucket = cat["brands"].setdefault(brand_key, {
+            "brand_name": brand_key,
+            "items": [],
+            "totals": empty_totals(),
+        })
+
+        brand_bucket["items"].append({
+            "id": item.id,
+            "item_details": item.item_details,
+            "unit": item.unit,
+            "closing_qty": item.closing_qty,
+            "age_0_60": item.age_0_60,
+            "age_61_90": item.age_61_90,
+            "age_91_150": item.age_91_150,
+            "age_151_180": item.age_151_180,
+            "age_181_365": item.age_181_365,
+            "age_366_plus": item.age_366_plus,
+            "qty_alm": item.qty_alm, "qty_hzt": item.qty_hzt, "qty_ash": item.qty_ash,
+            "qty_gng": item.qty_gng, "qty_vkn": item.qty_vkn, "qty_mwh": item.qty_mwh,
+            "qty_pwh": item.qty_pwh, "qty_vault": item.qty_vault,
+            "locations_present": item.locations_present,
+            "classification_source": item.classification_source,
+        })
+        add_into(brand_bucket["totals"], item)
+        add_into(cat["totals"], item)
+        add_into(grand_total, item)
+        cat["item_count"] += 1
+        grand_total_items += 1
+
+    categories_list = []
+    for cat_key in sorted(categories_out.keys()):
+        cat = categories_out[cat_key]
+        cat["brands"] = [cat["brands"][b] for b in sorted(cat["brands"].keys())]
+        categories_list.append(cat)
+
+    upload_record = db.query(models.AgeingStockUpload).order_by(models.AgeingStockUpload.id.desc()).first()
+
+    return {
+        "has_data": upload_record is not None,
+        "categories": categories_list,
+        "grand_total": grand_total,
+        "grand_total_items": grand_total_items,
+        "location_columns": [
+            {"code": code, "name": definition["name"]}
+            for code, definition in AGEING_LOCATION_DEFINITIONS.items()
+        ],
+        "filters": {"category": category or "ALL", "brand": brand, "search": search},
+    }
+
+
+@app.delete("/api/ageing-stock/clear")
+def clear_ageing_stock_data(
+    current_user: models.User = Depends(auth.require_roles("Admin")),
+    db: Session = Depends(get_db),
+):
+    deleted_count = db.query(models.AgeingStockItem).delete()
+    db.query(models.AgeingStockUpload).delete()
+    db.commit()
+    return {"message": "Ageing Stock Analysis data cleared", "deleted": deleted_count}
 
 
 @app.post("/api/analytics/stage/{token}/commit")

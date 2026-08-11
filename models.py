@@ -15,6 +15,12 @@ class Brand(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False)
     subcategory_id = Column(Integer, ForeignKey("sub_categories.id"), nullable=True)
+    # True only for brands created by the startup CATEGORY_BRAND_LISTS
+    # reseed itself. The reseed's "remove previous brands" cleanup step
+    # only ever touches brands it marked here - a brand added by a real
+    # user (through the UI/API) is never auto-deleted or unassigned by it,
+    # no matter what category/subcategory it's placed in.
+    is_seeded_default = Column(Boolean, nullable=False, default=False, server_default="0")
 
     products = relationship("Product", back_populates="brand", cascade="all, delete-orphan")
     subcategory = relationship("SubCategory", back_populates="brands")
@@ -519,3 +525,76 @@ class SupplierEmail(Base):
     supplier_name = Column(String(200), nullable=False, index=True)
     email = Column(String(150), nullable=False)
     created_date = Column(DateTime, default=datetime.utcnow)
+
+
+# ============================================================
+# AGEING STOCK ANALYSIS (home-page "Ageing Stock Analysis" tile)
+# One upload replaces the previous dataset (same pattern as AI Analysis).
+# The uploaded workbook has an "All Data" sheet (every item, with closing
+# qty split across ageing buckets) plus one sheet per physical location -
+# the 5 outlets, Warehouse (MWH), PWH, and Vault - that only lists the
+# items actually sitting there. On upload, every item in "All Data" is
+# matched by name against each location sheet to work out where it's
+# physically present, and classified into Category/Brand using keyword
+# rules plus the existing Brand/Category master data.
+# ============================================================
+
+class AgeingStockUpload(Base):
+    """One row per Ageing Stock Analysis workbook uploaded. Only metadata -
+    the parsed items live in AgeingStockItem. Each new upload replaces the
+    previous dataset wholesale, same as the AI Analysis dashboard."""
+    __tablename__ = "ageing_stock_uploads"
+    id = Column(Integer, primary_key=True, index=True)
+    source_file = Column(String(255), nullable=True)
+    uploaded_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    uploaded_by_username = Column(String(100), nullable=True)
+    item_count = Column(Integer, default=0)
+    location_sheets_found = Column(String(255), nullable=True)  # e.g. "ALM,HZT,ASH,GNG,VKN,MWH,PWH,VAULT"
+    unclassified_count = Column(Integer, default=0)
+    created_date = Column(DateTime, default=datetime.utcnow)
+
+
+class AgeingStockItem(Base):
+    """One row per item from the 'All Data' sheet of an Ageing Stock
+    upload, enriched with a derived Category/Brand and the quantity found
+    at each of the 8 locations (detected by matching this item's name
+    against the other sheets in the same workbook). Cleared and replaced
+    wholesale on every new upload."""
+    __tablename__ = "ageing_stock_items"
+    id = Column(Integer, primary_key=True, index=True)
+    upload_id = Column(Integer, ForeignKey("ageing_stock_uploads.id"), nullable=True, index=True)
+
+    item_details = Column(String(255), nullable=False, index=True)
+    unit = Column(String(30), nullable=True)
+    closing_qty = Column(Float, default=0)
+
+    # Ageing buckets, in days
+    age_0_60 = Column(Float, default=0)
+    age_61_90 = Column(Float, default=0)
+    age_91_150 = Column(Float, default=0)
+    age_151_180 = Column(Float, default=0)
+    age_181_365 = Column(Float, default=0)
+    age_366_plus = Column(Float, default=0)
+
+    # Derived classification - see classify_ageing_item() in main.py.
+    category_code = Column(String(10), nullable=True, index=True)
+    category_name = Column(String(100), nullable=True)
+    brand_name = Column(String(150), nullable=True, index=True)
+    # "Keyword" (matched a known product-type/brand keyword), "Brand Master"
+    # (matched the existing Brand table), or "Unclassified" (needs manual
+    # review - never silently guessed).
+    classification_source = Column(String(20), nullable=True)
+
+    # Quantity of this item found at each location, detected by matching
+    # Item Details against that location's sheet in the same workbook.
+    qty_alm = Column(Float, default=0)
+    qty_hzt = Column(Float, default=0)
+    qty_ash = Column(Float, default=0)
+    qty_gng = Column(Float, default=0)
+    qty_vkn = Column(Float, default=0)
+    qty_mwh = Column(Float, default=0)
+    qty_pwh = Column(Float, default=0)
+    qty_vault = Column(Float, default=0)
+    locations_present = Column(String(150), nullable=True)  # e.g. "ALM, HZT, Vault"
+
+    source_file = Column(String(255), nullable=True)

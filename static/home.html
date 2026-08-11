@@ -13,6 +13,7 @@
       --ai:#7c3aed; --ai-dark:#5b21b6; --ai-glow:#f1e8ff;
       --dp:#0f9d84; --dp-dark:#0a6b5a; --dp-glow:#e3f7f2;
       --price:#b7791f; --price-dark:#8a5a12; --price-glow:#fdf3e3;
+      --age:#b42318; --age-dark:#7a1913; --age-glow:#fdeceb;
       --good:#027a48;
     }
     * { box-sizing:border-box; }
@@ -53,6 +54,8 @@
     .tile:nth-child(2) { animation-delay:.08s; }
     .tile:nth-child(3) { animation-delay:.16s; }
     .tile:nth-child(4) { animation-delay:.24s; }
+    .tile:nth-child(5) { animation-delay:.32s; }
+    .tile:nth-child(6) { animation-delay:.40s; }
     .tile:hover { transform:translateY(-4px); box-shadow:0 24px 48px rgba(16,24,40,.18); border-color:transparent; }
     .tile::before { content:''; position:absolute; top:0; left:0; right:0; height:4px; }
     .tile.schemes::before { background:linear-gradient(90deg, var(--brand), var(--brand-dark)); }
@@ -60,12 +63,14 @@
     .tile.ai::before { background:linear-gradient(90deg, var(--ai), var(--ai-dark)); }
     .tile.dp::before { background:linear-gradient(90deg, var(--dp), var(--dp-dark)); }
     .tile.price::before { background:linear-gradient(90deg, var(--price), var(--price-dark)); }
+    .tile.age::before { background:linear-gradient(90deg, var(--age), var(--age-dark)); }
     .tile-glow { position:absolute; top:-60px; right:-60px; width:180px; height:180px; border-radius:50%; filter:blur(10px); opacity:.55; animation:pulse 5s ease-in-out infinite; pointer-events:none; }
     .tile.schemes .tile-glow { background:radial-gradient(circle, var(--brand-glow), transparent 70%); }
     .tile.po .tile-glow { background:radial-gradient(circle, var(--accent-glow), transparent 70%); }
     .tile.ai .tile-glow { background:radial-gradient(circle, var(--ai-glow), transparent 70%); }
     .tile.dp .tile-glow { background:radial-gradient(circle, var(--dp-glow), transparent 70%); }
     .tile.price .tile-glow { background:radial-gradient(circle, var(--price-glow), transparent 70%); }
+    .tile.age .tile-glow { background:radial-gradient(circle, var(--age-glow), transparent 70%); }
 
     .icon-badge { position:relative; width:56px; height:56px; border-radius:14px; display:flex; align-items:center; justify-content:center; margin-bottom:20px; }
     .tile.schemes .icon-badge { background:linear-gradient(135deg, var(--brand), var(--brand-dark)); box-shadow:0 8px 18px rgba(21,94,239,.28); }
@@ -73,6 +78,7 @@
     .tile.ai .icon-badge { background:linear-gradient(135deg, var(--ai), var(--ai-dark)); box-shadow:0 8px 18px rgba(124,58,237,.28); }
     .tile.dp .icon-badge { background:linear-gradient(135deg, var(--dp), var(--dp-dark)); box-shadow:0 8px 18px rgba(15,157,132,.28); }
     .tile.price .icon-badge { background:linear-gradient(135deg, var(--price), var(--price-dark)); box-shadow:0 8px 18px rgba(183,121,31,.28); }
+    .tile.age .icon-badge { background:linear-gradient(135deg, var(--age), var(--age-dark)); box-shadow:0 8px 18px rgba(180,35,24,.28); }
     .icon-badge svg { width:28px; height:28px; }
 
     .tile h2 { margin:0 0 8px; font-size:19px; }
@@ -88,6 +94,8 @@
     .tile.dp .tile-btn:hover { background:var(--dp-dark); gap:11px; }
     .tile.price .tile-btn { background:var(--price); }
     .tile.price .tile-btn:hover { background:var(--price-dark); gap:11px; }
+    .tile.age .tile-btn { background:var(--age); }
+    .tile.age .tile-btn:hover { background:var(--age-dark); gap:11px; }
     .tile-btn svg { width:14px; height:14px; }
 
     @keyframes riseIn { to { opacity:1; transform:translateY(0); } }
@@ -235,6 +243,20 @@
         <h2>IDS Price System</h2>
         <p class="desc">Brand-wise item prices - Category Managers and Brand Promoters see the latest MSP/ISP for every model.</p>
         <a class="tile-btn" href="/price-list">Open Price System
+          <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>
+        </a>
+      </article>
+
+      <article class="tile age">
+        <div class="tile-glow"></div>
+        <div class="icon-badge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3.5 2"></path>
+          </svg>
+        </div>
+        <h2>Ageing Stock Analysis</h2>
+        <p class="desc">Upload the stock ageing workbook and get a category and brand-wise ageing report, with a location breakdown across every outlet, warehouse, PWH, and vault.</p>
+        <a class="tile-btn" href="/ageing-stock">Open Ageing Stock
           <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>
         </a>
       </article>

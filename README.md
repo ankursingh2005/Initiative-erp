@@ -11,6 +11,7 @@ IDSPL is a FastAPI-based ERP application for managing scheme-driven sales, claim
 - Scheme document upload with Claude-powered OCR/extraction into Draft schemes for Admin review
 - Interval sales analytics upload and reporting, with a Scheme-Matched Sales profitability view
 - Purchase Orders with WhatsApp alerts and emailed PO documents
+- Ageing Stock Analysis: upload a 9-sheet stock ageing workbook and get a Category/Brand-wise ageing report with a per-location breakdown
 - Admin-managed user list and password reset (no outbound account-recovery email)
 - Static dashboard UI served directly by FastAPI
 
@@ -192,6 +193,15 @@ Redeploy (or just save the environment changes - Render restarts the service aut
 - If SMTP fails (wrong app password, Gmail blocking the login, network issue), the PO/request itself is still saved - only the email send is reported as failed, so nothing is lost.
 - To send from a different mailbox instead, just override `SMTP_HOST`, `SMTP_USER`, `SMTP_FROM`, and `SMTP_PASSWORD` with that provider's values; nothing else in the code needs to change.
 - SMTP configuration only affects Purchase Order emails now. Account recovery never uses email - see "Account recovery" above.
+
+## Ageing Stock Analysis
+
+After login, the **Ageing Stock Analysis** tile opens `/ageing-stock` - an Admin-uploaded, everyone-viewable report of slow-moving stock, broken out by ageing bucket, Category, Brand, and physical location.
+
+- **Upload (Admin only):** the workbook must have a sheet named **All Data** (every item company-wide, with Item Details / Closing Qty / Unit / the six ageing-bucket columns) plus one sheet per physical location - the 5 outlets (ALM, HZT, ASH, GNG, VKN), Warehouse (MWH), PWH, and Vault - each listing only the items actually present there. Each new upload replaces the previous dataset, same as the AI Analysis dashboard.
+- **Location matching:** every item in "All Data" is matched by name against each of the 8 location sheets (normalized for spacing/punctuation) to work out where it's physically sitting - the report shows a quantity column per location plus a "Present At" summary per item.
+- **Category/Brand classification:** each item is classified using product-type keywords first (LED/TV/Soundbar -> Home Entertainment; Laptop/Desktop/iPad -> Information Technology; Tab/iPhone -> Mobiles/Handset; Refrigerator/AC/Washing Machine -> Home Appliances), falling back to the existing Brand master data. Anything that can't be confidently classified is flagged **REVIEW** in the report rather than silently guessed, and counted in the upload summary.
+- **Report:** grouped Category -> Brand -> Item, each row showing all six ageing buckets (0-60, 61-90, 91-150, 151-180, 181-365, \u2265366 days) plus per-location quantities, with Brand, Category, and Grand Total subtotal rows. Filter by Category or search by item name; any logged-in user can view, only Admin can upload.
 
 ## Oracle Cloud Free Tier
 

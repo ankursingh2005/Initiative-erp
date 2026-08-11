@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#000000" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <title>Initiative ERP - Ageing Stock Analysis</title>
+  <link rel="icon" href="static/Initiative%20logo.png" type="image/png" />
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap');
+    :root {
+      --ink:#1d2939; --muted:#667085; --line:#e4e7ec; --bg:#f5f7fa; --card:#fff;
+      --age:#b42318; --age-dark:#7a1913; --age-glow:#fdeceb;
+      --warn:#b54708; --warn-bg:#fffaeb; --good:#027a48;
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:'Manrope', sans-serif; background:var(--bg); color:var(--ink); }
+    header { background:linear-gradient(90deg, #181818 0%, #000000 100%); color:#fff; padding:14px clamp(16px,3vw,32px); display:flex; gap:16px; align-items:center; justify-content:space-between; }
+    .brand { font-weight:800; font-size:16px; display:flex; align-items:center; gap:10px; }
+    .brand a { color:#fff; text-decoration:none; font-size:13px; font-weight:600; opacity:.75; }
+    .brand a:hover { opacity:1; text-decoration:underline; }
+    .header-right { display:flex; align-items:center; gap:14px; color:#d0d5dd; font-size:13px; }
+    button { font:inherit; cursor:pointer; border:0; border-radius:8px; font-weight:700; }
+    .btn-primary { padding:10px 16px; background:var(--age); color:#fff; }
+    .btn-primary:hover { background:var(--age-dark); }
+    .btn-primary:disabled { background:#d0d5dd; cursor:not-allowed; }
+    .btn-light { padding:9px 14px; background:#fff; color:#111; border:1px solid var(--line); }
+    .btn-light:hover { background:#f0f3f7; }
+
+    main { max-width:1400px; margin:0 auto; padding:26px 20px 70px; }
+    h1 { font-size:22px; margin:0 0 4px; }
+    .subtitle { color:var(--muted); font-size:13.5px; margin:0 0 22px; }
+
+    .panel { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px 22px; margin-bottom:20px; box-shadow:0 8px 20px rgba(16,24,40,.05); }
+    .panel h2 { font-size:15.5px; margin:0 0 12px; }
+    .upload-row { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
+    input[type=file] { font-size:13px; }
+    #uploadMsg { font-size:13px; margin-top:10px; }
+    #uploadMsg.error { color:#d92d20; }
+    #uploadMsg.success { color:var(--good); }
+    .meta-line { font-size:12.5px; color:var(--muted); margin-top:10px; line-height:1.6; }
+    .pill { display:inline-block; padding:2px 9px; border-radius:999px; font-size:11.5px; font-weight:700; margin-right:4px; }
+    .pill-good { background:#ecfdf3; color:var(--good); }
+    .pill-warn { background:var(--warn-bg); color:var(--warn); }
+
+    .filters { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:16px; }
+    .filters select, .filters input[type=text] { padding:9px 11px; border:1px solid var(--line); border-radius:8px; font-size:13px; font-family:inherit; }
+    .filters input[type=text] { min-width:220px; }
+
+    .cat-section { margin-bottom:22px; }
+    .cat-header { display:flex; align-items:center; justify-content:space-between; background:#111; color:#fff; padding:10px 16px; border-radius:10px 10px 0 0; cursor:pointer; }
+    .cat-header h3 { margin:0; font-size:14.5px; }
+    .cat-header .count { font-size:12px; color:#d0d5dd; }
+    .cat-body { border:1px solid var(--line); border-top:none; border-radius:0 0 10px 10px; overflow:hidden; }
+    .cat-body.collapsed { display:none; }
+
+    .brand-block { border-bottom:1px solid var(--line); }
+    .brand-block:last-child { border-bottom:none; }
+    .brand-title { background:#f9fafb; padding:8px 16px; font-size:13px; font-weight:700; color:var(--ink); border-bottom:1px solid var(--line); }
+
+    table { width:100%; border-collapse:collapse; font-size:12.5px; }
+    thead th { position:sticky; top:0; background:#fbfbfb; border-bottom:1px solid var(--line); padding:8px 10px; text-align:right; font-weight:700; color:var(--muted); white-space:nowrap; }
+    thead th:first-child { text-align:left; }
+    tbody td { padding:7px 10px; border-bottom:1px solid #f0f2f5; text-align:right; white-space:nowrap; }
+    tbody td:first-child { text-align:left; white-space:normal; min-width:220px; }
+    tbody tr:hover { background:#fafbfc; }
+    tr.subtotal td { font-weight:700; background:#f7f8fa; border-top:1px solid var(--line); }
+    tr.grand-total td { font-weight:800; background:#111; color:#fff; font-size:13px; }
+    .loc-col { color:#475467; }
+    .flag-review { color:var(--warn); font-size:10.5px; font-weight:700; margin-left:5px; }
+    .locs-cell { font-size:11px; color:var(--muted); }
+
+    #emptyState, #loadingState { text-align:center; padding:60px 20px; color:var(--muted); }
+    .scroll-wrap { overflow-x:auto; }
+
+    @media(max-width:700px) { header { flex-wrap:wrap; row-gap:8px; } .header-right { width:100%; justify-content:space-between; } }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">Initiative ERP <a href="/home">&larr; Workspace</a></div>
+    <div class="header-right">
+      <span id="userName"></span>
+      <button class="btn-light" onclick="logout()">Log out</button>
+    </div>
+  </header>
+
+  <main>
+    <h1>Ageing Stock Analysis</h1>
+    <p class="subtitle">Category and brand-wise stock ageing, with the location(s) each item is physically sitting at across all outlets, Warehouse, PWH, and Vault.</p>
+
+    <div class="panel" id="uploadPanel" style="display:none;">
+      <h2>Upload stock ageing workbook</h2>
+      <div class="upload-row">
+        <input type="file" id="fileInput" accept=".xlsx,.xls" />
+        <button class="btn-primary" id="uploadBtn" onclick="uploadFile()">Upload &amp; Process</button>
+      </div>
+      <div id="uploadMsg"></div>
+      <div class="meta-line" id="metaLine"></div>
+    </div>
+
+    <div class="panel" id="filtersPanel" style="display:none;">
+      <div class="filters">
+        <select id="categoryFilter" onchange="loadReport()">
+          <option value="ALL">All Categories</option>
+        </select>
+        <input type="text" id="searchBox" placeholder="Search item details..." oninput="debouncedSearch()" />
+        <button class="btn-light" onclick="expandAll()">Expand all</button>
+        <button class="btn-light" onclick="collapseAll()">Collapse all</button>
+      </div>
+    </div>
+
+    <div id="loadingState">Loading...</div>
+    <div id="emptyState" style="display:none;">No ageing stock data uploaded yet. Ask your Admin to upload the workbook.</div>
+    <div id="reportRoot"></div>
+  </main>
+
+  <script>
+    function appUrl(path) {
+      const p = window.location.pathname;
+      const base = p === '/erp' || p.startsWith('/erp/') ? '/erp' : '';
+      return path.startsWith('/') ? `${base}${path}` : `${base}/${path}`;
+    }
+    const token = localStorage.getItem('token');
+    const username = localStorage.getItem('username') || '';
+    if (!token) window.location.href = appUrl('/login');
+    document.getElementById('userName').textContent = username;
+    function logout() { localStorage.clear(); window.location.href = appUrl('/login'); }
+    function authHeaders() { return { 'Authorization': `Bearer ${token}` }; }
+
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register(appUrl('/sw.js')).catch(() => {}));
+    }
+
+    const LOC_LABELS = { qty_alm: 'ALM', qty_hzt: 'HZT', qty_ash: 'ASH', qty_gng: 'GNG', qty_vkn: 'VKN', qty_mwh: 'MWH', qty_pwh: 'PWH', qty_vault: 'Vault' };
+    const AGE_COLS = [
+      ['age_0_60', '0-60 Days'], ['age_61_90', '61-90 Days'], ['age_91_150', '91-150 Days'],
+      ['age_151_180', '151-180 Days'], ['age_181_365', '181-365 Days'], ['age_366_plus', '\u2265 366 Days'],
+    ];
+
+    function fmt(n) {
+      const v = Number(n || 0);
+      return v === 0 ? '-' : (Number.isInteger(v) ? v.toString() : v.toFixed(2));
+    }
+
+    async function loadMeta() {
+      const res = await fetch(appUrl('/api/ageing-stock/meta'), { headers: authHeaders() });
+      if (res.status === 401) { logout(); return; }
+      const data = await res.json();
+      if (data.can_upload) {
+        document.getElementById('uploadPanel').style.display = 'block';
+      }
+      if (data.has_data) {
+        const lu = data.last_upload;
+        const missing = ['ALM','HZT','ASH','GNG','VKN','MWH','PWH','VAULT'].filter(c => !(lu.location_sheets_found || []).includes(c));
+        let html = `Last upload: <strong>${lu.file_name}</strong> by ${lu.uploaded_by || '-'} on ${new Date(lu.uploaded_at).toLocaleString()} - ${lu.item_count} items.`;
+        if (missing.length) html += ` <span class="pill pill-warn">Missing sheets: ${missing.join(', ')}</span>`;
+        if (lu.unclassified_count) html += ` <span class="pill pill-warn">${lu.unclassified_count} item(s) need category review</span>`;
+        document.getElementById('metaLine').innerHTML = html;
+      }
+    }
+
+    let searchTimer = null;
+    function debouncedSearch() {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(loadReport, 350);
+    }
+
+    async function uploadFile() {
+      const input = document.getElementById('fileInput');
+      const msg = document.getElementById('uploadMsg');
+      msg.className = ''; msg.textContent = '';
+      if (!input.files.length) { msg.className = 'error'; msg.textContent = 'Choose a file first.'; return; }
+      const btn = document.getElementById('uploadBtn');
+      btn.disabled = true; btn.textContent = 'Processing...';
+
+      const form = new FormData();
+      form.append('file', input.files[0]);
+      try {
+        const res = await fetch(appUrl('/api/ageing-stock/upload'), { method: 'POST', headers: authHeaders(), body: form });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { msg.className = 'error'; msg.textContent = data.detail || 'Upload failed'; return; }
+        msg.className = 'success';
+        let text = `Loaded ${data.items_loaded} items from sheets: ${data.location_sheets_found.join(', ') || 'none'}.`;
+        if (data.location_sheets_missing.length) text += ` Missing: ${data.location_sheets_missing.join(', ')}.`;
+        if (data.unclassified_count) text += ` ${data.unclassified_count} item(s) need manual category review.`;
+        msg.textContent = text;
+        await loadMeta();
+        await loadReport();
+      } catch (e) {
+        msg.className = 'error'; msg.textContent = 'Upload failed - check your connection and try again.';
+      } finally {
+        btn.disabled = false; btn.textContent = 'Upload & Process';
+      }
+    }
+
+    function locationHeaderCells() {
+      return Object.values(LOC_LABELS).map(l => `<th>${l}</th>`).join('');
+    }
+    function locationDataCells(item) {
+      return Object.keys(LOC_LABELS).map(k => `<td class="loc-col">${fmt(item[k])}</td>`).join('');
+    }
+    function locationTotalCells(totals) {
+      return Object.keys(LOC_LABELS).map(k => `<td class="loc-col">${fmt(totals[k])}</td>`).join('');
+    }
+    function ageDataCells(row) {
+      return AGE_COLS.map(([key]) => `<td>${fmt(row[key])}</td>`).join('');
+    }
+
+    function renderBrandTable(brand) {
+      const rowsHtml = brand.items.map(item => `
+        <tr>
+          <td>${item.item_details}${item.classification_source === 'Unclassified' ? '<span class="flag-review">REVIEW</span>' : ''}</td>
+          <td>${item.unit || ''}</td>
+          <td>${fmt(item.closing_qty)}</td>
+          ${ageDataCells(item)}
+          ${locationDataCells(item)}
+          <td class="locs-cell">${item.locations_present || '-'}</td>
+        </tr>
+      `).join('');
+
+      return `
+        <div class="brand-block">
+          <div class="brand-title">${brand.brand_name}</div>
+          <div class="scroll-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Item Details</th><th>Unit</th><th>Closing Qty</th>
+                  ${AGE_COLS.map(([, label]) => `<th>${label}</th>`).join('')}
+                  ${locationHeaderCells()}
+                  <th>Present At</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rowsHtml}
+                <tr class="subtotal">
+                  <td>Total</td><td></td><td>${fmt(brand.totals.closing_qty)}</td>
+                  ${AGE_COLS.map(([key]) => `<td>${fmt(brand.totals[key])}</td>`).join('')}
+                  ${locationTotalCells(brand.totals)}
+                  <td></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderCategory(cat, idx) {
+      const brandsHtml = cat.brands.map(renderBrandTable).join('');
+      return `
+        <div class="cat-section">
+          <div class="cat-header" onclick="toggleCat(${idx})">
+            <h3>${cat.category_name}</h3>
+            <span class="count">${cat.item_count} items</span>
+          </div>
+          <div class="cat-body" id="catBody${idx}">
+            ${brandsHtml}
+          </div>
+        </div>
+      `;
+    }
+
+    function toggleCat(idx) {
+      document.getElementById(`catBody${idx}`).classList.toggle('collapsed');
+    }
+    function expandAll() { document.querySelectorAll('.cat-body').forEach(el => el.classList.remove('collapsed')); }
+    function collapseAll() { document.querySelectorAll('.cat-body').forEach(el => el.classList.add('collapsed')); }
+
+    async function loadReport() {
+      const category = document.getElementById('categoryFilter').value;
+      const search = document.getElementById('searchBox').value.trim();
+      const params = new URLSearchParams();
+      if (category && category !== 'ALL') params.set('category', category);
+      if (search) params.set('search', search);
+
+      const res = await fetch(appUrl(`/api/ageing-stock/report?${params.toString()}`), { headers: authHeaders() });
+      if (res.status === 401) { logout(); return; }
+      const data = await res.json();
+      document.getElementById('loadingState').style.display = 'none';
+
+      if (!data.has_data) {
+        document.getElementById('emptyState').style.display = 'block';
+        document.getElementById('filtersPanel').style.display = 'none';
+        document.getElementById('reportRoot').innerHTML = '';
+        return;
+      }
+      document.getElementById('emptyState').style.display = 'none';
+      document.getElementById('filtersPanel').style.display = 'block';
+
+      // Populate category filter once (only on first load, i.e. it's still just "All Categories").
+      const catSelect = document.getElementById('categoryFilter');
+      if (catSelect.options.length === 1) {
+        const seen = new Set();
+        data.categories.forEach(c => {
+          if (seen.has(c.category_name)) return;
+          seen.add(c.category_name);
+          const opt = document.createElement('option');
+          opt.value = c.category_code || 'UNCATEGORIZED';
+          opt.textContent = c.category_name;
+          catSelect.appendChild(opt);
+        });
+      }
+
+      const root = document.getElementById('reportRoot');
+      if (!data.categories.length) {
+        root.innerHTML = '<div id="emptyState" style="display:block;">No items match this filter.</div>';
+        return;
+      }
+
+      const catsHtml = data.categories.map((c, i) => renderCategory(c, i)).join('');
+      const grandHtml = `
+        <div class="scroll-wrap">
+          <table>
+            <thead><tr>
+              <th>Grand Total (${data.grand_total_items} items)</th><th></th><th>Closing Qty</th>
+              ${AGE_COLS.map(([, label]) => `<th>${label}</th>`).join('')}
+              ${locationHeaderCells()}
+              <th></th>
+            </tr></thead>
+            <tbody>
+              <tr class="grand-total">
+                <td>Grand Total</td><td></td><td>${fmt(data.grand_total.closing_qty)}</td>
+                ${AGE_COLS.map(([key]) => `<td>${fmt(data.grand_total[key])}</td>`).join('')}
+                ${locationTotalCells(data.grand_total)}
+                <td></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      `;
+      root.innerHTML = catsHtml + grandHtml;
+    }
+
+    (async function init() {
+      await loadMeta();
+      await loadReport();
+    })();
+  </script>
+</body>
+</html>
