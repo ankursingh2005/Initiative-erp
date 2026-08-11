@@ -5374,13 +5374,27 @@ def ageing_canonical_column(normalized_header: str) -> Optional[str]:
     return None
 
 
+# A handful of brands get written inconsistently across sheets (e.g. "Blue
+# Star" vs "Bluestar"). Collapsing these to one canonical spelling here -
+# before classification AND before location-sheet matching - means both
+# spellings land in the same brand bucket instead of splitting into two.
+# Add more (SOURCE -> CANONICAL, both upper-cased, whole-word) here if
+# another brand shows the same problem.
+AGEING_BRAND_TEXT_ALIASES = {
+    r"\bBLUE STAR\b": "BLUESTAR",
+}
+
+
 def normalize_ageing_item_key(value) -> str:
     """Normalizes an Item Details string for cross-sheet matching: upper-
     cased, punctuation/extra-whitespace collapsed. Two sheets writing the
     same item slightly differently (extra spaces, a stray hyphen) still
     match; genuinely different items still don't."""
     text = re.sub(r"[^A-Z0-9]+", " ", str(value or "").upper()).strip()
-    return re.sub(r"\s+", " ", text)
+    text = re.sub(r"\s+", " ", text)
+    for pattern, replacement in AGEING_BRAND_TEXT_ALIASES.items():
+        text = re.sub(pattern, replacement, text)
+    return text
 
 
 def find_ageing_header_row(table_rows: List[List]) -> tuple:
@@ -5449,9 +5463,32 @@ AGEING_CATEGORY_KEYWORD_RULES = [
         "REFRIGERATOR", "FRIDGE", "WASHING MACHINE", "MICROWAVE", "AIR CONDITIONER",
         " AC ", "OVEN", "DISHWASHER", "CHIMNEY", "GEYSER", "WATER HEATER", "COOLER",
     ]),
-    ("MH", "Mobiles / Handset", [
+    ("MH", "Mobile", [
         "IPHONE", " TAB ", " PAD ", "SMARTPHONE",
     ]),
+]
+
+# Fixed display order for the report - core categories in this order, then
+# Other last, regardless of how the alphabetical item_count sort would fall.
+AGEING_CATEGORY_ORDER = ["HA", "HE", "MH", "IT", "OTHER"]
+
+# Everything that is an accessory/consumable rather than a sellable core
+# unit - chargers, cables, cases, AC installation bits, etc. - is bucketed
+# into "Other" instead of its own row under HA/HE/IT/Mobile, no matter
+# which brand or product-type keyword it would otherwise match. Checked
+# BEFORE the category rules above and the brand hints below, so an
+# accessory from a mobile/TV/AC brand still lands in Other. Substrings are
+# intentionally broad (e.g. "ACCESSOR" catches both ACCESSORY and
+# ACCESSORIES) - extend this list as new accessory item names show up.
+AGEING_ACCESSORY_KEYWORDS = [
+    "ADAPTOR", "ADAPTER", "BATTERY", "BATTERIES", "CABLE", "BAG PACK",
+    "BACKPACK", "ACCESSOR", "CHARGER", "POWER BANK", "POWERBANK",
+    "TEMPERED GLASS", "SCREEN GUARD", "SCREEN PROTECTOR", "FLIP COVER",
+    "BACK COVER", "MOBILE COVER", "PHONE CASE", "POUCH", "STRAP",
+    "PENDRIVE", "PEN DRIVE", "USB HUB", "HDMI CABLE",
+    # AC-specific accessories/consumables and installation material.
+    "STABILIZER", "INSTALLATION KIT", "COPPER PIPE", "DRAIN PIPE",
+    "OUTDOOR BRACKET", "AC COVER", "AC ACCESSOR", "AC STAND", "VOLTAGE GUARD",
 ]
 
 # Brands treated as Mobile Phone by default when no product-type keyword
@@ -5486,19 +5523,32 @@ def build_ageing_brand_lookup(db: Session) -> List[tuple]:
     return lookup
 
 
+def _resolve_ageing_brand_name(padded: str, normalized: str, brand_lookup: List[tuple]) -> Optional[str]:
+    """Shared brand-name resolution: prefer a match against the existing
+    Brand master, else fall back to the item's first word."""
+    for brand_key, original_name, _cat_code, _cat_name in brand_lookup:
+        if brand_key and padded.startswith(f" {brand_key} "):
+            return original_name
+    return normalized.split(" ")[0].title() if normalized else None
+
+
 def classify_ageing_item(item_details: str, brand_lookup: List[tuple]) -> dict:
     normalized = normalize_ageing_item_key(item_details)
     padded = f" {normalized} "
 
+    # Accessories/consumables always land in "Other", regardless of brand -
+    # checked before every other rule so e.g. a Samsung charger doesn't get
+    # pulled into the Mobile category with the rest of Samsung's phones.
+    if any(keyword in padded for keyword in AGEING_ACCESSORY_KEYWORDS):
+        return {
+            "category_code": "OTHER", "category_name": "Other",
+            "brand_name": _resolve_ageing_brand_name(padded, normalized, brand_lookup),
+            "classification_source": "Accessory",
+        }
+
     for code, name, keywords in AGEING_CATEGORY_KEYWORD_RULES:
         if any(keyword in padded for keyword in keywords):
-            brand_name = None
-            for brand_key, original_name, _cat_code, _cat_name in brand_lookup:
-                if brand_key and padded.startswith(f" {brand_key} "):
-                    brand_name = original_name
-                    break
-            if not brand_name:
-                brand_name = normalized.split(" ")[0].title() if normalized else None
+            brand_name = _resolve_ageing_brand_name(padded, normalized, brand_lookup)
             return {
                 "category_code": code, "category_name": name,
                 "brand_name": brand_name, "classification_source": "Keyword",
@@ -5508,7 +5558,7 @@ def classify_ageing_item(item_details: str, brand_lookup: List[tuple]) -> dict:
     first_word = normalized.split(" ")[0] if normalized else ""
     if first_word in AGEING_MOBILE_BRAND_HINTS:
         return {
-            "category_code": "MH", "category_name": "Mobiles / Handset",
+            "category_code": "MH", "category_name": "Mobile",
             "brand_name": first_word.title(), "classification_source": "Keyword",
         }
     if first_word in AGEING_COMPUTER_BRAND_HINTS:
@@ -5518,18 +5568,21 @@ def classify_ageing_item(item_details: str, brand_lookup: List[tuple]) -> dict:
             "classification_source": "Keyword",
         }
 
-    # Last resort - match the existing Brand master by longest-prefix.
+    # Next - match the existing Brand master by longest-prefix, if that
+    # brand has a category assigned to it.
     for brand_key, original_name, cat_code, cat_name in brand_lookup:
-        if brand_key and padded.startswith(f" {brand_key} "):
+        if brand_key and padded.startswith(f" {brand_key} ") and cat_code:
             return {
                 "category_code": cat_code, "category_name": cat_name,
-                "brand_name": original_name,
-                "classification_source": "Brand Master" if cat_code else "Unclassified",
+                "brand_name": original_name, "classification_source": "Brand Master",
             }
 
+    # Last resort - nothing recognized this item at all. It still needs a
+    # home, so it goes into "Other" (flagged Unclassified/REVIEW) rather
+    # than a separate "Uncategorized" bucket.
     return {
-        "category_code": None, "category_name": "Uncategorized",
-        "brand_name": first_word.title() if first_word else None,
+        "category_code": "OTHER", "category_name": "Other",
+        "brand_name": _resolve_ageing_brand_name(padded, normalized, brand_lookup),
         "classification_source": "Unclassified",
     }
 
@@ -5789,8 +5842,18 @@ def ageing_stock_report(
         cat["item_count"] += 1
         grand_total_items += 1
 
+    def category_sort_key(cat_key):
+        code = (categories_out[cat_key].get("category_code") or "").upper()
+        try:
+            return (AGEING_CATEGORY_ORDER.index(code), cat_key)
+        except ValueError:
+            # Unrecognized/legacy code (e.g. data from before this
+            # classification scheme) - show it after the known categories,
+            # alphabetically among themselves, but still before nothing.
+            return (len(AGEING_CATEGORY_ORDER), cat_key)
+
     categories_list = []
-    for cat_key in sorted(categories_out.keys()):
+    for cat_key in sorted(categories_out.keys(), key=category_sort_key):
         cat = categories_out[cat_key]
         cat["brands"] = [cat["brands"][b] for b in sorted(cat["brands"].keys())]
         categories_list.append(cat)

@@ -9,70 +9,91 @@
   <title>Initiative ERP - Ageing Stock Analysis</title>
   <link rel="icon" href="static/Initiative%20logo.png" type="image/png" />
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800;900&display=swap');
     :root {
-      --ink:#1d2939; --muted:#667085; --line:#e4e7ec; --bg:#f5f7fa; --card:#fff;
+      /* Darker ink + heavier defaults across the board, per the "make it
+         eye-catching, dark font" redesign. */
+      --ink:#0b1220; --ink-strong:#000000; --muted:#475467; --line:#e2e5eb; --bg:#eef1f6; --card:#fff;
       --age:#b42318; --age-dark:#7a1913; --age-glow:#fdeceb;
       --warn:#b54708; --warn-bg:#fffaeb; --good:#027a48;
+      --danger:#b42318; --danger-dark:#7a1913; --danger-bg:#fef3f2;
+      /* Category accent colors - reused for card borders, headers, badges. */
+      --c-ha:#0f766e; --c-he:#6d28d9; --c-mh:#15803d; --c-it:#1d4ed8; --c-other:#475467;
     }
     * { box-sizing:border-box; }
-    body { margin:0; font-family:'Manrope', sans-serif; background:var(--bg); color:var(--ink); }
+    body { margin:0; font-family:'Manrope', sans-serif; background:var(--bg); color:var(--ink); font-weight:600; }
     header { background:linear-gradient(90deg, #181818 0%, #000000 100%); color:#fff; padding:14px clamp(16px,3vw,32px); display:flex; gap:16px; align-items:center; justify-content:space-between; }
-    .brand { font-weight:800; font-size:16px; display:flex; align-items:center; gap:10px; }
-    .brand a { color:#fff; text-decoration:none; font-size:13px; font-weight:600; opacity:.75; }
+    .brand { font-weight:900; font-size:16px; display:flex; align-items:center; gap:10px; }
+    .brand a { color:#fff; text-decoration:none; font-size:13px; font-weight:700; opacity:.8; }
     .brand a:hover { opacity:1; text-decoration:underline; }
-    .header-right { display:flex; align-items:center; gap:14px; color:#d0d5dd; font-size:13px; }
-    button { font:inherit; cursor:pointer; border:0; border-radius:8px; font-weight:700; }
-    .btn-primary { padding:10px 16px; background:var(--age); color:#fff; }
+    .header-right { display:flex; align-items:center; gap:14px; color:#e4e7ec; font-size:13px; font-weight:700; }
+    button { font:inherit; cursor:pointer; border:0; border-radius:8px; font-weight:800; }
+    .btn-primary { padding:10px 16px; background:var(--age); color:#fff; box-shadow:0 4px 10px rgba(180,35,24,.25); }
     .btn-primary:hover { background:var(--age-dark); }
-    .btn-primary:disabled { background:#d0d5dd; cursor:not-allowed; }
-    .btn-light { padding:9px 14px; background:#fff; color:#111; border:1px solid var(--line); }
+    .btn-primary:disabled { background:#98a2b3; cursor:not-allowed; box-shadow:none; }
+    .btn-danger { padding:10px 16px; background:#fff; color:var(--danger); border:1.5px solid var(--danger); }
+    .btn-danger:hover { background:var(--danger-bg); }
+    .btn-danger:disabled { color:#98a2b3; border-color:#d0d5dd; cursor:not-allowed; background:#fff; }
+    .btn-light { padding:9px 14px; background:#fff; color:#0b1220; border:1.5px solid var(--line); font-weight:800; }
     .btn-light:hover { background:#f0f3f7; }
 
     main { max-width:1400px; margin:0 auto; padding:26px 20px 70px; }
-    h1 { font-size:22px; margin:0 0 4px; }
-    .subtitle { color:var(--muted); font-size:13.5px; margin:0 0 22px; }
+    h1 { font-size:24px; margin:0 0 4px; font-weight:900; color:var(--ink-strong); letter-spacing:-.2px; }
+    .subtitle { color:var(--muted); font-size:13.5px; margin:0 0 22px; font-weight:700; }
 
-    .panel { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px 22px; margin-bottom:20px; box-shadow:0 8px 20px rgba(16,24,40,.05); }
-    .panel h2 { font-size:15.5px; margin:0 0 12px; }
+    .panel { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px 22px; margin-bottom:20px; box-shadow:0 8px 20px rgba(16,24,40,.06); }
+    .panel h2 { font-size:16px; margin:0 0 12px; font-weight:800; color:var(--ink-strong); }
     .upload-row { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
-    input[type=file] { font-size:13px; }
-    #uploadMsg { font-size:13px; margin-top:10px; }
+    input[type=file] { font-size:13px; font-weight:700; }
+    #uploadMsg { font-size:13px; margin-top:10px; font-weight:700; }
     #uploadMsg.error { color:#d92d20; }
     #uploadMsg.success { color:var(--good); }
-    .meta-line { font-size:12.5px; color:var(--muted); margin-top:10px; line-height:1.6; }
-    .pill { display:inline-block; padding:2px 9px; border-radius:999px; font-size:11.5px; font-weight:700; margin-right:4px; }
+    .meta-line { font-size:12.5px; color:var(--muted); margin-top:10px; line-height:1.6; font-weight:700; }
+    .pill { display:inline-block; padding:2px 9px; border-radius:999px; font-size:11.5px; font-weight:800; margin-right:4px; }
     .pill-good { background:#ecfdf3; color:var(--good); }
     .pill-warn { background:var(--warn-bg); color:var(--warn); }
 
+    /* Dashboard summary cards - one per category plus a grand-total card,
+       shown above the detailed tables so the overall picture is visible
+       at a glance without expanding anything. */
+    .dash-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(190px,1fr)); gap:14px; margin-bottom:22px; }
+    .dash-card { background:var(--card); border:1px solid var(--line); border-left:6px solid var(--cat-color, #111); border-radius:12px; padding:16px 18px; box-shadow:0 6px 16px rgba(16,24,40,.06); cursor:pointer; transition:transform .12s ease, box-shadow .12s ease; }
+    .dash-card:hover { transform:translateY(-2px); box-shadow:0 10px 22px rgba(16,24,40,.12); }
+    .dash-card .dash-label { font-size:12.5px; font-weight:800; text-transform:uppercase; letter-spacing:.4px; color:var(--cat-color, var(--muted)); margin-bottom:6px; }
+    .dash-card .dash-value { font-size:26px; font-weight:900; color:var(--ink-strong); line-height:1.1; }
+    .dash-card .dash-sub { font-size:12px; font-weight:700; color:var(--muted); margin-top:4px; }
+    .dash-card.dash-total { border-left-color:#000; background:linear-gradient(135deg,#111 0%,#000 100%); }
+    .dash-card.dash-total .dash-label { color:#d0d5dd; }
+    .dash-card.dash-total .dash-value, .dash-card.dash-total .dash-sub { color:#fff; }
+
     .filters { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:16px; }
-    .filters select, .filters input[type=text] { padding:9px 11px; border:1px solid var(--line); border-radius:8px; font-size:13px; font-family:inherit; }
+    .filters select, .filters input[type=text] { padding:9px 11px; border:1.5px solid var(--line); border-radius:8px; font-size:13px; font-family:inherit; font-weight:700; color:var(--ink); }
     .filters input[type=text] { min-width:220px; }
 
     .cat-section { margin-bottom:22px; }
-    .cat-header { display:flex; align-items:center; justify-content:space-between; background:#111; color:#fff; padding:10px 16px; border-radius:10px 10px 0 0; cursor:pointer; }
-    .cat-header h3 { margin:0; font-size:14.5px; }
-    .cat-header .count { font-size:12px; color:#d0d5dd; }
+    .cat-header { display:flex; align-items:center; justify-content:space-between; background:var(--cat-color, #111); color:#fff; padding:12px 18px; border-radius:10px 10px 0 0; cursor:pointer; }
+    .cat-header h3 { margin:0; font-size:15.5px; font-weight:900; letter-spacing:.2px; }
+    .cat-header .count { font-size:12.5px; color:#fff; opacity:.9; font-weight:800; background:rgba(255,255,255,.18); padding:3px 10px; border-radius:999px; }
     .cat-body { border:1px solid var(--line); border-top:none; border-radius:0 0 10px 10px; overflow:hidden; }
     .cat-body.collapsed { display:none; }
 
     .brand-block { border-bottom:1px solid var(--line); }
     .brand-block:last-child { border-bottom:none; }
-    .brand-title { background:#f9fafb; padding:8px 16px; font-size:13px; font-weight:700; color:var(--ink); border-bottom:1px solid var(--line); }
+    .brand-title { background:#f3f4f7; padding:9px 18px; font-size:13.5px; font-weight:800; color:var(--ink-strong); border-bottom:1px solid var(--line); }
 
     table { width:100%; border-collapse:collapse; font-size:12.5px; }
-    thead th { position:sticky; top:0; background:#fbfbfb; border-bottom:1px solid var(--line); padding:8px 10px; text-align:right; font-weight:700; color:var(--muted); white-space:nowrap; }
+    thead th { position:sticky; top:0; background:#f7f8fa; border-bottom:1.5px solid var(--line); padding:8px 10px; text-align:right; font-weight:800; color:var(--ink); white-space:nowrap; }
     thead th:first-child { text-align:left; }
-    tbody td { padding:7px 10px; border-bottom:1px solid #f0f2f5; text-align:right; white-space:nowrap; }
-    tbody td:first-child { text-align:left; white-space:normal; min-width:220px; }
-    tbody tr:hover { background:#fafbfc; }
-    tr.subtotal td { font-weight:700; background:#f7f8fa; border-top:1px solid var(--line); }
-    tr.grand-total td { font-weight:800; background:#111; color:#fff; font-size:13px; }
-    .loc-col { color:#475467; }
-    .flag-review { color:var(--warn); font-size:10.5px; font-weight:700; margin-left:5px; }
-    .locs-cell { font-size:11px; color:var(--muted); }
+    tbody td { padding:7px 10px; border-bottom:1px solid #eceef2; text-align:right; white-space:nowrap; font-weight:600; color:var(--ink); }
+    tbody td:first-child { text-align:left; white-space:normal; min-width:220px; font-weight:700; }
+    tbody tr:hover { background:#f5f7fb; }
+    tr.subtotal td { font-weight:800; background:#eef0f4; border-top:1.5px solid var(--line); }
+    tr.grand-total td { font-weight:900; background:#000; color:#fff; font-size:13px; }
+    .loc-col { color:#344054; }
+    .flag-review { color:var(--warn); font-size:10.5px; font-weight:800; margin-left:5px; }
+    .locs-cell { font-size:11px; color:var(--muted); font-weight:700; }
 
-    #emptyState, #loadingState { text-align:center; padding:60px 20px; color:var(--muted); }
+    #emptyState, #loadingState { text-align:center; padding:60px 20px; color:var(--muted); font-weight:700; }
     .scroll-wrap { overflow-x:auto; }
 
     @media(max-width:700px) { header { flex-wrap:wrap; row-gap:8px; } .header-right { width:100%; justify-content:space-between; } }
@@ -96,6 +117,7 @@
       <div class="upload-row">
         <input type="file" id="fileInput" accept=".xlsx,.xls" />
         <button class="btn-primary" id="uploadBtn" onclick="uploadFile()">Upload &amp; Process</button>
+        <button class="btn-danger" id="clearBtn" onclick="clearData()">Clear</button>
       </div>
       <div id="uploadMsg"></div>
       <div class="meta-line" id="metaLine"></div>
@@ -139,6 +161,10 @@
       ['age_0_60', '0-60 Days'], ['age_61_90', '61-90 Days'], ['age_91_150', '91-150 Days'],
       ['age_151_180', '151-180 Days'], ['age_181_365', '181-365 Days'], ['age_366_plus', '\u2265 366 Days'],
     ];
+    // One accent color per core category (HA/HE/Mobile/IT), plus Other -
+    // used for both the summary cards and each category's header bar.
+    const CATEGORY_COLORS = { HA: '#0f766e', HE: '#6d28d9', MH: '#15803d', IT: '#1d4ed8', OTHER: '#475467' };
+    function catColor(code) { return CATEGORY_COLORS[(code || '').toUpperCase()] || '#111827'; }
 
     function fmt(n) {
       const v = Number(n || 0);
@@ -193,6 +219,30 @@
         msg.className = 'error'; msg.textContent = 'Upload failed - check your connection and try again.';
       } finally {
         btn.disabled = false; btn.textContent = 'Upload & Process';
+      }
+    }
+
+    async function clearData() {
+      const msg = document.getElementById('uploadMsg');
+      if (!confirm('Clear all Ageing Stock Analysis data? This removes every uploaded item and cannot be undone.')) return;
+
+      const btn = document.getElementById('clearBtn');
+      btn.disabled = true; btn.textContent = 'Clearing...';
+      msg.className = ''; msg.textContent = '';
+      try {
+        const res = await fetch(appUrl('/api/ageing-stock/clear'), { method: 'DELETE', headers: authHeaders() });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { msg.className = 'error'; msg.textContent = data.detail || 'Clear failed'; return; }
+        msg.className = 'success';
+        msg.textContent = `Cleared ${data.deleted ?? 0} item(s).`;
+        document.getElementById('fileInput').value = '';
+        document.getElementById('metaLine').innerHTML = '';
+        await loadMeta();
+        await loadReport();
+      } catch (e) {
+        msg.className = 'error'; msg.textContent = 'Clear failed - check your connection and try again.';
+      } finally {
+        btn.disabled = false; btn.textContent = 'Clear';
       }
     }
 
@@ -253,7 +303,7 @@
       const brandsHtml = cat.brands.map(renderBrandTable).join('');
       return `
         <div class="cat-section">
-          <div class="cat-header" onclick="toggleCat(${idx})">
+          <div class="cat-header" style="--cat-color:${catColor(cat.category_code)};" onclick="toggleCat(${idx})">
             <h3>${cat.category_name}</h3>
             <span class="count">${cat.item_count} items</span>
           </div>
@@ -262,6 +312,32 @@
           </div>
         </div>
       `;
+    }
+
+    function renderDashboard(data) {
+      const cards = data.categories.map(cat => `
+        <div class="dash-card" style="--cat-color:${catColor(cat.category_code)};" onclick="filterToCategory('${cat.category_code || 'OTHER'}')">
+          <div class="dash-label">${cat.category_name}</div>
+          <div class="dash-value">${cat.item_count}</div>
+          <div class="dash-sub">${fmt(cat.totals.closing_qty)} units in stock</div>
+        </div>
+      `).join('');
+      return `
+        <div class="dash-grid">
+          <div class="dash-card dash-total" onclick="filterToCategory('ALL')">
+            <div class="dash-label">Grand Total</div>
+            <div class="dash-value">${data.grand_total_items}</div>
+            <div class="dash-sub">${fmt(data.grand_total.closing_qty)} units across all categories</div>
+          </div>
+          ${cards}
+        </div>
+      `;
+    }
+
+    function filterToCategory(code) {
+      document.getElementById('categoryFilter').value = code;
+      loadReport();
+      window.scrollTo({ top: document.getElementById('filtersPanel').offsetTop - 12, behavior: 'smooth' });
     }
 
     function toggleCat(idx) {
@@ -311,6 +387,7 @@
         return;
       }
 
+      const dashHtml = renderDashboard(data);
       const catsHtml = data.categories.map((c, i) => renderCategory(c, i)).join('');
       const grandHtml = `
         <div class="scroll-wrap">
@@ -332,7 +409,7 @@
           </table>
         </div>
       `;
-      root.innerHTML = catsHtml + grandHtml;
+      root.innerHTML = dashHtml + catsHtml + grandHtml;
     }
 
     (async function init() {
