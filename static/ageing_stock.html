@@ -127,6 +127,11 @@
       <div class="filters">
         <select id="categoryFilter" onchange="loadReport()">
           <option value="ALL">All Categories</option>
+          <option value="HA">HA</option>
+          <option value="HE">HE</option>
+          <option value="IT">COMPUTER</option>
+          <option value="MH">MOBILE</option>
+          <option value="OTHER">ACCESSORIES</option>
         </select>
         <input type="text" id="searchBox" placeholder="Search item details..." oninput="debouncedSearch()" />
         <button class="btn-light" onclick="expandAll()">Expand all</button>
@@ -366,20 +371,6 @@
       }
       document.getElementById('emptyState').style.display = 'none';
       document.getElementById('filtersPanel').style.display = 'block';
-
-      // Populate category filter once (only on first load, i.e. it's still just "All Categories").
-      const catSelect = document.getElementById('categoryFilter');
-      if (catSelect.options.length === 1) {
-        const seen = new Set();
-        data.categories.forEach(c => {
-          if (seen.has(c.category_name)) return;
-          seen.add(c.category_name);
-          const opt = document.createElement('option');
-          opt.value = c.category_code || 'UNCATEGORIZED';
-          opt.textContent = c.category_name;
-          catSelect.appendChild(opt);
-        });
-      }
 
       const root = document.getElementById('reportRoot');
       if (!data.categories.length) {
