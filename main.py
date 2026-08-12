@@ -5347,10 +5347,30 @@ AGEING_LOCATION_DEFINITIONS = {
     "GNG": {"name": "Gomtinagar", "aliases": {"gng", "gomtinagar"}},
     "VKN": {"name": "Vikas Nagar", "aliases": {"vkn", "vikasnagar"}},
     "MWH": {"name": "Warehouse", "aliases": {"mwh", "mwh1", "warehouse", "mainwarehouse"}},
-    "PWH": {"name": "PWH", "aliases": {"pwh", "purchasewarehouse", "pwh1"}},
-    "VAULT": {"name": "Vault", "aliases": {"vault"}},
+    # PWH and Vault are intentionally NOT listed here. Ageing Stock Analysis
+    # no longer tracks these two locations at all: if the uploaded workbook
+    # contains a PWH or Vault sheet, it simply won't match any location code
+    # below and its rows are skipped during parsing (see
+    # parse_ageing_stock_workbook) - so no PWH/Vault quantity ever reaches
+    # the report, the Excel export, or the on-screen table.
 }
 AGEING_ALL_DATA_SHEET_ALIASES = {"alldata", "all", "master", "masterdata"}
+
+# Category Master workbook (separate upload - see
+# parse_ageing_category_master_workbook) - one sheet per category, each
+# listing every item name (across all brands) that belongs there. Sheet
+# titles are matched the same normalized way as the location sheets above,
+# so "HA", "Home Appliances", "Mobile", "Computer" etc. all resolve.
+AGEING_CATEGORY_MASTER_SHEET_ALIASES = {
+    "HA": {"ha", "homeappliances", "homeappliance"},
+    "HE": {"he", "homeentertainment"},
+    "MH": {"mobile", "mh", "mobiles", "mobilephones"},
+    "IT": {"computer", "computers", "it", "informationtechnology"},
+}
+AGEING_CATEGORY_MASTER_SHEET_NAMES = {
+    "HA": "Home Appliances", "HE": "Home Entertainment",
+    "MH": "Mobile", "IT": "Information Technology",
+}
 
 # Header aliases for the "All Data" (and location) sheets - matched the
 # same way as ANALYTICS_HEADER_ALIASES above, via normalize_header_name().
@@ -5458,13 +5478,33 @@ AGEING_CATEGORY_KEYWORD_RULES = [
     ("IT", "Information Technology", [
         "LAPTOP", "DESKTOP", "MACBOOK", " MBA ", " MBP ", "NOTEBOOK",
         "PRINTER", "MONITOR", " AIO ", "IPAD", "I PAD",
+        # Tablets are grouped with Computer/IT, not Mobile / Handset -
+        # Mobile / Handset is reserved for actual phones only.
+        " TAB ", " TABLET",
+        # Any other Apple "Mac" product line (Mac mini, Mac Studio, and
+        # any oddly-named Mac SKU) is a computer, not a phone.
+        " MAC ",
     ]),
     ("HA", "Home Appliances", [
         "REFRIGERATOR", "FRIDGE", "WASHING MACHINE", "MICROWAVE", "AIR CONDITIONER",
         " AC ", "OVEN", "DISHWASHER", "CHIMNEY", "GEYSER", "WATER HEATER", "COOLER",
+        # " REF " is the company's own shorthand for Refrigerator (as used
+        # throughout ageing_category_master.json, e.g. "Godrej Ref ...").
+        " REF ",
+        # Short-form/abbreviated appliance codes used in item names across
+        # brands (e.g. "Samsung WM ...", "LG SAC ID ...", "IFB MWO ...",
+        # "Havells Mixer Grinder ...", "Voltas WAC ..."). Without these, an
+        # item using the short form (rather than the full word above) that
+        # isn't an exact hit in ageing_category_master.json falls through
+        # to the item's brand's *default* category, which can wrongly be
+        # HE for a brand that's normally filed there for other products
+        # (e.g. TVs) - these keywords make sure the product type itself
+        # decides the category, same as the full-word keywords above.
+        " MW ", " WM ", " SAC ", " MWO ", " WAC ", "MIXER", "GRINDER",
+        "WATER PURIFIER", "VACUUM CLEANER",
     ]),
     ("MH", "Mobile", [
-        "IPHONE", " TAB ", " PAD ", "SMARTPHONE",
+        "IPHONE", "SMARTPHONE",
     ]),
 ]
 
@@ -5482,24 +5522,109 @@ AGEING_CATEGORY_ORDER = ["HA", "HE", "MH", "IT", "OTHER"]
 # ACCESSORIES) - extend this list as new accessory item names show up.
 AGEING_ACCESSORY_KEYWORDS = [
     "ADAPTOR", "ADAPTER", "BATTERY", "BATTERIES", "CABLE", "BAG PACK",
-    "BACKPACK", "ACCESSOR", "CHARGER", "POWER BANK", "POWERBANK",
+    "BACKPACK", "BACK PACK", "ACCESSOR", "CHARGER", "POWER BANK", "POWERBANK",
     "TEMPERED GLASS", "SCREEN GUARD", "SCREEN PROTECTOR", "FLIP COVER",
     "BACK COVER", "MOBILE COVER", "PHONE CASE", "POUCH", "STRAP",
     "PENDRIVE", "PEN DRIVE", "USB HUB", "HDMI CABLE",
+    # Wearables/audio/input accessories - not core sellable Mobile units
+    # even when sold under a phone brand (e.g. "Samsung Earphones...",
+    # "Apple Watch...", "Apple Airpods...", "Lenovo Mouse...", "Vivo
+    # Buds...", "CMF Buds..."). Per Admin request, these always land in
+    # Accessories regardless of brand. " WATCH" is padded with a leading
+    # space so it only matches the whole word (Smart Watch, Apple Watch)
+    # and not an unrelated substring.
+    "EARPHONE", "NECKBAND", "NECK BAND", " WATCH", "AIRPOD", "BUDS",
+    "KEYBOARD", "MOUSE", "PENCIL", "SMART BAND", "SMARTBAND",
+    # Mounting/installation hardware - not a phone, TV, or appliance unit
+    # itself even when named after the brand it's mounted to.
+    "WALL MOUNT",
+    # Branded promotional/gift-with-purchase items (e.g. "Vivo Gift
+    # Bottle", "Vivo Gift Tifin Box", "Vivo Pen") - not a sellable phone
+    # unit even though named after a phone brand. " PEN " padded so it
+    # only matches the standalone word, not "PENCIL"/"PENDRIVE"/"OPEN".
+    "GIFT", "BOTTLE", "TIFIN", "TIFFIN", " PEN ",
+    # Networking/charging accessories sold under a phone-making brand
+    # (e.g. "Apple Router WiFi MC 414 HN/A", "Apple Magsafe 2 MD 504
+    # ZM/A") - neither is a phone unit itself.
+    "ROUTER", "MAGSAFE",
     # AC-specific accessories/consumables and installation material.
     "STABILIZER", "INSTALLATION KIT", "COPPER PIPE", "DRAIN PIPE",
     "OUTDOOR BRACKET", "AC COVER", "AC ACCESSOR", "AC STAND", "VOLTAGE GUARD",
 ]
 
+# Guard applied ONLY to items that would otherwise land in "MH" (Mobile /
+# Handset) - keeps that category strictly to actual mobile phone units,
+# no matter which rule put them there (including a bad/legacy entry in
+# the bundled ageing_category_master.json, which is checked first and
+# would otherwise be unoverridable). Any MH classification is re-routed:
+#  - to Home Appliances if it's really an appliance sold under a phone
+#    brand (e.g. "Samsung WM ..." = Washing Machine, "Samsung Ref ..." =
+#    Refrigerator, not a phone),
+#  - to Information Technology if it's really a laptop/desktop/tablet
+#    sold under a phone brand,
+#  - to Other/Accessories for wearables, audio, input, promotional/gift,
+#    and consumable accessories sold under a phone brand.
+AGEING_MH_DEMOTE_TO_HA_KEYWORDS = [
+    " WM ", " REF ", "WASHING MACHINE", "REFRIGERATOR", "MICROWAVE", "CHIMNEY",
+    "AIR CONDITIONER", " AC ",
+]
+AGEING_MH_DEMOTE_TO_IT_KEYWORDS = [
+    "LAPTOP", "NOTEBOOK", "MACBOOK", "DESKTOP", "MONITOR", "PRINTER",
+    " TAB ", " TABLET", " MAC ",
+]
+AGEING_MH_DEMOTE_TO_OTHER_KEYWORDS = [
+    "BUDS", "EARBUD", "NECKBAND", "NECK BAND", " WATCH", "SMART BAND",
+    "SMARTBAND", "WALL MOUNT", "MOUSE", "KEYBOARD", "AIRPOD", "EARPHONE",
+    "PENCIL", "CHARGER", "CABLE", "ADAPTOR", "ADAPTER", "POWER BANK",
+    "POWERBANK", "TEMPERED GLASS", "SCREEN GUARD", "SCREEN PROTECTOR",
+    "FLIP COVER", "BACK COVER", "MOBILE COVER", "PHONE CASE", "POUCH",
+    "STRAP", "BATTERY", "BATTERIES", "GIFT", "BOTTLE", "TIFIN", "TIFFIN",
+    " PEN ", "ROUTER", "MAGSAFE",
+]
+
+
+def _enforce_mobile_category_is_phones_only(result: dict, padded: str, brand_lookup: List[tuple]) -> dict:
+    if result.get("category_code") != "MH":
+        return result
+    if any(keyword in padded for keyword in AGEING_MH_DEMOTE_TO_HA_KEYWORDS):
+        fixed = dict(result)
+        fixed["category_code"] = "HA"
+        fixed["category_name"] = "Home Appliances"
+        fixed["classification_source"] = "Mobile Guard"
+        return fixed
+    if any(keyword in padded for keyword in AGEING_MH_DEMOTE_TO_IT_KEYWORDS):
+        fixed = dict(result)
+        fixed["category_code"] = "IT"
+        fixed["category_name"] = "Information Technology"
+        fixed["classification_source"] = "Mobile Guard"
+        return fixed
+    if any(keyword in padded for keyword in AGEING_MH_DEMOTE_TO_OTHER_KEYWORDS):
+        fixed = dict(result)
+        fixed["category_code"] = "OTHER"
+        fixed["category_name"] = "Other"
+        fixed["brand_name"] = _resolve_known_brand_only(padded, brand_lookup)
+        fixed["classification_source"] = "Mobile Guard"
+        return fixed
+    return result
+
 # Brands treated as Mobile Phone by default when no product-type keyword
 # above matched (covers plain phone-model rows like "Samsung A17 5G...").
+# NOTE: Lenovo is intentionally NOT here - Lenovo's real business here is
+# laptops/tablets, and a plain "Lenovo <model-number>" row (no LAPTOP/TAB
+# keyword in the name) should default to Computer/IT (see
+# AGEING_COMPUTER_BRAND_HINTS below), not Mobile. Lenovo Tab items still
+# correctly land in Mobile via the " TAB " keyword rule above, which is
+# checked before this fallback.
 AGEING_MOBILE_BRAND_HINTS = {
-    "IPHONE", "IQOO", "LENOVO", "MOTOROLA", "NOTHING", "ONEPLUS", "OPPO",
+    "IQOO", "MOTOROLA", "NOTHING", "ONEPLUS", "OPPO",
     "REALME", "SAMSUNG", "VIVO", "XIAOMI", "REDMI", "CMF",
 }
 # Brands treated as Computer/IT by default when no product-type keyword
-# above matched.
-AGEING_COMPUTER_BRAND_HINTS = {"ASUS", "DELL", "HP", "EPSON", "ACER"}
+# above matched. Lenovo included here (rather than in the Mobile hints)
+# so a bare "Lenovo <model-number>" row - with no LAPTOP/TAB keyword and
+# no explicit ageing_category_master.json entry - defaults to Computer,
+# matching Lenovo's actual business here.
+AGEING_COMPUTER_BRAND_HINTS = {"ASUS", "DELL", "HP", "EPSON", "ACER", "LENOVO"}
 
 
 def build_ageing_brand_lookup(db: Session) -> List[tuple]:
@@ -5513,10 +5638,18 @@ def build_ageing_brand_lookup(db: Session) -> List[tuple]:
         .outerjoin(models.Category, models.SubCategory.category_id == models.Category.id)
         .all()
     )
+    # A Brand record whose name duplicates a Category's own display name
+    # (e.g. a brand literally named "Mobiles / Handset", matching the MH
+    # category's full name) is a data-entry mistake, not a real brand -
+    # left in, it shows up as a bogus "brand" grouping in the ageing
+    # report. Excluded here so such rows fall back to "General" instead.
+    category_names = {
+        normalize_ageing_item_key(c.name) for c in db.query(models.Category).all()
+    }
     lookup = []
     for brand, category in rows:
         normalized = normalize_ageing_item_key(brand.name)
-        if not normalized:
+        if not normalized or normalized in category_names:
             continue
         lookup.append((normalized, brand.name, category.code if category else None, category.name if category else None))
     lookup.sort(key=lambda entry: len(entry[0]), reverse=True)
@@ -5525,16 +5658,97 @@ def build_ageing_brand_lookup(db: Session) -> List[tuple]:
 
 def _resolve_ageing_brand_name(padded: str, normalized: str, brand_lookup: List[tuple]) -> Optional[str]:
     """Shared brand-name resolution: prefer a match against the existing
-    Brand master, else fall back to the item's first word."""
+    Brand master, else fall back to the item's first word. Only used for
+    items landing in a real product category (HA/HE/Mobile/IT) - those
+    names reliably start with the brand (e.g. "Samsung LED...", "HP
+    Laptop..."), so the first-word guess is safe there."""
     for brand_key, original_name, _cat_code, _cat_name in brand_lookup:
         if brand_key and padded.startswith(f" {brand_key} "):
             return original_name
     return normalized.split(" ")[0].title() if normalized else None
 
 
-def classify_ageing_item(item_details: str, brand_lookup: List[tuple]) -> dict:
+def _resolve_known_brand_only(padded: str, brand_lookup: List[tuple]) -> Optional[str]:
+    """Brand resolution for Accessories/Unclassified items: match against
+    the existing Brand master ONLY - never guess the first word as a
+    brand. Accessory names (e.g. "Flare Natt 1/2", "Floor Stand", "Foam
+    Sheet") don't follow a brand-first naming convention, so guessing
+    would invent fake brands like "Flare"/"Floor"/"Foam" instead of
+    grouping them sensibly. Falls back to "General" when no real brand
+    matches."""
+    for brand_key, original_name, _cat_code, _cat_name in brand_lookup:
+        if brand_key and padded.startswith(f" {brand_key} "):
+            return original_name
+    return "General"
+
+
+def build_ageing_category_master_lookup(db: Session) -> dict:
+    """normalized item key -> {category_code, category_name, brand_name}.
+    Loaded once from the bundled static/ageing_category_master.json file
+    (generated from the company's HA/HE/Mobile/Computer item lists) - see
+    _AGEING_CATEGORY_MASTER_LOOKUP below. classify_ageing_item() checks
+    this first; anything not on the list falls through to the keyword/
+    brand rules exactly as before. The db argument is unused - kept so
+    call sites don't need to change if this is ever swapped back to a
+    DB-backed lookup."""
+    return _AGEING_CATEGORY_MASTER_LOOKUP
+
+
+def _load_ageing_category_master() -> dict:
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "ageing_category_master.json")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            rows = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+    return {
+        row["item_key"]: {
+            "category_code": row["category_code"],
+            "category_name": AGEING_CATEGORY_MASTER_SHEET_NAMES.get(row["category_code"], row["category_code"]),
+            "brand_name": None,  # resolved dynamically at classify time against the current Brand master
+        }
+        for row in rows
+        if row.get("item_key")
+    }
+
+
+# Loaded once at startup from static/ageing_category_master.json - the
+# company's own HA/HE/Mobile/Computer item lists. Every ageing-stock item
+# is matched against this first (exact, normalized name); anything not on
+# it falls through to the keyword/brand-hint rules below, and finally to
+# Other (Accessories) if nothing matches at all.
+_AGEING_CATEGORY_MASTER_LOOKUP = _load_ageing_category_master()
+
+
+def classify_ageing_item(item_details: str, brand_lookup: List[tuple], category_master_lookup: Optional[dict] = None) -> dict:
     normalized = normalize_ageing_item_key(item_details)
     padded = f" {normalized} "
+    result = _classify_ageing_item_raw(item_details, normalized, padded, brand_lookup, category_master_lookup)
+    return _enforce_mobile_category_is_phones_only(result, padded, brand_lookup)
+
+
+def _classify_ageing_item_raw(
+    item_details: str,
+    normalized: str,
+    padded: str,
+    brand_lookup: List[tuple],
+    category_master_lookup: Optional[dict],
+) -> dict:
+    # Exact match against the uploaded Category Master list (HA/HE/Mobile/
+    # Computer sheets) - this is the authoritative source when present,
+    # since it's the company's own definition of what belongs to each
+    # category. Checked before every keyword/brand heuristic below, so a
+    # listed item always lands in its master-assigned category even if its
+    # name would otherwise match a different keyword rule.
+    if category_master_lookup:
+        master_match = category_master_lookup.get(normalized)
+        if master_match:
+            return {
+                "category_code": master_match["category_code"],
+                "category_name": master_match["category_name"],
+                "brand_name": master_match["brand_name"] or _resolve_ageing_brand_name(padded, normalized, brand_lookup),
+                "classification_source": "Category Master",
+            }
 
     # Accessories/consumables always land in "Other", regardless of brand -
     # checked before every other rule so e.g. a Samsung charger doesn't get
@@ -5542,13 +5756,19 @@ def classify_ageing_item(item_details: str, brand_lookup: List[tuple]) -> dict:
     if any(keyword in padded for keyword in AGEING_ACCESSORY_KEYWORDS):
         return {
             "category_code": "OTHER", "category_name": "Other",
-            "brand_name": _resolve_ageing_brand_name(padded, normalized, brand_lookup),
+            "brand_name": _resolve_known_brand_only(padded, brand_lookup),
             "classification_source": "Accessory",
         }
 
     for code, name, keywords in AGEING_CATEGORY_KEYWORD_RULES:
         if any(keyword in padded for keyword in keywords):
-            brand_name = _resolve_ageing_brand_name(padded, normalized, brand_lookup)
+            # "iPhone" is a product line, not a brand - it's sold under
+            # Apple, so group it there instead of guessing the brand name
+            # is literally "Iphone" from the item text's first word.
+            if code == "MH" and "IPHONE" in padded:
+                brand_name = "Apple"
+            else:
+                brand_name = _resolve_ageing_brand_name(padded, normalized, brand_lookup)
             return {
                 "category_code": code, "category_name": name,
                 "brand_name": brand_name, "classification_source": "Keyword",
@@ -5582,7 +5802,7 @@ def classify_ageing_item(item_details: str, brand_lookup: List[tuple]) -> dict:
     # than a separate "Uncategorized" bucket.
     return {
         "category_code": "OTHER", "category_name": "Other",
-        "brand_name": _resolve_ageing_brand_name(padded, normalized, brand_lookup),
+        "brand_name": _resolve_known_brand_only(padded, brand_lookup),
         "classification_source": "Unclassified",
     }
 
@@ -5643,9 +5863,10 @@ def parse_ageing_stock_workbook(content: bytes, db: Session) -> tuple:
         raise HTTPException(status_code=400, detail="The 'All Data' sheet has no readable item rows.")
 
     brand_lookup = build_ageing_brand_lookup(db)
+    category_master_lookup = build_ageing_category_master_lookup(db)
     location_columns = {
         "ALM": "qty_alm", "HZT": "qty_hzt", "ASH": "qty_ash", "GNG": "qty_gng",
-        "VKN": "qty_vkn", "MWH": "qty_mwh", "PWH": "qty_pwh", "VAULT": "qty_vault",
+        "VKN": "qty_vkn", "MWH": "qty_mwh",
     }
 
     item_rows = []
@@ -5654,7 +5875,7 @@ def parse_ageing_stock_workbook(content: bytes, db: Session) -> tuple:
         item_details = str(row.get("item_details") or "").strip()
         item_key = normalize_ageing_item_key(item_details)
 
-        classification = classify_ageing_item(item_details, brand_lookup)
+        classification = classify_ageing_item(item_details, brand_lookup, category_master_lookup)
         if classification["classification_source"] == "Unclassified":
             unclassified_count += 1
 
@@ -5673,7 +5894,7 @@ def parse_ageing_stock_workbook(content: bytes, db: Session) -> tuple:
             "brand_name": classification["brand_name"],
             "classification_source": classification["classification_source"],
             "qty_alm": 0.0, "qty_hzt": 0.0, "qty_ash": 0.0, "qty_gng": 0.0,
-            "qty_vkn": 0.0, "qty_mwh": 0.0, "qty_pwh": 0.0, "qty_vault": 0.0,
+            "qty_vkn": 0.0, "qty_mwh": 0.0,
         }
 
         present_at = []
@@ -5767,14 +5988,22 @@ def ageing_stock_meta(
     }
 
 
-@app.get("/api/ageing-stock/report")
-def ageing_stock_report(
-    category: Optional[str] = Query(None),
-    brand: Optional[str] = Query(None),
-    search: Optional[str] = Query(None),
-    current_user: models.User = Depends(auth.get_current_user),
-    db: Session = Depends(get_db),
-):
+AGEING_AGE_FIELDS = ["age_0_60", "age_61_90", "age_91_150", "age_151_180", "age_181_365", "age_366_plus"]
+AGEING_AGE_LABELS = {
+    "age_0_60": "0-60 Days",
+    "age_61_90": "61-90 Days",
+    "age_91_150": "91-150 Days",
+    "age_151_180": "151-180 Days",
+    "age_181_365": "181-365 Days",
+    "age_366_plus": "\u2265 366 Days",
+}
+AGEING_LOCATION_FIELDS = ["qty_alm", "qty_hzt", "qty_ash", "qty_gng", "qty_vkn", "qty_mwh"]
+
+
+def compute_ageing_stock_report(db: Session, category: Optional[str], brand: Optional[str], search: Optional[str]) -> dict:
+    """Shared query + aggregation logic behind both the on-screen report
+    (/api/ageing-stock/report) and the Excel export (/api/ageing-stock/export),
+    so the two can never drift out of sync with each other."""
     query = db.query(models.AgeingStockItem)
     if category and category.upper() != "ALL":
         if category.upper() == "UNCATEGORIZED":
@@ -5788,8 +6017,8 @@ def ageing_stock_report(
 
     items = query.order_by(models.AgeingStockItem.category_name, models.AgeingStockItem.brand_name, models.AgeingStockItem.item_details).all()
 
-    age_fields = ["age_0_60", "age_61_90", "age_91_150", "age_151_180", "age_181_365", "age_366_plus"]
-    location_fields = ["qty_alm", "qty_hzt", "qty_ash", "qty_gng", "qty_vkn", "qty_mwh", "qty_pwh", "qty_vault"]
+    age_fields = AGEING_AGE_FIELDS
+    location_fields = AGEING_LOCATION_FIELDS
 
     def empty_totals():
         return {f: 0.0 for f in age_fields + location_fields + ["closing_qty"]}
@@ -5832,7 +6061,6 @@ def ageing_stock_report(
             "age_366_plus": item.age_366_plus,
             "qty_alm": item.qty_alm, "qty_hzt": item.qty_hzt, "qty_ash": item.qty_ash,
             "qty_gng": item.qty_gng, "qty_vkn": item.qty_vkn, "qty_mwh": item.qty_mwh,
-            "qty_pwh": item.qty_pwh, "qty_vault": item.qty_vault,
             "locations_present": item.locations_present,
             "classification_source": item.classification_source,
         })
@@ -5871,6 +6099,192 @@ def ageing_stock_report(
         ],
         "filters": {"category": category or "ALL", "brand": brand, "search": search},
     }
+
+
+@app.get("/api/ageing-stock/report")
+def ageing_stock_report(
+    category: Optional[str] = Query(None),
+    brand: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    return compute_ageing_stock_report(db, category, brand, search)
+
+
+def parse_ageing_durations_param(durations: Optional[str]) -> List[str]:
+    """Turns the ?durations=age_0_60,age_181_365 query string into a
+    validated, order-preserved list of age bucket keys. Blank/omitted or
+    entirely unrecognized input falls back to all six buckets, so an old
+    cached link or a stray typo never produces a report with zero age
+    columns."""
+    if not durations:
+        return list(AGEING_AGE_FIELDS)
+    requested = {d.strip() for d in durations.split(",") if d.strip()}
+    active = [f for f in AGEING_AGE_FIELDS if f in requested]
+    return active or list(AGEING_AGE_FIELDS)
+
+
+@app.get("/api/ageing-stock/export")
+def ageing_stock_export(
+    category: Optional[str] = Query(None),
+    brand: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    durations: Optional[str] = Query(None, description="Comma-separated age bucket keys to include, e.g. age_0_60,age_181_365. Omit for all."),
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Downloads the currently-filtered Ageing Stock Analysis report (same
+    category/brand/search scope as the on-screen view, plus whichever
+    ageing-duration columns the user has checked) as a single .xlsx file -
+    one flat row per item so it's easy to sort/pivot in Excel, with a
+    Grand Total row at the bottom."""
+    report = compute_ageing_stock_report(db, category, brand, search)
+    if not report["has_data"] or not report["categories"]:
+        raise HTTPException(status_code=404, detail="No ageing stock data available for the selected filters.")
+
+    active_age_fields = parse_ageing_durations_param(durations)
+
+    import openpyxl as _openpyxl
+    from openpyxl.styles import Font as _Font, PatternFill as _PatternFill, Alignment as _Alignment, Border as _Border, Side as _Side
+    from openpyxl.utils import get_column_letter as _get_column_letter
+
+    FONT_TITLE = _Font(name="Calibri", size=14, bold=True)
+    FONT_HEADER = _Font(name="Calibri", size=10.5, bold=True, color="FFFFFF")
+    FONT_DATA = _Font(name="Calibri", size=10.5)
+    FONT_TOTAL = _Font(name="Calibri", size=10.5, bold=True)
+    FILL_HEADER = _PatternFill("solid", fgColor="111827")
+    FILL_TOTAL = _PatternFill("solid", fgColor="EEF0F4")
+    FILL_GRAND = _PatternFill("solid", fgColor="000000")
+    FONT_GRAND = _Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+    THIN = _Side(style="thin", color="D0D5DD")
+    BORDER_ALL = _Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
+    NUMFMT = '#,##0.##;-#,##0.##;"-"'
+
+    headers = ["Category", "Brand", "Item Details", "Unit", "Closing Qty"]
+    headers += [AGEING_AGE_LABELS[f] for f in active_age_fields]
+    headers += [{"qty_alm": "ALM", "qty_hzt": "HZT", "qty_ash": "ASH", "qty_gng": "GNG",
+                 "qty_vkn": "VKN", "qty_mwh": "MWH"}[f]
+                for f in AGEING_LOCATION_FIELDS]
+    headers += ["Present At"]
+
+    wb = _openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Ageing Stock Report"
+
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(headers))
+    title_cell = ws.cell(row=1, column=1, value="Initiative ERP - Ageing Stock Analysis")
+    title_cell.font = FONT_TITLE
+    title_cell.alignment = _Alignment(horizontal="left")
+    ws.row_dimensions[1].height = 22
+
+    filt = report["filters"]
+    subtitle_bits = [f"Category: {filt.get('category') or 'ALL'}"]
+    if filt.get("search"):
+        subtitle_bits.append(f"Search: \"{filt['search']}\"")
+    subtitle_bits.append("Durations: " + ", ".join(AGEING_AGE_LABELS[f] for f in active_age_fields))
+    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=len(headers))
+    ws.cell(row=2, column=1, value="  |  ".join(subtitle_bits)).font = _Font(name="Calibri", size=9.5, italic=True, color="475467")
+
+    header_row = 4
+    for ci, h in enumerate(headers, start=1):
+        cell = ws.cell(row=header_row, column=ci, value=h)
+        cell.font = FONT_HEADER
+        cell.fill = FILL_HEADER
+        cell.border = BORDER_ALL
+        cell.alignment = _Alignment(horizontal="center", vertical="center", wrap_text=True)
+    ws.freeze_panes = ws.cell(row=header_row + 1, column=4)
+
+    def totals_row_values(totals: dict) -> list:
+        vals = [round(totals.get("closing_qty") or 0, 2)]
+        vals += [round(totals.get(f) or 0, 2) for f in active_age_fields]
+        vals += [round(totals.get(f) or 0, 2) for f in AGEING_LOCATION_FIELDS]
+        return vals
+
+    def item_qty_in_active_durations(item: dict) -> float:
+        return sum(item.get(f) or 0 for f in active_age_fields)
+
+    r = header_row + 1
+    grand_totals = {f: 0.0 for f in ["closing_qty"] + active_age_fields + AGEING_LOCATION_FIELDS}
+    any_rows_written = False
+    for cat in report["categories"]:
+        for brand_bucket in cat["brands"]:
+            # Only items with stock in at least one CHECKED duration bucket -
+            # matches the on-screen behaviour so the download never shows an
+            # item that the report itself hid.
+            filtered_items = [it for it in brand_bucket["items"] if item_qty_in_active_durations(it) > 0]
+            if not filtered_items:
+                continue
+
+            brand_totals = {f: 0.0 for f in ["closing_qty"] + active_age_fields + AGEING_LOCATION_FIELDS}
+            for item in filtered_items:
+                row_vals = [cat["category_name"], brand_bucket["brand_name"], item["item_details"], item.get("unit") or ""]
+                row_vals += [round(item.get("closing_qty") or 0, 2)]
+                row_vals += [round(item.get(f) or 0, 2) for f in active_age_fields]
+                row_vals += [round(item.get(f) or 0, 2) for f in AGEING_LOCATION_FIELDS]
+                row_vals += [item.get("locations_present") or "-"]
+                for ci, val in enumerate(row_vals, start=1):
+                    cell = ws.cell(row=r, column=ci, value=val)
+                    cell.font = FONT_DATA
+                    cell.border = BORDER_ALL
+                    if ci >= 5 and ci < len(headers):
+                        cell.number_format = NUMFMT
+                    cell.alignment = _Alignment(horizontal="left" if ci in (1, 2, 3, 4, len(headers)) else "right")
+                brand_totals["closing_qty"] += item.get("closing_qty") or 0
+                for f in active_age_fields + AGEING_LOCATION_FIELDS:
+                    brand_totals[f] += item.get(f) or 0
+                r += 1
+            any_rows_written = True
+
+            # Brand subtotal row
+            sub_vals = ["", f"{brand_bucket['brand_name']} Total", "", ""] + totals_row_values(brand_totals) + [""]
+            for ci, val in enumerate(sub_vals, start=1):
+                cell = ws.cell(row=r, column=ci, value=val)
+                cell.font = FONT_TOTAL
+                cell.fill = FILL_TOTAL
+                cell.border = BORDER_ALL
+                if ci >= 5 and ci < len(headers):
+                    cell.number_format = NUMFMT
+                cell.alignment = _Alignment(horizontal="left" if ci in (1, 2, 3, 4, len(headers)) else "right")
+            r += 1
+
+            grand_totals["closing_qty"] += brand_totals["closing_qty"]
+            for f in active_age_fields + AGEING_LOCATION_FIELDS:
+                grand_totals[f] += brand_totals[f]
+
+    if not any_rows_written:
+        raise HTTPException(status_code=404, detail="No items have stock in the selected duration(s).")
+
+    grand_vals = ["", "GRAND TOTAL", "", ""] + [round(grand_totals["closing_qty"], 2)] + \
+                 [round(grand_totals[f], 2) for f in active_age_fields] + \
+                 [round(grand_totals[f], 2) for f in AGEING_LOCATION_FIELDS] + [""]
+    for ci, val in enumerate(grand_vals, start=1):
+        cell = ws.cell(row=r, column=ci, value=val)
+        cell.font = FONT_GRAND
+        cell.fill = FILL_GRAND
+        cell.border = BORDER_ALL
+        if ci >= 5 and ci < len(headers):
+            cell.number_format = NUMFMT
+        cell.alignment = _Alignment(horizontal="left" if ci in (1, 2, 3, 4, len(headers)) else "right")
+
+    widths = [16, 18, 40, 8, 11] + [11] * len(active_age_fields) + [8] * len(AGEING_LOCATION_FIELDS) + [22]
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[_get_column_letter(i)].width = w
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+
+    fname_bits = [filt.get("category") or "ALL"]
+    if filt.get("search"):
+        fname_bits.append("search")
+    filename = f"Ageing_Stock_Report_{'_'.join(fname_bits)}.xlsx".replace(" ", "_")
+
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @app.delete("/api/ageing-stock/clear")

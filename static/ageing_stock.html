@@ -70,6 +70,17 @@
     .filters select, .filters input[type=text] { padding:9px 11px; border:1.5px solid var(--line); border-radius:8px; font-size:13px; font-family:inherit; font-weight:700; color:var(--ink); }
     .filters input[type=text] { min-width:220px; }
 
+    /* Date Duration picker (checkbox dropdown), sits right after Collapse all */
+    .duration-picker { position:relative; display:inline-block; }
+    #durationBtnCount { color:var(--age); font-weight:900; }
+    .duration-menu { display:none; position:absolute; top:calc(100% + 6px); left:0; z-index:40; background:#fff; border:1.5px solid var(--line); border-radius:10px; box-shadow:0 12px 28px rgba(16,24,40,.16); padding:12px 14px; min-width:200px; }
+    .duration-menu.open { display:block; }
+    .duration-menu-title { font-size:11.5px; font-weight:800; text-transform:uppercase; letter-spacing:.4px; color:var(--muted); margin-bottom:8px; }
+    .duration-item { display:flex; align-items:center; gap:8px; font-size:13px; font-weight:700; color:var(--ink); padding:5px 0; cursor:pointer; }
+    .duration-item input[type=checkbox] { width:15px; height:15px; accent-color:var(--age); cursor:pointer; }
+    .duration-menu-actions { display:flex; gap:8px; margin-top:10px; padding-top:10px; border-top:1px solid var(--line); }
+    .duration-menu-actions button { padding:6px 10px; font-size:12px; }
+
     .cat-section { margin-bottom:22px; }
     .cat-header { display:flex; align-items:center; justify-content:space-between; background:var(--cat-color, #111); color:#fff; padding:12px 18px; border-radius:10px 10px 0 0; cursor:pointer; }
     .cat-header h3 { margin:0; font-size:15.5px; font-weight:900; letter-spacing:.2px; }
@@ -110,7 +121,7 @@
 
   <main>
     <h1>Ageing Stock Analysis</h1>
-    <p class="subtitle">Category and brand-wise stock ageing, with the location(s) each item is physically sitting at across all outlets, Warehouse, PWH, and Vault.</p>
+    <p class="subtitle">Category and brand-wise stock ageing, with the location(s) each item is physically sitting at across all outlets and Warehouse.</p>
 
     <div class="panel" id="uploadPanel" style="display:none;">
       <h2>Upload stock ageing workbook</h2>
@@ -136,6 +147,23 @@
         <input type="text" id="searchBox" placeholder="Search item details..." oninput="debouncedSearch()" />
         <button class="btn-light" onclick="expandAll()">Expand all</button>
         <button class="btn-light" onclick="collapseAll()">Collapse all</button>
+        <div class="duration-picker" id="durationPicker">
+          <button class="btn-light" id="durationBtn" onclick="toggleDurationMenu(event)">Date Duration <span id="durationBtnCount"></span> &#9662;</button>
+          <div class="duration-menu" id="durationMenu">
+            <div class="duration-menu-title">Show ageing buckets</div>
+            <label class="duration-item"><input type="checkbox" data-age-key="age_0_60" checked onchange="onDurationCheckboxChange(this)" /> 0-60 Days</label>
+            <label class="duration-item"><input type="checkbox" data-age-key="age_61_90" checked onchange="onDurationCheckboxChange(this)" /> 61-90 Days</label>
+            <label class="duration-item"><input type="checkbox" data-age-key="age_91_150" checked onchange="onDurationCheckboxChange(this)" /> 91-150 Days</label>
+            <label class="duration-item"><input type="checkbox" data-age-key="age_151_180" checked onchange="onDurationCheckboxChange(this)" /> 151-180 Days</label>
+            <label class="duration-item"><input type="checkbox" data-age-key="age_181_365" checked onchange="onDurationCheckboxChange(this)" /> 181-365 Days</label>
+            <label class="duration-item"><input type="checkbox" data-age-key="age_366_plus" checked onchange="onDurationCheckboxChange(this)" /> &ge; 366 Days</label>
+            <div class="duration-menu-actions">
+              <button type="button" class="btn-light" onclick="setAllDurations(true)">Select all</button>
+              <button type="button" class="btn-light" onclick="setAllDurations(false)">Clear</button>
+            </div>
+          </div>
+        </div>
+        <button class="btn-primary" onclick="downloadReport()" id="downloadReportBtn">&#8681; Download Report (Excel)</button>
       </div>
     </div>
 
@@ -161,11 +189,159 @@
       window.addEventListener('load', () => navigator.serviceWorker.register(appUrl('/sw.js')).catch(() => {}));
     }
 
-    const LOC_LABELS = { qty_alm: 'ALM', qty_hzt: 'HZT', qty_ash: 'ASH', qty_gng: 'GNG', qty_vkn: 'VKN', qty_mwh: 'MWH', qty_pwh: 'PWH', qty_vault: 'Vault' };
+    const LOC_LABELS = { qty_alm: 'ALM', qty_hzt: 'HZT', qty_ash: 'ASH', qty_gng: 'GNG', qty_vkn: 'VKN', qty_mwh: 'MWH' };
     const AGE_COLS = [
       ['age_0_60', '0-60 Days'], ['age_61_90', '61-90 Days'], ['age_91_150', '91-150 Days'],
       ['age_151_180', '151-180 Days'], ['age_181_365', '181-365 Days'], ['age_366_plus', '\u2265 366 Days'],
     ];
+
+    // Which age-bucket columns are currently checked in the "Date Duration"
+    // picker. Starts with every bucket on (matches the old always-show-all
+    // behaviour). Re-rendering on a checkbox change uses the already-fetched
+    // report (lastReportData) instead of hitting the API again.
+    let ACTIVE_AGE_KEYS = new Set(AGE_COLS.map(([key]) => key));
+    let lastReportData = null;
+
+    function activeAgeCols() {
+      return AGE_COLS.filter(([key]) => ACTIVE_AGE_KEYS.has(key));
+    }
+
+    // Rebuilds the categories/brands/items tree so that only items with
+    // stock in at least one CHECKED duration bucket survive - and every
+    // subtotal/grand-total is recomputed from the surviving items only, so
+    // the numbers never include a bucket the user unchecked. Any brand or
+    // category left with zero items after filtering is dropped entirely.
+    const TOTALS_FIELDS = ['closing_qty', ...AGE_COLS.map(([k]) => k), ...Object.keys(LOC_LABELS)];
+    function emptyTotals() {
+      const t = {};
+      TOTALS_FIELDS.forEach(f => { t[f] = 0; });
+      return t;
+    }
+    function addIntoTotals(totals, item) {
+      TOTALS_FIELDS.forEach(f => { totals[f] += Number(item[f]) || 0; });
+    }
+    function itemQtyInActiveDurations(item) {
+      return activeAgeCols().reduce((sum, [key]) => sum + (Number(item[key]) || 0), 0);
+    }
+
+    function buildFilteredReport(data) {
+      const grandTotal = emptyTotals();
+      let grandItems = 0;
+      const categories = [];
+
+      for (const cat of data.categories) {
+        const brands = [];
+        const catTotals = emptyTotals();
+        let catItems = 0;
+
+        for (const brand of cat.brands) {
+          const items = brand.items.filter(it => itemQtyInActiveDurations(it) > 0);
+          if (!items.length) continue;
+
+          const brandTotals = emptyTotals();
+          items.forEach(it => addIntoTotals(brandTotals, it));
+          brands.push({ brand_name: brand.brand_name, items, totals: brandTotals });
+
+          items.forEach(it => { addIntoTotals(catTotals, it); addIntoTotals(grandTotal, it); });
+          catItems += items.length;
+          grandItems += items.length;
+        }
+
+        if (!brands.length) continue;
+        categories.push({
+          category_name: cat.category_name,
+          category_code: cat.category_code,
+          brands,
+          totals: catTotals,
+          item_count: catItems,
+        });
+      }
+
+      return { ...data, categories, grand_total: grandTotal, grand_total_items: grandItems };
+    }
+
+    function updateDurationButtonLabel() {
+      const total = AGE_COLS.length;
+      const active = ACTIVE_AGE_KEYS.size;
+      document.getElementById('durationBtnCount').textContent = active === total ? '' : `(${active}/${total})`;
+    }
+
+    function toggleDurationMenu(event) {
+      event.stopPropagation();
+      document.getElementById('durationMenu').classList.toggle('open');
+    }
+    document.addEventListener('click', (e) => {
+      const picker = document.getElementById('durationPicker');
+      if (picker && !picker.contains(e.target)) {
+        document.getElementById('durationMenu').classList.remove('open');
+      }
+    });
+
+    function onDurationCheckboxChange(checkbox) {
+      const checkedCount = document.querySelectorAll('#durationMenu input[type=checkbox]:checked').length;
+      if (checkedCount === 0) {
+        // Never allow zero buckets selected - re-check this one and stop.
+        checkbox.checked = true;
+        return;
+      }
+      ACTIVE_AGE_KEYS = new Set(
+        Array.from(document.querySelectorAll('#durationMenu input[type=checkbox]:checked')).map(cb => cb.dataset.ageKey)
+      );
+      updateDurationButtonLabel();
+      if (lastReportData) renderReport(lastReportData);
+    }
+
+    function setAllDurations(checked) {
+      const boxes = Array.from(document.querySelectorAll('#durationMenu input[type=checkbox]'));
+      boxes.forEach((cb, i) => {
+        // "Clear" always leaves at least one bucket checked (the first),
+        // same rule as unchecking the last box by hand.
+        cb.checked = checked || i === 0;
+      });
+      ACTIVE_AGE_KEYS = new Set(boxes.filter(cb => cb.checked).map(cb => cb.dataset.ageKey));
+      updateDurationButtonLabel();
+      if (lastReportData) renderReport(lastReportData);
+    }
+
+    async function downloadReport() {
+      const btn = document.getElementById('downloadReportBtn');
+      const category = document.getElementById('categoryFilter').value;
+      const search = document.getElementById('searchBox').value.trim();
+      const params = new URLSearchParams();
+      if (category && category !== 'ALL') params.set('category', category);
+      if (search) params.set('search', search);
+      params.set('durations', Array.from(ACTIVE_AGE_KEYS).join(','));
+
+      btn.disabled = true;
+      const originalText = btn.innerHTML;
+      btn.innerHTML = 'Preparing...';
+      try {
+        const res = await fetch(appUrl(`/api/ageing-stock/export?${params.toString()}`), { headers: authHeaders() });
+        if (res.status === 401) { logout(); return; }
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          alert(data.detail || 'Could not generate the report. Try adjusting your filters.');
+          return;
+        }
+        const blob = await res.blob();
+        const disposition = res.headers.get('Content-Disposition') || '';
+        const match = disposition.match(/filename="?([^"]+)"?/);
+        const filename = match ? match[1] : 'Ageing_Stock_Report.xlsx';
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+      } catch (e) {
+        alert('Download failed - check your connection and try again.');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+      }
+    }
     // One accent color per core category (HA/HE/Mobile/IT), plus Other -
     // used for both the summary cards and each category's header bar.
     const CATEGORY_COLORS = { HA: '#0f766e', HE: '#6d28d9', MH: '#15803d', IT: '#1d4ed8', OTHER: '#475467' };
@@ -185,7 +361,7 @@
       }
       if (data.has_data) {
         const lu = data.last_upload;
-        const missing = ['ALM','HZT','ASH','GNG','VKN','MWH','PWH','VAULT'].filter(c => !(lu.location_sheets_found || []).includes(c));
+        const missing = ['ALM','HZT','ASH','GNG','VKN','MWH'].filter(c => !(lu.location_sheets_found || []).includes(c));
         let html = `Last upload: <strong>${lu.file_name}</strong> by ${lu.uploaded_by || '-'} on ${new Date(lu.uploaded_at).toLocaleString()} - ${lu.item_count} items.`;
         if (missing.length) html += ` <span class="pill pill-warn">Missing sheets: ${missing.join(', ')}</span>`;
         if (lu.unclassified_count) html += ` <span class="pill pill-warn">${lu.unclassified_count} item(s) need category review</span>`;
@@ -261,7 +437,7 @@
       return Object.keys(LOC_LABELS).map(k => `<td class="loc-col">${fmt(totals[k])}</td>`).join('');
     }
     function ageDataCells(row) {
-      return AGE_COLS.map(([key]) => `<td>${fmt(row[key])}</td>`).join('');
+      return activeAgeCols().map(([key]) => `<td>${fmt(row[key])}</td>`).join('');
     }
 
     function renderBrandTable(brand) {
@@ -284,7 +460,7 @@
               <thead>
                 <tr>
                   <th>Item Details</th><th>Unit</th><th>Closing Qty</th>
-                  ${AGE_COLS.map(([, label]) => `<th>${label}</th>`).join('')}
+                  ${activeAgeCols().map(([, label]) => `<th>${label}</th>`).join('')}
                   ${locationHeaderCells()}
                   <th>Present At</th>
                 </tr>
@@ -293,7 +469,7 @@
                 ${rowsHtml}
                 <tr class="subtotal">
                   <td>Total</td><td></td><td>${fmt(brand.totals.closing_qty)}</td>
-                  ${AGE_COLS.map(([key]) => `<td>${fmt(brand.totals[key])}</td>`).join('')}
+                  ${activeAgeCols().map(([key]) => `<td>${fmt(brand.totals[key])}</td>`).join('')}
                   ${locationTotalCells(brand.totals)}
                   <td></td>
                 </tr>
@@ -362,7 +538,15 @@
       if (res.status === 401) { logout(); return; }
       const data = await res.json();
       document.getElementById('loadingState').style.display = 'none';
+      lastReportData = data;
+      renderReport(data);
+    }
 
+    // Renders from an already-fetched report payload (cached in
+    // lastReportData). Called both after a fresh fetch and whenever the
+    // Date Duration checkboxes change, so toggling which ageing buckets are
+    // visible doesn't need a round trip to the server.
+    function renderReport(data) {
       if (!data.has_data) {
         document.getElementById('emptyState').style.display = 'block';
         document.getElementById('filtersPanel').style.display = 'none';
@@ -372,28 +556,29 @@
       document.getElementById('emptyState').style.display = 'none';
       document.getElementById('filtersPanel').style.display = 'block';
 
+      const filtered = buildFilteredReport(data);
       const root = document.getElementById('reportRoot');
-      if (!data.categories.length) {
-        root.innerHTML = '<div id="emptyState" style="display:block;">No items match this filter.</div>';
+      if (!filtered.categories.length) {
+        root.innerHTML = '<div id="emptyState" style="display:block;">No items have stock in the selected duration(s).</div>';
         return;
       }
 
-      const dashHtml = renderDashboard(data);
-      const catsHtml = data.categories.map((c, i) => renderCategory(c, i)).join('');
+      const dashHtml = renderDashboard(filtered);
+      const catsHtml = filtered.categories.map((c, i) => renderCategory(c, i)).join('');
       const grandHtml = `
         <div class="scroll-wrap">
           <table>
             <thead><tr>
-              <th>Grand Total (${data.grand_total_items} items)</th><th></th><th>Closing Qty</th>
-              ${AGE_COLS.map(([, label]) => `<th>${label}</th>`).join('')}
+              <th>Grand Total (${filtered.grand_total_items} items)</th><th></th><th>Closing Qty</th>
+              ${activeAgeCols().map(([, label]) => `<th>${label}</th>`).join('')}
               ${locationHeaderCells()}
               <th></th>
             </tr></thead>
             <tbody>
               <tr class="grand-total">
-                <td>Grand Total</td><td></td><td>${fmt(data.grand_total.closing_qty)}</td>
-                ${AGE_COLS.map(([key]) => `<td>${fmt(data.grand_total[key])}</td>`).join('')}
-                ${locationTotalCells(data.grand_total)}
+                <td>Grand Total</td><td></td><td>${fmt(filtered.grand_total.closing_qty)}</td>
+                ${activeAgeCols().map(([key]) => `<td>${fmt(filtered.grand_total[key])}</td>`).join('')}
+                ${locationTotalCells(filtered.grand_total)}
                 <td></td>
               </tr>
             </tbody>
