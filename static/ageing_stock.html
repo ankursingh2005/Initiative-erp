@@ -21,7 +21,7 @@
       --c-ha:#0f766e; --c-he:#6d28d9; --c-mh:#15803d; --c-it:#1d4ed8; --c-other:#475467;
     }
     * { box-sizing:border-box; }
-    body { margin:0; font-family:'Manrope', sans-serif; background:var(--bg); color:var(--ink); font-weight:600; }
+    body { margin:0; font-family:'Manrope', sans-serif; background:var(--bg); color:var(--ink); font-weight:600; -webkit-overflow-scrolling:touch; overscroll-behavior-y:contain; }
     header { background:linear-gradient(90deg, #181818 0%, #000000 100%); color:#fff; padding:14px clamp(16px,3vw,32px); display:flex; gap:16px; align-items:center; justify-content:space-between; }
     .brand { font-weight:900; font-size:16px; display:flex; align-items:center; gap:10px; }
     .brand a { color:#fff; text-decoration:none; font-size:13px; font-weight:700; opacity:.8; }
@@ -66,9 +66,47 @@
     .dash-card.dash-total .dash-label { color:#d0d5dd; }
     .dash-card.dash-total .dash-value, .dash-card.dash-total .dash-sub { color:#fff; }
 
-    .filters { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:16px; }
-    .filters select, .filters input[type=text] { padding:9px 11px; border:1.5px solid var(--line); border-radius:8px; font-size:13px; font-family:inherit; font-weight:700; color:var(--ink); }
-    .filters input[type=text] { min-width:220px; }
+    .filters { display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between; margin-bottom:16px; }
+    .filters-left { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+    .filters-right { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-left:auto; }
+    .filters select, .filters input[type=text] { padding:9px 12px; border:1.5px solid var(--line); border-radius:8px; font-size:14px; font-family:inherit; font-weight:700; color:var(--ink); }
+    .filters input[type=text] { min-width:190px; }
+    .filters button { font-size:14px; }
+    .filters .btn-light { padding:9px 14px; }
+    .filters .btn-primary { padding:9px 16px; }
+
+    /* Brand picker (searchable dropdown), sits right after Category */
+    .brand-picker { position:relative; display:inline-block; }
+    #brandFilterBtn { display:inline-flex; align-items:center; gap:6px; min-width:155px; justify-content:space-between; }
+    #brandFilterBtnLabel { max-width:190px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    #itemCatFilterBtn { display:inline-flex; align-items:center; gap:6px; min-width:170px; justify-content:space-between; }
+    #itemCatFilterBtnLabel { max-width:210px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    #itemCatMenu { width:250px; }
+    .brand-menu { display:none; position:absolute; top:calc(100% + 6px); left:0; z-index:40; background:#fff; border:1.5px solid var(--line); border-radius:10px; box-shadow:0 12px 28px rgba(16,24,40,.16); padding:10px; width:280px; }
+    .brand-menu.open { display:block; }
+    .brand-search { width:100%; padding:8px 10px; border:1.5px solid var(--line); border-radius:8px; font-size:13px; font-family:inherit; font-weight:700; box-sizing:border-box; margin-bottom:8px; }
+    .brand-search:focus { outline:none; border-color:var(--age); }
+    .brand-list { max-height:260px; overflow-y:auto; }
+    .brand-option { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:7px 8px; border-radius:6px; font-size:13px; font-weight:700; color:var(--ink); cursor:pointer; }
+    .brand-option:hover { background:#f5f7fb; }
+    .brand-option.active { background:var(--age-glow); color:var(--age-dark); }
+    .brand-option .brand-count { font-size:11px; font-weight:800; color:var(--muted); }
+    .brand-option.active .brand-count { color:var(--age); }
+    .brand-empty { padding:12px 8px; font-size:12.5px; color:var(--muted); text-align:center; font-weight:700; }
+    .brand-all { border-bottom:1px solid var(--line); margin-bottom:6px; padding-bottom:8px; }
+
+    /* Download Report format picker - same dropdown pattern as the Brand
+       and Item Category pickers above, listing Excel/PDF/Image choices. */
+    .download-picker { position:relative; display:inline-block; }
+    .download-menu { display:none; position:absolute; top:calc(100% + 6px); right:0; z-index:40; background:#fff; border:1.5px solid var(--line); border-radius:10px; box-shadow:0 12px 28px rgba(16,24,40,.16); padding:8px; width:210px; }
+    .download-menu.open { display:block; }
+    .download-option { display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:8px; font-size:13.5px; font-weight:800; color:var(--ink); cursor:pointer; }
+    .download-option:hover { background:#f5f7fb; }
+    .download-option .dl-icon { width:26px; height:26px; border-radius:7px; display:flex; align-items:center; justify-content:center; font-size:10.5px; font-weight:900; color:#fff; flex-shrink:0; }
+    .download-option .dl-sub { font-size:11px; color:var(--muted); font-weight:700; margin-top:1px; }
+    .dl-icon.xlsx { background:#1a7f42; }
+    .dl-icon.pdf { background:#b42318; }
+    .dl-icon.jpg { background:#1d4ed8; }
 
     /* Date Duration picker (checkbox dropdown), sits right after Collapse all */
     .duration-picker { position:relative; display:inline-block; }
@@ -92,22 +130,52 @@
     .brand-block:last-child { border-bottom:none; }
     .brand-title { background:#f3f4f7; padding:9px 18px; font-size:13.5px; font-weight:800; color:var(--ink-strong); border-bottom:1px solid var(--line); }
 
-    table { width:100%; border-collapse:collapse; font-size:12.5px; }
-    thead th { position:sticky; top:0; background:#f7f8fa; border-bottom:1.5px solid var(--line); padding:8px 10px; text-align:right; font-weight:800; color:var(--ink); white-space:nowrap; }
+    table { width:max-content; min-width:100%; table-layout:fixed; border-collapse:collapse; font-size:12.5px; }
+    thead th { position:sticky; top:0; background:#f7f8fa; border-bottom:1.5px solid var(--line); padding:8px 10px; text-align:right; font-weight:800; color:var(--ink); white-space:nowrap; z-index:2; }
     thead th:first-child { text-align:left; }
     tbody td { padding:7px 10px; border-bottom:1px solid #eceef2; text-align:right; white-space:nowrap; font-weight:600; color:var(--ink); }
-    tbody td:first-child { text-align:left; white-space:normal; min-width:220px; font-weight:700; }
+    tbody td:first-child { text-align:left; white-space:normal; font-weight:700; }
     tbody tr:hover { background:#f5f7fb; }
     tr.subtotal td { font-weight:800; background:#eef0f4; border-top:1.5px solid var(--line); }
     tr.grand-total td { font-weight:900; background:#000; color:#fff; font-size:13px; }
+    /* Freeze the Item Details column (first column of every table) while
+       the rest of the row scrolls horizontally - like Excel's "Freeze
+       Panes" applied to columns instead of rows. Needs its own solid
+       background per row state (normal/hover/subtotal/grand-total),
+       otherwise the columns scrolling underneath would show through the
+       sticky cell. thead th:first-child gets the highest z-index since it
+       sits at the frozen row+column intersection (top-left corner). */
+    thead th:first-child, tbody td:first-child { position:sticky; left:0; z-index:1; border-right:1px solid var(--line); transform:translateZ(0); will-change:transform; }
+    thead th:first-child { z-index:3; background:#f7f8fa; }
+    tbody td:first-child { background:#fff; }
+    tbody tr:hover td:first-child { background:#f5f7fb; }
+    tr.subtotal td:first-child { background:#eef0f4; }
+    tr.grand-total td:first-child { background:#000; }
     .loc-col { color:#344054; }
     .flag-review { color:var(--warn); font-size:10.5px; font-weight:800; margin-left:5px; }
     .locs-cell { font-size:11px; color:var(--muted); font-weight:700; }
 
     #emptyState, #loadingState { text-align:center; padding:60px 20px; color:var(--muted); font-weight:700; }
-    .scroll-wrap { overflow-x:auto; }
+    /* Each brand's item table scrolls in its own bounded box instead of
+       the whole page, so the column header row (Item Details/Unit/Closing
+       Qty/age buckets/locations/Present At) stays frozen in view - like
+       Excel's "Freeze Panes" - no matter how many items that brand has.
+       Without a real max-height + overflow-y here, position:sticky on
+       thead th has no actual scrolling container to stick within (the
+       page itself scrolls instead), which is why the header used to
+       scroll away entirely on long lists. */
+    .scroll-wrap { overflow-x:auto; overflow-y:auto; max-height:70vh; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; contain:paint; }
 
     @media(max-width:700px) { header { flex-wrap:wrap; row-gap:8px; } .header-right { width:100%; justify-content:space-between; } }
+
+    /* Clear-data confirmation modal - replaces the plain browser confirm()
+       popup with something that matches the rest of the UI. */
+    .modal-backdrop { display:none; position:fixed; inset:0; background:rgba(11,18,32,.5); z-index:100; align-items:center; justify-content:center; padding:20px; }
+    .modal-backdrop.show { display:flex; }
+    .modal-box { background:#fff; border-radius:14px; padding:24px 26px; width:100%; max-width:400px; box-shadow:0 24px 48px rgba(16,24,40,.28); }
+    .modal-box h3 { margin:0 0 8px; font-size:17px; font-weight:900; color:var(--ink-strong); }
+    .modal-box p { margin:0; font-size:13.5px; color:var(--muted); font-weight:700; line-height:1.5; }
+    .modal-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:20px; }
   </style>
 </head>
 <body>
@@ -128,7 +196,7 @@
       <div class="upload-row">
         <input type="file" id="fileInput" accept=".xlsx,.xls" />
         <button class="btn-primary" id="uploadBtn" onclick="uploadFile()">Upload &amp; Process</button>
-        <button class="btn-danger" id="clearBtn" onclick="clearData()">Clear</button>
+        <button class="btn-danger" id="clearBtn" onclick="openClearConfirm()">Clear</button>
       </div>
       <div id="uploadMsg"></div>
       <div class="meta-line" id="metaLine"></div>
@@ -136,34 +204,99 @@
 
     <div class="panel" id="filtersPanel" style="display:none;">
       <div class="filters">
-        <select id="categoryFilter" onchange="loadReport()">
-          <option value="ALL">All Categories</option>
-          <option value="HA">HA</option>
-          <option value="HE">HE</option>
-          <option value="IT">COMPUTER</option>
-          <option value="MH">MOBILE</option>
-          <option value="OTHER">ACCESSORIES</option>
-        </select>
-        <input type="text" id="searchBox" placeholder="Search item details..." oninput="debouncedSearch()" />
-        <button class="btn-light" onclick="expandAll()">Expand all</button>
-        <button class="btn-light" onclick="collapseAll()">Collapse all</button>
-        <div class="duration-picker" id="durationPicker">
-          <button class="btn-light" id="durationBtn" onclick="toggleDurationMenu(event)">Date Duration <span id="durationBtnCount"></span> &#9662;</button>
-          <div class="duration-menu" id="durationMenu">
-            <div class="duration-menu-title">Show ageing buckets</div>
-            <label class="duration-item"><input type="checkbox" data-age-key="age_0_60" checked onchange="onDurationCheckboxChange(this)" /> 0-60 Days</label>
-            <label class="duration-item"><input type="checkbox" data-age-key="age_61_90" checked onchange="onDurationCheckboxChange(this)" /> 61-90 Days</label>
-            <label class="duration-item"><input type="checkbox" data-age-key="age_91_150" checked onchange="onDurationCheckboxChange(this)" /> 91-150 Days</label>
-            <label class="duration-item"><input type="checkbox" data-age-key="age_151_180" checked onchange="onDurationCheckboxChange(this)" /> 151-180 Days</label>
-            <label class="duration-item"><input type="checkbox" data-age-key="age_181_365" checked onchange="onDurationCheckboxChange(this)" /> 181-365 Days</label>
-            <label class="duration-item"><input type="checkbox" data-age-key="age_366_plus" checked onchange="onDurationCheckboxChange(this)" /> &ge; 366 Days</label>
-            <div class="duration-menu-actions">
-              <button type="button" class="btn-light" onclick="setAllDurations(true)">Select all</button>
-              <button type="button" class="btn-light" onclick="setAllDurations(false)">Clear</button>
+        <div class="filters-left">
+          <div class="brand-picker" id="categoryPicker">
+            <button class="btn-light" id="categoryFilterBtn" type="button" onclick="toggleCategoryMenu(event)">
+              <span id="categoryFilterBtnLabel">All Categories</span> &#9662;
+            </button>
+            <div class="duration-menu" id="categoryMenu">
+              <div class="duration-menu-title">Show categories</div>
+              <label class="duration-item"><input type="checkbox" data-category-key="HA" checked onchange="onCategoryCheckboxChange(this)" /> HA</label>
+              <label class="duration-item"><input type="checkbox" data-category-key="HE" checked onchange="onCategoryCheckboxChange(this)" /> HE</label>
+              <label class="duration-item"><input type="checkbox" data-category-key="IT" checked onchange="onCategoryCheckboxChange(this)" /> COMPUTER</label>
+              <label class="duration-item"><input type="checkbox" data-category-key="MH" checked onchange="onCategoryCheckboxChange(this)" /> MOBILE</label>
+              <label class="duration-item"><input type="checkbox" data-category-key="DC" checked onchange="onCategoryCheckboxChange(this)" /> DIGITAL CAMERA</label>
+              <label class="duration-item"><input type="checkbox" data-category-key="OTHER" checked onchange="onCategoryCheckboxChange(this)" /> ACCESSORIES</label>
+              <div class="duration-menu-actions">
+                <button type="button" class="btn-light" onclick="setAllCategories(true)">Select all</button>
+                <button type="button" class="btn-light" onclick="setAllCategories(false)">Clear</button>
+              </div>
+            </div>
+          </div>
+          <div class="brand-picker" id="brandPicker">
+            <button class="btn-light" id="brandFilterBtn" type="button" onclick="toggleBrandMenu(event)">
+              <span id="brandFilterBtnLabel">All Brands</span> &#9662;
+            </button>
+            <div class="brand-menu" id="brandMenu">
+              <input type="text" id="brandSearchInput" class="brand-search" placeholder="Search brand..." oninput="renderBrandOptions()" onclick="event.stopPropagation()" />
+              <div class="brand-list" id="brandList"></div>
+            </div>
+          </div>
+          <div class="brand-picker" id="branchPicker">
+            <button class="btn-light" id="branchBtn" type="button" onclick="toggleBranchMenu(event)">
+              Branch <span id="branchBtnCount"></span> &#9662;
+            </button>
+            <div class="duration-menu" id="branchMenu">
+              <div class="duration-menu-title">Show branches</div>
+              <label class="duration-item"><input type="checkbox" data-branch-key="qty_alm" checked onchange="onBranchCheckboxChange(this)" /> ALM</label>
+              <label class="duration-item"><input type="checkbox" data-branch-key="qty_hzt" checked onchange="onBranchCheckboxChange(this)" /> HZT</label>
+              <label class="duration-item"><input type="checkbox" data-branch-key="qty_ash" checked onchange="onBranchCheckboxChange(this)" /> ASH</label>
+              <label class="duration-item"><input type="checkbox" data-branch-key="qty_gng" checked onchange="onBranchCheckboxChange(this)" /> GNG</label>
+              <label class="duration-item"><input type="checkbox" data-branch-key="qty_vkn" checked onchange="onBranchCheckboxChange(this)" /> VKN</label>
+              <label class="duration-item"><input type="checkbox" data-branch-key="qty_mwh" checked onchange="onBranchCheckboxChange(this)" /> MWH</label>
+              <div class="duration-menu-actions">
+                <button type="button" class="btn-light" onclick="setAllBranches(true)">Select all</button>
+                <button type="button" class="btn-light" onclick="setAllBranches(false)">Clear</button>
+              </div>
+            </div>
+          </div>
+          <div class="brand-picker" id="itemCatPicker">
+            <button class="btn-light" id="itemCatFilterBtn" type="button" onclick="toggleItemCatMenu(event)">
+              <span id="itemCatFilterBtnLabel">All Item Categories</span> &#9662;
+            </button>
+            <div class="brand-menu" id="itemCatMenu">
+              <input type="text" id="itemCatSearchInput" class="brand-search" placeholder="Search item category..." oninput="renderItemCatOptions()" onclick="event.stopPropagation()" />
+              <div class="brand-list" id="itemCatList"></div>
+            </div>
+          </div>
+          <input type="text" id="searchBox" placeholder="Search item details or model no..." oninput="debouncedSearch()" />
+        </div>
+        <div class="filters-right">
+          <button class="btn-light" id="expandCollapseAllBtn" onclick="toggleExpandCollapseAll()">Collapse all</button>
+          <div class="duration-picker" id="durationPicker">
+            <button class="btn-light" id="durationBtn" onclick="toggleDurationMenu(event)">Date Duration <span id="durationBtnCount"></span> &#9662;</button>
+            <div class="duration-menu" id="durationMenu">
+              <div class="duration-menu-title">Show ageing buckets</div>
+              <label class="duration-item"><input type="checkbox" data-age-key="age_0_60" checked onchange="onDurationCheckboxChange(this)" /> 0-60 Days</label>
+              <label class="duration-item"><input type="checkbox" data-age-key="age_61_90" checked onchange="onDurationCheckboxChange(this)" /> 61-90 Days</label>
+              <label class="duration-item"><input type="checkbox" data-age-key="age_91_150" checked onchange="onDurationCheckboxChange(this)" /> 91-150 Days</label>
+              <label class="duration-item"><input type="checkbox" data-age-key="age_151_180" checked onchange="onDurationCheckboxChange(this)" /> 151-180 Days</label>
+              <label class="duration-item"><input type="checkbox" data-age-key="age_181_365" checked onchange="onDurationCheckboxChange(this)" /> 181-365 Days</label>
+              <label class="duration-item"><input type="checkbox" data-age-key="age_366_plus" checked onchange="onDurationCheckboxChange(this)" /> &ge; 366 Days</label>
+              <div class="duration-menu-actions">
+                <button type="button" class="btn-light" onclick="setAllDurations(true)">Select all</button>
+                <button type="button" class="btn-light" onclick="setAllDurations(false)">Clear</button>
+              </div>
+            </div>
+          </div>
+          <div class="download-picker" id="downloadPicker">
+            <button class="btn-primary" type="button" onclick="toggleDownloadMenu(event)" id="downloadReportBtn">&#8681; Download Report</button>
+            <div class="download-menu" id="downloadMenu">
+              <div class="download-option" onclick="downloadReport('xlsx')">
+                <span class="dl-icon xlsx">XLS</span>
+                <span><div>Excel Workbook</div><div class="dl-sub">.xlsx - editable spreadsheet</div></span>
+              </div>
+              <div class="download-option" onclick="downloadReport('pdf')">
+                <span class="dl-icon pdf">PDF</span>
+                <span><div>PDF Document</div><div class="dl-sub">.pdf - for sharing/printing</div></span>
+              </div>
+              <div class="download-option" onclick="downloadReport('jpg')">
+                <span class="dl-icon jpg">JPG</span>
+                <span><div>Image</div><div class="dl-sub">.jpg - quick snapshot</div></span>
+              </div>
             </div>
           </div>
         </div>
-        <button class="btn-primary" onclick="downloadReport()" id="downloadReportBtn">&#8681; Download Report (Excel)</button>
       </div>
     </div>
 
@@ -171,6 +304,17 @@
     <div id="emptyState" style="display:none;">No ageing stock data uploaded yet. Ask your Admin to upload the workbook.</div>
     <div id="reportRoot"></div>
   </main>
+
+  <div class="modal-backdrop" id="clearConfirmModal" onclick="if (event.target === this) closeClearConfirm()">
+    <div class="modal-box" role="alertdialog" aria-modal="true" aria-labelledby="clearConfirmTitle">
+      <h3 id="clearConfirmTitle">Clear all Ageing Stock Analysis data?</h3>
+      <p>This removes every uploaded item and cannot be undone.</p>
+      <div class="modal-actions">
+        <button class="btn-light" onclick="closeClearConfirm()">Cancel</button>
+        <button class="btn-danger" id="clearConfirmBtn" onclick="clearData()">Clear</button>
+      </div>
+    </div>
+  </div>
 
   <script>
     function appUrl(path) {
@@ -202,8 +346,313 @@
     let ACTIVE_AGE_KEYS = new Set(AGE_COLS.map(([key]) => key));
     let lastReportData = null;
 
+    // Brand picker state: the full brand list (fetched once from
+    // /api/ageing-stock/brands) and which brand is currently selected as a
+    // filter. selectedBrand === '' means "All Brands" - the report then
+    // shows every category, same as today. Picking one brand narrows the
+    // report to that brand's items across ALL categories it appears in
+    // (the category filter is left as-is and combines with it, same as any
+    // other two filters), which is what "one brand belongs to all
+    // category" means here.
+    let ALL_BRANDS = [];
+    let selectedBrand = '';
+
+    // Branch picker state: which location columns (ALM/HZT/ASH/GNG/VKN/MWH)
+    // are currently checked in the "Branch" picker. Starts with all six on
+    // (matches the old "show everything" behaviour). Unchecking a branch
+    // both hides its qty_xxx column from every table (same as the Date
+    // Duration picker hiding age-bucket columns) AND drops any item that
+    // has zero stock across every still-checked branch, so items only
+    // present in a hidden branch disappear from the report entirely.
+    let ACTIVE_BRANCH_KEYS = new Set(Object.keys(LOC_LABELS));
+
+    // Item Category picker: a product-type filter (LED, Cooler, AC, etc.)
+    // that sits right next to the Brand picker. There's no server field
+    // for this - it's derived purely by keyword-matching each item's
+    // item_details text - so classification and counting both happen
+    // client-side against whatever report data is already loaded.
+    // Picking one narrows the report to only items of that type, and any
+    // brand/category left with zero matching items is dropped (same rule
+    // the Date Duration picker already uses).
+    const ITEM_CATEGORIES = [
+      { code: 'LED', label: 'LED / TV', match: [/\bLED\b/, /\bQLED\b/, /\bOLED\b/, /\bTELEVISION\b/] },
+      { code: 'SPEAKER', label: 'Speaker', match: [/\bSPEAKER\b/] },
+      { code: 'REF', label: 'Refrigerator (REF)', match: [/\bREF\b/, /\bREFRIGERATOR\b/, /\bFRIDGE\b/] },
+      { code: 'WM', label: 'Washing Machine (WM)', match: [/\bWM\b/, /\bWASHING MACHINE\b/] },
+      { code: 'GEYSER', label: 'Geyser', match: [/\bGEYSER\b/, /\bWATER HEATER\b/] },
+      { code: 'COOLER', label: 'Cooler', match: [/\bCOOLER\b/] },
+      { code: 'IRON', label: 'Iron', match: [/\bIRON\b/] },
+      { code: 'MIXER', label: 'Mixer', match: [/\bMIXER\b/] },
+      { code: 'BLENDER', label: 'Blender', match: [/\bBLENDER\b/] },
+      { code: 'AIR_PURIFIER', label: 'Air Purifier', match: [/\bAIR\s*PURIFIER\b/] },
+      { code: 'HAIR_DRYER', label: 'Hair Dryer', match: [/\bHAIR\s*DRYER\b/] },
+      { code: 'VACUUM', label: 'Vacuum Cleaner', match: [/\bVACUUM\b/] },
+      { code: 'MWO', label: 'Microwave (MWO)', match: [/\bMWO\b/, /\bMICROWAVE\b/] },
+      // HOOD and RO must come before AC: their specs often include an "AC"
+      // abbreviation of their own (Auto Clean / Alkaline Copper) that isn't
+      // an air conditioner - checking these first keeps that from wrongly
+      // landing them under AC (All Types). Mirrors AGEING_ITEM_CATEGORIES
+      // in main.py - keep both lists in sync.
+      { code: 'HOOD', label: 'Chimney / Hood', match: [/\bHOOD\b/, /\bCHIMNEY\b/] },
+      { code: 'RO', label: 'RO / Water Purifier', match: [/\bRO\b/, /\bAQUAGUARD\b/, /\bWATER\s*PURIFIER\b/] },
+      { code: 'AC', label: 'AC (All Types)', match: [/\bAC\b/, /\bSAC\b/, /\bAIR\s*CONDITION/] },
+      { code: 'FAN', label: 'Fan', match: [/\bFAN\b/] },
+      { code: 'JUICER', label: 'Juicer', match: [/\bJUICER\b/] },
+      { code: 'SOUNDBAR', label: 'Soundbar', match: [/\bSOUND\s*BAR\b/] },
+    ];
+    let selectedItemCategory = '';
+
+    function classifyItemCategory(text) {
+      const t = (text || '').toUpperCase();
+      for (const cat of ITEM_CATEGORIES) {
+        if (cat.match.some(re => re.test(t))) return cat.code;
+      }
+      return null;
+    }
+
+    // Tallies how many items (in whatever report data is currently
+    // loaded) fall into each item category, so the dropdown can show a
+    // count next to each option - same look as the Brand picker.
+    function computeItemCategoryCounts() {
+      const counts = {};
+      if (!lastReportData || !lastReportData.categories) return counts;
+      lastReportData.categories.forEach(cat => {
+        cat.brands.forEach(brand => {
+          brand.items.forEach(item => {
+            const code = classifyItemCategory(item.item_details);
+            if (code) counts[code] = (counts[code] || 0) + 1;
+          });
+        });
+      });
+      return counts;
+    }
+
+    function renderItemCatOptions() {
+      const list = document.getElementById('itemCatList');
+      const q = document.getElementById('itemCatSearchInput').value.trim().toLowerCase();
+      const counts = computeItemCategoryCounts();
+      const matches = q ? ITEM_CATEGORIES.filter(c => c.label.toLowerCase().includes(q)) : ITEM_CATEGORIES;
+
+      const allOption = `
+        <div class="brand-option brand-all ${selectedItemCategory === '' ? 'active' : ''}" onclick="selectItemCategory('')">
+          <span>All Item Categories</span>
+        </div>
+      `;
+
+      if (!matches.length) {
+        list.innerHTML = allOption + '<div class="brand-empty">No item category matches your search.</div>';
+        return;
+      }
+
+      list.innerHTML = allOption + matches.map(c => `
+        <div class="brand-option ${selectedItemCategory === c.code ? 'active' : ''}" onclick="selectItemCategory('${c.code}')">
+          <span>${c.label}</span>
+          <span class="brand-count">${counts[c.code] || 0}</span>
+        </div>
+      `).join('');
+    }
+
+    function selectItemCategory(code) {
+      selectedItemCategory = code;
+      const cat = ITEM_CATEGORIES.find(c => c.code === code);
+      document.getElementById('itemCatFilterBtnLabel').textContent = cat ? cat.label : 'All Item Categories';
+      document.getElementById('itemCatMenu').classList.remove('open');
+      renderItemCatOptions();
+      // Purely client-side filter - no need to re-fetch, just re-render
+      // from whatever's already been loaded.
+      if (lastReportData) renderReport(lastReportData);
+    }
+
+    function updateBranchButtonLabel() {
+      const total = Object.keys(LOC_LABELS).length;
+      const active = ACTIVE_BRANCH_KEYS.size;
+      document.getElementById('branchBtnCount').textContent = active === total ? '' : `(${active}/${total})`;
+    }
+
+    function toggleBranchMenu(event) {
+      event.stopPropagation();
+      document.getElementById('branchMenu').classList.toggle('open');
+    }
+    document.addEventListener('click', (e) => {
+      const picker = document.getElementById('branchPicker');
+      if (picker && !picker.contains(e.target)) {
+        document.getElementById('branchMenu').classList.remove('open');
+      }
+    });
+
+    function onBranchCheckboxChange(checkbox) {
+      const checkedCount = document.querySelectorAll('#branchMenu input[type=checkbox]:checked').length;
+      if (checkedCount === 0) {
+        // Never allow zero branches selected - re-check this one and stop.
+        checkbox.checked = true;
+        return;
+      }
+      ACTIVE_BRANCH_KEYS = new Set(
+        Array.from(document.querySelectorAll('#branchMenu input[type=checkbox]:checked')).map(cb => cb.dataset.branchKey)
+      );
+      updateBranchButtonLabel();
+      // Purely client-side - no re-fetch needed, just re-render (hides the
+      // unchecked branch columns and drops items with no stock left in
+      // any checked branch) from whatever's already been loaded.
+      if (lastReportData) renderReport(lastReportData);
+    }
+
+    function setAllBranches(checked) {
+      const boxes = Array.from(document.querySelectorAll('#branchMenu input[type=checkbox]'));
+      boxes.forEach((cb, i) => {
+        // "Clear" always leaves at least one branch checked (the first),
+        // same rule as unchecking the last box by hand.
+        cb.checked = checked || i === 0;
+      });
+      ACTIVE_BRANCH_KEYS = new Set(boxes.filter(cb => cb.checked).map(cb => cb.dataset.branchKey));
+      updateBranchButtonLabel();
+      if (lastReportData) renderReport(lastReportData);
+    }
+
+    // "All Categories" is a checkbox multi-select (like Branch), so users
+    // can view any combination of categories at once instead of only one
+    // at a time. An empty/"select all" state is sent to the backend as no
+    // category param at all (same as the old "ALL" option); a subset is
+    // sent as a comma-separated list of category codes.
+    const CATEGORY_KEYS = ['HA', 'HE', 'IT', 'MH', 'DC', 'OTHER'];
+    let ACTIVE_CATEGORY_KEYS = new Set(CATEGORY_KEYS);
+
+    function updateCategoryButtonLabel() {
+      const total = CATEGORY_KEYS.length;
+      const active = ACTIVE_CATEGORY_KEYS.size;
+      document.getElementById('categoryFilterBtnLabel').textContent =
+        active === total ? 'All Categories' : `Categories (${active}/${total})`;
+    }
+
+    function categoryParamValue() {
+      return ACTIVE_CATEGORY_KEYS.size === CATEGORY_KEYS.length ? '' : Array.from(ACTIVE_CATEGORY_KEYS).join(',');
+    }
+
+    function toggleCategoryMenu(event) {
+      event.stopPropagation();
+      document.getElementById('categoryMenu').classList.toggle('open');
+    }
+    document.addEventListener('click', (e) => {
+      const picker = document.getElementById('categoryPicker');
+      if (picker && !picker.contains(e.target)) {
+        document.getElementById('categoryMenu').classList.remove('open');
+      }
+    });
+
+    function onCategoryCheckboxChange(checkbox) {
+      const checkedCount = document.querySelectorAll('#categoryMenu input[type=checkbox]:checked').length;
+      if (checkedCount === 0) {
+        // Never allow zero categories selected - re-check this one and stop.
+        checkbox.checked = true;
+        return;
+      }
+      ACTIVE_CATEGORY_KEYS = new Set(
+        Array.from(document.querySelectorAll('#categoryMenu input[type=checkbox]:checked')).map(cb => cb.dataset.categoryKey)
+      );
+      updateCategoryButtonLabel();
+      loadReport();
+    }
+
+    function setAllCategories(checked) {
+      const boxes = Array.from(document.querySelectorAll('#categoryMenu input[type=checkbox]'));
+      boxes.forEach((cb, i) => {
+        // "Clear" always leaves at least one category checked (the first),
+        // same rule as unchecking the last box by hand.
+        cb.checked = checked || i === 0;
+      });
+      ACTIVE_CATEGORY_KEYS = new Set(boxes.filter(cb => cb.checked).map(cb => cb.dataset.categoryKey));
+      updateCategoryButtonLabel();
+      loadReport();
+    }
+
+    function toggleItemCatMenu(event) {
+      event.stopPropagation();
+      const menu = document.getElementById('itemCatMenu');
+      const opening = !menu.classList.contains('open');
+      menu.classList.toggle('open');
+      if (opening) {
+        const input = document.getElementById('itemCatSearchInput');
+        input.value = '';
+        renderItemCatOptions();
+        setTimeout(() => input.focus(), 0);
+      }
+    }
+    document.addEventListener('click', (e) => {
+      const picker = document.getElementById('itemCatPicker');
+      if (picker && !picker.contains(e.target)) {
+        document.getElementById('itemCatMenu').classList.remove('open');
+      }
+    });
+
+    async function loadBrands() {
+      try {
+        const res = await fetch(appUrl('/api/ageing-stock/brands'), { headers: authHeaders() });
+        if (res.status === 401) { logout(); return; }
+        const data = await res.json();
+        ALL_BRANDS = data.brands || [];
+        renderBrandOptions();
+      } catch (e) {
+        ALL_BRANDS = [];
+      }
+    }
+
+    function renderBrandOptions() {
+      const list = document.getElementById('brandList');
+      const q = document.getElementById('brandSearchInput').value.trim().toLowerCase();
+      const matches = q ? ALL_BRANDS.filter(b => b.name.toLowerCase().includes(q)) : ALL_BRANDS;
+
+      const allOption = `
+        <div class="brand-option brand-all ${selectedBrand === '' ? 'active' : ''}" onclick="selectBrand('')">
+          <span>All Brands</span>
+        </div>
+      `;
+
+      if (!matches.length) {
+        list.innerHTML = allOption + '<div class="brand-empty">No brand matches your search.</div>';
+        return;
+      }
+
+      list.innerHTML = allOption + matches.map(b => `
+        <div class="brand-option ${selectedBrand === b.name ? 'active' : ''}" onclick="selectBrand('${b.name.replace(/'/g, "\\'")}')">
+          <span>${b.name}</span>
+          <span class="brand-count">${b.item_count}</span>
+        </div>
+      `).join('');
+    }
+
+    function selectBrand(name) {
+      selectedBrand = name;
+      document.getElementById('brandFilterBtnLabel').textContent = name || 'All Brands';
+      document.getElementById('brandMenu').classList.remove('open');
+      renderBrandOptions();
+      loadReport();
+    }
+
+    function toggleBrandMenu(event) {
+      event.stopPropagation();
+      const menu = document.getElementById('brandMenu');
+      const opening = !menu.classList.contains('open');
+      menu.classList.toggle('open');
+      if (opening) {
+        const input = document.getElementById('brandSearchInput');
+        input.value = '';
+        renderBrandOptions();
+        setTimeout(() => input.focus(), 0);
+      }
+    }
+    document.addEventListener('click', (e) => {
+      const picker = document.getElementById('brandPicker');
+      if (picker && !picker.contains(e.target)) {
+        document.getElementById('brandMenu').classList.remove('open');
+      }
+    });
+
     function activeAgeCols() {
       return AGE_COLS.filter(([key]) => ACTIVE_AGE_KEYS.has(key));
+    }
+
+    function activeLocCols() {
+      return Object.entries(LOC_LABELS).filter(([key]) => ACTIVE_BRANCH_KEYS.has(key));
     }
 
     // Rebuilds the categories/brands/items tree so that only items with
@@ -218,10 +667,20 @@
       return t;
     }
     function addIntoTotals(totals, item) {
-      TOTALS_FIELDS.forEach(f => { totals[f] += Number(item[f]) || 0; });
+      TOTALS_FIELDS.forEach(f => {
+        // Closing Qty must always equal the sum of whichever duration
+        // bucket(s) are currently checked in the Date Duration picker -
+        // never the item's full raw closing_qty - so it can never show a
+        // different number than the age-bucket columns next to it.
+        totals[f] += f === 'closing_qty' ? itemQtyInActiveDurations(item) : (Number(item[f]) || 0);
+      });
     }
     function itemQtyInActiveDurations(item) {
       return activeAgeCols().reduce((sum, [key]) => sum + (Number(item[key]) || 0), 0);
+    }
+
+    function itemQtyInActiveBranches(item) {
+      return activeLocCols().reduce((sum, [key]) => sum + (Number(item[key]) || 0), 0);
     }
 
     function buildFilteredReport(data) {
@@ -235,7 +694,11 @@
         let catItems = 0;
 
         for (const brand of cat.brands) {
-          const items = brand.items.filter(it => itemQtyInActiveDurations(it) > 0);
+          const items = brand.items.filter(it =>
+            itemQtyInActiveDurations(it) > 0 &&
+            itemQtyInActiveBranches(it) > 0 &&
+            (!selectedItemCategory || classifyItemCategory(it.item_details) === selectedItemCategory)
+          );
           if (!items.length) continue;
 
           const brandTotals = emptyTotals();
@@ -303,14 +766,36 @@
       if (lastReportData) renderReport(lastReportData);
     }
 
-    async function downloadReport() {
+    function toggleDownloadMenu(event) {
+      event.stopPropagation();
+      document.getElementById('downloadMenu').classList.toggle('open');
+    }
+    document.addEventListener('click', (e) => {
+      const picker = document.getElementById('downloadPicker');
+      if (picker && !picker.contains(e.target)) {
+        document.getElementById('downloadMenu').classList.remove('open');
+      }
+    });
+
+    async function downloadReport(format) {
+      document.getElementById('downloadMenu').classList.remove('open');
       const btn = document.getElementById('downloadReportBtn');
-      const category = document.getElementById('categoryFilter').value;
+      const category = categoryParamValue();
       const search = document.getElementById('searchBox').value.trim();
       const params = new URLSearchParams();
-      if (category && category !== 'ALL') params.set('category', category);
+      if (category) params.set('category', category);
+      if (selectedBrand) params.set('brand', selectedBrand);
       if (search) params.set('search', search);
+      // Send the same Item Category filter (LED, Cooler, AC, etc.) that's
+      // currently narrowing the on-screen table, so the download always
+      // contains exactly the items visible on screen - never the full
+      // unfiltered list.
+      if (selectedItemCategory) params.set('item_category', selectedItemCategory);
+      if (ACTIVE_BRANCH_KEYS.size < Object.keys(LOC_LABELS).length) {
+        params.set('locations', Array.from(ACTIVE_BRANCH_KEYS).map(k => k.replace('qty_', '')).join(','));
+      }
       params.set('durations', Array.from(ACTIVE_AGE_KEYS).join(','));
+      params.set('format', format);
 
       btn.disabled = true;
       const originalText = btn.innerHTML;
@@ -326,7 +811,14 @@
         const blob = await res.blob();
         const disposition = res.headers.get('Content-Disposition') || '';
         const match = disposition.match(/filename="?([^"]+)"?/);
-        const filename = match ? match[1] : 'Ageing_Stock_Report.xlsx';
+        const filename = match ? match[1] : `Ageing_Stock_Report.${format}`;
+        // A JPG request for a very large, mostly-unfiltered report comes
+        // back as a .zip (one image per category) instead of a single
+        // .jpg, since one image that tall can't physically be saved - let
+        // the user know why the file extension changed.
+        if (format === 'jpg' && filename.toLowerCase().endsWith('.zip')) {
+          alert('This report has too many items for a single image, so it has been split into one JPG per category inside a .zip file.');
+        }
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -344,7 +836,7 @@
     }
     // One accent color per core category (HA/HE/Mobile/IT), plus Other -
     // used for both the summary cards and each category's header bar.
-    const CATEGORY_COLORS = { HA: '#0f766e', HE: '#6d28d9', MH: '#15803d', IT: '#1d4ed8', OTHER: '#475467' };
+    const CATEGORY_COLORS = { HA: '#0f766e', HE: '#6d28d9', MH: '#15803d', IT: '#1d4ed8', DC: '#b45309', OTHER: '#475467' };
     function catColor(code) { return CATEGORY_COLORS[(code || '').toUpperCase()] || '#111827'; }
 
     function fmt(n) {
@@ -395,6 +887,7 @@
         if (data.unclassified_count) text += ` ${data.unclassified_count} item(s) need manual category review.`;
         msg.textContent = text;
         await loadMeta();
+        await loadBrands();
         await loadReport();
       } catch (e) {
         msg.className = 'error'; msg.textContent = 'Upload failed - check your connection and try again.';
@@ -403,9 +896,17 @@
       }
     }
 
+    function openClearConfirm() {
+      document.getElementById('clearConfirmModal').classList.add('show');
+    }
+
+    function closeClearConfirm() {
+      document.getElementById('clearConfirmModal').classList.remove('show');
+    }
+
     async function clearData() {
       const msg = document.getElementById('uploadMsg');
-      if (!confirm('Clear all Ageing Stock Analysis data? This removes every uploaded item and cannot be undone.')) return;
+      closeClearConfirm();
 
       const btn = document.getElementById('clearBtn');
       btn.disabled = true; btn.textContent = 'Clearing...';
@@ -418,7 +919,14 @@
         msg.textContent = `Cleared ${data.deleted ?? 0} item(s).`;
         document.getElementById('fileInput').value = '';
         document.getElementById('metaLine').innerHTML = '';
+        selectedBrand = '';
+        document.getElementById('brandFilterBtnLabel').textContent = 'All Brands';
+        setAllBranches(true);
+        setAllCategories(true);
+        selectedItemCategory = '';
+        document.getElementById('itemCatFilterBtnLabel').textContent = 'All Item Categories';
         await loadMeta();
+        await loadBrands();
         await loadReport();
       } catch (e) {
         msg.className = 'error'; msg.textContent = 'Clear failed - check your connection and try again.';
@@ -428,13 +936,36 @@
     }
 
     function locationHeaderCells() {
-      return Object.values(LOC_LABELS).map(l => `<th>${l}</th>`).join('');
+      return activeLocCols().map(([, l]) => `<th>${l}</th>`).join('');
+    }
+    // Every ageing-stock table (each brand's item table, and the Grand
+    // Total table at the very bottom) has the exact same column set:
+    // label, Unit, Closing Qty, the active age-bucket columns, the fixed
+    // location columns, then Present At. Without this, each <table>
+    // auto-sizes its own columns from its own content, so the Grand
+    // Total table's shorter/differently-sized content drifts out of
+    // alignment with the item tables above it. Emitting the same
+    // <colgroup> (paired with table-layout:fixed in the CSS) forces every
+    // table on the page to use identical column widths, so headers and
+    // totals always line up in the same vertical columns.
+    function colgroupHtml() {
+      const ageCols = activeAgeCols().length;
+      const locCols = activeLocCols().length;
+      const cols = [
+        '<col style="width:260px">',
+        '<col style="width:70px">',
+        '<col style="width:100px">',
+        ...Array(ageCols).fill('<col style="width:100px">'),
+        ...Array(locCols).fill('<col style="width:70px">'),
+        '<col style="width:160px">',
+      ];
+      return `<colgroup>${cols.join('')}</colgroup>`;
     }
     function locationDataCells(item) {
-      return Object.keys(LOC_LABELS).map(k => `<td class="loc-col">${fmt(item[k])}</td>`).join('');
+      return activeLocCols().map(([k]) => `<td class="loc-col">${fmt(item[k])}</td>`).join('');
     }
     function locationTotalCells(totals) {
-      return Object.keys(LOC_LABELS).map(k => `<td class="loc-col">${fmt(totals[k])}</td>`).join('');
+      return activeLocCols().map(([k]) => `<td class="loc-col">${fmt(totals[k])}</td>`).join('');
     }
     function ageDataCells(row) {
       return activeAgeCols().map(([key]) => `<td>${fmt(row[key])}</td>`).join('');
@@ -445,7 +976,7 @@
         <tr>
           <td>${item.item_details}${item.classification_source === 'Unclassified' ? '<span class="flag-review">REVIEW</span>' : ''}</td>
           <td>${item.unit || ''}</td>
-          <td>${fmt(item.closing_qty)}</td>
+          <td>${fmt(itemQtyInActiveDurations(item))}</td>
           ${ageDataCells(item)}
           ${locationDataCells(item)}
           <td class="locs-cell">${item.locations_present || '-'}</td>
@@ -457,6 +988,7 @@
           <div class="brand-title">${brand.brand_name}</div>
           <div class="scroll-wrap">
             <table>
+              ${colgroupHtml()}
               <thead>
                 <tr>
                   <th>Item Details</th><th>Unit</th><th>Closing Qty</th>
@@ -516,8 +1048,16 @@
     }
 
     function filterToCategory(code) {
-      document.getElementById('categoryFilter').value = code;
-      loadReport();
+      if (code === 'ALL') {
+        setAllCategories(true);
+      } else {
+        document.querySelectorAll('#categoryMenu input[type=checkbox]').forEach(cb => {
+          cb.checked = cb.dataset.categoryKey === code;
+        });
+        ACTIVE_CATEGORY_KEYS = new Set([code]);
+        updateCategoryButtonLabel();
+        loadReport();
+      }
       window.scrollTo({ top: document.getElementById('filtersPanel').offsetTop - 12, behavior: 'smooth' });
     }
 
@@ -526,12 +1066,24 @@
     }
     function expandAll() { document.querySelectorAll('.cat-body').forEach(el => el.classList.remove('collapsed')); }
     function collapseAll() { document.querySelectorAll('.cat-body').forEach(el => el.classList.add('collapsed')); }
+    function toggleExpandCollapseAll() {
+      const btn = document.getElementById('expandCollapseAllBtn');
+      const isCollapsing = btn.textContent.trim() === 'Collapse all';
+      if (isCollapsing) {
+        collapseAll();
+        btn.textContent = 'Expand all';
+      } else {
+        expandAll();
+        btn.textContent = 'Collapse all';
+      }
+    }
 
     async function loadReport() {
-      const category = document.getElementById('categoryFilter').value;
+      const category = categoryParamValue();
       const search = document.getElementById('searchBox').value.trim();
       const params = new URLSearchParams();
-      if (category && category !== 'ALL') params.set('category', category);
+      if (category) params.set('category', category);
+      if (selectedBrand) params.set('brand', selectedBrand);
       if (search) params.set('search', search);
 
       const res = await fetch(appUrl(`/api/ageing-stock/report?${params.toString()}`), { headers: authHeaders() });
@@ -540,6 +1092,7 @@
       document.getElementById('loadingState').style.display = 'none';
       lastReportData = data;
       renderReport(data);
+      renderItemCatOptions();
     }
 
     // Renders from an already-fetched report payload (cached in
@@ -568,6 +1121,7 @@
       const grandHtml = `
         <div class="scroll-wrap">
           <table>
+            ${colgroupHtml()}
             <thead><tr>
               <th>Grand Total (${filtered.grand_total_items} items)</th><th></th><th>Closing Qty</th>
               ${activeAgeCols().map(([, label]) => `<th>${label}</th>`).join('')}
@@ -590,6 +1144,7 @@
 
     (async function init() {
       await loadMeta();
+      await loadBrands();
       await loadReport();
     })();
   </script>

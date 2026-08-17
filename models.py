@@ -567,6 +567,11 @@ class AgeingStockItem(Base):
     item_details = Column(String(255), nullable=False, index=True)
     unit = Column(String(30), nullable=True)
     closing_qty = Column(Float, default=0)
+    # From the "All Data" sheet's Model No. column, when the uploaded
+    # workbook has one. Lets the Ageing Stock Analysis search box match
+    # either Item Details or Model No. from the same field - see
+    # AGEING_HEADER_ALIASES / parse_ageing_stock_workbook in main.py.
+    model_no = Column(String(150), nullable=True, index=True)
 
     # Ageing buckets, in days
     age_0_60 = Column(Float, default=0)
