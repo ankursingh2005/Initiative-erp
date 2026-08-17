@@ -6043,6 +6043,7 @@ def _load_ageing_category_master() -> dict:
         "SUNFLAME COOKER HOOD MAGNUM 60": "HA",              # Sunflame Cooker Hood Magnum 60 -> Home Appliances
         "JBL SOUND BAR SB595": "HE",                          # JBL Sound Bar SB595 -> Home Entertainment
         "LAPTOP SPEAKER": "IT",                               # Laptop Speaker -> Computer (would otherwise match the "SPEAKER" HE keyword)
+        "HAVELLS LED PRIDE PLUS 10W": "OTHER",                # Havells LED Pride Plus 10W -> Accessories
     }
     for item_key, category_code in AGEING_CATEGORY_MASTER_MANUAL_OVERRIDES.items():
         lookup[item_key] = {
@@ -6469,6 +6470,9 @@ AGEING_ITEM_CATEGORIES = [
     ("FAN", [r"\bFAN\b"]),
     ("JUICER", [r"\bJUICER\b"]),
     ("SOUNDBAR", [r"\bSOUND\s*BAR\b"]),
+    ("IPAD", [r"\bIPAD\b"]),
+    ("TAB", [r"\bTAB\b", r"\bTABLET\b"]),
+    ("CAMERA", [r"\bCAMERA\b", r"\bDSLR\b", r"\bCAMCORDER\b"]),
 ]
 _AGEING_ITEM_CATEGORY_PATTERNS = [
     (code, [re.compile(p) for p in patterns]) for code, patterns in AGEING_ITEM_CATEGORIES

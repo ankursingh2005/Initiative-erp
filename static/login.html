@@ -3,164 +3,205 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#000000" />
+  <meta name="theme-color" content="#1c1c1c" />
   <meta name="mobile-web-app-capable" content="yes" />
   <link rel="manifest" href="manifest.webmanifest" />
   <title>Initiative ERP - Login</title>
   <link rel="icon" href="static/Initiative%20logo.png" type="image/png" />
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
 
     :root {
-      --ink: #111111;
-      --ink-soft: #4d4d4d;
-      --line: #d6d6d6;
+      --ink: #14141a;
+      --ink-soft: #5b5f6b;
+      --line: #e3e5ea;
       --panel: #ffffff;
-      --accent: #111111;
-      --accent-dark: #000000;
+      --brand: #155eef;
+      --brand-dark: #0d3fb0;
     }
 
-    html, body {
-      height: 100%;
-      margin: 0;
-    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
     body {
       font-family: 'Manrope', sans-serif;
-      background:
-        radial-gradient(circle at 12% 14%, rgba(0, 0, 0, 0.12) 0%, transparent 32%),
-        radial-gradient(circle at 88% 86%, rgba(40, 40, 40, 0.12) 0%, transparent 30%),
-        linear-gradient(135deg, #f2f2f2 0%, #fafafa 56%, #f0f0f0 100%);
       display: flex;
-      justify-content: center;
-      align-items: center;
-      padding: 20px;
-      box-sizing: border-box;
+      min-height: 100vh;
     }
-    .card {
-      background: var(--panel);
-      padding: 34px;
-      width: 100%;
-      max-width: 390px;
-      border-radius: 16px;
-      border: 1px solid var(--line);
-      box-shadow: 0 24px 48px rgba(12, 35, 59, 0.14);
-    }
-    .brand {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 12px;
-      margin-bottom: 10px;
-      transform: translateX(-10px);
-    }
-    .brand-text {
-      text-align: center;
-    }
-    .logo {
-      width: 72px;
-      height: 72px;
-      border-radius: 50%;
+
+    /* ---------------- Left brand panel ---------------- */
+    .brand-panel {
+      position: relative;
+      flex: 1.05;
+      min-width: 0;
       overflow: hidden;
-      background: #ffffff;
-      border: 1px solid #d6d6d6;
-      box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: clamp(28px, 4vw, 56px);
+      color: #fff;
+      background:
+        radial-gradient(circle at 12% 8%, rgba(21,94,239,0.20) 0%, transparent 42%),
+        radial-gradient(circle at 92% 92%, rgba(217,95,0,0.16) 0%, transparent 45%),
+        linear-gradient(160deg, #0b0b0b 0%, #161616 55%, #0b0b0b 100%);
     }
-    .logo img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      display: block;
+    .brand-panel::before {
+      content: '';
+      position: absolute; inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
+      background-size: 44px 44px;
+      mask-image: radial-gradient(ellipse at 20% 10%, #000 40%, transparent 75%);
+      pointer-events: none;
     }
-    .brand-text h1 {
-      margin: 0;
-      font-size: 42px;
-      line-height: 0.95;
+    .brand-mark { position: relative; display: flex; align-items: center; gap: 14px; }
+    .brand-mark .logo {
+      width: 52px; height: 52px; border-radius: 14px; overflow: hidden;
+      background: #fff; flex-shrink: 0;
+      box-shadow: 0 10px 22px rgba(0,0,0,0.28);
+    }
+    .brand-mark .logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .brand-mark .wordmark {
       font-family: 'Arial Black', Impact, 'Segoe UI Black', sans-serif;
-      font-style: italic;
-      color: #000000;
-      letter-spacing: -1px;
-      font-weight: 900;
-      display: inline-block;
-      transform: skewX(-10deg);
-      text-transform: none;
+      font-style: italic; font-weight: 900; font-size: 26px;
+      letter-spacing: -0.5px; transform: skewX(-8deg); display: inline-block;
     }
-    .brand-text h2 {
-      margin: 2px 0 0;
-      font-size: 19px;
-      color: var(--ink);
-      text-align: center;
+    .brand-mark .sub { font-size: 11.5px; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(255,255,255,0.62); margin-top: 2px; }
+
+    .brand-copy { position: relative; max-width: 480px; }
+    .brand-copy h1 {
+      font-size: clamp(30px, 3.6vw, 44px);
+      line-height: 1.12;
+      letter-spacing: -0.02em;
+      margin: 0 0 16px;
       font-weight: 800;
     }
-    label {
-      display: block;
-      margin-top: 12px;
-      font-size: 13px;
-      color: var(--ink-soft);
-      font-weight: 700;
-      letter-spacing: 0.2px;
+    .brand-copy p {
+      margin: 0;
+      font-size: 15px;
+      line-height: 1.6;
+      color: rgba(255,255,255,0.72);
     }
+
+    .module-chips { position: relative; display: flex; flex-wrap: wrap; gap: 9px; margin-top: 26px; }
+    .chip {
+      font-size: 12.5px; font-weight: 700; padding: 7px 14px; border-radius: 999px;
+      background: rgba(255,255,255,0.10); border: 1px solid rgba(255,255,255,0.18);
+      color: rgba(255,255,255,0.88); letter-spacing: 0.01em;
+    }
+
+    .trust-line {
+      position: relative;
+      display: flex; align-items: center; gap: 8px;
+      font-size: 12.5px; color: rgba(255,255,255,0.55); font-weight: 600;
+    }
+    .trust-line svg { width: 15px; height: 15px; flex-shrink: 0; }
+
+    /* ---------------- Right sign-in panel ---------------- */
+    .form-panel {
+      flex: 0.85;
+      min-width: 340px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--panel);
+      padding: 32px;
+    }
+    .form-wrap { width: 100%; max-width: 360px; }
+    .form-wrap h2 { margin: 0 0 6px; font-size: 27px; font-weight: 800; color: var(--ink); letter-spacing: -0.01em; }
+    .form-wrap .lede { margin: 0 0 30px; font-size: 14px; color: var(--ink-soft); line-height: 1.5; }
+
+    label {
+      display: block; margin-top: 18px; margin-bottom: 6px;
+      font-size: 11.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--brand);
+    }
+    label:first-of-type { margin-top: 0; }
     input {
-      width: 100%;
-      padding: 11px 12px;
-      margin-top: 6px;
-      border: 1px solid #c9c9c9;
-      border-radius: 10px;
-      box-sizing: border-box;
-      transition: border-color 0.2s ease, box-shadow 0.2s ease;
-      font-size: 14px;
+      width: 100%; padding: 12px 14px;
+      border: 1px solid var(--line); border-radius: 10px;
+      background: #f7f8fa;
+      box-sizing: border-box; font-size: 14.5px; font-family: inherit; color: var(--ink);
+      transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
     }
     input:focus {
-      outline: none;
-      border-color: var(--accent);
-      box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.12);
+      outline: none; border-color: var(--brand); background: #fff;
+      box-shadow: 0 0 0 3px rgba(21,94,239,0.14);
     }
-    button {
-      width: 100%;
-      padding: 11px;
-      margin-top: 16px;
-      background: linear-gradient(120deg, var(--accent) 0%, #2a2a2a 100%);
-      color: #fff;
-      border: none;
-      border-radius: 10px;
-      cursor: pointer;
-      font-size: 15px;
-      font-weight: 700;
-      transition: transform 0.15s ease, box-shadow 0.2s ease;
+
+    button.submit {
+      width: 100%; margin-top: 26px; padding: 13px;
+      background: linear-gradient(120deg, var(--brand) 0%, var(--brand-dark) 100%);
+      color: #fff; border: none; border-radius: 10px; cursor: pointer;
+      font-size: 15px; font-weight: 700; font-family: inherit;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      transition: box-shadow 0.15s ease, transform 0.15s ease;
     }
-    button:hover {
-      background: linear-gradient(120deg, var(--accent-dark) 0%, #151515 100%);
-      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.24);
-      transform: translateY(-1px);
-    }
-    .msg { min-height: 20px; margin-top: 10px; color: #c0392b; text-align: center; font-size: 14px; }
-    a { display: block; text-align: center; margin-top: 12px; color: #111111; text-decoration: none; font-weight: 600; }
-    a:hover { text-decoration: underline; }
-  
-    @media (max-width: 380px) {
-      body { padding: 12px; }
-      .card { padding: 22px; }
-      .brand-text h1 { font-size: 34px; }
-      .logo { width: 60px; height: 60px; }
+    button.submit:hover { box-shadow: 0 10px 22px rgba(21,94,239,0.32); transform: translateY(-1px); }
+    button.submit svg { width: 16px; height: 16px; }
+
+    .msg { min-height: 20px; margin-top: 12px; color: #c0392b; text-align: center; font-size: 13.5px; }
+    .links { margin-top: 20px; text-align: center; }
+    .links a { color: var(--ink); text-decoration: none; font-weight: 700; font-size: 13.5px; }
+    .links a:hover { text-decoration: underline; }
+    .hint { margin-top: 10px; text-align: center; font-size: 12px; color: #8a8f99; }
+
+    @media (max-width: 880px) {
+      body { flex-direction: column; }
+      .brand-panel { flex: none; padding: 30px 24px 40px; }
+      .brand-copy h1 { font-size: 26px; }
+      .form-panel { flex: none; min-width: 0; padding: 30px 24px 44px; }
     }
   </style>
 </head>
 <body>
-  <div class="card">
-    <div class="brand">
+  <div class="brand-panel">
+    <div class="brand-mark">
       <div class="logo"><img src="static/Initiative%20logo.png" alt="Initiative Logo" /></div>
-      <div class="brand-text">
-        <h1>Initiative</h1>
-        <h2>ERP Login</h2>
+      <div>
+        <span class="wordmark">Initiative</span>
+        <div class="sub">Electronics Megastore &middot; ERP</div>
       </div>
     </div>
-    <label for="username">Username / Email</label>
-    <input id="username" name="username" type="text" placeholder="Enter username or email" />
-    <label for="password">Password</label>
-    <input id="password" name="password" type="password" placeholder="Enter password" />
-    <button onclick="login()">Login</button>
-    <div id="msg" class="msg"></div>
-    <a href="signup">Create a new account</a>
-    <p style="text-align:center; margin:12px 0 0; font-size:12.5px; color:#6b6b6b;">Forgot your password? Ask your Admin to reset it for you.</p>
+
+    <div class="brand-copy">
+      <h1>The command center for your retail business.</h1>
+      <p>Schemes, purchase orders, price lists, and profitability &mdash; all in one workspace built for your team.</p>
+      <div class="module-chips">
+        <span class="chip">Schemes</span>
+        <span class="chip">Purchase Orders</span>
+        <span class="chip">AI Analysis</span>
+        <span class="chip">Daily Profitability</span>
+        <span class="chip">Price System</span>
+        <span class="chip">Ageing Stock</span>
+      </div>
+    </div>
+
+    <div class="trust-line">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"></path></svg>
+      JWT secured &middot; Role-based access
+    </div>
+  </div>
+
+  <div class="form-panel">
+    <div class="form-wrap">
+      <h2>Sign in</h2>
+      <p class="lede">Access your schemes, purchase orders, and reports.</p>
+
+      <label for="username">Username / Email</label>
+      <input id="username" name="username" type="text" placeholder="Enter username or email" />
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" placeholder="Enter password" />
+
+      <button type="button" class="submit" onclick="login()">
+        Sign in
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>
+      </button>
+      <div id="msg" class="msg"></div>
+
+      <div class="links"><a href="signup">Create a new account</a></div>
+      <p class="hint">Forgot your password? Ask your Admin to reset it for you.</p>
+    </div>
   </div>
 
   <script>
@@ -207,8 +248,13 @@
       localStorage.setItem('token', data.access_token);
       localStorage.setItem('role', data.role);
       localStorage.setItem('username', data.username);
+      sessionStorage.setItem('showLoginSuccess', '1');
       window.location.href = appUrl('/home');
     }
+
+    document.getElementById('password').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') login();
+    });
   </script>
 </body>
 </html>
