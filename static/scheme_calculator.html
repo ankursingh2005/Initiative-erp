@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#1b1812" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <title>Initiative ERP - Scheme Calculator</title>
+  <link rel="icon" href="static/Initiative%20logo.png" type="image/png" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700;9..144,900&family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600;700&display=swap');
+
+    :root {
+      /* Ledger base */
+      --paper:#f4f1e6; --panel:#fffefb; --line:#e2dbc4; --line-soft:#ede7d5;
+      --ink:#181a2e; --muted:#726c5c;
+      /* Four workflow accents - one per step, used consistently throughout */
+      --sales:#2b4bf2; --sales-dark:#1730a8; --sales-soft:#e8ecfe;
+      --scheme:#0d9488; --scheme-dark:#0a6259; --scheme-soft:#dff5f1;
+      --calc:#e08a1e; --calc-dark:#9a5c0a; --calc-soft:#fcecd4;
+      --results:#c22a72; --results-dark:#861d4e; --results-soft:#fbe6f0;
+      /* Brand-cycle palette for grouped payout rows */
+      --c1:#2b4bf2; --c2:#0d9488; --c3:#e08a1e; --c4:#c22a72; --c5:#7c3aed; --c6:#0891b2;
+      --ok:#0f7d52; --ok-soft:#e2f5ec; --warn:#e08a1e; --warn-soft:#fcecd4; --err:#c22a2a; --err-soft:#fbe7e6;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: 'Manrope', Arial, sans-serif; background: var(--paper); color: var(--ink);
+      background-image: radial-gradient(circle at 1px 1px, rgba(24,26,46,0.06) 1px, transparent 0);
+      background-size: 22px 22px;
+    }
+    a { text-decoration: none; color: inherit; }
+    button { font: inherit; cursor: pointer; border: 0; border-radius: 8px; font-weight: 700; }
+    .mono { font-family: 'IBM Plex Mono', monospace; }
+
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 24px; background: var(--panel); border-bottom: 1px solid var(--line);
+      position: relative;
+    }
+    .topbar::after {
+      content: ''; position: absolute; left: 0; right: 0; bottom: -3px; height: 3px;
+      background: linear-gradient(90deg, var(--sales) 0 25%, var(--scheme) 25% 50%, var(--calc) 50% 75%, var(--results) 75% 100%);
+    }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand .logo-chip {
+      width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0;
+      background: linear-gradient(135deg, var(--sales), var(--results));
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-family: 'Fraunces', serif; font-weight: 700; font-size: 15px;
+    }
+    .brand .wordmark { font-family: 'Arial Black', Impact, sans-serif; font-style: italic; font-weight: 900; font-size: 16px; transform: skewX(-8deg); display: inline-block; }
+    .back-link { font-size: 12.5px; font-weight: 700; color: var(--muted); padding: 8px 12px; border-radius: 8px; }
+    .back-link:hover { background: var(--sales-soft); color: var(--sales-dark); }
+
+    .wrap { max-width: 1040px; margin: 0 auto; padding: 40px 22px 70px; }
+
+    .eyebrow {
+      font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: 0.16em;
+      text-transform: uppercase; color: var(--sales-dark); margin: 0 0 10px; display: flex; align-items: center; gap: 8px;
+    }
+    .eyebrow::before { content: ''; width: 20px; height: 3px; border-radius: 2px; background: linear-gradient(90deg, var(--sales), var(--results)); display: inline-block; }
+    h1 {
+      font-family: 'Fraunces', serif; font-weight: 700; font-size: 42px; line-height: 1.04;
+      letter-spacing: -0.01em; margin: 0 0 8px;
+      background: linear-gradient(100deg, var(--ink) 45%, var(--sales-dark) 100%);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .lede { color: var(--muted); font-size: 14.5px; margin: 0 0 14px; max-width: 560px; }
+    .rule { border: none; border-top: 3px double var(--line); margin: 0 0 30px; }
+
+    .step-eyebrow {
+      font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; font-weight: 700; letter-spacing: 0.14em;
+      text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+    }
+    .step-num {
+      width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+      color: #fff; font-size: 10px; font-weight: 700; flex-shrink: 0;
+    }
+    .step-eyebrow.s1 .step-num { background: var(--sales); }
+    .step-eyebrow.s2 .step-num { background: var(--scheme); }
+    .step-eyebrow.s3 .step-num { background: var(--calc); }
+    .step-eyebrow.s4 .step-num { background: var(--results); }
+
+    .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 24px; }
+    @media (max-width: 760px) { .cards { grid-template-columns: 1fr; } }
+    .card {
+      background: var(--panel); border: 1px solid var(--line); border-top: 3px solid var(--accent-card, var(--sales));
+      border-radius: 8px; padding: 18px;
+      box-shadow: 0 2px 0 var(--line-soft), 0 10px 24px -18px rgba(24,26,46,0.35);
+    }
+    .card.c-sales { --accent-card: var(--sales); }
+    .card.c-scheme { --accent-card: var(--scheme); }
+    .card h3 { margin: 0 0 2px; font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    .card .sub { margin: 0 0 14px; font-size: 12px; color: var(--muted); }
+    .drop {
+      width: 100%; border: 1.5px dashed var(--line); border-radius: 6px; background: var(--paper);
+      padding: 26px 10px; display: flex; flex-direction: column; align-items: center; gap: 8px;
+      color: var(--muted); font-weight: 700; font-size: 12.5px; text-align: center; transition: border-color .15s, background .15s, color .15s;
+    }
+    .drop svg { opacity: .55; }
+    .card.c-sales .drop:hover { border-color: var(--sales); background: var(--sales-soft); color: var(--sales-dark); }
+    .card.c-scheme .drop:hover { border-color: var(--scheme); background: var(--scheme-soft); color: var(--scheme-dark); }
+    .drop:hover svg { opacity: 1; }
+    .badge {
+      font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; font-weight: 700; background: var(--ok-soft);
+      color: var(--ok); border-radius: 20px; padding: 3px 10px; letter-spacing: 0.02em;
+    }
+
+    .row { display: flex; gap: 10px; align-items: center; margin-bottom: 22px; flex-wrap: wrap; }
+    input[type=text] {
+      padding: 11px 13px; border: 1.5px solid var(--line); border-radius: 6px; font-size: 13.5px;
+      font-family: 'IBM Plex Mono', monospace; width: 250px; background: var(--panel); color: var(--ink);
+    }
+    input[type=text]:focus { outline: none; border-color: var(--calc); box-shadow: 0 0 0 3px var(--calc-soft); }
+    input[type=text]::placeholder { color: var(--muted); }
+    .btn-primary {
+      background: linear-gradient(120deg, var(--calc), var(--calc-dark)); color: #fff; padding: 12px 22px; font-size: 13.5px; border-radius: 7px;
+      box-shadow: 0 4px 14px -4px rgba(224,138,30,0.55); transition: transform .12s, box-shadow .12s;
+    }
+    .btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 18px -4px rgba(224,138,30,0.65); }
+    .btn-primary:disabled { opacity: .35; cursor: not-allowed; box-shadow: none; }
+    .btn-secondary {
+      background: var(--panel); border: 1.5px solid var(--line) !important; padding: 9px 14px; font-size: 12.5px;
+      border-radius: 7px; color: var(--ink);
+    }
+    .btn-secondary:hover { background: var(--sales-soft); border-color: var(--sales) !important; color: var(--sales-dark); }
+
+    .msg { font-size: 13px; padding: 11px 14px; border-radius: 6px; margin-bottom: 18px; border-left: 3px solid; }
+    .msg.err { background: var(--err-soft); color: var(--err); border-color: var(--err); }
+    .msg.warn { background: var(--warn-soft); color: var(--calc-dark); border-color: var(--calc); }
+
+    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; margin-bottom: 18px; overflow: hidden; box-shadow: 0 10px 24px -20px rgba(24,26,46,0.4); }
+    .panel-head {
+      padding: 13px 18px; border-bottom: 1px dashed var(--line); font-weight: 700; font-size: 13px;
+      font-family: 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted);
+      background: var(--paper);
+    }
+    .fuzzy-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 18px; border-bottom: 1px solid var(--line-soft); font-size: 13px; background: var(--warn-soft); }
+    .fuzzy-item:last-child { border-bottom: none; }
+    .fuzzy-item .name { font-weight: 700; }
+    .fuzzy-item .hint { color: var(--calc-dark); font-size: 11.5px; }
+    .fz-btn { width: 30px; height: 30px; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-weight: 900; }
+    .fz-accept { background: var(--ok); color: #fff; }
+    .fz-reject { background: #fff; color: var(--err); border: 1.5px solid var(--err) !important; }
+
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 18px 16px; background: var(--err-soft); }
+    .chip {
+      font-size: 11px; font-family: 'IBM Plex Mono', monospace; background: #fff; border: 1px solid var(--err);
+      border-radius: 20px; padding: 4px 10px; color: var(--err); font-weight: 600;
+    }
+
+    .results-head {
+      display: flex; align-items: center; justify-content: space-between; padding: 20px; gap: 16px;
+      border-bottom: 1px solid var(--line); flex-wrap: wrap;
+      background: linear-gradient(120deg, var(--results-soft) 0%, var(--sales-soft) 100%);
+    }
+    .stamp {
+      width: 104px; height: 104px; border-radius: 50%; flex-shrink: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
+      transform: rotate(-8deg); background: linear-gradient(135deg, var(--results), var(--sales));
+      color: #fff; box-shadow: 0 10px 26px -8px rgba(194,42,114,0.55), inset 0 0 0 4px rgba(255,255,255,0.18);
+      animation: stamp-in .4s ease-out;
+    }
+    @media (prefers-reduced-motion: reduce) { .stamp { animation: none; } }
+    @keyframes stamp-in { from { transform: rotate(-8deg) scale(0.6); opacity: 0; } to { transform: rotate(-8deg) scale(1); opacity: 1; } }
+    .stamp-label { font-family: 'IBM Plex Mono', monospace; font-size: 8.5px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 700; opacity: 0.9; }
+    .stamp-amount { font-family: 'Fraunces', serif; font-size: 18px; font-weight: 700; line-height: 1.1; margin-top: 3px; }
+    .grand-note { font-size: 12px; color: var(--results-dark); font-family: 'IBM Plex Mono', monospace; font-weight: 700; letter-spacing: 0.06em; }
+    .grand-actions { display: flex; gap: 8px; margin-left: auto; }
+    @media (max-width: 600px) { .results-head { flex-direction: column; align-items: flex-start; } .grand-actions { margin-left: 0; } }
+
+    .brand-group { border-left: 4px solid var(--group-color, var(--sales)); }
+    .brand-group:nth-of-type(6n+1) { --group-color: var(--c1); }
+    .brand-group:nth-of-type(6n+2) { --group-color: var(--c2); }
+    .brand-group:nth-of-type(6n+3) { --group-color: var(--c3); }
+    .brand-group:nth-of-type(6n+4) { --group-color: var(--c4); }
+    .brand-group:nth-of-type(6n+5) { --group-color: var(--c5); }
+    .brand-group:nth-of-type(6n+6) { --group-color: var(--c6); }
+    .brand-group summary {
+      list-style: none; cursor: pointer; padding: 13px 16px; display: flex; align-items: center; justify-content: space-between;
+      border-top: 1px dashed var(--line); font-weight: 700; font-size: 13.5px; font-family: 'Fraunces', serif;
+    }
+    .brand-group summary:hover { background: var(--paper); }
+    .brand-group summary::-webkit-details-marker { display: none; }
+    .brand-group summary::before {
+      content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+      background: var(--group-color, var(--sales)); margin-right: 8px;
+    }
+    .brand-group summary .tot { font-weight: 500; color: var(--muted); font-size: 12px; font-family: 'IBM Plex Mono', monospace; }
+    .brand-group summary .tot b { color: var(--group-color, var(--ink)); font-weight: 700; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    thead tr { background: var(--ink); }
+    th { text-align: left; color: #fff; font-weight: 800; padding: 12px 18px; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.05em; }
+    th.sno { text-align: center; width: 60px; }
+    td { padding: 12px 18px; border-top: 1px solid var(--line-soft); font-family: 'IBM Plex Mono', monospace; font-size: 13.5px; font-weight: 600; color: var(--ink); }
+    td.sno { text-align: center; font-family: 'Manrope', sans-serif; font-weight: 800; color: var(--muted); font-size: 13px; }
+    td.model { font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 14px; }
+    td.mode { text-transform: capitalize; color: var(--muted); }
+    td.note { color: var(--muted); font-size: 11.5px; font-weight: 500; }
+    td.payout { font-weight: 900; font-size: 15px; color: var(--results-dark); }
+    td.num, th.num { text-align: right; }
+    tbody tr:nth-child(even) { background: var(--paper); }
+    tbody tr:hover { background: var(--results-soft); }
+
+    .download-wrap { position: relative; display: inline-block; }
+    .download-menu {
+      display: none; position: absolute; top: calc(100% + 6px); right: 0; z-index: 30;
+      background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+      box-shadow: 0 14px 32px -8px rgba(24,26,46,0.28); min-width: 220px; overflow: hidden; padding: 6px;
+    }
+    .download-menu.show { display: block; }
+    .download-menu button {
+      display: flex; align-items: center; gap: 9px; width: 100%; text-align: left;
+      padding: 10px 12px; background: none; border-radius: 8px; font-size: 13px; font-weight: 700; color: var(--ink);
+    }
+    .download-menu button:hover { background: var(--results-soft); color: var(--results-dark); }
+    .download-menu button svg { flex-shrink: 0; opacity: 0.75; }
+
+    .history-list { padding: 6px 18px 16px; }
+    .hist-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--line-soft); font-size: 13px; }
+    .hist-row:last-child { border-bottom: none; }
+    .hist-row .meta { color: var(--muted); font-size: 11.5px; font-family: 'IBM Plex Mono', monospace; }
+    .empty { color: var(--muted); font-size: 13px; padding: 14px 18px; font-family: 'IBM Plex Mono', monospace; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">
+      <span class="logo-chip">I</span>
+      <span class="wordmark">Initiative</span>
+    </div>
+    <a class="back-link" href="/home">&larr; Back to Dashboard</a>
+  </div>
+
+  <div class="wrap">
+    <p class="eyebrow">Payout Worksheet</p>
+    <h1>Scheme Calculator</h1>
+    <p class="lede">Monthly scheme payout for any product &mdash; upload sales data and the scheme sheet, get payout per model.</p>
+    <hr class="rule" />
+
+    <div class="cards">
+      <div class="card c-sales">
+        <span class="step-eyebrow s1"><span class="step-num">1</span> SALES DATA</span>
+        <h3>Sales Data <span id="salesBadge"></span></h3>
+        <p class="sub">Item/Model + Cost Amt. or Sale Value (Qty and Date optional)</p>
+        <input id="salesInput" type="file" accept=".xlsx,.xls,.csv,image/*" style="display:none" />
+        <button class="drop" type="button" onclick="document.getElementById('salesInput').click()">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"></path><path d="M7 9l5-5 5 5"></path><path d="M12 4v12"></path></svg>
+          <span id="salesLabel">Click to upload Excel, CSV, or a photo</span>
+        </button>
+      </div>
+      <div class="card c-scheme">
+        <span class="step-eyebrow s2"><span class="step-num">2</span> SCHEME SHEET</span>
+        <h3>Scheme Sheet <span id="schemeBadge"></span></h3>
+        <p class="sub">Models + Payout % &mdash; add a "Remaining All Model" row as a catch-all rate</p>
+        <input id="schemeInput" type="file" accept=".xlsx,.xls,.csv,image/*" style="display:none" />
+        <button class="drop" type="button" onclick="document.getElementById('schemeInput').click()">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"></path><path d="M7 9l5-5 5 5"></path><path d="M12 4v12"></path></svg>
+          <span id="schemeLabel">Click to upload Excel, CSV, or a photo</span>
+        </button>
+      </div>
+    </div>
+
+    <div id="msgBox"></div>
+
+    <span class="step-eyebrow s3"><span class="step-num">3</span> CALCULATE</span>
+    <div class="row">
+      <input id="runLabel" type="text" placeholder="Label this run (e.g. August 2026)" />
+      <button class="btn-primary" id="calcBtn" onclick="runCalculation()" disabled>Calculate Payout</button>
+      <button class="btn-secondary" onclick="toggleHistory()">History</button>
+    </div>
+
+    <div id="historyPanel" class="panel" style="display:none;">
+      <div class="panel-head">Saved runs</div>
+      <div id="historyList" class="history-list"></div>
+    </div>
+
+    <div id="fuzzyPanel" class="panel" style="display:none;">
+      <div class="panel-head">Confirm uncertain model matches</div>
+      <div id="fuzzyList"></div>
+    </div>
+
+    <div id="unmatchedPanel" class="panel" style="display:none;">
+      <div class="panel-head">Unmatched sales rows</div>
+      <div id="unmatchedChips" class="chips"></div>
+    </div>
+
+    <div id="resultsPanel" class="panel" style="display:none;">
+      <div class="results-head">
+        <div class="stamp">
+          <span class="stamp-label">Total Payout</span>
+          <span class="stamp-amount mono" id="grandTotal">&#8377;0</span>
+        </div>
+        <div class="grand-note"><span class="step-num" style="background:var(--results); display:inline-flex; margin-right:6px;">4</span>PAYOUT STATEMENT</div>
+        <div class="grand-actions">
+          <button class="btn-secondary" id="expandCollapseBtn" onclick="toggleAllGroups()">Collapse All</button>
+          <button class="btn-secondary" onclick="saveRun()">Save run</button>
+          <div class="download-wrap" id="downloadWrap">
+            <button class="btn-secondary" onclick="toggleDownloadMenu(event)">Download Report &#9662;</button>
+            <div class="download-menu" id="downloadMenu">
+              <button type="button" onclick="downloadExcel()">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"></path><path d="M7 10l5 5 5-5"></path><path d="M12 15V3"></path></svg>
+                Download as Excel (.xlsx)
+              </button>
+              <button type="button" onclick="downloadPDF()">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"></path><path d="M7 10l5 5 5-5"></path><path d="M12 15V3"></path></svg>
+                Download as PDF
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="resultsBody"></div>
+    </div>
+  </div>
+
+  <script>
+    function appUrl(path) {
+      const currentPath = window.location.pathname;
+      const appBasePath = currentPath === '/erp' || currentPath.startsWith('/erp/') ? '/erp' : '';
+      if (!path) return appBasePath || '/';
+      if (/^https?:\/\//i.test(path)) return path;
+      return path.startsWith('/') ? `${appBasePath}${path}` : `${appBasePath}/${path}`;
+    }
+
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register(appUrl('/sw.js')).catch(() => {});
+      });
+    }
+
+    // Redirect to login if not authenticated, matching other pages.
+    const TOKEN = localStorage.getItem('token');
+    if (!TOKEN) window.location.href = appUrl('/login');
+
+    // ------------------------------------------------------------------
+    // Helpers
+    // ------------------------------------------------------------------
+    function normalize(str) {
+      return String(str || '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
+    }
+    function bigrams(str) {
+      const s = str.replace(/\s+/g, '');
+      const map = new Map();
+      for (let i = 0; i < s.length - 1; i++) {
+        const bg = s.slice(i, i + 2);
+        map.set(bg, (map.get(bg) || 0) + 1);
+      }
+      return map;
+    }
+    function similarity(a, b) {
+      if (!a || !b) return 0;
+      if (a === b) return 1;
+      const ba = bigrams(a), bb = bigrams(b);
+      let overlap = 0;
+      for (const [bg, count] of ba) if (bb.has(bg)) overlap += Math.min(count, bb.get(bg));
+      const total = [...ba.values()].reduce((x, y) => x + y, 0) + [...bb.values()].reduce((x, y) => x + y, 0);
+      return total === 0 ? 0 : (2 * overlap) / total;
+    }
+    function fmtINR(n) { return (Number(n) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    // Known brand names, longest first so e.g. "Google Pixel" matches before
+    // bare "Google" - mirrors the backend's BRAND_LIST/detect_brand so a row
+    // with no explicit Brand column still gets a real brand instead of
+    // falling through to "Unassigned".
+    const BRAND_LIST = [
+      "Daikin", "Blue Star", "O General", "Voltas", "Hitachi", "LG", "Samsung",
+      "Godrej", "Haier", "Panasonic", "Sony", "Mitashi", "IFB", "Bosch",
+      "Carrier", "Lloyd", "Bajaj", "Havells", "Kent",
+      "Faber", "V-Guard", "Philips", "Luminous", "Dyson", "Vivo", "Oppo", "Realme", "Redmi", "Xiaomi", "iPhone", "Apple", "Motorola", "IQOO",
+      "Nothing", "Google Pixel", "Google", "OnePlus", "Poco", "Tecno", "Infinix", "Itel", "Honor",
+      "HP", "Dell", "Lenovo", "Acer", "Nikon",
+    ].sort((a, b) => b.length - a.length);
+    function detectBrand(itemText) {
+      const text = String(itemText || '');
+      for (const brand of BRAND_LIST) {
+        const re = new RegExp('\\b' + brand.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
+        if (re.test(text)) return brand;
+      }
+      const firstWord = text.trim().match(/^[A-Za-z0-9]+/);
+      return firstWord ? firstWord[0].charAt(0).toUpperCase() + firstWord[0].slice(1).toLowerCase() : null;
+    }
+    function showMsg(text, kind) {
+      document.getElementById('msgBox').innerHTML = text ? `<div class="msg ${kind || 'err'}">${text}</div>` : '';
+    }
+
+    // ------------------------------------------------------------------
+    // Sheet parsing
+    // ------------------------------------------------------------------
+    const SALES_ALIASES = {
+      brand: ['brand', 'brand name'],
+      model: ['model', 'models', 'model no', 'model name', 'item', 'product', 'product name', 'item details'],
+      qty: ['qty', 'quantity', 'units', 'nos', 'units sold', 'qty sold'],
+      value: ['sale value', 'value', 'amount', 'sales value', 'sales amount', 'revenue', 'total value',
+              'cost amt', 'cost amount', 'cost value', 'cost'],
+      date: ['date', 'sale date', 'invoice date', 'bill date'],
+    };
+    const SCHEME_ALIASES = {
+      brand: ['brand', 'brand name'],
+      model: ['model', 'models', 'model no', 'model name', 'item', 'product', 'product name'],
+      percent: ['scheme %', 'scheme percent', 'scheme%', 'payout %', 'payout%', '%', 'scheme amount', 'scheme value'],
+      target: ['target', 'target qty', 'target units', 'target quantity', 'monthly target'],
+    };
+    // A scheme row whose model reads like "Remaining All Model" / "All Other
+    // Models" / "Others" / "Rest" is a catch-all fallback rate, not a
+    // specific model to match against - it never takes part in matching
+    // itself, it's applied at the end to whatever didn't match anything else.
+    const DEFAULT_ROW_PATTERN = /\bREMAINING\b|\bALL\s*OTHER|\bOTHERS?\b|\bREST\b/;
+    function markDefaultSchemeRow(rows) {
+      return rows.map(r => ({ ...r, isDefault: DEFAULT_ROW_PATTERN.test(normalize(r.model)) }));
+    }
+    // A "core code" strips RAM+Storage combos (e.g. "12+512") and all
+    // whitespace, so a short scheme model code like "V70 Elite" can be
+    // found as a contiguous substring inside a long sales description like
+    // "Vivo V 70 Elite 12+512 Authentic Blk" regardless of spacing.
+    function coreCode(str) {
+      const stripped = String(str || '').replace(/\d+\s*\+\s*\d+/g, ' ');
+      return normalize(stripped).replace(/\s+/g, '');
+    }
+
+    function findHeaderRow(rows2D, aliasMap) {
+      const scanLimit = Math.min(rows2D.length, 10);
+      let best = { index: 0, score: -1, colMap: {} };
+      for (let r = 0; r < scanLimit; r++) {
+        const row = rows2D[r] || [];
+        const colMap = {};
+        let score = 0;
+        row.forEach((cell, c) => {
+          const norm = normalize(cell);
+          if (!norm) return;
+          for (const [field, aliases] of Object.entries(aliasMap)) {
+            if (colMap[field] !== undefined) continue;
+            if (aliases.some(a => norm === normalize(a))) { colMap[field] = c; score++; }
+          }
+        });
+        if (score > best.score) best = { index: r, score, colMap };
+      }
+      return best;
+    }
+    function findSlabColumns(headerRow) {
+      const slabs = {};
+      headerRow.forEach((cell, c) => {
+        const raw = String(cell || '');
+        const m = raw.match(/slab\s*(\d+)\s*(qty|quantity|%|percent|pct)/i);
+        if (!m) return;
+        const n = m[1];
+        slabs[n] = slabs[n] || {};
+        if (/qty|quantity/i.test(m[2])) slabs[n].qtyCol = c; else slabs[n].pctCol = c;
+      });
+      return Object.values(slabs).filter(s => s.qtyCol !== undefined && s.pctCol !== undefined);
+    }
+    function parseSalesSheet(rows2D) {
+      const { index, colMap } = findHeaderRow(rows2D, SALES_ALIASES);
+      const out = [];
+      for (let r = index + 1; r < rows2D.length; r++) {
+        const row = rows2D[r] || [];
+        const model = colMap.model !== undefined ? row[colMap.model] : undefined;
+        if (!model || !String(model).trim()) continue;
+        out.push({
+          brand: colMap.brand !== undefined ? String(row[colMap.brand] || '').trim() : '',
+          model: String(model).trim(),
+          // No Qty column at all usually means one row = one unit sold (a
+          // transaction log, not a pre-summarized report) - default to 1 so
+          // totals and any slab/target scheme still work. A Qty column that
+          // exists but is blank/zero on a row is left as a genuine 0.
+          qty: colMap.qty !== undefined ? (Number(row[colMap.qty]) || 0) : 1,
+          value: Number(colMap.value !== undefined ? row[colMap.value] : 0) || 0,
+          date: colMap.date !== undefined ? row[colMap.date] : null,
+        });
+      }
+      return out;
+    }
+    // Excel stores a cell formatted as "0%"/"0.00%" as the underlying
+    // fraction (0.05 for a cell that displays "5%"). sheet_to_json({raw:
+    // true}) returns that raw fraction, not the "5" a person typed - so
+    // without this check a 5% scheme silently became 0.05% (500x too
+    // small). We check the cell's rendered text (cell.w, which SheetJS
+    // computes from the number format) for a literal "%" and, if present,
+    // convert the fraction into a whole-number percent so downstream
+    // "value * percent / 100" math sees 5, not 0.05. A cell that was
+    // typed as a plain number (e.g. "5", format "General") has no "%" in
+    // cell.w and is left untouched.
+    function normalizedPercent(sheet, r, c, rawValue) {
+      const value = Number(rawValue) || 0;
+      if (!sheet || c === undefined) return value;
+      const addr = XLSX.utils.encode_cell({ r, c });
+      const cell = sheet[addr];
+      if (cell && typeof cell.w === 'string' && cell.w.includes('%')) {
+        return value * 100;
+      }
+      return value;
+    }
+    function parseSchemeSheet(rows2D, sheet) {
+      const { index, colMap } = findHeaderRow(rows2D, SCHEME_ALIASES);
+      const headerRow = rows2D[index] || [];
+      const slabCols = findSlabColumns(headerRow);
+      const out = [];
+      for (let r = index + 1; r < rows2D.length; r++) {
+        const row = rows2D[r] || [];
+        const model = colMap.model !== undefined ? row[colMap.model] : undefined;
+        if (!model || !String(model).trim()) continue;
+        let mode = 'flat', slabs = [];
+        if (slabCols.length) {
+          slabs = slabCols.map(sc => ({
+            qty: Number(row[sc.qtyCol]) || 0,
+            percent: normalizedPercent(sheet, r, sc.pctCol, row[sc.pctCol]),
+          })).filter(s => s.qty > 0 || s.percent > 0).sort((a, b) => a.qty - b.qty);
+          if (slabs.length) mode = 'slab';
+        }
+        const target = colMap.target !== undefined ? Number(row[colMap.target]) || 0 : 0;
+        if (mode === 'flat' && target > 0) mode = 'target';
+        out.push({
+          brand: colMap.brand !== undefined ? String(row[colMap.brand] || '').trim() : '',
+          model: String(model).trim(),
+          percent: normalizedPercent(sheet, r, colMap.percent, colMap.percent !== undefined ? row[colMap.percent] : 0),
+          target, slabs, mode,
+        });
+      }
+      return out;
+    }
+    function readWorkbookRows(arrayBuffer) {
+      const wb = XLSX.read(arrayBuffer, { type: 'array', cellDates: true });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows2D = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' });
+      return { rows2D, sheet };
+    }
+    function suggestRunLabel(rows) {
+      const dates = rows.map(r => r.date).filter(Boolean)
+        .map(d => (d instanceof Date ? d : new Date(d))).filter(d => !isNaN(d));
+      if (!dates.length) return null;
+      dates.sort((a, b) => a - b);
+      const mid = dates[Math.floor(dates.length / 2)];
+      return mid.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+    }
+
+    // ------------------------------------------------------------------
+    // Image extraction - goes through our own backend, which holds the
+    // ANTHROPIC_API_KEY. Never call api.anthropic.com directly from here.
+    // ------------------------------------------------------------------
+    async function extractFromImage(file, kind) {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('kind', kind);
+      const response = await fetch(appUrl('/api/scheme-calculator/extract-image'), {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${TOKEN}` },
+        body: form,
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.detail || 'Image extraction failed');
+      return data.rows || [];
+    }
+
+    // ------------------------------------------------------------------
+    // Matching + payout engine
+    // ------------------------------------------------------------------
+    function computeMatches(salesRows, schemeRows) {
+      // The catch-all "Remaining All Model" row never matches directly -
+      // it's applied afterwards, in withDefaults(), to whatever's left over.
+      const activeIdxs = schemeRows.map((_, i) => i).filter(i => !schemeRows[i].isDefault);
+
+      const schemeByKey = new Map();
+      activeIdxs.forEach(i => {
+        const s = schemeRows[i];
+        const key = normalize(`${s.brand} ${s.model}`.trim());
+        const keyModelOnly = normalize(s.model);
+        schemeByKey.set(key, i);
+        if (!schemeByKey.has(keyModelOnly)) schemeByKey.set(keyModelOnly, i);
+      });
+      // For the substring pass: each active scheme row's compact code (no
+      // spaces, RAM+Storage stripped), longest first so "V70 Elite" wins
+      // over the plainer "V70" when a sale description contains both.
+      const schemeCodes = activeIdxs
+        .map(i => ({ i, code: coreCode(schemeRows[i].model) }))
+        .filter(sc => sc.code.length >= 2);
+
+      const exact = [], fuzzyPending = [], unmatched = [];
+      salesRows.forEach((sale, si) => {
+        const keyFull = normalize(`${sale.brand} ${sale.model}`.trim());
+        const keyModel = normalize(sale.model);
+        let schemeIdx = schemeByKey.get(keyFull);
+        if (schemeIdx === undefined) schemeIdx = schemeByKey.get(keyModel);
+        if (schemeIdx !== undefined) { exact.push({ saleIdx: si, schemeIdx }); return; }
+
+        // Substring code match: e.g. scheme model "V70 Elite" -> code
+        // "V70ELITE" found inside sale "Vivo V 70 Elite 12+512 Authentic
+        // Blk" -> code "VIVOV70ELITE...". High confidence - no need to ask
+        // the user to confirm it, unlike the bigram fuzzy fallback below.
+        const saleCode = coreCode(sale.model);
+        let bestCode = null;
+        schemeCodes.forEach(sc => {
+          if (saleCode.includes(sc.code) && (!bestCode || sc.code.length > bestCode.code.length)) bestCode = sc;
+        });
+        if (bestCode) { exact.push({ saleIdx: si, schemeIdx: bestCode.i }); return; }
+
+        let best = { idx: -1, score: 0 };
+        activeIdxs.forEach(i => {
+          const score = similarity(keyModel, normalize(schemeRows[i].model));
+          if (score > best.score) best = { idx: i, score };
+        });
+        if (best.idx !== -1 && best.score >= 0.55) fuzzyPending.push({ saleIdx: si, schemeIdx: best.idx, score: best.score });
+        else unmatched.push(si);
+      });
+      return { exact, fuzzyPending, unmatched };
+    }
+    // Whatever's still unmatched after exact + code + confirmed-fuzzy
+    // matching falls back to the "Remaining All Model" row, if the scheme
+    // sheet has one. If it doesn't, those sales stay genuinely unmatched.
+    function withDefaults(pairs, unmatchedList, schemeRows) {
+      const defaultIdx = schemeRows.findIndex(s => s.isDefault);
+      if (defaultIdx === -1) return { pairs, stillUnmatched: unmatchedList };
+      const defaulted = unmatchedList.map(saleIdx => ({ saleIdx, schemeIdx: defaultIdx, isDefault: true }));
+      return { pairs: [...pairs, ...defaulted], stillUnmatched: [] };
+    }
+    function calcPayoutForPair(sale, scheme) {
+      let percent = 0, note = '';
+      if (scheme.mode === 'slab') {
+        const eligible = scheme.slabs.filter(s => sale.qty >= s.qty);
+        if (eligible.length) {
+          const best = eligible.reduce((a, b) => (b.qty > a.qty ? b : a));
+          percent = best.percent; note = `Slab tier @ ${best.qty}+ units`;
+        } else note = 'Below lowest slab - no payout';
+      } else if (scheme.mode === 'target') {
+        const achieved = scheme.target > 0 ? sale.qty >= scheme.target : false;
+        percent = achieved ? scheme.percent : 0;
+        note = scheme.target > 0 ? `${achieved ? 'Target met' : 'Target missed'} (${sale.qty}/${scheme.target})` : 'No target set';
+      } else { percent = scheme.percent; note = 'Flat rate'; }
+      // Keep the exact decimal payout (e.g. 120.40) instead of rounding to
+      // the nearest rupee, so the report matches the uploaded data exactly.
+      const payout = (sale.value * percent) / 100;
+      return { percent, payout, note, mode: scheme.mode };
+    }
+
+    // ------------------------------------------------------------------
+    // State + UI wiring
+    // ------------------------------------------------------------------
+    let salesRows = [], schemeRows = [];
+    let fuzzyPending = [], confirmedFuzzy = [], unmatched = [];
+    let results = null;
+
+    async function handleFile(file, kind) {
+      showMsg('');
+      const labelEl = document.getElementById(kind + 'Label');
+      const badgeEl = document.getElementById(kind + 'Badge');
+      labelEl.textContent = 'Reading...';
+      try {
+        const isImage = /^image\//.test(file.type);
+        let rows;
+        if (isImage) {
+          const extracted = await extractFromImage(file, kind);
+          rows = kind === 'sales'
+            ? extracted.map(r => ({ brand: r.brand || '', model: r.model || '', qty: Number(r.qty) || 1, value: Number(r.value) || 0, date: null }))
+            : extracted.map(r => {
+                const slabs = (r.slabs || []).filter(s => s.qty > 0 || s.percent > 0);
+                const target = Number(r.target) || 0;
+                let mode = 'flat';
+                if (slabs.length) mode = 'slab'; else if (target > 0) mode = 'target';
+                return { brand: r.brand || '', model: r.model || '', percent: Number(r.percent) || 0, target, slabs, mode };
+              });
+        } else {
+          const buf = await file.arrayBuffer();
+          const { rows2D, sheet } = readWorkbookRows(buf);
+          rows = kind === 'sales' ? parseSalesSheet(rows2D) : parseSchemeSheet(rows2D, sheet);
+        }
+        if (kind === 'sales') {
+          salesRows = rows;
+          const labelInput = document.getElementById('runLabel');
+          if (!labelInput.value.trim()) {
+            const suggested = suggestRunLabel(rows);
+            if (suggested) labelInput.value = suggested;
+          }
+        } else {
+          schemeRows = markDefaultSchemeRow(rows);
+        }
+        labelEl.textContent = file.name;
+        const defaultNote = kind === 'scheme' && schemeRows.some(s => s.isDefault) ? ' <span class="badge" style="background:var(--warn-soft); color:var(--calc-dark);">catch-all found</span>' : '';
+        badgeEl.innerHTML = `<span class="badge">${rows.length} rows</span>${defaultNote}`;
+        results = null;
+        document.getElementById('resultsPanel').style.display = 'none';
+        document.getElementById('calcBtn').disabled = !(salesRows.length && schemeRows.length);
+      } catch (e) {
+        labelEl.textContent = 'Click to upload Excel, CSV, or a photo';
+        showMsg(`Couldn't read ${kind === 'sales' ? 'Sales' : 'Scheme'} file: ${e.message || e}`, 'err');
+      }
+    }
+    document.getElementById('salesInput').addEventListener('change', e => { const f = e.target.files[0]; if (f) handleFile(f, 'sales'); });
+    document.getElementById('schemeInput').addEventListener('change', e => { const f = e.target.files[0]; if (f) handleFile(f, 'scheme'); });
+
+    function runCalculation() {
+      showMsg('');
+      if (!salesRows.length || !schemeRows.length) { showMsg('Upload both the Sales Data and the Scheme Sheet first.', 'err'); return; }
+      const { exact, fuzzyPending: pending, unmatched: um } = computeMatches(salesRows, schemeRows);
+      fuzzyPending = pending; confirmedFuzzy = []; unmatched = um;
+      const { pairs: initialPairs, stillUnmatched } = withDefaults(exact, unmatched, schemeRows);
+      unmatched = stillUnmatched;
+      renderFuzzy(); renderUnmatched();
+      buildResults(initialPairs);
+    }
+    function renderFuzzy() {
+      const panel = document.getElementById('fuzzyPanel');
+      const list = document.getElementById('fuzzyList');
+      if (!fuzzyPending.length) { panel.style.display = 'none'; return; }
+      panel.style.display = 'block';
+      list.innerHTML = fuzzyPending.map((item, i) => {
+        const sale = salesRows[item.saleIdx], scheme = schemeRows[item.schemeIdx];
+        return `<div class="fuzzy-item">
+          <div><div class="name">${sale.model}</div><div class="hint">matches scheme model: <b>${scheme.model}</b> (${Math.round(item.score * 100)}% similar)</div></div>
+          <div style="display:flex; gap:6px;">
+            <button class="fz-btn fz-accept" onclick="confirmFuzzy(${item.saleIdx}, true)">&check;</button>
+            <button class="fz-btn fz-reject" onclick="confirmFuzzy(${item.saleIdx}, false)">&times;</button>
+          </div>
+        </div>`;
+      }).join('');
+    }
+    function renderUnmatched() {
+      const panel = document.getElementById('unmatchedPanel');
+      const chips = document.getElementById('unmatchedChips');
+      if (!unmatched.length) { panel.style.display = 'none'; return; }
+      panel.style.display = 'block';
+      chips.innerHTML = unmatched.map(idx => `<span class="chip">${salesRows[idx].model}</span>`).join('');
+    }
+    function confirmFuzzy(saleIdx, accept) {
+      const item = fuzzyPending.find(p => p.saleIdx === saleIdx);
+      fuzzyPending = fuzzyPending.filter(p => p.saleIdx !== saleIdx);
+      if (accept) confirmedFuzzy.push({ saleIdx: item.saleIdx, schemeIdx: item.schemeIdx });
+      else unmatched.push(saleIdx);
+      if (!fuzzyPending.length) {
+        const { exact } = computeMatches(salesRows, schemeRows);
+        const { pairs, stillUnmatched } = withDefaults([...exact, ...confirmedFuzzy], unmatched, schemeRows);
+        unmatched = stillUnmatched;
+        buildResults(pairs);
+      }
+      renderFuzzy(); renderUnmatched();
+    }
+    function buildResults(pairs) {
+      // One line per uploaded row, exactly as uploaded - no merging of
+      // rows that happen to share a model name, and no summing of qty.
+      // When the sales file has no Qty column (a transaction log, one row
+      // = one unit sold), every row's qty stays 1 and its own cost amount
+      // is used for that row's payout, instead of being folded into a
+      // combined total for the model.
+      const rows = pairs.map(({ saleIdx, schemeIdx, isDefault }) => {
+        const sale = salesRows[saleIdx];
+        const scheme = schemeRows[schemeIdx];
+        const brand = sale.brand || scheme.brand || detectBrand(sale.model) || detectBrand(scheme.model) || 'Unassigned';
+        const calc = calcPayoutForPair({ qty: sale.qty, value: sale.value }, scheme);
+        if (isDefault) {
+          calc.note = 'OTH';
+        }
+        return { brand, model: sale.model, qty: sale.qty, value: sale.value, ...calc };
+      });
+      const byBrand = {};
+      rows.forEach(r => {
+        byBrand[r.brand] = byBrand[r.brand] || { rows: [], totalQty: 0, totalValue: 0, totalPayout: 0 };
+        byBrand[r.brand].rows.push(r);
+        byBrand[r.brand].totalQty += r.qty; byBrand[r.brand].totalValue += r.value; byBrand[r.brand].totalPayout += r.payout;
+      });
+      const grandTotal = rows.reduce((acc, r) => ({ qty: acc.qty + r.qty, value: acc.value + r.value, payout: acc.payout + r.payout }), { qty: 0, value: 0, payout: 0 });
+      results = { rows, byBrand, grandTotal };
+      renderResults();
+    }
+    function renderResults() {
+      const panel = document.getElementById('resultsPanel');
+      if (!results || !results.rows.length) { panel.style.display = 'none'; return; }
+      panel.style.display = 'block';
+      document.getElementById('grandTotal').textContent = `\u20b9${fmtINR(results.grandTotal.payout)}`;
+      let sno = 0;
+      const body = Object.entries(results.byBrand).map(([brand, data]) => `
+        <details class="brand-group" open>
+          <summary><span>${brand} <span class="tot" style="font-weight:400;">(${data.rows.length} models)</span></span>
+          <span class="tot">Qty ${data.totalQty} &middot; \u20b9${fmtINR(data.totalValue)} &middot; <b>Payout \u20b9${fmtINR(data.totalPayout)}</b></span></summary>
+          <table>
+            <thead><tr><th class="sno">S.No.</th><th>Model</th><th class="num">Qty</th><th class="num">Cost Price</th><th>Mode</th><th class="num">Applied %</th><th class="num">Payout</th><th>Note</th></tr></thead>
+            <tbody>${data.rows.map(r => { sno++; return `<tr>
+              <td class="sno">${sno}</td>
+              <td class="model">${r.model}</td><td class="num">${r.qty}</td><td class="num">\u20b9${fmtINR(r.value)}</td>
+              <td class="mode">${r.mode}</td><td class="num">${r.percent}%</td>
+              <td class="num payout">\u20b9${fmtINR(r.payout)}</td><td class="note">${r.note}</td>
+            </tr>`; }).join('')}</tbody>
+          </table>
+        </details>`).join('');
+      document.getElementById('resultsBody').innerHTML = body;
+      const expandCollapseBtn = document.getElementById('expandCollapseBtn');
+      if (expandCollapseBtn) expandCollapseBtn.textContent = 'Collapse All';
+    }
+    // ------------------------------------------------------------------
+    // Download Report menu (Excel / PDF)
+    // ------------------------------------------------------------------
+    function reportLabel() {
+      return (document.getElementById('runLabel').value || 'run').trim().replace(/\s+/g, '_');
+    }
+    function buildReportRows() {
+      // Same S.No. numbering the on-screen report uses: continuous across
+      // brand groups, in the order the groups render.
+      if (!results) return [];
+      let sno = 0;
+      const out = [];
+      Object.entries(results.byBrand).forEach(([brand, data]) => {
+        data.rows.forEach(r => {
+          sno++;
+          out.push({ sno, brand, model: r.model, qty: r.qty, value: r.value, mode: r.mode, percent: r.percent, payout: r.payout, note: r.note });
+        });
+      });
+      return out;
+    }
+    function toggleAllGroups() {
+      const groups = document.querySelectorAll('#resultsBody .brand-group');
+      if (!groups.length) return;
+      const btn = document.getElementById('expandCollapseBtn');
+      const anyOpen = Array.from(groups).some(g => g.open);
+      groups.forEach(g => { g.open = !anyOpen; });
+      btn.textContent = anyOpen ? 'Expand All' : 'Collapse All';
+    }
+    function toggleDownloadMenu(event) {
+      if (event) event.stopPropagation();
+      document.getElementById('downloadMenu').classList.toggle('show');
+    }
+    function closeDownloadMenu() {
+      document.getElementById('downloadMenu').classList.remove('show');
+    }
+    document.addEventListener('click', (e) => {
+      const wrap = document.getElementById('downloadWrap');
+      if (wrap && !wrap.contains(e.target)) closeDownloadMenu();
+    });
+
+    function downloadExcel() {
+      if (!results) return;
+      const rows = buildReportRows();
+      const header = ['S.No.', 'Model', 'Qty Sold', 'Cost Price', 'Mode', 'Applied %', 'Payout', 'Note'];
+      const data = rows.map(r => [r.sno, r.model, r.qty, Number(r.value.toFixed(2)), r.mode, r.percent, Number(r.payout.toFixed(2)), r.note || '']);
+      data.push([]);
+      data.push(['', '', '', '', '', 'GRAND TOTAL', '', '']);
+      data.push(['', '', '', '', '', '', Number(results.grandTotal.payout.toFixed(2)), '']);
+      const ws = XLSX.utils.aoa_to_sheet([header, ...data]);
+      ws['!cols'] = [{ wch: 7 }, { wch: 28 }, { wch: 10 }, { wch: 14 }, { wch: 10 }, { wch: 11 }, { wch: 14 }, { wch: 30 }];
+      ws['!freeze'] = { xSplit: 0, ySplit: 1 };
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Scheme Payout');
+      XLSX.writeFile(wb, `scheme_payout_${reportLabel()}.xlsx`);
+      closeDownloadMenu();
+    }
+
+    function downloadPDF() {
+      if (!results) return;
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+      const label = document.getElementById('runLabel').value.trim() || 'Run';
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(18);
+      doc.setTextColor(24, 26, 46);
+      doc.text('Initiative ERP \u2013 Scheme Payout Report', 40, 40);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10.5);
+      doc.setTextColor(114, 108, 92);
+      doc.text(`${label}  |  Generated ${new Date().toLocaleString('en-IN')}`, 40, 58);
+
+      const body = buildReportRows().map(r => [
+        r.sno, r.model, r.qty, `Rs ${fmtINR(r.value)}`, r.mode, `${r.percent}%`, `Rs ${fmtINR(r.payout)}`, r.note || ''
+      ]);
+
+      doc.autoTable({
+        startY: 74,
+        margin: { left: 40, right: 40 },
+        head: [['S.No.', 'Model', 'Qty', 'Cost Price', 'Mode', 'Applied %', 'Payout', 'Note']],
+        body,
+        theme: 'grid',
+        tableWidth: 'auto',
+        styles: {
+          font: 'helvetica', fontSize: 9.5, cellPadding: { top: 7, right: 8, bottom: 7, left: 8 },
+          valign: 'middle', halign: 'center', textColor: [24, 26, 46],
+          lineColor: [214, 208, 190], lineWidth: 0.5, overflow: 'linebreak',
+        },
+        headStyles: {
+          fillColor: [24, 26, 46], textColor: 255, fontStyle: 'bold', fontSize: 10,
+          halign: 'center', valign: 'middle', cellPadding: { top: 8, right: 8, bottom: 8, left: 8 },
+        },
+        alternateRowStyles: { fillColor: [244, 241, 230] },
+        columnStyles: {
+          0: { cellWidth: 42 },
+          1: { cellWidth: 175, fontStyle: 'bold', halign: 'left' },
+          2: { cellWidth: 42 },
+          3: { cellWidth: 80 },
+          4: { cellWidth: 55 },
+          5: { cellWidth: 65 },
+          6: { cellWidth: 85, fontStyle: 'bold', textColor: [134, 29, 78] },
+          7: { cellWidth: 'auto', halign: 'left' },
+        },
+        foot: [['', '', '', '', '', 'GRAND TOTAL', `Rs ${fmtINR(results.grandTotal.payout)}`, '']],
+        footStyles: {
+          fillColor: [194, 42, 114], textColor: 255, fontStyle: 'bold', fontSize: 10.5,
+          halign: 'center', valign: 'middle', cellPadding: { top: 8, right: 8, bottom: 8, left: 8 },
+        },
+        // Only print the GRAND TOTAL footer once, on the last page - not
+        // repeated at the bottom of every page.
+        showFoot: 'lastPage',
+      });
+
+      doc.save(`scheme_payout_${reportLabel()}.pdf`);
+      closeDownloadMenu();
+    }
+
+    // ------------------------------------------------------------------
+    // History (stored in localStorage, per-browser - see note in chat for
+    // moving this server-side if multiple people need to see saved runs)
+    // ------------------------------------------------------------------
+    const HISTORY_KEY = 'schemeCalcRuns';
+    function loadHistory() { try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch (e) { return []; } }
+    function saveHistory(list) { localStorage.setItem(HISTORY_KEY, JSON.stringify(list)); }
+    function saveRun() {
+      if (!results) return;
+      const label = document.getElementById('runLabel').value.trim() || new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+      const list = loadHistory();
+      list.unshift({ label, savedAt: new Date().toISOString(), grandTotal: results.grandTotal, rows: results.rows });
+      saveHistory(list.slice(0, 30));
+      renderHistory();
+    }
+    function deleteRun(savedAt) {
+      saveHistory(loadHistory().filter(r => r.savedAt !== savedAt));
+      renderHistory();
+    }
+    function toggleHistory() {
+      const panel = document.getElementById('historyPanel');
+      const show = panel.style.display === 'none';
+      panel.style.display = show ? 'block' : 'none';
+      if (show) renderHistory();
+    }
+    function renderHistory() {
+      const list = loadHistory();
+      const el = document.getElementById('historyList');
+      if (!list.length) { el.innerHTML = '<div class="empty">No saved runs yet.</div>'; return; }
+      el.innerHTML = list.map(h => `<div class="hist-row">
+        <div><div style="font-weight:700;">${h.label}</div><div class="meta">Saved ${new Date(h.savedAt).toLocaleString('en-IN')} &middot; Payout \u20b9${fmtINR(h.grandTotal.payout)}</div></div>
+        <button class="btn-secondary" onclick="deleteRun('${h.savedAt}')">Delete</button>
+      </div>`).join('');
+    }
+  </script>
+</body>
+</html>

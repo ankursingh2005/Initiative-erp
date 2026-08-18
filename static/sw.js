@@ -1,9 +1,9 @@
-// Bumped to v12: added the new /ageing-stock (Ageing Stock Analysis) page
-// to the core asset list. Bumping the cache name forces every existing
-// install to drop its old cache on the next activate, so the new page
-// shell gets prefetched too instead of only being cached the first time a
-// user happens to visit it.
-const CACHE_NAME = 'initiative-erp-v12';
+// Bumped to v13: added the new /scheme-calculator page to the core asset
+// list. Bumping the cache name forces every existing install to drop its
+// old cache on the next activate, so the new page shell gets prefetched
+// too instead of only being cached the first time a user happens to visit
+// it.
+const CACHE_NAME = 'initiative-erp-v13';
 const CORE_ASSETS = [
   '/login',
   '/signup',
@@ -14,6 +14,7 @@ const CORE_ASSETS = [
   '/daily-profitability',
   '/price-list',
   '/ageing-stock',
+  '/scheme-calculator',
   '/manifest.webmanifest',
   '/static/Initiative%20logo.png'
 ];

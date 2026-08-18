@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Query, Request
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Query, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.security import OAuth2PasswordRequestForm
@@ -1284,6 +1284,77 @@ def _call_anthropic_vision(content_block: dict, instructions: str) -> str:
         raise RuntimeError(f"Unexpected response format from Claude API: {exc}") from exc
 
 
+SCHEME_CALCULATOR_EXTRACT_INSTRUCTIONS = {
+    "sales": (
+        'This image shows a phone sales report (brand, model, quantity sold, sale value). '
+        'Extract every row into a JSON array, one object per model, matching exactly this shape: '
+        '[{"brand":"","model":"","qty":0,"value":0}]  '
+        '// qty = units sold, value = total sale value (rupees) for that row. '
+        'Respond with ONLY the JSON array, no markdown fences, no commentary, no explanation.'
+    ),
+    "scheme": (
+        'This image shows a mobile phone scheme sheet (brand, model, scheme payout % - possibly with '
+        'a monthly target or slab-wise tiers). '
+        'Extract every row into a JSON array, one object per model, matching exactly this shape: '
+        '[{"brand":"","model":"","percent":0,"target":0,"slabs":[{"qty":0,"percent":0}]}]  '
+        '// percent = flat scheme % if no target/slabs apply; target = monthly unit target if the sheet '
+        'states one (else 0); slabs = tiered qty->percent breakpoints if the sheet shows a slab table '
+        '(else empty array). '
+        'If a row is a catch-all/default rate that applies to every model not listed elsewhere on the '
+        'sheet (e.g. labeled "Remaining All Model", "All Other Models", "Others", or similar), keep '
+        'that row\'s wording in "model" exactly as printed - do not shorten, rename, or drop it. '
+        'Respond with ONLY the JSON array, no markdown fences, no commentary, no explanation.'
+    ),
+}
+
+
+@app.post("/api/scheme-calculator/extract-image")
+def scheme_calculator_extract_image(
+    file: UploadFile = File(...),
+    kind: str = Form(...),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Reads a photographed/scanned Sales Data or Scheme Sheet for the
+    Scheme Calculator page and returns extracted rows as JSON. Runs
+    server-side (unlike the Scheme Calculator's Excel/CSV parsing, which
+    happens entirely in the browser) because it needs ANTHROPIC_API_KEY,
+    which must never be exposed to client-side code."""
+    if kind not in SCHEME_CALCULATOR_EXTRACT_INSTRUCTIONS:
+        raise HTTPException(status_code=400, detail="kind must be 'sales' or 'scheme'")
+
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise HTTPException(
+            status_code=503,
+            detail="Reading a photo requires ANTHROPIC_API_KEY to be configured on the server. "
+                   "Upload an Excel/CSV file instead, or ask an Admin to set that key.",
+        )
+
+    raw_bytes = file.file.read()
+    try:
+        image_b64, media_type = _image_bytes_to_supported_b64(
+            file.filename or "upload.jpg", file.content_type or "", raw_bytes
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    content_block = {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": image_b64}}
+    try:
+        raw_text = _call_anthropic_vision(content_block, SCHEME_CALCULATOR_EXTRACT_INSTRUCTIONS[kind])
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    cleaned = raw_text.replace("```json", "").replace("```", "").strip()
+    try:
+        rows = json.loads(cleaned)
+        if not isinstance(rows, list):
+            raise ValueError("Expected a JSON array")
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise HTTPException(status_code=502, detail=f"Couldn't parse what the AI read from the image: {exc}")
+
+    return {"rows": rows}
+
+
 def _call_openai_compatible_vision(api_key: str, base_url: str, model: str, image_b64: str,
                                     media_type: str, instructions: str, provider_label: str) -> str:
     """Sends one base64 image to an OpenAI-compatible /chat/completions
@@ -1491,6 +1562,12 @@ def privacy_page():
 @app.get("/ageing-stock.html")
 def ageing_stock_page():
     return serve_html("static/ageing_stock.html")
+
+
+@app.get("/scheme-calculator")
+@app.get("/scheme-calculator.html")
+def scheme_calculator_page():
+    return serve_html("static/scheme_calculator.html")
 
 
 @app.get("/api/price-list/brands")
@@ -6043,7 +6120,6 @@ def _load_ageing_category_master() -> dict:
         "SUNFLAME COOKER HOOD MAGNUM 60": "HA",              # Sunflame Cooker Hood Magnum 60 -> Home Appliances
         "JBL SOUND BAR SB595": "HE",                          # JBL Sound Bar SB595 -> Home Entertainment
         "LAPTOP SPEAKER": "IT",                               # Laptop Speaker -> Computer (would otherwise match the "SPEAKER" HE keyword)
-        "HAVELLS LED PRIDE PLUS 10W": "OTHER",                # Havells LED Pride Plus 10W -> Accessories
     }
     for item_key, category_code in AGEING_CATEGORY_MASTER_MANUAL_OVERRIDES.items():
         lookup[item_key] = {
