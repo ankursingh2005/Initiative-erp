@@ -30,6 +30,7 @@
       --age:#dc2626; --age-dark:#a11616; --age-soft:#fde9e9;
       --po:#0d9488; --po-dark:#0a6b5f; --po-soft:#e0f6f2;
       --calc:#db2777; --calc-dark:#a3175a; --calc-soft:#fce7f1;
+      --um:#7c3aed; --um-dark:#5b21b6; --um-soft:#f1e9fe;
     }
     * { box-sizing: border-box; }
     body {
@@ -78,6 +79,7 @@
     .nav-item.n-price { --nav-color: var(--price); }
     .nav-item.n-age { --nav-color: var(--age); }
     .nav-item.n-calc { --nav-color: var(--calc); }
+    .nav-item.n-um { --nav-color: var(--um); }
 
     .sidebar-foot { padding: 16px 20px; border-top: 1px solid var(--line); }
     .sidebar-user { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
@@ -169,6 +171,58 @@
     .success-sub { font-size: 13px; color: var(--muted); }
     .layout { opacity: 1; transition: opacity .45s ease; }
     html.pre-reveal .layout { opacity: 0; }
+
+    /* ---------------- User Management ---------------- */
+    .um-card {
+      background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+      padding: 22px 24px; margin-top: 4px;
+      box-shadow: 0 10px 24px -18px rgba(24,26,46,0.4);
+    }
+    .um-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; cursor: pointer; }
+    .um-header-text { flex: 1; min-width: 0; }
+    .um-card h2 { margin: 0 0 4px; font-size: 18px; letter-spacing: -0.01em; color: var(--ink); }
+    .um-card > .um-header .um-header-text > p { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.5; }
+    .um-locked-hint {
+      display: flex; align-items: center; gap: 8px; margin-top: 14px; padding: 12px 14px;
+      border: 1px dashed var(--line); border-radius: 10px; background: var(--bg);
+      color: var(--muted); font-size: 13px; font-weight: 600; cursor: pointer;
+    }
+    .um-locked-hint svg { width: 17px; height: 17px; flex-shrink: 0; color: var(--um-dark); }
+    .um-summary { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
+    .um-pill {
+      display: inline-block; padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 700;
+      background: var(--um-soft); color: var(--um-dark); border: 1px solid transparent;
+    }
+    .um-pill.total { background: var(--ink); color: #fff; }
+    .um-chevron { width: 20px; height: 20px; flex-shrink: 0; color: var(--muted); margin-top: 4px; transition: transform 0.2s ease; }
+    .um-card.expanded .um-chevron { transform: rotate(90deg); }
+    .um-detail { margin-top: 18px; }
+    .um-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--line); border-radius: 10px; }
+    .um-table { width: 100%; border-collapse: collapse; min-width: 760px; }
+    .um-table th, .um-table td { text-align: left; padding: 11px 14px; font-size: 13.5px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+    .um-table th { color: var(--muted); font-weight: 800; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; background: var(--bg); }
+    .um-table tbody tr:hover { background: color-mix(in srgb, var(--um) 5%, #fff); }
+    .um-table tbody tr:last-child td { border-bottom: none; }
+    .um-table .empty { text-align: center; color: var(--muted); padding: 20px 0; }
+    .um-actions { display: flex; gap: 8px; white-space: nowrap; }
+    .um-reset-btn { padding: 7px 12px; font-size: 12px; background: var(--brand); color: #fff; }
+    .um-reset-btn:hover { background: var(--brand-dark); }
+    .um-delete-btn { padding: 7px 12px; font-size: 12px; background: #c0392b; color: #fff; }
+    .um-delete-btn:hover { background: #9c2c20; }
+    .um-delete-btn:disabled { background: var(--line); color: var(--muted); cursor: not-allowed; }
+    .um-msg { min-height: 18px; margin-top: 10px; font-size: 13px; color: #c0392b; }
+    .um-msg.success { color: #0f7d52; }
+
+    /* Shared modal field styling, used by the Reset Password modal below */
+    .modal-card .field { text-align: left; margin-bottom: 14px; }
+    .modal-card .field label { display: block; font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: 5px; }
+    .modal-card .field input {
+      width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px;
+      font-size: 13.5px; font-family: inherit; box-sizing: border-box; color: var(--ink);
+    }
+    .modal-card .field input:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+    .btn-primary-modal { padding: 10px 14px; background: var(--brand); color: #fff; }
+    .btn-primary-modal:hover { background: var(--brand-dark); }
   </style>
 </head>
 <body>
@@ -243,6 +297,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"></rect><path d="M8 6h8"></path><path d="M8 10h2"></path><path d="M12 10h2"></path><path d="M16 10h0"></path><path d="M8 14h2"></path><path d="M12 14h2"></path><path d="M16 14h0"></path><path d="M8 18h2"></path><path d="M12 18h2"></path></svg>
           Scheme Calculator
         </a>
+        <a class="nav-item n-um" href="#user-management" id="navUserManagement" style="display:none;" onclick="revealUserManagement(event)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+          User Management
+        </a>
       </nav>
 
       <div class="sidebar-foot">
@@ -295,6 +353,87 @@
           <div class="sub" id="statPendingValue">&nbsp;</div>
         </div>
 
+      </div>
+
+      <div class="um-card" id="user-management" style="display:none;">
+        <div class="um-header" onclick="handleUserManagementClick()">
+          <div class="um-header-text">
+            <h2>User Management</h2>
+            <p>Since account-recovery email isn't configured on this system, a user who forgets their password should contact you to have it reset here. This also shows every account that has been registered.</p>
+          </div>
+          <svg id="umChevron" class="um-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg>
+        </div>
+        <div id="umLockedHint" class="um-locked-hint" onclick="handleUserManagementClick(event)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>
+          Click to enter your password and view registered accounts.
+        </div>
+        <div id="umDetail" class="um-detail" style="display:none;">
+          <div id="userCountSummary" class="um-summary"></div>
+          <div class="um-table-wrap">
+            <table class="um-table">
+              <thead>
+                <tr>
+                  <th>Username</th><th>Email</th><th>Role</th><th>Store/Category</th><th>Status</th><th>Registered</th><th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="userManagementTableBody"></tbody>
+            </table>
+          </div>
+          <div id="userManagementMsg" class="um-msg"></div>
+        </div>
+      </div>
+
+  </div>
+
+  <div id="umPasswordModal" style="position:fixed; inset:0; z-index:60; display:none; align-items:center; justify-content:center; background:rgba(16,24,40,.55); backdrop-filter:blur(3px);" onclick="if (event.target === this) closeUmPasswordModal()">
+    <div class="modal-card" style="max-width:380px;">
+      <h3>Confirm your password</h3>
+      <p>Re-enter your password to view registered account details.</p>
+      <div class="field">
+        <label>Password</label>
+        <input id="umPasswordInput" type="password" placeholder="Enter your password" autocomplete="current-password" />
+      </div>
+      <div id="umPasswordError" class="um-msg" style="display:none;"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn-light" onclick="closeUmPasswordModal()">Cancel</button>
+        <button type="button" class="btn-primary-modal" id="umPasswordConfirmBtn" onclick="confirmUmPassword()">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="resetPasswordModal" style="position:fixed; inset:0; z-index:60; display:none; align-items:center; justify-content:center; background:rgba(16,24,40,.55); backdrop-filter:blur(3px);" onclick="if (event.target === this) closeResetPasswordModal()">
+    <div class="modal-card" style="max-width:380px;">
+      <h3>Reset password</h3>
+      <p>Set a new password for <strong id="resetPasswordUsername"></strong>. They'll need to log in again with this password.</p>
+      <div class="field">
+        <label>New Password</label>
+        <input id="resetPasswordNew" type="password" placeholder="Enter new password" autocomplete="new-password" />
+      </div>
+      <div class="field">
+        <label>Confirm Password</label>
+        <input id="resetPasswordConfirm" type="password" placeholder="Confirm new password" autocomplete="new-password" />
+      </div>
+      <div id="resetPasswordError" class="um-msg" style="display:none;"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn-light" onclick="closeResetPasswordModal()">Cancel</button>
+        <button type="button" class="btn-primary-modal" id="resetPasswordConfirmBtn" onclick="confirmResetPassword()">Reset Password</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="deleteUserModal" style="position:fixed; inset:0; z-index:60; display:none; align-items:center; justify-content:center; background:rgba(16,24,40,.55); backdrop-filter:blur(3px);" onclick="if (event.target === this) closeDeleteUserModal()">
+    <div class="modal-card" style="max-width:380px;">
+      <h3>Delete account</h3>
+      <p>This permanently deletes <strong id="deleteUserUsername"></strong>'s account. This can't be undone. Type <strong>DELETE</strong> below to confirm.</p>
+      <div class="field">
+        <input id="deleteUserConfirmInput" type="text" placeholder="Type DELETE to confirm" autocomplete="off" />
+      </div>
+      <div id="deleteUserError" class="um-msg" style="display:none;"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn-light" onclick="closeDeleteUserModal()">Cancel</button>
+        <button type="button" class="btn-primary-modal" id="deleteUserConfirmBtn" style="background:#c0392b;" onclick="confirmDeleteUser()">Delete Account</button>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -333,6 +472,269 @@
       }
     }
     loadDashboardStats();
+
+    // ------------------------------------------------------------------
+    // User Management (Admin only) - moved here from the Schemes page.
+    // ------------------------------------------------------------------
+    async function umFetch(url, options = {}) {
+      const response = await fetch(appUrl(url), {
+        ...options,
+        cache: 'no-store',
+        headers: { ...(options.headers || {}), 'Cache-Control': 'no-cache', Authorization: 'Bearer ' + token }
+      });
+      if (response.status === 401) { logout(); return null; }
+      return response;
+    }
+
+    function formatDateShort(value) {
+      if (!value) return '-';
+      const d = new Date(value);
+      if (isNaN(d.getTime())) return '-';
+      return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    }
+
+    async function loadUserManagement() {
+      try {
+        const [usersRes, countRes] = await Promise.all([umFetch('/api/users'), umFetch('/api/users/count')]);
+        if (!usersRes || !countRes || !usersRes.ok || !countRes.ok) return;
+        const users = await usersRes.json();
+        const countData = await countRes.json();
+        renderUserCountSummary(countData);
+        renderUserManagementTable(users);
+      } catch (e) {
+        // Leave the section empty if user data can't be loaded right now.
+      }
+    }
+
+    function renderUserCountSummary(countData) {
+      const wrap = document.getElementById('userCountSummary');
+      const roleChips = Object.entries(countData.by_role || {})
+        .sort((a, b) => b[1] - a[1])
+        .map(([roleName, count]) => `<span class="um-pill">${roleName}: ${count}</span>`)
+        .join('');
+      wrap.innerHTML = `<span class="um-pill total">${countData.total} account${countData.total === 1 ? '' : 's'} registered</span>${roleChips}`;
+    }
+
+    function renderUserManagementTable(users) {
+      const tbody = document.getElementById('userManagementTableBody');
+      tbody.innerHTML = users.map(u => `
+        <tr>
+          <td>${u.username}</td>
+          <td>${u.email}</td>
+          <td>${u.role}</td>
+          <td>${u.category_code || '-'}</td>
+          <td>${u.status}</td>
+          <td>${formatDateShort(u.created_date)}</td>
+          <td class="um-actions">
+            <button type="button" class="um-reset-btn" onclick="openResetPasswordModal(${u.id}, '${String(u.username).replace(/'/g, "\\'")}')">Reset Password</button>
+            <button type="button" class="um-delete-btn" onclick="openDeleteUserModal(${u.id}, '${String(u.username).replace(/'/g, "\\'")}')" ${u.username === username ? 'disabled title="You cannot delete your own account"' : ''}>Delete</button>
+          </td>
+        </tr>
+      `).join('') || '<tr><td colspan="7" class="empty">No registered accounts found</td></tr>';
+    }
+
+    let resetPasswordTargetId = null;
+    function openResetPasswordModal(userId, usernameLabel) {
+      resetPasswordTargetId = userId;
+      document.getElementById('resetPasswordUsername').textContent = usernameLabel;
+      document.getElementById('resetPasswordNew').value = '';
+      document.getElementById('resetPasswordConfirm').value = '';
+      const err = document.getElementById('resetPasswordError');
+      err.style.display = 'none';
+      err.textContent = '';
+      document.getElementById('resetPasswordModal').style.display = 'flex';
+    }
+    function closeResetPasswordModal() {
+      resetPasswordTargetId = null;
+      document.getElementById('resetPasswordModal').style.display = 'none';
+    }
+    async function confirmResetPassword() {
+      const err = document.getElementById('resetPasswordError');
+      err.style.display = 'none';
+      err.textContent = '';
+
+      const newPassword = document.getElementById('resetPasswordNew').value;
+      const confirmPassword = document.getElementById('resetPasswordConfirm').value;
+
+      if (!newPassword || newPassword.length < 4) {
+        err.textContent = 'Password must be at least 4 characters.';
+        err.style.display = 'block';
+        return;
+      }
+      if (newPassword !== confirmPassword) {
+        err.textContent = 'New password and confirm password do not match.';
+        err.style.display = 'block';
+        return;
+      }
+
+      const btn = document.getElementById('resetPasswordConfirmBtn');
+      btn.disabled = true;
+      try {
+        const response = await umFetch(`/api/users/${resetPasswordTargetId}/reset-password`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ new_password: newPassword })
+        });
+        if (!response) return;
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          err.textContent = data.detail || 'Unable to reset password';
+          err.style.display = 'block';
+          return;
+        }
+        closeResetPasswordModal();
+        const msg = document.getElementById('userManagementMsg');
+        msg.classList.add('success');
+        msg.textContent = data.message || 'Password reset successfully';
+        setTimeout(() => { msg.textContent = ''; msg.classList.remove('success'); }, 2500);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    let deleteUserTargetId = null;
+    function openDeleteUserModal(userId, usernameLabel) {
+      deleteUserTargetId = userId;
+      document.getElementById('deleteUserUsername').textContent = usernameLabel;
+      document.getElementById('deleteUserConfirmInput').value = '';
+      const err = document.getElementById('deleteUserError');
+      err.style.display = 'none';
+      err.textContent = '';
+      document.getElementById('deleteUserModal').style.display = 'flex';
+    }
+    function closeDeleteUserModal() {
+      deleteUserTargetId = null;
+      document.getElementById('deleteUserModal').style.display = 'none';
+    }
+    async function confirmDeleteUser() {
+      const err = document.getElementById('deleteUserError');
+      err.style.display = 'none';
+      err.textContent = '';
+
+      if (document.getElementById('deleteUserConfirmInput').value.trim() !== 'DELETE') {
+        err.textContent = 'Type DELETE to confirm.';
+        err.style.display = 'block';
+        return;
+      }
+
+      const btn = document.getElementById('deleteUserConfirmBtn');
+      btn.disabled = true;
+      try {
+        const response = await umFetch(`/api/users/${deleteUserTargetId}`, { method: 'DELETE' });
+        if (!response) return;
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          err.textContent = data.detail || 'Unable to delete account';
+          err.style.display = 'block';
+          return;
+        }
+        closeDeleteUserModal();
+        const msg = document.getElementById('userManagementMsg');
+        msg.classList.add('success');
+        msg.textContent = data.message || 'Account deleted';
+        setTimeout(() => { msg.textContent = ''; msg.classList.remove('success'); }, 2500);
+        loadUserManagement();
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function showUmDetail() {
+      const card = document.getElementById('user-management');
+      const detail = document.getElementById('umDetail');
+      const hint = document.getElementById('umLockedHint');
+      if (!card || !detail) return;
+      hint.style.display = 'none';
+      detail.style.display = 'block';
+      card.classList.add('expanded');
+    }
+
+    function hideUmDetail() {
+      const card = document.getElementById('user-management');
+      const detail = document.getElementById('umDetail');
+      const hint = document.getElementById('umLockedHint');
+      if (!card || !detail) return;
+      detail.style.display = 'none';
+      hint.style.display = 'flex';
+      card.classList.remove('expanded');
+    }
+
+    // Every time the section is opened, the admin has to re-enter their
+    // password before user details are shown - closing it always locks it
+    // again, it never stays unlocked in the background.
+    function handleUserManagementClick(e) {
+      if (e) e.preventDefault();
+      const detail = document.getElementById('umDetail');
+      if (detail.style.display === 'none') {
+        openUmPasswordModal();
+      } else {
+        hideUmDetail();
+      }
+    }
+
+    function openUmPasswordModal() {
+      document.getElementById('umPasswordInput').value = '';
+      const err = document.getElementById('umPasswordError');
+      err.style.display = 'none';
+      err.textContent = '';
+      document.getElementById('umPasswordModal').style.display = 'flex';
+      setTimeout(() => document.getElementById('umPasswordInput').focus(), 50);
+    }
+    function closeUmPasswordModal() {
+      document.getElementById('umPasswordModal').style.display = 'none';
+    }
+    async function confirmUmPassword() {
+      const err = document.getElementById('umPasswordError');
+      err.style.display = 'none';
+      err.textContent = '';
+
+      const password = document.getElementById('umPasswordInput').value;
+      if (!password) {
+        err.textContent = 'Please enter your password.';
+        err.style.display = 'block';
+        return;
+      }
+
+      const btn = document.getElementById('umPasswordConfirmBtn');
+      btn.disabled = true;
+      try {
+        const response = await umFetch('/auth/verify-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password })
+        });
+        if (!response) return;
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          err.textContent = data.detail || 'Incorrect password';
+          err.style.display = 'block';
+          return;
+        }
+        closeUmPasswordModal();
+        await loadUserManagement();
+        showUmDetail();
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    document.getElementById('umPasswordInput')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') confirmUmPassword();
+    });
+
+    function revealUserManagement(e) {
+      e.preventDefault();
+      const el = document.getElementById('user-management');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (document.getElementById('umDetail').style.display === 'none') {
+        openUmPasswordModal();
+      }
+    }
+
+    if (role === 'Admin') {
+      document.getElementById('navUserManagement').style.display = 'flex';
+      document.getElementById('user-management').style.display = 'block';
+    }
 
     // Show the login-success ring animation only right after a fresh login.
     if (sessionStorage.getItem('showLoginSuccess') === '1') {

@@ -130,6 +130,24 @@
     }
     .btn-secondary:hover { background: var(--sales-soft); border-color: var(--sales) !important; color: var(--sales-dark); }
 
+    .item-search-wrap {
+      display: flex; align-items: center; gap: 7px; padding: 8px 12px; margin-left: auto;
+      background: var(--panel); border: 1.5px solid var(--line); border-radius: 7px; color: var(--muted);
+    }
+    .item-search-wrap:focus-within { border-color: var(--results); box-shadow: 0 0 0 3px var(--results-soft); }
+    .item-search-wrap svg { flex-shrink: 0; }
+    .item-search-wrap input[type=text] {
+      width: 220px; padding: 0; border: none; background: transparent; font-size: 12.5px;
+    }
+    .item-search-wrap input[type=text]:focus { outline: none; box-shadow: none; }
+    .item-search-clear {
+      width: 18px; height: 18px; border-radius: 50%; background: var(--line); color: var(--panel);
+      font-size: 13px; line-height: 1; display: flex; align-items: center; justify-content: center; flex-shrink: 0; padding: 0;
+    }
+    .item-search-clear:hover { background: var(--err); }
+    tr.search-hidden, details.brand-group.search-hidden { display: none !important; }
+    mark.search-hit { background: var(--warn-soft); color: var(--calc-dark); border-radius: 3px; padding: 0 1px; }
+
     .msg { font-size: 13px; padding: 11px 14px; border-radius: 6px; margin-bottom: 18px; border-left: 3px solid; }
     .msg.err { background: var(--err-soft); color: var(--err); border-color: var(--err); }
     .msg.warn { background: var(--warn-soft); color: var(--calc-dark); border-color: var(--calc); }
@@ -274,6 +292,11 @@
       <input id="runLabel" type="text" placeholder="Label this run (e.g. August 2026)" />
       <button class="btn-primary" id="calcBtn" onclick="runCalculation()" disabled>Calculate Payout</button>
       <button class="btn-secondary" onclick="toggleHistory()">History</button>
+      <div class="item-search-wrap">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>
+        <input id="itemSearchInput" type="text" placeholder="Search item name or model no." oninput="filterResultsBySearch()" />
+        <button class="item-search-clear" id="itemSearchClearBtn" type="button" onclick="clearItemSearch()" title="Clear search" style="display:none;">&times;</button>
+      </div>
     </div>
 
     <div id="historyPanel" class="panel" style="display:none;">
@@ -377,13 +400,24 @@
       "HP", "Dell", "Lenovo", "Acer", "Nikon",
     ].sort((a, b) => b.length - a.length);
     function detectBrand(itemText) {
+      const known = detectBrandFromList(itemText);
+      if (known) return known;
+      const text = String(itemText || '');
+      const firstWord = text.trim().match(/^[A-Za-z0-9]+/);
+      return firstWord ? firstWord[0].charAt(0).toUpperCase() + firstWord[0].slice(1).toLowerCase() : null;
+    }
+    // BRAND_LIST-only lookup, no "first word" guess-fallback. Used for
+    // catch-all scheme rows ("Remaining All Model") so a blank Brand
+    // column there doesn't turn into a fake brand like "Remaining" -
+    // it should stay blank (a true cross-brand catch-all) unless the
+    // row's own text genuinely names a real brand.
+    function detectBrandFromList(itemText) {
       const text = String(itemText || '');
       for (const brand of BRAND_LIST) {
         const re = new RegExp('\\b' + brand.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
         if (re.test(text)) return brand;
       }
-      const firstWord = text.trim().match(/^[A-Za-z0-9]+/);
-      return firstWord ? firstWord[0].charAt(0).toUpperCase() + firstWord[0].slice(1).toLowerCase() : null;
+      return null;
     }
     function showMsg(text, kind) {
       document.getElementById('msgBox').innerHTML = text ? `<div class="msg ${kind || 'err'}">${text}</div>` : '';
@@ -568,23 +602,55 @@
       activeIdxs.forEach(i => {
         const s = schemeRows[i];
         const key = normalize(`${s.brand} ${s.model}`.trim());
-        const keyModelOnly = normalize(s.model);
         schemeByKey.set(key, i);
-        if (!schemeByKey.has(keyModelOnly)) schemeByKey.set(keyModelOnly, i);
+      });
+      // Model-only key -> list of scheme indices sharing that model text.
+      // Kept as a list (not overwritten) so that when the SAME model name
+      // exists under two different brands, we don't silently pick whichever
+      // scheme row happened to be parsed last.
+      const schemeByModelOnly = new Map();
+      activeIdxs.forEach(i => {
+        const keyModelOnly = normalize(schemeRows[i].model);
+        if (!schemeByModelOnly.has(keyModelOnly)) schemeByModelOnly.set(keyModelOnly, []);
+        schemeByModelOnly.get(keyModelOnly).push(i);
       });
       // For the substring pass: each active scheme row's compact code (no
       // spaces, RAM+Storage stripped), longest first so "V70 Elite" wins
       // over the plainer "V70" when a sale description contains both.
       const schemeCodes = activeIdxs
-        .map(i => ({ i, code: coreCode(schemeRows[i].model) }))
+        .map(i => ({ i, code: coreCode(schemeRows[i].model), brand: normalize(schemeRows[i].brand) }))
         .filter(sc => sc.code.length >= 2);
+
+      // Restrict a candidate list to the sale's own brand when both the
+      // sale and at least one candidate actually carry brand info - this
+      // is what keeps two different brands' identically-named/near-named
+      // models (e.g. two "128GB Black" variants) from cross-matching when
+      // a single upload contains several brands at once. If nothing in
+      // the candidate list shares the sale's brand, fall back to the full
+      // candidate list rather than dropping the sale as unmatched.
+      function restrictToBrand(candidates, saleBrandNorm, getBrandNorm) {
+        if (!saleBrandNorm) return candidates;
+        const sameBrand = candidates.filter(c => getBrandNorm(c) === saleBrandNorm);
+        return sameBrand.length ? sameBrand : candidates;
+      }
 
       const exact = [], fuzzyPending = [], unmatched = [];
       salesRows.forEach((sale, si) => {
+        const saleBrandNorm = normalize(sale.brand);
         const keyFull = normalize(`${sale.brand} ${sale.model}`.trim());
-        const keyModel = normalize(sale.model);
         let schemeIdx = schemeByKey.get(keyFull);
-        if (schemeIdx === undefined) schemeIdx = schemeByKey.get(keyModel);
+        if (schemeIdx === undefined) {
+          const keyModel = normalize(sale.model);
+          const modelMatches = schemeByModelOnly.get(keyModel) || [];
+          if (modelMatches.length === 1) {
+            schemeIdx = modelMatches[0];
+          } else if (modelMatches.length > 1) {
+            const sameBrandMatches = restrictToBrand(modelMatches, saleBrandNorm, idx => normalize(schemeRows[idx].brand));
+            if (sameBrandMatches.length === 1 || (saleBrandNorm && sameBrandMatches.length && sameBrandMatches !== modelMatches)) {
+              schemeIdx = sameBrandMatches[0];
+            }
+          }
+        }
         if (schemeIdx !== undefined) { exact.push({ saleIdx: si, schemeIdx }); return; }
 
         // Substring code match: e.g. scheme model "V70 Elite" -> code
@@ -592,14 +658,17 @@
         // Blk" -> code "VIVOV70ELITE...". High confidence - no need to ask
         // the user to confirm it, unlike the bigram fuzzy fallback below.
         const saleCode = coreCode(sale.model);
+        const codeCandidates = restrictToBrand(schemeCodes, saleBrandNorm, sc => sc.brand);
         let bestCode = null;
-        schemeCodes.forEach(sc => {
+        codeCandidates.forEach(sc => {
           if (saleCode.includes(sc.code) && (!bestCode || sc.code.length > bestCode.code.length)) bestCode = sc;
         });
         if (bestCode) { exact.push({ saleIdx: si, schemeIdx: bestCode.i }); return; }
 
+        const fuzzyCandidates = restrictToBrand(activeIdxs, saleBrandNorm, idx => normalize(schemeRows[idx].brand));
+        const keyModel = normalize(sale.model);
         let best = { idx: -1, score: 0 };
-        activeIdxs.forEach(i => {
+        fuzzyCandidates.forEach(i => {
           const score = similarity(keyModel, normalize(schemeRows[i].model));
           if (score > best.score) best = { idx: i, score };
         });
@@ -609,12 +678,30 @@
       return { exact, fuzzyPending, unmatched };
     }
     // Whatever's still unmatched after exact + code + confirmed-fuzzy
-    // matching falls back to the "Remaining All Model" row, if the scheme
-    // sheet has one. If it doesn't, those sales stay genuinely unmatched.
+    // matching falls back to a "Remaining All Model" catch-all row, if the
+    // scheme sheet has one. A multi-brand scheme sheet can carry a
+    // separate catch-all row per brand (e.g. "Vivo Remaining All Model"
+    // and "Oppo Remaining All Model") - each unmatched sale gets its own
+    // brand's catch-all rate first, and only falls through to a brand-less
+    // catch-all row (or, failing that, whichever catch-all row appears
+    // first) when no brand-specific one exists.
     function withDefaults(pairs, unmatchedList, schemeRows) {
-      const defaultIdx = schemeRows.findIndex(s => s.isDefault);
-      if (defaultIdx === -1) return { pairs, stillUnmatched: unmatchedList };
-      const defaulted = unmatchedList.map(saleIdx => ({ saleIdx, schemeIdx: defaultIdx, isDefault: true }));
+      const defaultIdxs = schemeRows.map((s, i) => (s.isDefault ? i : -1)).filter(i => i !== -1);
+      if (!defaultIdxs.length) return { pairs, stillUnmatched: unmatchedList };
+      const byBrand = new Map();
+      let genericIdx = -1;
+      defaultIdxs.forEach(i => {
+        const b = normalize(schemeRows[i].brand);
+        if (b) { if (!byBrand.has(b)) byBrand.set(b, i); }
+        else if (genericIdx === -1) genericIdx = i;
+      });
+      const fallbackIdx = genericIdx !== -1 ? genericIdx : defaultIdxs[0];
+      const salesRowsRef = window.__salesRowsForDefaults;
+      const defaulted = unmatchedList.map(saleIdx => {
+        const saleBrandNorm = salesRowsRef ? normalize(salesRowsRef[saleIdx].brand) : '';
+        const idx = (saleBrandNorm && byBrand.has(saleBrandNorm)) ? byBrand.get(saleBrandNorm) : fallbackIdx;
+        return { saleIdx, schemeIdx: idx, isDefault: true };
+      });
       return { pairs: [...pairs, ...defaulted], stillUnmatched: [] };
     }
     function calcPayoutForPair(sale, scheme) {
@@ -668,14 +755,18 @@
           rows = kind === 'sales' ? parseSalesSheet(rows2D) : parseSchemeSheet(rows2D, sheet);
         }
         if (kind === 'sales') {
-          salesRows = rows;
+          salesRows = rows.map(r => ({ ...r, brand: (r.brand && r.brand.trim()) || detectBrand(r.model) || 'Unassigned' }));
           const labelInput = document.getElementById('runLabel');
           if (!labelInput.value.trim()) {
             const suggested = suggestRunLabel(rows);
             if (suggested) labelInput.value = suggested;
           }
         } else {
-          schemeRows = markDefaultSchemeRow(rows);
+          const marked = markDefaultSchemeRow(rows);
+          schemeRows = marked.map(r => ({
+            ...r,
+            brand: (r.brand && r.brand.trim()) || (r.isDefault ? (detectBrandFromList(r.model) || '') : (detectBrand(r.model) || '')),
+          }));
         }
         labelEl.textContent = file.name;
         const defaultNote = kind === 'scheme' && schemeRows.some(s => s.isDefault) ? ' <span class="badge" style="background:var(--warn-soft); color:var(--calc-dark);">catch-all found</span>' : '';
@@ -776,9 +867,9 @@
           <span class="tot">Qty ${data.totalQty} &middot; \u20b9${fmtINR(data.totalValue)} &middot; <b>Payout \u20b9${fmtINR(data.totalPayout)}</b></span></summary>
           <table>
             <thead><tr><th class="sno">S.No.</th><th>Model</th><th class="num">Qty</th><th class="num">Cost Price</th><th>Mode</th><th class="num">Applied %</th><th class="num">Payout</th><th>Note</th></tr></thead>
-            <tbody>${data.rows.map(r => { sno++; return `<tr>
+            <tbody>${data.rows.map(r => { sno++; return `<tr data-model="${r.model.toLowerCase()}">
               <td class="sno">${sno}</td>
-              <td class="model">${r.model}</td><td class="num">${r.qty}</td><td class="num">\u20b9${fmtINR(r.value)}</td>
+              <td class="model"><span class="model-text">${r.model}</span></td><td class="num">${r.qty}</td><td class="num">\u20b9${fmtINR(r.value)}</td>
               <td class="mode">${r.mode}</td><td class="num">${r.percent}%</td>
               <td class="num payout">\u20b9${fmtINR(r.payout)}</td><td class="note">${r.note}</td>
             </tr>`; }).join('')}</tbody>
@@ -787,6 +878,65 @@
       document.getElementById('resultsBody').innerHTML = body;
       const expandCollapseBtn = document.getElementById('expandCollapseBtn');
       if (expandCollapseBtn) expandCollapseBtn.textContent = 'Collapse All';
+      // Re-apply whatever's currently typed in the item search box, so
+      // searching survives a Calculate re-run or a fuzzy-match confirm.
+      filterResultsBySearch();
+    }
+    // ------------------------------------------------------------------
+    // Item search - filters the payout table (not the history list) by
+    // model/item name. Hides non-matching rows, hides a whole brand group
+    // when nothing in it matches, and highlights the matched text.
+    //
+    // Matching ignores spaces/hyphens/punctuation on BOTH sides, so a
+    // search for "y 400" finds a model stored as "Y400" (and "y400" finds
+    // "Y 400", "Y-400", etc.) - letters/digits just need to appear in the
+    // same order, with only non-alphanumeric characters allowed between
+    // them. This mirrors how the app already matches sale rows to scheme
+    // rows internally (see coreCode()).
+    // ------------------------------------------------------------------
+    function escapeRegex(str) { return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+    // Builds a regex SOURCE (not yet a RegExp) from the search term: each
+    // letter/digit the user typed, separated by "any amount of punctuation
+    // /whitespace (or none)". Returns null for an empty/punctuation-only
+    // search term so callers can treat that as "no filter".
+    function buildFlexiblePattern(term) {
+      const alnumChars = term.replace(/[^a-z0-9]/gi, '').split('');
+      if (!alnumChars.length) return null;
+      return alnumChars.map(escapeRegex).join('[^a-z0-9]*');
+    }
+    function filterResultsBySearch() {
+      const input = document.getElementById('itemSearchInput');
+      const clearBtn = document.getElementById('itemSearchClearBtn');
+      const term = input.value.trim();
+      clearBtn.style.display = term ? 'flex' : 'none';
+      const pattern = buildFlexiblePattern(term);
+      const groups = document.querySelectorAll('#resultsBody .brand-group');
+      groups.forEach(group => {
+        let groupHasMatch = false;
+        group.querySelectorAll('tbody tr').forEach(tr => {
+          const textEl = tr.querySelector('.model-text');
+          // .textContent always returns the plain text even if a previous
+          // search already wrapped part of it in <mark> - so re-reading it
+          // here on every keystroke can't accumulate stale highlight tags.
+          const original = textEl ? textEl.textContent : '';
+          const isMatch = !pattern || new RegExp(pattern, 'i').test(original);
+          tr.classList.toggle('search-hidden', !isMatch);
+          if (isMatch) groupHasMatch = true;
+          if (textEl) {
+            textEl.innerHTML = (isMatch && pattern)
+              ? original.replace(new RegExp(pattern, 'gi'), (m) => `<mark class="search-hit">${m}</mark>`)
+              : original;
+          }
+        });
+        group.classList.toggle('search-hidden', pattern ? !groupHasMatch : false);
+        if (pattern && groupHasMatch) group.open = true;
+      });
+    }
+    function clearItemSearch() {
+      const input = document.getElementById('itemSearchInput');
+      input.value = '';
+      filterResultsBySearch();
+      input.focus();
     }
     // ------------------------------------------------------------------
     // Download Report menu (Excel / PDF)

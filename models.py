@@ -602,4 +602,19 @@ class AgeingStockItem(Base):
     qty_vault = Column(Float, default=0)
     locations_present = Column(String(150), nullable=True)  # e.g. "ALM, HZT, Vault"
 
+    # JSON: {"qty_alm": {"age_0_60": 1.0, ..., "age_366_plus": 0.0}, "qty_hzt": {...}, ...}
+    # - the age-bucket breakdown WITHIN each location, read from that
+    # location's own sheet in the uploaded workbook (each location sheet
+    # carries the same age-bucket columns as "All Data"). Only locations
+    # actually present for this item are included. Without this, the
+    # qty_xxx columns above are each location's ALL-TIME total regardless
+    # of age, so filtering the report to e.g. ">= 366 Days" would still
+    # show a branch's full all-time quantity next to a Closing Qty that
+    # only counts the >=366 portion - the two would disagree, and their
+    # sum would exceed Closing Qty. This field lets the report compute
+    # each branch's quantity for exactly the selected duration bucket(s),
+    # so Closing Qty, the duration columns, and every branch column always
+    # agree - see location_qty_for_durations() in main.py.
+    location_age_buckets_json = Column(Text, nullable=True)
+
     source_file = Column(String(255), nullable=True)

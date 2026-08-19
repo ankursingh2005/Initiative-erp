@@ -4,6 +4,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from sqlalchemy import inspect, text, func, or_
+from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, date, timedelta
@@ -13,6 +14,7 @@ import csv
 import json
 import os
 import re
+import difflib
 import importlib
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -1950,6 +1952,20 @@ def get_me(current_user: models.User = Depends(auth.get_current_user)):
     return current_user
 
 
+@app.post("/auth/verify-password")
+def verify_own_password(
+    payload: schemas.PasswordVerify,
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Re-checks the logged-in user's own current password, without issuing
+    a new token. Used as a re-auth gate before revealing something sensitive
+    (e.g. the User Management table) to someone who's stepped away from an
+    already-unlocked session."""
+    if not auth.verify_password(payload.password, current_user.password_hash):
+        raise HTTPException(status_code=401, detail="Incorrect password")
+    return {"valid": True}
+
+
 # ============================================================
 # ROLE-SCOPED DATA (each role only sees what it's allowed to)
 # ============================================================
@@ -2323,6 +2339,78 @@ def update_user_assignments(
     db.commit()
     db.refresh(target_user)
     return serialize_user_with_brands(target_user)
+
+
+@app.delete("/api/users/{user_id}")
+def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_roles("Admin")),
+):
+    """Admin-only: permanently delete a user account, regardless of what
+    they've submitted/uploaded in the past. Purchase orders require an
+    owning user (that column is NOT NULL), so any the deleted user
+    submitted or approved are reassigned to the admin doing the deletion,
+    with a note recording who originally submitted them - the order itself
+    and its history are kept, just no longer tied to the removed login.
+    Other historical references (uploaded scheme attachments, price list
+    edits, etc.) are simply detached from the deleted user."""
+    target_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if target_user.id == current_user.id:
+        raise HTTPException(status_code=400, detail="You cannot delete your own account.")
+
+    deleted_username = target_user.username
+
+    # Purchase orders must always have a submitter, so reassign any this
+    # user submitted to the admin performing the deletion, and record who
+    # originally submitted it in processing_notes for the audit trail.
+    submitted_orders = (
+        db.query(models.PurchaseOrder)
+        .filter(models.PurchaseOrder.submitted_by_user_id == target_user.id)
+        .all()
+    )
+    for po in submitted_orders:
+        note = f"[Originally submitted by {deleted_username} - account deleted]"
+        po.processing_notes = f"{po.processing_notes}\n{note}" if po.processing_notes else note
+        po.submitted_by_user_id = current_user.id
+
+    db.query(models.PurchaseOrder).filter(models.PurchaseOrder.approved_by_user_id == target_user.id).update(
+        {"approved_by_user_id": None}
+    )
+
+    # Detach other, optional historical references so deleting the account
+    # doesn't break foreign-key constraints on records that don't strictly
+    # need an owning user (the record itself, and its data, stays intact).
+    db.query(models.SchemeAttachment).filter(models.SchemeAttachment.uploaded_by_user_id == target_user.id).update(
+        {"uploaded_by_user_id": None}
+    )
+    db.query(models.IntervalSaleUpload).filter(models.IntervalSaleUpload.uploaded_by == target_user.id).update(
+        {"uploaded_by": None}
+    )
+    db.query(models.AnalyticsUpload).filter(models.AnalyticsUpload.uploaded_by == target_user.id).update(
+        {"uploaded_by": None}
+    )
+    db.query(models.PriceListItem).filter(models.PriceListItem.updated_by_user_id == target_user.id).update(
+        {"updated_by_user_id": None}
+    )
+    db.query(models.AgeingStockUpload).filter(models.AgeingStockUpload.uploaded_by == target_user.id).update(
+        {"uploaded_by": None}
+    )
+
+    try:
+        db.delete(target_user)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unable to delete {deleted_username}: this account still has linked records.",
+        )
+
+    return {"message": f"Account '{deleted_username}' deleted"}
 
 
 # ============================================================
@@ -4195,8 +4283,20 @@ def dp_extract_store(vch_no: Optional[str]) -> str:
     return vch_no.split("/")[0].strip().upper() or "UNK"
 
 
-def dp_tokens(name: Optional[str]) -> set:
-    return set(re.findall(r"[A-Za-z0-9]+", (name or "").upper()))
+def dp_item_similarity(a: Optional[str], b: Optional[str]) -> float:
+    """Case-insensitive whole-name similarity (0-1) between two item names,
+    used to match an outdoor-unit/zero-value line to the indoor-unit/priced
+    line it belongs to on the same voucher.
+
+    A paired indoor/outdoor unit's model numbers are usually near-identical
+    strings - e.g. indoor 'ASGG18CEAC-B' pairs with outdoor 'AOGG18CEAC-B',
+    only two characters apart - so whole-string similarity is far more
+    reliable here than splitting into tokens and requiring an exact token
+    match, which treats 'ASGG18CEAC' and 'AOGG18CEAC' as two completely
+    unrelated tokens even though they're the same model family, and can tie
+    (and then silently mismatch) against an unrelated pair like '18CPWA-B'.
+    """
+    return difflib.SequenceMatcher(None, (a or "").upper(), (b or "").upper()).ratio()
 
 
 # Accessories that ride along with a Mobile-category sale but are not a
@@ -4324,6 +4424,12 @@ def dp_categorize(item_name: Optional[str]) -> str:
         "IQOO", "SAMSUNG GALAXY",
         # Foldable phones (any brand) - Fold/Flip model names.
         " FOLD ", " FLIP ",
+        # iPad (any model - Air/Pro/Mini/base) - grouped under Mobile along
+        # with every other Tab/Pad device, same as the rest of the app.
+        # Bare "IPAD" (no padding) since "iPad" normalizes to one token
+        # with no internal space (e.g. "iPad Air 11" M3 WiFi MC9YAHN/A
+        # 128GB Sta").
+        "IPAD",
     )
     if any(k in padded for k in mobile_keywords):
         return "Mobile"
@@ -4386,16 +4492,17 @@ def dp_merge_rows(rows: List["models.IntervalSaleUpload"]) -> tuple:
             continue
 
         # multiple priced lines in one voucher: attribute each zero-sale line
-        # to the priced line it shares the most name-tokens with.
+        # to the priced line whose name is the closest overall match (see
+        # dp_item_similarity - paired indoor/outdoor model numbers are
+        # near-identical strings, not necessarily sharing whole tokens).
         bucket = {id(p): {"item": p.item, "sale": p.sales_amt or 0, "cost": p.cost_amt or 0, "date": p.sale_date, "components": []} for p in priced}
         for z in zero:
-            zt = dp_tokens(z.item)
-            best, best_score = None, -1
+            best, best_score = None, -1.0
             for p in priced:
-                score = len(zt & dp_tokens(p.item))
+                score = dp_item_similarity(z.item, p.item)
                 if score > best_score:
                     best, best_score = p, score
-            if best_score <= 0:
+            if best_score < 0.5:
                 review_notes.append(
                     f"Vch {vch}: could not confidently match zero-value line "
                     f"'{z.item}' (cost {z.cost_amt or 0:.2f}) to a product in the "
@@ -4405,7 +4512,7 @@ def dp_merge_rows(rows: List["models.IntervalSaleUpload"]) -> tuple:
             else:
                 review_notes.append(
                     f"Vch {vch}: cost {z.cost_amt or 0:.2f} from '{z.item}' "
-                    f"attributed to '{best.item}' (matched by shared name tokens)."
+                    f"attributed to '{best.item}' (matched by name similarity)."
                 )
             bucket[id(best)]["cost"] += (z.cost_amt or 0)
             if z.item and not dp_is_ac_od_component(z.item):
@@ -6120,6 +6227,7 @@ def _load_ageing_category_master() -> dict:
         "SUNFLAME COOKER HOOD MAGNUM 60": "HA",              # Sunflame Cooker Hood Magnum 60 -> Home Appliances
         "JBL SOUND BAR SB595": "HE",                          # JBL Sound Bar SB595 -> Home Entertainment
         "LAPTOP SPEAKER": "IT",                               # Laptop Speaker -> Computer (would otherwise match the "SPEAKER" HE keyword)
+        "HAVELLS LED PRIDE PLUS 10W": "OTHER",                # Havells LED Pride Plus 10W -> Accessories (was landing in HE)
     }
     for item_key, category_code in AGEING_CATEGORY_MASTER_MANUAL_OVERRIDES.items():
         lookup[item_key] = {
