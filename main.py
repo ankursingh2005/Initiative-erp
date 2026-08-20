@@ -4311,6 +4311,11 @@ DP_ACCESSORY_KEYWORDS = (
     "SMART WATCH", "SMARTWATCH", "TEMPERED GLASS", "SCREEN GUARD",
     "MOBILE COVER", "BACK COVER", "PENDRIVE", "MEMORY CARD", "OTG",
     "KEYBOARD", "MOUSE",
+    # Small laptop/desktop accessory, not a computer unit itself (e.g.
+    # "Laptop Fan", "HP Laptop Fan Cooler") - without this it falls through
+    # to the laptop_keywords check below, which matches bare "LAPTOP" as a
+    # substring and wrongly counts it as a full Computer-category sale.
+    "LAPTOP FAN",
 )
 
 
@@ -6391,6 +6396,7 @@ def parse_ageing_stock_workbook(content: bytes, db: Session) -> tuple:
 
     all_data_rows = None
     location_row_maps: dict = {}  # location code -> {normalized item key: qty}
+    location_bucket_maps: dict = {}  # location code -> {normalized item key: {age_bucket: qty}}
     location_sheets_found = []
     excluded_item_keys: set = set()  # item keys found on a PWH/Vault sheet
 
@@ -6426,20 +6432,33 @@ def parse_ageing_stock_workbook(content: bytes, db: Session) -> tuple:
             continue
         location_sheets_found.append(matched_code)
         qty_map = {}
+        # Per-item, per-age-bucket breakdown WITHIN this location, so a
+        # duration filter (e.g. ">= 366 Days") can show exactly this
+        # branch's quantity for that duration, not its all-time total -
+        # see location_qty_for_durations() below and the
+        # location_age_buckets_json comment on models.AgeingStockItem.
+        bucket_map: dict = {}
         for row in rows:
             key = normalize_ageing_item_key(row.get("item_details"))
             if not key:
                 continue
+            buckets = {
+                bucket: parse_float_value(row.get(bucket), fallback=0.0)
+                for bucket in AGEING_AGE_FIELDS
+            }
             qty = parse_float_value(row.get("closing_qty"), fallback=None)
             if qty is None:
                 # Some location sheets may only carry ageing buckets, no
                 # Closing Qty column - fall back to their sum.
-                qty = sum(
-                    parse_float_value(row.get(bucket), fallback=0.0)
-                    for bucket in ("age_0_60", "age_61_90", "age_91_150", "age_151_180", "age_181_365", "age_366_plus")
-                )
+                qty = sum(buckets.values())
             qty_map[key] = qty_map.get(key, 0.0) + qty
+            if key not in bucket_map:
+                bucket_map[key] = dict(buckets)
+            else:
+                for bucket, value in buckets.items():
+                    bucket_map[key][bucket] += value
         location_row_maps[matched_code] = qty_map
+        location_bucket_maps[matched_code] = bucket_map
 
     if all_data_rows is None:
         raise HTTPException(
@@ -6498,6 +6517,7 @@ def parse_ageing_stock_workbook(content: bytes, db: Session) -> tuple:
         }
 
         present_at = []
+        location_buckets_out = {}
         for code, column in location_columns.items():
             qty_map = location_row_maps.get(code)
             if not qty_map:
@@ -6506,7 +6526,15 @@ def parse_ageing_stock_workbook(content: bytes, db: Session) -> tuple:
             if qty_here:
                 built[column] = qty_here
                 present_at.append(code)
+                bucket_here = (location_bucket_maps.get(code) or {}).get(item_key)
+                if bucket_here:
+                    location_buckets_out[column] = bucket_here
         built["locations_present"] = ", ".join(present_at) if present_at else None
+        # {"qty_alm": {"age_0_60": 1.0, ...}, "qty_hzt": {...}, ...} - lets
+        # the report/export show each branch's quantity for exactly the
+        # selected duration bucket(s) instead of that branch's all-time
+        # total. See location_qty_for_durations() below.
+        built["location_age_buckets_json"] = json.dumps(location_buckets_out) if location_buckets_out else None
 
         item_rows.append(built)
 
@@ -6774,6 +6802,7 @@ def compute_ageing_stock_report(
             "qty_alm": item.qty_alm, "qty_hzt": item.qty_hzt, "qty_ash": item.qty_ash,
             "qty_gng": item.qty_gng, "qty_vkn": item.qty_vkn, "qty_mwh": item.qty_mwh,
             "locations_present": item.locations_present,
+            "location_age_buckets_json": item.location_age_buckets_json,
             "classification_source": item.classification_source,
         })
         add_into(brand_bucket["totals"], item)
@@ -6824,6 +6853,37 @@ def ageing_stock_report(
     db: Session = Depends(get_db),
 ):
     return compute_ageing_stock_report(db, category, brand, search, item_category, locations)
+
+
+def location_qty_for_durations(item: dict, location_field: str, active_age_fields: List[str]) -> float:
+    """This item's quantity at one branch (qty_alm, qty_hzt, etc.), scoped
+    to only the selected duration bucket(s) - fixes branch columns showing
+    a branch's ALL-TIME total next to a Closing Qty/duration column that's
+    already scoped to the selected duration(s), which could make the
+    branch columns sum to more than Closing Qty (e.g. an item aged 91-150
+    days at one branch was still being counted when the report was
+    filtered to only ">= 366 Days").
+
+    Uses the per-branch age-bucket breakdown captured at upload time
+    (location_age_buckets_json). Falls back to the branch's raw all-time
+    total when every duration bucket is selected (no filtering needed - the
+    two are equivalent) or when the item predates this fix and has no
+    bucket breakdown recorded (re-upload the workbook to get exact
+    branch-level duration filtering for it)."""
+    raw_total = item.get(location_field) or 0.0
+    if len(active_age_fields) >= len(AGEING_AGE_FIELDS):
+        return raw_total
+    buckets_json = item.get("location_age_buckets_json")
+    if not buckets_json:
+        return raw_total
+    try:
+        buckets_by_location = json.loads(buckets_json)
+    except (TypeError, ValueError):
+        return raw_total
+    location_buckets = buckets_by_location.get(location_field)
+    if not location_buckets:
+        return raw_total
+    return sum(location_buckets.get(f, 0.0) for f in active_age_fields)
 
 
 def parse_ageing_durations_param(durations: Optional[str]) -> List[str]:
@@ -6899,15 +6959,24 @@ def build_ageing_export_dataset(report: dict, active_age_fields: List[str], acti
                 # addIntoTotals(), so the download always matches the
                 # on-screen numbers with no discrepancy to explain.
                 item_active_qty = round(item_qty_in_active_durations(item), 2)
+                # Each branch column is scoped to the same selected
+                # duration bucket(s) as Closing Qty above, not that
+                # branch's all-time total - see location_qty_for_durations().
+                loc_qtys = {f: location_qty_for_durations(item, f, active_age_fields) for f in location_fields}
+                present_at_filtered = ", ".join(
+                    loc_labels[f] for f in location_fields if loc_qtys[f] > 0
+                ) or "-"
                 row = [item["item_details"], item.get("unit") or ""]
                 row.append(item_active_qty)
                 row += [round(item.get(f) or 0, 2) for f in active_age_fields]
-                row += [round(item.get(f) or 0, 2) for f in location_fields]
-                row.append(item.get("locations_present") or "-")
+                row += [round(loc_qtys[f], 2) for f in location_fields]
+                row.append(present_at_filtered)
                 rows.append(row)
                 brand_totals["closing_qty"] += item_active_qty
-                for f in active_age_fields + location_fields:
+                for f in active_age_fields:
                     brand_totals[f] += item.get(f) or 0
+                for f in location_fields:
+                    brand_totals[f] += loc_qtys[f]
             any_rows = True
             brands_out.append({
                 "name": brand_bucket["brand_name"],

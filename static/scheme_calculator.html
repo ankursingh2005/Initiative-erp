@@ -276,7 +276,7 @@
       <div class="card c-scheme">
         <span class="step-eyebrow s2"><span class="step-num">2</span> SCHEME SHEET</span>
         <h3>Scheme Sheet <span id="schemeBadge"></span></h3>
-        <p class="sub">Models + Payout % &mdash; add a "Remaining All Model" row as a catch-all rate</p>
+        <p class="sub">Models + Payout % &mdash; add a "Remaining All Model" / "All Model" row as a catch-all rate</p>
         <input id="schemeInput" type="file" accept=".xlsx,.xls,.csv,image/*" style="display:none" />
         <button class="drop" type="button" onclick="document.getElementById('schemeInput').click()">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"></path><path d="M7 9l5-5 5 5"></path><path d="M12 4v12"></path></svg>
@@ -399,6 +399,23 @@
       "Nothing", "Google Pixel", "Google", "OnePlus", "Poco", "Tecno", "Infinix", "Itel", "Honor",
       "HP", "Dell", "Lenovo", "Acer", "Nikon",
     ].sort((a, b) => b.length - a.length);
+    // Tablet product lines checked BEFORE the phone brand list. Without
+    // this, a row like "Redmi Pad 2 4G 4+128 Graphite Grey" matches the
+    // word "Redmi" in BRAND_LIST and gets lumped into the Redmi PHONE
+    // group, and "Apple iPad 10th Gen" matches "Apple" and never gets its
+    // own iPad group - same reasoning as the "Google Pixel" > "Google"
+    // ordering above, just pulled into its own list so it always wins
+    // regardless of string length vs. "Apple"/"Redmi"/"Xiaomi".
+    const TABLET_LIST = ["Redmi Pad", "Xiaomi Pad", "Mi Pad", "iPad"]
+      .sort((a, b) => b.length - a.length);
+    function matchFromList(itemText, list) {
+      const text = String(itemText || '');
+      for (const name of list) {
+        const re = new RegExp('\\b' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
+        if (re.test(text)) return name;
+      }
+      return null;
+    }
     function detectBrand(itemText) {
       const known = detectBrandFromList(itemText);
       if (known) return known;
@@ -410,14 +427,10 @@
     // catch-all scheme rows ("Remaining All Model") so a blank Brand
     // column there doesn't turn into a fake brand like "Remaining" -
     // it should stay blank (a true cross-brand catch-all) unless the
-    // row's own text genuinely names a real brand.
+    // row's own text genuinely names a real brand. Tablets are checked
+    // first so they group separately from their phone-brand parent.
     function detectBrandFromList(itemText) {
-      const text = String(itemText || '');
-      for (const brand of BRAND_LIST) {
-        const re = new RegExp('\\b' + brand.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
-        if (re.test(text)) return brand;
-      }
-      return null;
+      return matchFromList(itemText, TABLET_LIST) || matchFromList(itemText, BRAND_LIST);
     }
     function showMsg(text, kind) {
       document.getElementById('msgBox').innerHTML = text ? `<div class="msg ${kind || 'err'}">${text}</div>` : '';
@@ -444,7 +457,7 @@
     // Models" / "Others" / "Rest" is a catch-all fallback rate, not a
     // specific model to match against - it never takes part in matching
     // itself, it's applied at the end to whatever didn't match anything else.
-    const DEFAULT_ROW_PATTERN = /\bREMAINING\b|\bALL\s*OTHER|\bOTHERS?\b|\bREST\b/;
+    const DEFAULT_ROW_PATTERN = /\bREMAINING\b|\bALL\s*OTHER|\bOTHERS?\b|\bREST\b|\bALL\s*MODELS?\b|\bDEFAULT\b/;
     function markDefaultSchemeRow(rows) {
       return rows.map(r => ({ ...r, isDefault: DEFAULT_ROW_PATTERN.test(normalize(r.model)) }));
     }
@@ -452,9 +465,39 @@
     // whitespace, so a short scheme model code like "V70 Elite" can be
     // found as a contiguous substring inside a long sales description like
     // "Vivo V 70 Elite 12+512 Authentic Blk" regardless of spacing.
+    //
+    // Scheme sheets often name a whole model family with a trailing
+    // "Series" word - e.g. "Reno 15 Series", "A6S 5G Series", "A6X 5G
+    // Series" - meant to cover every variant sold under that name (Reno
+    // 15, 15c, 15 Pro, ...). That literal word never appears in the sale
+    // item text itself ("Oppo Reno 15c 5G 8+256 T Blue"), so leaving it in
+    // the code made the substring check fail for every single row and
+    // silently dumped the whole sheet into the "Remaining All Model"
+    // catch-all. Stripping it here - same idea as DEFAULT_ROW_PATTERN
+    // above - lets "Reno 15 Series" -> "RENO15" actually match "...RENO
+    // 15C..." while leaving genuinely unlisted models (e.g. "F33", "K14x")
+    // to fall through to the catch-all as before.
     function coreCode(str) {
-      const stripped = String(str || '').replace(/\d+\s*\+\s*\d+/g, ' ');
+      const stripped = String(str || '')
+        .replace(/\d+\s*\+\s*\d+/g, ' ')
+        .replace(/\bseries\b/gi, ' ');
       return normalize(stripped).replace(/\s+/g, '');
+    }
+    // Same RAM/Storage + "series" stripping as coreCode(), but keeps each
+    // word separate instead of gluing them together. A glued code only
+    // matches when the scheme's words sit right next to each other in the
+    // sale text - so a two-word scheme model like "Note Pro Series" ->
+    // glued "NOTEPRO" never matches a sale row like "Redmi Note 15 Pro
+    // Plus ..." because the model number ("15") sits between "Note" and
+    // "Pro" in the real product name. coreWords() lets the caller check
+    // each word independently (still plain substring, still order-
+    // agnostic) so that case matches too, while still requiring every
+    // word of the scheme model to be present somewhere in the sale text.
+    function coreWords(str) {
+      const stripped = String(str || '')
+        .replace(/\d+\s*\+\s*\d+/g, ' ')
+        .replace(/\bseries\b/gi, ' ');
+      return normalize(stripped).split(' ').filter(Boolean);
     }
 
     function findHeaderRow(rows2D, aliasMap) {
@@ -614,11 +657,18 @@
         if (!schemeByModelOnly.has(keyModelOnly)) schemeByModelOnly.set(keyModelOnly, []);
         schemeByModelOnly.get(keyModelOnly).push(i);
       });
-      // For the substring pass: each active scheme row's compact code (no
-      // spaces, RAM+Storage stripped), longest first so "V70 Elite" wins
-      // over the plainer "V70" when a sale description contains both.
+      // For the substring pass: each active scheme row's compact glued
+      // code (no spaces, RAM+Storage+"series" stripped) AND its individual
+      // words. The glued code stays the primary/strongest signal - see the
+      // scoring loop below for why the word list is only used as a
+      // narrowly-guarded fallback, not a replacement.
       const schemeCodes = activeIdxs
-        .map(i => ({ i, code: coreCode(schemeRows[i].model), brand: normalize(schemeRows[i].brand) }))
+        .map(i => ({
+          i,
+          code: coreCode(schemeRows[i].model),
+          words: coreWords(schemeRows[i].model),
+          brand: normalize(schemeRows[i].brand),
+        }))
         .filter(sc => sc.code.length >= 2);
 
       // Restrict a candidate list to the sale's own brand when both the
@@ -630,8 +680,19 @@
       // candidate list rather than dropping the sale as unmatched.
       function restrictToBrand(candidates, saleBrandNorm, getBrandNorm) {
         if (!saleBrandNorm) return candidates;
-        const sameBrand = candidates.filter(c => getBrandNorm(c) === saleBrandNorm);
-        return sameBrand.length ? sameBrand : candidates;
+        // Keep a candidate if it shares the sale's brand OR never claimed a
+        // brand of its own (blank = generic model code that can apply to
+        // any brand's sales, e.g. a single-brand scheme sheet with no
+        // Brand column). Previously only same-brand rows were kept, and
+        // ONLY fell back to the full list when there were zero same-brand
+        // matches - so a single accidental same-brand hit (e.g. one row
+        // that happens to spell out "Redmi") silently wiped out every
+        // brand-less row from consideration instead of coexisting with it.
+        const eligible = candidates.filter(c => {
+          const b = getBrandNorm(c);
+          return !b || b === saleBrandNorm;
+        });
+        return eligible.length ? eligible : candidates;
       }
 
       const exact = [], fuzzyPending = [], unmatched = [];
@@ -659,9 +720,28 @@
         // the user to confirm it, unlike the bigram fuzzy fallback below.
         const saleCode = coreCode(sale.model);
         const codeCandidates = restrictToBrand(schemeCodes, saleBrandNorm, sc => sc.brand);
-        let bestCode = null;
+        let bestCode = null, bestScore = -1;
         codeCandidates.forEach(sc => {
-          if (saleCode.includes(sc.code) && (!bestCode || sc.code.length > bestCode.code.length)) bestCode = sc;
+          // Tier 1 (primary): the scheme row's words sit right next to
+          // each other in the sale text, e.g. scheme "V70 Elite" -> code
+          // "V70ELITE" found inside sale "Vivo V 70 Elite 12+512 ...".
+          if (saleCode.includes(sc.code)) {
+            const score = sc.code.length;
+            if (score > bestScore) { bestCode = sc; bestScore = score; }
+          }
+          // Tier 2 (fallback): a genuinely multi-word scheme family name
+          // (2+ words) whose words are scattered rather than adjacent in
+          // the sale text - e.g. scheme "Note Pro Series" -> ["NOTE",
+          // "PRO"] found in "Redmi Note 15 Pro Plus ..." even though the
+          // model number "15" sits between them. Guarded to 2+ words and
+          // excludes any word equal to the sale's own brand, so a row
+          // like "Redmi 15" -> ["REDMI","15"] can't win just because
+          // every same-brand sale trivially contains the word "REDMI" -
+          // that row is left to Tier 1's stricter adjacency check instead.
+          if (sc.words.length >= 2 && !sc.words.includes(saleBrandNorm) && sc.words.every(w => saleCode.includes(w))) {
+            const score = sc.words.join('').length;
+            if (score > bestScore) { bestCode = sc; bestScore = score; }
+          }
         });
         if (bestCode) { exact.push({ saleIdx: si, schemeIdx: bestCode.i }); return; }
 
@@ -756,6 +836,7 @@
         }
         if (kind === 'sales') {
           salesRows = rows.map(r => ({ ...r, brand: (r.brand && r.brand.trim()) || detectBrand(r.model) || 'Unassigned' }));
+          window.__salesRowsForDefaults = salesRows;
           const labelInput = document.getElementById('runLabel');
           if (!labelInput.value.trim()) {
             const suggested = suggestRunLabel(rows);
@@ -763,9 +844,17 @@
           }
         } else {
           const marked = markDefaultSchemeRow(rows);
+          // Known-brands-only lookup (no "guess the first word" fallback)
+          // for EVERY scheme row, not just catch-all ones. A scheme sheet
+          // often lists short model codes with no Brand column at all
+          // ("A5", "14C", "Note Series", "Pad") - guessing the first word
+          // as a brand turned those into fake per-row brands ("A5", "14C",
+          // "Note", "Pad"), which then made the brand-restriction check
+          // below wrongly treat them as a different brand from the real
+          // sale brand and exclude them from matching entirely.
           schemeRows = marked.map(r => ({
             ...r,
-            brand: (r.brand && r.brand.trim()) || (r.isDefault ? (detectBrandFromList(r.model) || '') : (detectBrand(r.model) || '')),
+            brand: (r.brand && r.brand.trim()) || (detectBrandFromList(r.model) || ''),
           }));
         }
         labelEl.textContent = file.name;

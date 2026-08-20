@@ -674,16 +674,61 @@
         // Closing Qty must always equal the sum of whichever duration
         // bucket(s) are currently checked in the Date Duration picker -
         // never the item's full raw closing_qty - so it can never show a
-        // different number than the age-bucket columns next to it.
-        totals[f] += f === 'closing_qty' ? itemQtyInActiveDurations(item) : (Number(item[f]) || 0);
+        // different number than the age-bucket columns next to it. Branch
+        // (qty_alm, etc.) columns get the same duration scoping via
+        // locationQtyForDurations(), so they can never sum to more than
+        // Closing Qty either.
+        if (f === 'closing_qty') {
+          totals[f] += itemQtyInActiveDurations(item);
+        } else if (Object.prototype.hasOwnProperty.call(LOC_LABELS, f)) {
+          totals[f] += locationQtyForDurations(item, f);
+        } else {
+          totals[f] += Number(item[f]) || 0;
+        }
       });
     }
     function itemQtyInActiveDurations(item) {
       return activeAgeCols().reduce((sum, [key]) => sum + (Number(item[key]) || 0), 0);
     }
 
+    // This item's quantity at ONE branch (qty_alm, etc.), scoped to only
+    // the currently checked duration bucket(s) - not that branch's
+    // all-time total. Without this, a branch column could keep showing
+    // stock aged outside the selected duration (e.g. a unit aged 91-150
+    // days still counted while only ">= 366 Days" is checked), making the
+    // branch columns sum to more than Closing Qty. Uses the per-branch
+    // age-bucket breakdown captured at upload time
+    // (item.location_age_buckets_json); falls back to the branch's raw
+    // total when every duration is selected (no filtering needed) or when
+    // the item predates this fix and has no breakdown recorded.
+    function locationQtyForDurations(item, key) {
+      const rawTotal = Number(item[key]) || 0;
+      if (activeAgeCols().length >= AGE_COLS.length) return rawTotal;
+      const bucketsJson = item.location_age_buckets_json;
+      if (!bucketsJson) return rawTotal;
+      let bucketsByLocation;
+      try {
+        bucketsByLocation = JSON.parse(bucketsJson);
+      } catch (e) {
+        return rawTotal;
+      }
+      const locationBuckets = bucketsByLocation[key];
+      if (!locationBuckets) return rawTotal;
+      return activeAgeCols().reduce((sum, [bucketKey]) => sum + (Number(locationBuckets[bucketKey]) || 0), 0);
+    }
+
     function itemQtyInActiveBranches(item) {
-      return activeLocCols().reduce((sum, [key]) => sum + (Number(item[key]) || 0), 0);
+      return activeLocCols().reduce((sum, [key]) => sum + locationQtyForDurations(item, key), 0);
+    }
+
+    // "Present At" list, scoped to the same selected duration(s) - a
+    // branch only counts as "present" here if it actually has stock in
+    // the checked bucket(s), not merely stock at some other age.
+    function locationsPresentForDurations(item) {
+      return activeLocCols()
+        .filter(([key]) => locationQtyForDurations(item, key) > 0)
+        .map(([, label]) => label)
+        .join(', ') || '-';
     }
 
     function buildFilteredReport(data) {
@@ -965,7 +1010,7 @@
       return `<colgroup>${cols.join('')}</colgroup>`;
     }
     function locationDataCells(item) {
-      return activeLocCols().map(([k]) => `<td class="loc-col">${fmt(item[k])}</td>`).join('');
+      return activeLocCols().map(([k]) => `<td class="loc-col">${fmt(locationQtyForDurations(item, k))}</td>`).join('');
     }
     function locationTotalCells(totals) {
       return activeLocCols().map(([k]) => `<td class="loc-col">${fmt(totals[k])}</td>`).join('');
@@ -982,7 +1027,7 @@
           <td>${fmt(itemQtyInActiveDurations(item))}</td>
           ${ageDataCells(item)}
           ${locationDataCells(item)}
-          <td class="locs-cell">${item.locations_present || '-'}</td>
+          <td class="locs-cell">${locationsPresentForDurations(item)}</td>
         </tr>
       `).join('');
 
