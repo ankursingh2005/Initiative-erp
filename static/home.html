@@ -6,6 +6,9 @@
   <title>Initiative - Dashboard</title>
   <link rel="icon" href="static/Initiative%20logo.png" type="image/png" />
   <script>
+    if (localStorage.getItem('role') === 'BrandPartner') {
+      document.documentElement.classList.add('brand-promotor-limited');
+    }
     // Runs before the body paints: if we're arriving fresh from login, mark
     // <html> so the dashboard starts fully hidden instead of flashing into
     // view behind the "Signed in successfully" overlay.
@@ -80,6 +83,14 @@
     .nav-item.n-age { --nav-color: var(--age); }
     .nav-item.n-calc { --nav-color: var(--calc); }
     .nav-item.n-um { --nav-color: var(--um); }
+    .brand-promotor-limited .nav-item.n-dash,
+    .brand-promotor-limited .nav-item.n-po,
+    .brand-promotor-limited .nav-item.n-ai,
+    .brand-promotor-limited .nav-item.n-dp,
+    .brand-promotor-limited .nav-item.n-price,
+    .brand-promotor-limited .nav-item.n-age,
+    .brand-promotor-limited .nav-item.n-calc,
+    .brand-promotor-limited .nav-item.n-um { display: none; }
 
     .sidebar-foot { padding: 16px 20px; border-top: 1px solid var(--line); }
     .sidebar-user { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
@@ -268,6 +279,10 @@
         <a class="nav-item n-dash active" href="#">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"></rect><rect x="14" y="3" width="7" height="5" rx="1.5"></rect><rect x="14" y="12" width="7" height="9" rx="1.5"></rect><rect x="3" y="16" width="7" height="5" rx="1.5"></rect></svg>
           Dashboard
+        </a>
+        <a class="nav-item n-attendance" href="/attendance">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"></rect><path d="M16 2v4"></path><path d="M8 2v4"></path><path d="M3 10h18"></path><path d="M8 14h.01"></path><path d="M12 14h.01"></path><path d="M16 14h.01"></path><path d="M8 18h.01"></path><path d="M12 18h.01"></path></svg>
+          Attendance
         </a>
         <a class="nav-item n-scheme" href="/dashboard">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V10"></path><path d="M10 19V5"></path><path d="M16 19v-7"></path><path d="M21 19H3"></path></svg>

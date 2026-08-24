@@ -1,13 +1,13 @@
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Query, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response, RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from sqlalchemy import inspect, text, func, or_
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from decimal import Decimal, ROUND_HALF_UP
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from io import BytesIO, StringIO
 from collections import defaultdict
 import csv
@@ -20,6 +20,20 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from uuid import uuid4
 import base64
+import math
+
+INDIA_TZ = timezone(timedelta(hours=5, minutes=30))
+
+
+def india_datetime(value: datetime) -> datetime:
+    """Normalize an incoming timestamp to naive India Standard Time."""
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(INDIA_TZ).replace(tzinfo=None)
+
+
+def india_today() -> date:
+    return datetime.now(INDIA_TZ).date()
 import smtplib
 from email.mime.text import MIMEText
 from dotenv import load_dotenv
@@ -53,6 +67,11 @@ def ensure_database_schema():
     ensure_column("stores", "code", "VARCHAR(20)")
     ensure_column("stores", "city", "VARCHAR(100)")
     ensure_column("stores", "status", "VARCHAR(20)")
+    ensure_column("stores", "latitude", "FLOAT")
+    ensure_column("stores", "longitude", "FLOAT")
+    ensure_column("stores", "geofence_radius_m", "FLOAT")
+    ensure_column("attendance_records", "second_punch_at", "DATETIME")
+    ensure_column("attendance_records", "second_punch_selfie", "TEXT")
 
     ensure_column("categories", "code", "VARCHAR(10)")
     ensure_column("sub_categories", "category_id", "INTEGER")
@@ -152,11 +171,11 @@ def ensure_default_branches():
     with SessionLocal() as db:
         if db.query(models.Store).count() == 0:
             default_branches = [
-                {"name": "Alambagh", "code": "BR001", "city": "Lucknow", "status": "Active"},
-                {"name": "Gomtinagar", "code": "BR002", "city": "Lucknow", "status": "Active"},
-                {"name": "Ashiyana", "code": "BR003", "city": "Lucknow", "status": "Active"},
-                {"name": "Hazratganj", "code": "BR004", "city": "Lucknow", "status": "Active"},
-                {"name": "Vikas Nagar", "code": "BR005", "city": "Lucknow", "status": "Active"},
+                {"name": "Alambagh", "code": "BR001", "city": "Lucknow", "status": "Active", "latitude": 26.8023316384953, "longitude": 80.89578659627016, "geofence_radius_m": 100},
+                {"name": "Gomtinagar", "code": "BR002", "city": "Lucknow", "status": "Active", "latitude": 26.850130023596396, "longitude": 81.00713531584118, "geofence_radius_m": 100},
+                {"name": "Ashiyana", "code": "BR003", "city": "Lucknow", "status": "Active", "latitude": 26.79601399706687, "longitude": 80.9208545762198, "geofence_radius_m": 100},
+                {"name": "Hazratganj", "code": "BR004", "city": "Lucknow", "status": "Active", "latitude": 26.84924030483742, "longitude": 80.94773860240677, "geofence_radius_m": 100},
+                {"name": "Vikas Nagar", "code": "BR005", "city": "Lucknow", "status": "Active", "latitude": 26.90188397262733, "longitude": 80.95513690261241, "geofence_radius_m": 100},
             ]
             for branch in default_branches:
                 db.add(models.Store(**branch))
@@ -457,6 +476,40 @@ ensure_default_master_data()
 app = FastAPI(title="IDSPL Scheme Management ERP")
 
 
+@app.middleware("http")
+async def brand_promotor_limited_access(request: Request, call_next):
+    """Brand Promotor accounts may use Dashboard, Schemes, and Attendance only."""
+    token = request.headers.get("Authorization", "")
+    if token.startswith("Bearer "):
+        try:
+            payload = auth.jwt.decode(
+                token[7:], auth.SECRET_KEY, algorithms=[auth.ALGORITHM]
+            )
+            if payload.get("role") == "BrandPartner":
+                allowed = {
+                    "/attendance", "/attendance.html", "/home", "/home.html",
+                    "/dashboard", "/dashboard.html", "/api/me", "/api/attendance",
+                    "/dashboard-stats", "/brands", "/categories", "/subcategories",
+                    "/products", "/stores", "/schemes", "/auth/login", "/openapi.json", "/docs",
+                }
+                static_html = request.url.path.startswith("/static/") and request.url.path.endswith(".html")
+                scheme_request = request.url.path == "/schemes" or request.url.path.startswith("/schemes/")
+                if request.url.path not in allowed and not scheme_request and not request.url.path.startswith("/static/"):
+                    return JSONResponse(
+                        status_code=403,
+                        content={"detail": "Brand Promotor access is limited to Dashboard, Schemes, and Attendance."},
+                    )
+                if static_html and not request.url.path.endswith("/attendance.html"):
+                    return JSONResponse(
+                        status_code=403,
+                        content={"detail": "Brand Promotor access is limited to Dashboard, Schemes, and Attendance."},
+                    )
+        except Exception:
+            pass
+    response = await call_next(request)
+    return response
+
+
 @app.exception_handler(Exception)
 async def handle_unexpected_error(request: Request, exc: Exception):
     """Any error we didn't explicitly raise as an HTTPException still comes
@@ -470,7 +523,7 @@ async def handle_unexpected_error(request: Request, exc: Exception):
 # "static" folder sitting next to this file.
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-VALID_ROLES = ["Admin", "CategoryManager", "BrandManager", "BrandPartner", "Accounts", "MISExecutive"]
+VALID_ROLES = ["Admin", "CategoryManager", "BrandManager", "BrandPartner", "SupportingStaff", "Accounts", "MISExecutive"]
 
 
 def normalize_category_code(raw_value: Optional[str]) -> Optional[str]:
@@ -1536,6 +1589,12 @@ def app_home_page():
     return serve_html("static/home.html")
 
 
+@app.get("/attendance")
+@app.get("/attendance.html")
+def attendance_page():
+    return serve_html("static/attendance.html")
+
+
 @app.get("/price-list")
 @app.get("/price-list.html")
 def price_list_page():
@@ -1902,6 +1961,11 @@ def signup(user: schemas.UserSignup, db: Session = Depends(get_db)):
     if user.role not in VALID_ROLES:
         raise HTTPException(status_code=400, detail=f"Role must be one of {VALID_ROLES}")
 
+    if user.store_id is not None:
+        selected_store = db.query(models.Store).filter(models.Store.id == user.store_id).first()
+        if selected_store is None or selected_store.status != "Active":
+            raise HTTPException(status_code=400, detail="Select an active outlet")
+
     category_roles = {"CategoryManager"}
     db_user = models.User(
         username=user.username,
@@ -1909,7 +1973,7 @@ def signup(user: schemas.UserSignup, db: Session = Depends(get_db)):
         password_hash=auth.hash_password(user.password),
         full_name=user.full_name,
         role=user.role,
-        store_id=user.store_id if user.role == "StoreManager" else None,
+        store_id=user.store_id,
         category_code=normalize_category_code(user.category_code) if user.role in category_roles else None,
         status="Active",
     )
@@ -2220,6 +2284,9 @@ def create_store(store: schemas.StoreCreate, db: Session = Depends(get_db)):
         code=store.code,
         city=store.city,
         status=store.status or "Active",
+        latitude=store.latitude,
+        longitude=store.longitude,
+        geofence_radius_m=store.geofence_radius_m or 100,
     )
     db.add(db_store)
     db.commit()
@@ -2263,6 +2330,157 @@ def get_my_profile(current_user: models.User = Depends(auth.get_current_user)):
         "category_code": current_user.category_code,
         "brand_ids": [ub.brand_id for ub in current_user.brands],
     }
+
+
+@app.post("/api/attendance", response_model=schemas.AttendanceOut)
+def save_attendance(
+    attendance: schemas.AttendanceCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    if attendance.action not in {"checkin", "second", "checkout"}:
+        raise HTTPException(status_code=400, detail="Action must be checkin, second, or checkout")
+    if current_user.store_id is None:
+        raise HTTPException(status_code=400, detail="No outlet is assigned to this account")
+    store = db.query(models.Store).filter(models.Store.id == current_user.store_id).first()
+    if not store or store.latitude is None or store.longitude is None:
+        raise HTTPException(status_code=400, detail="Assigned outlet has no GPS coordinates")
+    radius = 6371000
+    radians = math.pi / 180
+    lat_delta = (attendance.latitude - store.latitude) * radians
+    lon_delta = (attendance.longitude - store.longitude) * radians
+    value = math.sin(lat_delta / 2) ** 2 + math.cos(store.latitude * radians) * math.cos(attendance.latitude * radians) * math.sin(lon_delta / 2) ** 2
+    actual_distance = 2 * radius * math.atan2(math.sqrt(value), math.sqrt(1 - value))
+    allowed_radius = store.geofence_radius_m or 100
+    if actual_distance > allowed_radius:
+        raise HTTPException(status_code=403, detail=f"Attendance blocked: you are {round(actual_distance)} m from {store.name}; maximum allowed distance is {round(allowed_radius)} m")
+    captured_at = india_datetime(attendance.captured_at)
+    record = db.query(models.AttendanceRecord).filter(
+        models.AttendanceRecord.user_id == current_user.id,
+        models.AttendanceRecord.attendance_date == captured_at.date(),
+    ).first()
+    if not record:
+        record = models.AttendanceRecord(
+            user_id=current_user.id,
+            store_id=current_user.store_id,
+            attendance_date=captured_at.date(),
+        )
+        db.add(record)
+    prefix = "checkin" if attendance.action == "checkin" else "second_punch" if attendance.action == "second" else "checkout"
+    if getattr(record, f"{prefix}_at") is not None:
+        raise HTTPException(status_code=409, detail=f"{attendance.action.title()} already recorded")
+    setattr(record, f"{prefix}_at", captured_at)
+    setattr(record, f"{prefix}_selfie", attendance.selfie)
+    setattr(record, f"{prefix}_latitude", attendance.latitude)
+    setattr(record, f"{prefix}_longitude", attendance.longitude)
+    setattr(record, f"{prefix}_distance_m", attendance.distance_m)
+    setattr(record, f"{prefix}_accuracy_m", attendance.accuracy_m)
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+@app.get("/api/attendance", response_model=List[schemas.AttendanceOut])
+def list_attendance(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    query = db.query(models.AttendanceRecord)
+    if current_user.role != "Admin":
+        query = query.filter(models.AttendanceRecord.user_id == current_user.id)
+    records = query.order_by(models.AttendanceRecord.attendance_date.desc()).all()
+    users = {user.id: user.username for user in db.query(models.User).all()}
+    stores = {store.id: store.name for store in db.query(models.Store).all()}
+    return [
+        {
+            **{column.name: getattr(record, column.name) for column in models.AttendanceRecord.__table__.columns},
+            "username": users.get(record.user_id),
+            "outlet_name": stores.get(record.store_id),
+        }
+        for record in records
+    ]
+
+
+@app.post("/api/attendance/location")
+def save_attendance_location(
+    point: schemas.AttendanceLocationCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    if current_user.store_id is None:
+        raise HTTPException(status_code=400, detail="No outlet is assigned to this account")
+    store = db.query(models.Store).filter(models.Store.id == current_user.store_id).first()
+    if not store or store.latitude is None or store.longitude is None:
+        raise HTTPException(status_code=400, detail="Assigned outlet has no GPS coordinates")
+    radius = 6371000
+    radians = math.pi / 180
+    lat_delta = (point.latitude - store.latitude) * radians
+    lon_delta = (point.longitude - store.longitude) * radians
+    value = math.sin(lat_delta / 2) ** 2 + math.cos(store.latitude * radians) * math.cos(point.latitude * radians) * math.sin(lon_delta / 2) ** 2
+    actual_distance = 2 * radius * math.atan2(math.sqrt(value), math.sqrt(1 - value))
+    if actual_distance > (store.geofence_radius_m or 100):
+        raise HTTPException(status_code=403, detail=f"Location tracking blocked outside {store.name} geofence")
+    previous = db.query(models.AttendanceLocationPoint).filter(
+            models.AttendanceLocationPoint.user_id == current_user.id,
+            models.AttendanceLocationPoint.captured_at >= datetime.combine(india_datetime(point.captured_at).date(), datetime.min.time()),
+            models.AttendanceLocationPoint.captured_at < india_datetime(point.captured_at),
+        ).order_by(models.AttendanceLocationPoint.captured_at.desc()).first()
+    route_distance = 0
+    if previous:
+        radius = 6371000
+        radians = math.pi / 180
+        lat_delta = (point.latitude - previous.latitude) * radians
+        lon_delta = (point.longitude - previous.longitude) * radians
+        value = math.sin(lat_delta / 2) ** 2 + math.cos(previous.latitude * radians) * math.cos(point.latitude * radians) * math.sin(lon_delta / 2) ** 2
+        route_distance = 2 * radius * math.atan2(math.sqrt(value), math.sqrt(1 - value))
+    location = models.AttendanceLocationPoint(
+        user_id=current_user.id, store_id=store.id, captured_at=india_datetime(point.captured_at),
+        latitude=point.latitude, longitude=point.longitude,
+        accuracy_m=point.accuracy_m, distance_from_store_m=point.distance_from_store_m,
+        route_distance_m=route_distance,
+    )
+    db.add(location)
+    db.commit()
+    return {"id": location.id, "route_distance_m": route_distance}
+
+
+@app.get("/api/attendance/admin-summary")
+def attendance_admin_summary(
+    store_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_roles("Admin")),
+):
+    today = india_today()
+    user_query = db.query(models.User).filter(models.User.status == "Active")
+    if store_id is not None:
+        user_query = user_query.filter(models.User.store_id == store_id)
+    users = user_query.all()
+    record_query = db.query(models.AttendanceRecord).filter(
+        models.AttendanceRecord.attendance_date == today,
+        models.AttendanceRecord.user_id.in_([user.id for user in users] or [-1]),
+    )
+    records = record_query.all()
+    by_user = {record.user_id: record for record in records}
+    rows = []
+    for user in users:
+        record = by_user.get(user.id)
+        points = db.query(models.AttendanceLocationPoint).filter(
+            models.AttendanceLocationPoint.user_id == user.id,
+            models.AttendanceLocationPoint.captured_at >= datetime.combine(today, datetime.min.time()),
+        ).all()
+        rows.append({
+            "user_id": user.id, "username": user.username, "outlet_id": user.store_id,
+            "status": "Present" if record and record.checkin_at else "Absent",
+            "checkin_at": record.checkin_at if record else None,
+            "checkout_at": record.checkout_at if record else None,
+            "route_distance_m": round(sum(point.route_distance_m or 0 for point in points), 1),
+            "max_distance_from_store_m": round(max((point.distance_from_store_m or 0 for point in points), default=0), 1),
+            "max_distance_at": max(points, key=lambda point: point.distance_from_store_m or 0).captured_at if points else None,
+            "last_latitude": points[-1].latitude if points else None,
+            "last_longitude": points[-1].longitude if points else None,
+            "location_points": len(points),
+        })
+    return {"date": today, "total": len(users), "present": sum(row["status"] == "Present" for row in rows), "absent": sum(row["status"] == "Absent" for row in rows), "rows": rows}
 
 
 @app.get("/api/users", response_model=List[schemas.UserAdminOut])

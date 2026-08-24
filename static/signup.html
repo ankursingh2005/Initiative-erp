@@ -252,8 +252,19 @@
         <option value="CategoryManager">Category Manager</option>
         <option value="BrandManager">Brand Manager</option>
         <option value="BrandPartner">Brand Promotor</option>
+        <option value="SupportingStaff">Supporting Staff</option>
         <option value="Accounts">Accounts</option>
         <option value="MISExecutive">MIS Executive</option>
+      </select>
+
+      <label for="outletSelect">Assigned Outlet</label>
+      <select id="outletSelect" required>
+        <option value="">Select outlet</option>
+        <option value="1">BR001 - Alambagh</option>
+        <option value="2">BR002 - Gomtinagar</option>
+        <option value="3">BR003 - Ashiyana</option>
+        <option value="4">BR004 - Hazratganj</option>
+        <option value="5">BR005 - Vikas Nagar</option>
       </select>
 
       <div id="mandatoryMsg" class="mandatory-msg" style="display:none;"></div>
@@ -378,6 +389,7 @@
       if (!password) missingFields.push(fieldLabel("Password"));
       if (!inviteCode) missingFields.push(fieldLabel("Invite Code"));
       if (!role) missingFields.push(fieldLabel("Role"));
+      if (!document.getElementById("outletSelect").value) missingFields.push(fieldLabel("Assigned Outlet"));
 
       if (role === "CategoryManager") {
         const categoryCode = document.getElementById("categorySelect").value;
@@ -402,7 +414,7 @@
         password,
         role,
         invite_code: inviteCode,
-        store_id: null,
+        store_id: Number(document.getElementById("outletSelect").value),
         category_code: null,
         brand_ids: []
       };

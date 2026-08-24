@@ -52,6 +52,9 @@ class Store(Base):
     code = Column(String(20), unique=True, nullable=True)
     city = Column(String(100), nullable=True)
     status = Column(String(20), default="Active")
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    geofence_radius_m = Column(Float, nullable=True, default=100)
 
 
 class Product(Base):
@@ -383,6 +386,42 @@ class UserBrand(Base):
     brand_id = Column(Integer, ForeignKey("brands.id"), nullable=False)
 
     user = relationship("User", back_populates="brands")
+
+
+class AttendanceRecord(Base):
+    __tablename__ = "attendance_records"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    store_id = Column(Integer, ForeignKey("stores.id"), nullable=True, index=True)
+    attendance_date = Column(Date, nullable=False, index=True)
+    checkin_at = Column(DateTime, nullable=True)
+    second_punch_at = Column(DateTime, nullable=True)
+    checkout_at = Column(DateTime, nullable=True)
+    checkin_selfie = Column(Text, nullable=True)
+    second_punch_selfie = Column(Text, nullable=True)
+    checkout_selfie = Column(Text, nullable=True)
+    checkin_latitude = Column(Float, nullable=True)
+    checkin_longitude = Column(Float, nullable=True)
+    checkout_latitude = Column(Float, nullable=True)
+    checkout_longitude = Column(Float, nullable=True)
+    checkin_distance_m = Column(Float, nullable=True)
+    checkout_distance_m = Column(Float, nullable=True)
+    checkin_accuracy_m = Column(Float, nullable=True)
+    checkout_accuracy_m = Column(Float, nullable=True)
+    created_date = Column(DateTime, default=datetime.utcnow)
+
+
+class AttendanceLocationPoint(Base):
+    __tablename__ = "attendance_location_points"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    store_id = Column(Integer, ForeignKey("stores.id"), nullable=True, index=True)
+    captured_at = Column(DateTime, nullable=False, index=True)
+    latitude = Column(Float, nullable=False)
+    longitude = Column(Float, nullable=False)
+    accuracy_m = Column(Float, nullable=True)
+    distance_from_store_m = Column(Float, nullable=True)
+    route_distance_m = Column(Float, default=0)
 
 
 # ============================================================

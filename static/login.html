@@ -249,7 +249,7 @@
       localStorage.setItem('role', data.role);
       localStorage.setItem('username', data.username);
       sessionStorage.setItem('showLoginSuccess', '1');
-      window.location.href = appUrl('/home');
+      window.location.href = appUrl(data.role === 'BrandPartner' ? '/attendance' : '/home');
     }
 
     document.getElementById('password').addEventListener('keydown', (e) => {

@@ -104,6 +104,9 @@ class StoreCreate(BaseModel):
     code: Optional[str] = None
     city: Optional[str] = None
     status: Optional[str] = "Active"
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    geofence_radius_m: Optional[float] = 100
 
 
 class StoreOut(StoreCreate):
@@ -322,6 +325,50 @@ class MyProfileOut(BaseModel):
     store_id: Optional[int]
     category_code: Optional[str]
     brand_ids: List[int] = []
+
+
+class AttendanceCreate(BaseModel):
+    action: str
+    captured_at: datetime
+    selfie: str
+    latitude: float
+    longitude: float
+    distance_m: float
+    accuracy_m: Optional[float] = None
+
+
+class AttendanceOut(BaseModel):
+    id: int
+    user_id: int
+    store_id: Optional[int]
+    attendance_date: date
+    checkin_at: Optional[datetime]
+    second_punch_at: Optional[datetime]
+    checkout_at: Optional[datetime]
+    checkin_selfie: Optional[str]
+    second_punch_selfie: Optional[str]
+    checkout_selfie: Optional[str]
+    checkin_latitude: Optional[float]
+    checkin_longitude: Optional[float]
+    checkout_latitude: Optional[float]
+    checkout_longitude: Optional[float]
+    checkin_distance_m: Optional[float]
+    checkout_distance_m: Optional[float]
+    checkin_accuracy_m: Optional[float]
+    checkout_accuracy_m: Optional[float]
+    username: Optional[str] = None
+    outlet_name: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class AttendanceLocationCreate(BaseModel):
+    captured_at: datetime
+    latitude: float
+    longitude: float
+    accuracy_m: Optional[float] = None
+    distance_from_store_m: Optional[float] = None
 
 
 class UserAdminOut(BaseModel):
