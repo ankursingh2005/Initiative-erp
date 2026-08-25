@@ -351,7 +351,7 @@ class AnalyticsSalesRow(Base):
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
-    username = Column(String(50), unique=True, nullable=False)
+    username = Column(String(50), index=True, nullable=False)  # no longer unique - multiple users may share a username; email is the unique identifier
     email = Column(String(150), unique=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
     full_name = Column(String(150))

@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#000000" />
   <meta name="mobile-web-app-capable" content="yes" />
   <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="stylesheet" href="static/app-shell.css" /><script src="static/app-shell.js"></script>
   <title>Initiative ERP - Ageing Stock Analysis</title>
   <link rel="icon" href="static/Initiative%20logo.png" type="image/png" />
   <style>
@@ -21,7 +22,7 @@
       --c-ha:#0f766e; --c-he:#6d28d9; --c-mh:#15803d; --c-it:#1d4ed8; --c-other:#475467;
     }
     * { box-sizing:border-box; }
-    body { margin:0; font-family:'Manrope', sans-serif; background:var(--bg); color:var(--ink); font-weight:600; -webkit-overflow-scrolling:touch; overscroll-behavior-y:contain; }
+    body { margin:0; font-family:'Manrope', sans-serif; background:var(--bg); color:var(--ink); font-weight:600; -webkit-overflow-scrolling:touch; overscroll-behavior-y:auto; }
     header { background:linear-gradient(90deg, #181818 0%, #000000 100%); color:#fff; padding:14px clamp(16px,3vw,32px); display:flex; gap:16px; align-items:center; justify-content:space-between; }
     .brand { font-weight:900; font-size:16px; display:flex; align-items:center; gap:10px; }
     .brand a { color:#fff; text-decoration:none; font-size:13px; font-weight:700; opacity:.8; }
@@ -126,7 +127,7 @@
     .cat-body { border:1px solid var(--line); border-top:none; border-radius:0 0 10px 10px; overflow:hidden; }
     .cat-body.collapsed { display:none; }
 
-    .brand-block { border-bottom:1px solid var(--line); }
+    .brand-block { border-bottom:1px solid var(--line); content-visibility:auto; contain-intrinsic-size:auto 520px; }
     .brand-block:last-child { border-bottom:none; }
     .brand-title { background:#f3f4f7; padding:9px 18px; font-size:13.5px; font-weight:800; color:var(--ink-strong); border-bottom:1px solid var(--line); }
 
@@ -145,7 +146,8 @@
        otherwise the columns scrolling underneath would show through the
        sticky cell. thead th:first-child gets the highest z-index since it
        sits at the frozen row+column intersection (top-left corner). */
-    thead th:first-child, tbody td:first-child { position:sticky; left:0; z-index:1; border-right:1px solid var(--line); transform:translateZ(0); will-change:transform; }
+    thead th:first-child { position:sticky; left:0; z-index:3; border-right:1px solid var(--line); }
+    tbody td:first-child { position:static; border-right:1px solid var(--line); }
     thead th:first-child { z-index:3; background:#f7f8fa; }
     tbody td:first-child { background:#fff; }
     tbody tr:hover td:first-child { background:#f5f7fb; }
@@ -156,15 +158,10 @@
     .locs-cell { font-size:11px; color:var(--muted); font-weight:700; }
 
     #emptyState, #loadingState { text-align:center; padding:60px 20px; color:var(--muted); font-weight:700; }
-    /* Each brand's item table scrolls in its own bounded box instead of
-       the whole page, so the column header row (Item Details/Unit/Closing
-       Qty/age buckets/locations/Present At) stays frozen in view - like
-       Excel's "Freeze Panes" - no matter how many items that brand has.
-       Without a real max-height + overflow-y here, position:sticky on
-       thead th has no actual scrolling container to stick within (the
-       page itself scrolls instead), which is why the header used to
-       scroll away entirely on long lists. */
-    .scroll-wrap { overflow-x:auto; overflow-y:auto; max-height:70vh; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; contain:paint; }
+    /* Keep horizontal table scrolling, but let the page own all vertical
+       scrolling. This prevents the pointer from getting trapped between
+       many nested brand scroll areas and avoids hundreds of GPU layers. */
+    .scroll-wrap { overflow-x:auto; max-height:none; -webkit-overflow-scrolling:touch; overscroll-behavior-x:contain; }
 
     @media(max-width:700px) { header { flex-wrap:wrap; row-gap:8px; } .header-right { width:100%; justify-content:space-between; } }
 
@@ -1034,7 +1031,7 @@
       return `
         <div class="brand-block">
           <div class="brand-title">${brand.brand_name}</div>
-          <div class="scroll-wrap">
+          <div class="scroll-wrap app-table-scroll">
             <table>
               ${colgroupHtml()}
               <thead>
@@ -1167,7 +1164,7 @@
       const dashHtml = renderDashboard(filtered);
       const catsHtml = filtered.categories.map((c, i) => renderCategory(c, i)).join('');
       const grandHtml = `
-        <div class="scroll-wrap">
+        <div class="scroll-wrap app-table-scroll">
           <table>
             ${colgroupHtml()}
             <thead><tr>

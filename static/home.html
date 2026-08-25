@@ -3,12 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Initiative - Dashboard</title>
+  <meta name="theme-color" content="#155eef" /><meta name="mobile-web-app-capable" content="yes" />
+  <link rel="manifest" href="manifest.webmanifest" /><link rel="stylesheet" href="static/app-shell.css" /><script src="static/app-shell.js"></script>
+  <title>Initiative - Home</title>
   <link rel="icon" href="static/Initiative%20logo.png" type="image/png" />
   <script>
-    if (localStorage.getItem('role') === 'BrandPartner') {
-      document.documentElement.classList.add('brand-promotor-limited');
-    }
+    const initialRole = localStorage.getItem('role') || '';
+    if (initialRole) document.documentElement.classList.add(`role-${initialRole}`);
     // Runs before the body paints: if we're arriving fresh from login, mark
     // <html> so the dashboard starts fully hidden instead of flashing into
     // view behind the "Signed in successfully" overlay.
@@ -55,6 +56,8 @@
       display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh;
     }
     .sidebar-brand { display: flex; align-items: center; gap: 12px; padding: 22px 20px; border-bottom: 1px solid var(--line); position: relative; }
+    .mobile-menu-toggle { display:none; width:46px; height:46px; padding:0; border:0; border-radius:10px; align-items:center; justify-content:center; color:var(--ink); background:var(--brand-soft); }
+    .mobile-menu-toggle svg { width:25px; height:25px; stroke-width:3.2; }
     .sidebar-brand::after {
       content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 3px;
       background: linear-gradient(90deg, var(--brand), var(--ai), var(--calc), var(--age));
@@ -74,6 +77,10 @@
     .nav-item:hover { background: color-mix(in srgb, var(--nav-color, var(--brand)) 10%, #fff); color: var(--ink); }
     .nav-item.active { background: color-mix(in srgb, var(--nav-color, var(--brand)) 14%, #fff); color: var(--nav-color, var(--brand-dark)); }
     .nav-item.active svg { color: var(--nav-color, var(--brand-dark)); }
+    .nav-item.n-scheme,.nav-item.n-po,.nav-item.n-ai,.nav-item.n-dp,.nav-item.n-price,.nav-item.n-age,.nav-item.n-calc { display:none; }
+    :is(.role-Admin,.role-MISExecutive,.role-Accounts) .nav-item:is(.n-scheme,.n-po,.n-ai,.n-dp,.n-price,.n-age,.n-calc) { display:flex; }
+    :is(.role-CategoryManager,.role-BrandManager) .nav-item.n-scheme { display:flex; }
+    .nav-item.n-mobile-logout { display:none; width:100%; border:0; background:transparent; text-align:left; }
     .nav-item.n-dash { --nav-color: var(--brand); }
     .nav-item.n-scheme { --nav-color: var(--ai); }
     .nav-item.n-po { --nav-color: var(--po); }
@@ -83,15 +90,6 @@
     .nav-item.n-age { --nav-color: var(--age); }
     .nav-item.n-calc { --nav-color: var(--calc); }
     .nav-item.n-um { --nav-color: var(--um); }
-    .brand-promotor-limited .nav-item.n-dash,
-    .brand-promotor-limited .nav-item.n-po,
-    .brand-promotor-limited .nav-item.n-ai,
-    .brand-promotor-limited .nav-item.n-dp,
-    .brand-promotor-limited .nav-item.n-price,
-    .brand-promotor-limited .nav-item.n-age,
-    .brand-promotor-limited .nav-item.n-calc,
-    .brand-promotor-limited .nav-item.n-um { display: none; }
-
     .sidebar-foot { padding: 16px 20px; border-top: 1px solid var(--line); }
     .sidebar-user { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
     .avatar { width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(135deg, var(--brand), var(--ai)); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px; flex-shrink: 0; }
@@ -118,7 +116,66 @@
     .content-head h1 { margin: 0 0 4px; font-size: 25px; letter-spacing: -0.01em; color: #fff; }
     .content-head p { margin: 0; color: rgba(255,255,255,0.82); font-size: 14px; }
 
-    .stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 16px; margin-bottom: 30px; }
+    .infinity-stage { position:relative; display:grid; place-items:center; min-height:230px; margin-bottom:30px; padding:18px; overflow:hidden; border:1px solid var(--line); border-radius:18px; background:linear-gradient(145deg,#fff 0%,#eef4ff 55%,#fff6eb 100%); box-shadow:0 16px 36px -24px rgba(24,26,46,.45); }
+    .infinity-stage::before { content:''; position:absolute; width:240px; height:240px; border-radius:50%; top:-130px; right:-70px; background:#2f6bff18; }
+    .infinity-visual { position:relative; width:min(100%,820px); height:auto; overflow:visible; }
+    .infinity-track-shadow { fill:none; stroke:#155eef20; stroke-width:34; stroke-linecap:round; }
+    .infinity-track { fill:none; stroke:url(#infinityGradient); stroke-width:18; stroke-linecap:round; stroke-linejoin:round; }
+    .infinity-dash { fill:none; stroke:#fff9; stroke-width:3; stroke-linecap:round; stroke-dasharray:3 15; }
+    .infinity-title { position:absolute; inset:auto 0 14px; margin:0; color:#475467; font-size:12px; font-weight:800; letter-spacing:.12em; text-align:center; text-transform:uppercase; }
+    .dinosaur { filter:drop-shadow(0 5px 4px #10182835); }
+    .dino-battle{position:absolute;inset:0;pointer-events:none;overflow:hidden;background:linear-gradient(180deg,#8ed8ff22 0 55%,#89c76520 55% 100%)}
+    .scene-sun{position:absolute;right:8%;top:10%;width:48px;height:48px;border-radius:50%;background:#ffd43b;box-shadow:0 0 0 12px #ffd43b22,0 0 35px #ffb30099;animation:sunPulse 3s ease-in-out infinite}
+    .scene-cloud{position:absolute;top:18%;left:-20%;width:76px;height:22px;border-radius:30px;background:#fff9;box-shadow:22px -10px 0 2px #fff9,45px 1px 0 -3px #fff9;animation:cloudMove 14s linear infinite}
+    .scene-ground{position:absolute;left:0;right:0;bottom:24%;height:3px;background:linear-gradient(90deg,transparent,#65a30d66 12%,#65a30d66 88%,transparent)}
+    .dino-actor{position:absolute;top:42%;z-index:4;font-size:48px;line-height:1;filter:drop-shadow(0 6px 5px #10182835)}
+    .dino-face{display:block;animation:dinoBob .38s ease-in-out infinite alternate}
+    .dino-one{left:-12%;animation:dinoOneScene 14s ease-in-out infinite}
+    .dino-one .dino-face{transform:scaleX(-1)}
+    .dino-two{right:-12%;animation:dinoTwoScene 14s ease-in-out infinite}
+    .dino-sword,.dino-gun,.dino-shades,.dino-laugh{position:absolute;opacity:0}
+    .dino-sword{left:34px;top:-20px;font-size:34px;transform-origin:8px 35px;animation:swordSkill 14s linear infinite}
+    .dino-gun{left:-25px;top:20px;font-size:28px;transform:rotate(12deg);animation:gunDraw 14s linear infinite}
+    .dino-shades{left:10px;top:6px;font-size:25px;animation:shadesOn 14s linear infinite}
+    .dino-laugh{left:50px;top:-20px;padding:4px 7px;border-radius:999px;background:#fff;color:#172033;font:900 13px/1 Manrope,sans-serif;box-shadow:0 4px 12px #10182826;animation:laughBubble 14s linear infinite}
+    .comic-flash{position:absolute;left:50%;top:48%;z-index:3;width:12px;height:12px;border-radius:50%;background:#ffd43b;opacity:0;box-shadow:0 0 0 10px #ff922b55;animation:comicFlash 14s linear infinite}
+    .dino-shadow{position:absolute;left:5px;top:48px;width:48px;height:10px;border-radius:50%;background:#10182830;filter:blur(2px);animation:shadowBounce .38s ease-in-out infinite alternate}
+    .run-dust{position:absolute;z-index:2;top:60%;width:12px;height:12px;border-radius:50%;background:#c8a46b99;opacity:0;box-shadow:14px 5px 0 #c8a46b77,28px -3px 0 #c8a46b55}
+    .dust-one{animation:dustOne 14s linear infinite}.dust-two{animation:dustTwo 14s linear infinite}
+    .slash{position:absolute;left:47%;top:37%;z-index:5;width:75px;height:75px;border:5px solid transparent;border-top-color:#fff;border-right-color:#7dd3fc;border-radius:50%;opacity:0;filter:drop-shadow(0 0 5px #38bdf8);animation:slashCombo 14s linear infinite}
+    .slash.two{width:58px;height:58px;animation-delay:.32s;transform:rotate(120deg)}
+    .slash.three{width:90px;height:90px;animation-delay:.64s;transform:rotate(230deg)}
+    .shot-line{position:absolute;left:51%;top:52%;z-index:6;width:0;height:4px;border-radius:8px;background:linear-gradient(90deg,#fff,#ffd43b,#ff6b00);box-shadow:0 0 8px #ff6b00;opacity:0;transform-origin:right;animation:shotLine 14s linear infinite}
+    .impact-word{position:absolute;left:43%;top:28%;z-index:8;opacity:0;color:#fff;background:#ef4444;padding:7px 10px;clip-path:polygon(50% 0,61% 24%,84% 8%,78% 35%,100% 43%,76% 55%,93% 78%,65% 72%,55% 100%,43% 75%,17% 94%,24% 64%,0 55%,27% 43%,8% 20%,38% 29%);font:900 17px/1 Manrope,sans-serif;text-shadow:1px 1px #7f1d1d;animation:impactWord 14s linear infinite}
+    .ko-stars{position:absolute;left:45%;top:35%;z-index:7;opacity:0;font-size:20px;letter-spacing:7px;animation:koStars 14s linear infinite}
+    .scene-caption{position:absolute;left:50%;top:13%;z-index:9;translate:-50% 0;min-width:150px;padding:6px 12px;border-radius:999px;background:#172033dd;color:#fff;text-align:center;font:800 0/1.2 Manrope,sans-serif;opacity:0;animation:sceneCaption 14s linear infinite}
+    .scene-caption::before{content:'The race begins!';font-size:11px;animation:captionWords 14s linear infinite}
+    .initiative-reveal{position:absolute;inset:0;z-index:20;display:grid;place-items:center;padding:20px;opacity:0;perspective:700px;background:radial-gradient(circle at center,#ffffffee 0 25%,#155eefcc 70%,#172033ee 100%);animation:initiativeReveal 14s cubic-bezier(.2,.8,.2,1) infinite}
+    .initiative-reveal span{display:block;color:#fff;font:900 clamp(26px,6vw,58px)/1.05 Manrope,sans-serif;letter-spacing:.04em;text-align:center;text-transform:uppercase;text-shadow:0 4px 0 #0f3fbd,0 10px 25px #10182899;transform-style:preserve-3d;animation:initiativeText 14s cubic-bezier(.15,.9,.25,1.25) infinite}
+    .dino-one,.dino-two,.dino-sword,.dino-gun,.dino-shades,.dino-laugh,.comic-flash,.dust-one,.dust-two,.slash,.shot-line,.impact-word,.ko-stars,.scene-caption,.scene-caption::before,.initiative-reveal,.initiative-reveal span{animation-duration:20s}
+    @keyframes sunPulse{50%{transform:scale(1.08);box-shadow:0 0 0 18px #ffd43b16,0 0 45px #ffb300aa}}
+    @keyframes cloudMove{to{left:105%}}
+    @keyframes dinoBob{to{transform:translateY(-4px) rotate(2deg)}}
+    .dino-one .dino-face{animation:dinoBobFlipped .38s ease-in-out infinite alternate}
+    @keyframes dinoBobFlipped{from{transform:scaleX(-1) translateY(0) rotate(0)}to{transform:scaleX(-1) translateY(-4px) rotate(2deg)}}
+    @keyframes shadowBounce{to{transform:scaleX(.72);opacity:.5}}
+    @keyframes dustOne{0%,22%,100%{left:-10%;opacity:0}4%,19%{opacity:1}22%{left:42%}}
+    @keyframes dustTwo{0%,30%,52%,100%{right:-10%;opacity:0}34%,49%{opacity:1}52%{right:37%}}
+    @keyframes slashCombo{0%,26%,48%,100%{opacity:0;scale:.4;rotate:0deg}29%,44%{opacity:1;scale:1;rotate:280deg}46%{opacity:0;scale:1.3;rotate:360deg}}
+    @keyframes shotLine{0%,61%,65%,100%{opacity:0;width:0}63%{left:47%;width:120px;opacity:1}}
+    @keyframes impactWord{0%,62%,69%,100%{opacity:0;transform:scale(.2) rotate(-18deg)}64%,67%{opacity:1;transform:scale(1.25) rotate(8deg)}}
+    @keyframes koStars{0%,66%,76%,100%{opacity:0;transform:translateY(10px) rotate(0)}69%,74%{opacity:1;transform:translateY(-8px) rotate(30deg)}}
+    @keyframes sceneCaption{0%,5%,100%{opacity:0}7%,18%{opacity:1}20%,24%{opacity:0}26%,45%{opacity:1}47%,53%{opacity:0}55%,63%{opacity:1}65%,72%{opacity:0}74%,94%{opacity:1}96%{opacity:0}}
+    @keyframes captionWords{0%,24%{content:'The race begins!'}25%,52%{content:'Sword skill combo!'}53%,72%{content:'The challenger responds!'}73%,100%{content:'Too cool for the duel!'}}
+    @keyframes initiativeReveal{0%,73%,100%{opacity:0;visibility:hidden}75%,99%{opacity:1;visibility:visible}}
+    @keyframes initiativeText{0%,73%{transform:translateZ(-650px) scale(.05) rotateX(35deg);letter-spacing:.3em;opacity:0}77%{transform:translateZ(120px) scale(1.16) rotateX(0);letter-spacing:.04em;opacity:1}80%,97%{transform:translateZ(0) scale(1);opacity:1}100%{transform:translateZ(260px) scale(1.35);opacity:0}}
+    @keyframes dinoOneScene{0%{left:-12%;transform:translateY(0) rotate(0);opacity:1}22%{left:43%;transform:translateY(0) rotate(0);opacity:1}29%{left:43%;transform:translateY(-28px) rotate(-8deg)}34%{left:45%;transform:translateY(0) rotate(8deg)}40%{left:42%;transform:translateY(-20px) rotate(-12deg)}48%{left:45%;transform:translateY(0) rotate(0);opacity:1}64%{left:45%;transform:translateY(0) rotate(0);opacity:1}69%{left:43%;transform:translateY(45px) rotate(-75deg);opacity:.9}74%,100%{left:43%;transform:translateY(58px) rotate(-90deg);opacity:0}}
+    @keyframes dinoTwoScene{0%,30%{right:-12%;transform:translateY(0)}52%{right:38%;transform:translateY(0)}62%{right:38%;transform:translateY(0)}70%{right:38%;transform:translateY(-5px)}76%,82%,88%{right:38%;transform:translateY(-10px) rotate(-3deg)}79%,85%,91%{right:38%;transform:translateY(0) rotate(3deg)}94%,100%{right:38%;transform:translateY(0)}}
+    @keyframes swordSkill{0%,23%,49%,100%{opacity:0;transform:rotate(-70deg)}27%,47%{opacity:1}30%{transform:rotate(35deg)}35%{transform:rotate(-105deg)}40%{transform:rotate(55deg)}45%{transform:rotate(-45deg)}}
+    @keyframes gunDraw{0%,54%,68%,100%{opacity:0}57%,66%{opacity:1}}
+    @keyframes shadesOn{0%,69%,100%{opacity:0;transform:translateY(-12px)}73%,96%{opacity:1;transform:translateY(0)}}
+    @keyframes laughBubble{0%,73%,100%{opacity:0;transform:scale(.7)}77%,94%{opacity:1;transform:scale(1)}}
+    @keyframes comicFlash{0%,62%,66%,100%{opacity:0;transform:scale(.2)}64%{opacity:1;transform:scale(2.2)}}
     .stat-card {
       background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px;
       border-top: 3px solid var(--sc-color, var(--brand));
@@ -136,16 +193,22 @@
     .stat-card.ai { --sc-color: var(--dp); --sc-soft: var(--dp-soft); }
     .stat-card.dp { --sc-color: var(--ai); --sc-soft: var(--ai-soft); }
 
-    @media (max-width: 1080px) { .stat-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+    @media (max-width: 1080px) { }
     @media (max-width: 860px) {
+      .app-mobile-nav { display:none !important; }
       .layout { flex-direction: column; }
-      .sidebar { width: 100%; height: auto; position: relative; flex-direction: row; align-items: center; overflow-x: auto; }
-      .sidebar-brand { border-bottom: none; border-right: 1px solid var(--line); flex-shrink: 0; }
-      .nav { display: flex; padding: 10px; }
-      .nav-item { white-space: nowrap; margin-bottom: 0; margin-right: 4px; }
+      .sidebar { width:100%; height:auto; position:relative; display:block; overflow:visible; }
+      .sidebar-brand { min-height:70px; width:100%; padding:10px 18px; border-right:0; border-bottom:1px solid var(--line); justify-content:center; }
+      .sidebar-brand .wordmark,.sidebar-brand .sub { display:none; }
+      .sidebar-brand .logo { width:48px; height:48px; }
+      .mobile-menu-toggle { position:absolute; left:18px; top:50%; translate:0 -50%; display:flex; }
+      .nav { position:absolute; z-index:100; top:70px; left:0; right:0; display:none; width:100%; max-height:calc(100dvh - 70px); overflow-y:auto; padding:10px 14px 14px; border-bottom:1px solid var(--line); background:#fff; box-shadow:0 18px 36px rgba(16,24,40,.18); }
+      .nav.mobile-open { display:flex; flex-direction:column; }
+      .nav-item { width:100%; min-height:46px; white-space:nowrap; margin:2px 0; }
+      .nav-item.n-mobile-logout { display:flex; color:var(--red); --nav-color:var(--red); }
       .sidebar-foot { display: none; }
     }
-    @media (max-width: 560px) { .stat-grid { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 560px) { .infinity-stage{min-height:180px;padding:10px}.infinity-title{bottom:8px;font-size:10px}.infinity-track-shadow{stroke-width:40}.infinity-track{stroke-width:22}.dino-actor{font-size:38px}.dino-sword{left:27px;font-size:27px}.dino-gun{left:-20px;font-size:23px}.dino-shades{left:7px;font-size:20px}.dino-laugh{left:38px;font-size:10px} }
 
     /* ---------------- Logout modal ---------------- */
     #logoutModal { position: fixed; inset: 0; z-index: 60; display: none; align-items: center; justify-content: center; background: rgba(16,24,40,.55); backdrop-filter: blur(3px); }
@@ -268,6 +331,9 @@
   <div class="layout">
     <aside class="sidebar">
       <div class="sidebar-brand">
+        <button id="mobileMenuToggle" class="mobile-menu-toggle" type="button" aria-label="Open navigation menu" aria-controls="mainNavigation" aria-expanded="false" onclick="toggleMobileMenu()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"></path></svg>
+        </button>
         <div class="logo"><img src="static/Initiative%20logo.png" alt="Initiative Logo" /></div>
         <div>
           <span class="wordmark">Initiative</span>
@@ -275,10 +341,10 @@
         </div>
       </div>
 
-      <nav class="nav">
-        <a class="nav-item n-dash active" href="#">
+      <nav class="nav" id="mainNavigation" aria-label="Primary navigation">
+        <a class="nav-item n-dash active" href="/home">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"></rect><rect x="14" y="3" width="7" height="5" rx="1.5"></rect><rect x="14" y="12" width="7" height="9" rx="1.5"></rect><rect x="3" y="16" width="7" height="5" rx="1.5"></rect></svg>
-          Dashboard
+          Home
         </a>
         <a class="nav-item n-attendance" href="/attendance">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"></rect><path d="M16 2v4"></path><path d="M8 2v4"></path><path d="M3 10h18"></path><path d="M8 14h.01"></path><path d="M12 14h.01"></path><path d="M16 14h.01"></path><path d="M8 18h.01"></path><path d="M12 18h.01"></path></svg>
@@ -316,6 +382,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
           User Management
         </a>
+        <button class="nav-item n-mobile-logout" type="button" onclick="toggleMobileMenu();openLogoutModal()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 17l5-5-5-5"></path><path d="M15 12H3"></path><path d="M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5"></path></svg>
+          Logout
+        </button>
       </nav>
 
       <div class="sidebar-foot">
@@ -338,36 +408,16 @@
         </div>
       </div>
 
-      <div class="stat-grid" id="statGrid">
-        <div class="stat-card brand">
-          <div class="label">Active Schemes
-            <span class="icon-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V10"></path><path d="M10 19V5"></path><path d="M16 19v-7"></path><path d="M21 19H3"></path></svg></span>
-          </div>
-          <div class="value" id="statActiveSchemes">&mdash;</div>
-          <div class="sub" id="statExpiredSchemes">&nbsp;</div>
-        </div>
-        <div class="stat-card accent">
-          <div class="label">Today's Sales
-            <span class="icon-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"></path><path d="M7 15l4-5 3 3 5-7"></path></svg></span>
-          </div>
-          <div class="value" id="statTodaySales">&mdash;</div>
-          <div class="sub">Entries logged today</div>
-        </div>
-        <div class="stat-card ai">
-          <div class="label">Pending Claims
-            <span class="icon-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3.5 2"></path></svg></span>
-          </div>
-          <div class="value" id="statPendingClaims">&mdash;</div>
-          <div class="sub" id="statClaimBreakdown">&nbsp;</div>
-        </div>
-        <div class="stat-card dp">
-          <div class="label">Total Claim Value
-            <span class="icon-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H7"></path></svg></span>
-          </div>
-          <div class="value" id="statClaimValue">&mdash;</div>
-          <div class="sub" id="statPendingValue">&nbsp;</div>
-        </div>
-
+      <div class="infinity-stage" aria-label="Animated dinosaur traveling around an infinity loop">
+        <svg class="infinity-visual" viewBox="0 0 820 260" role="img" aria-labelledby="infinityTitle infinityDescription">
+          <title id="infinityTitle">Infinite possibilities</title>
+          <desc id="infinityDescription">A dinosaur continuously travels around a colorful infinity-shaped track.</desc>
+          <defs><linearGradient id="infinityGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#155eef"/><stop offset=".48" stop-color="#8b5cf6"/><stop offset="1" stop-color="#f97316"/></linearGradient></defs>
+          <path class="infinity-track-shadow" d="M410 130 C315 5 120 20 105 130 C90 240 285 255 410 130 C535 5 730 20 715 130 C700 240 505 255 410 130 Z"/>
+          <path id="infinityTrack" class="infinity-track" d="M410 130 C315 5 120 20 105 130 C90 240 285 255 410 130 C535 5 730 20 715 130 C700 240 505 255 410 130 Z"/>
+          <path class="infinity-dash" d="M410 130 C315 5 120 20 105 130 C90 240 285 255 410 130 C535 5 730 20 715 130 C700 240 505 255 410 130 Z"/>
+        </svg>
+        <div class="dino-battle" aria-hidden="true"><span class="scene-sun"></span><span class="scene-cloud"></span><span class="scene-ground"></span><span class="scene-caption">READY...</span><span class="run-dust dust-one"></span><span class="run-dust dust-two"></span><span class="slash"></span><span class="slash two"></span><span class="slash three"></span><span class="shot-line"></span><span class="comic-flash"></span><span class="impact-word">POW!</span><span class="ko-stars">⭐💫⭐</span><div class="dino-actor dino-one"><span class="dino-shadow"></span><span class="dino-face">🦖</span><span class="dino-sword">⚔️</span></div><div class="dino-actor dino-two"><span class="dino-shadow"></span><span class="dino-face">🦖</span><span class="dino-gun">🔫</span><span class="dino-shades">🕶️</span><span class="dino-laugh">HA! HA!</span></div><div class="initiative-reveal"><span>Welcome in Initiative</span></div></div>
       </div>
 
       <div class="um-card" id="user-management" style="display:none;">
@@ -453,6 +503,22 @@
 
   <script>
     function appUrl(path) { const p = location.pathname; const base = p === '/erp' || p.startsWith('/erp/') ? '/erp' : ''; return `${base}${path}`; }
+    function toggleMobileMenu() {
+      const nav = document.getElementById('mainNavigation');
+      const button = document.getElementById('mobileMenuToggle');
+      const isOpen = nav.classList.toggle('mobile-open');
+      button.setAttribute('aria-expanded', String(isOpen));
+      button.setAttribute('aria-label', isOpen ? 'Close navigation menu' : 'Open navigation menu');
+    }
+    document.addEventListener('click', event => {
+      const nav = document.getElementById('mainNavigation');
+      const button = document.getElementById('mobileMenuToggle');
+      if (!nav?.classList.contains('mobile-open')) return;
+      if (nav.contains(event.target) || button.contains(event.target)) return;
+      nav.classList.remove('mobile-open');
+      button.setAttribute('aria-expanded', 'false');
+      button.setAttribute('aria-label', 'Open navigation menu');
+    });
     const token = localStorage.getItem('token'); const username = localStorage.getItem('username') || '';
     const role = localStorage.getItem('role') || '';
     if (!token) location.href = appUrl('/login');
@@ -465,6 +531,13 @@
     function logout() { localStorage.clear(); location.href = appUrl('/login'); }
     function openLogoutModal() { document.getElementById('logoutModal').style.display = 'flex'; }
     function closeLogoutModal() { document.getElementById('logoutModal').style.display = 'none'; }
+    if (window.matchMedia('(max-width: 860px)').matches) {
+      history.pushState({ mobileHome: true }, '', window.location.href);
+      window.addEventListener('popstate', () => {
+        history.pushState({ mobileHome: true }, '', window.location.href);
+        openLogoutModal();
+      });
+    }
 
     function fmtCurrency(n) {
       return '\u20b9' + Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
@@ -486,7 +559,6 @@
         // Leave dashes in place if stats can't be loaded right now.
       }
     }
-    loadDashboardStats();
 
     // ------------------------------------------------------------------
     // User Management (Admin only) - moved here from the Schemes page.

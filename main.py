@@ -63,7 +63,47 @@ def ensure_column(table_name: str, column_name: str, column_def: str):
         conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_def}"))
 
 
+def ensure_username_not_unique():
+    """One-time repair for databases created before username was made
+    non-unique (see models.py User.username). ALTER TABLE ADD COLUMN
+    can't drop a constraint, so on SQLite we rebuild the table without
+    it; on Postgres the constraint just needs dropping by name. Safe to
+    run on every startup - it's a no-op once the fix has been applied."""
+    inspector = inspect(engine)
+    if "users" not in inspector.get_table_names():
+        return
+
+    if engine.dialect.name == "sqlite":
+        with engine.begin() as conn:
+            index_list = conn.execute(text("PRAGMA index_list(users)")).fetchall()
+            has_unique_username = False
+            for idx in index_list:
+                idx_name, is_unique = idx[1], idx[2]
+                if not is_unique:
+                    continue
+                cols = {row[2] for row in conn.execute(text(f"PRAGMA index_info({idx_name})")).fetchall()}
+                if cols == {"username"}:
+                    has_unique_username = True
+                    break
+            if not has_unique_username:
+                return
+
+            conn.execute(text("ALTER TABLE users RENAME TO users_pre_username_fix"))
+            models.User.__table__.create(bind=conn)
+            columns = ", ".join(c.name for c in models.User.__table__.columns)
+            conn.execute(text(
+                f"INSERT INTO users ({columns}) SELECT {columns} FROM users_pre_username_fix"
+            ))
+            conn.execute(text("DROP TABLE users_pre_username_fix"))
+    else:
+        # Postgres: SQLAlchemy's default constraint name for a
+        # single-column UNIQUE is "<table>_<column>_key".
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE users DROP CONSTRAINT IF EXISTS users_username_key"))
+
+
 def ensure_database_schema():
+    ensure_username_not_unique()
     ensure_column("stores", "code", "VARCHAR(20)")
     ensure_column("stores", "city", "VARCHAR(100)")
     ensure_column("stores", "status", "VARCHAR(20)")
@@ -169,17 +209,24 @@ ensure_database_schema()
 
 def ensure_default_branches():
     with SessionLocal() as db:
+        default_branches = [
+            {"name": "Alambagh", "code": "BR001", "city": "Lucknow", "status": "Active", "latitude": 26.8023316384953, "longitude": 80.89578659627016, "geofence_radius_m": 100},
+            {"name": "Gomtinagar", "code": "BR002", "city": "Lucknow", "status": "Active", "latitude": 26.850130023596396, "longitude": 81.00713531584118, "geofence_radius_m": 100},
+            {"name": "Ashiyana", "code": "BR003", "city": "Lucknow", "status": "Active", "latitude": 26.79601399706687, "longitude": 80.9208545762198, "geofence_radius_m": 100},
+            {"name": "Hazratganj", "code": "BR004", "city": "Lucknow", "status": "Active", "latitude": 26.84924030483742, "longitude": 80.94773860240677, "geofence_radius_m": 100},
+            {"name": "Vikas Nagar", "code": "BR005", "city": "Lucknow", "status": "Active", "latitude": 26.90188397262733, "longitude": 80.95513690261241, "geofence_radius_m": 100},
+        ]
         if db.query(models.Store).count() == 0:
-            default_branches = [
-                {"name": "Alambagh", "code": "BR001", "city": "Lucknow", "status": "Active", "latitude": 26.8023316384953, "longitude": 80.89578659627016, "geofence_radius_m": 100},
-                {"name": "Gomtinagar", "code": "BR002", "city": "Lucknow", "status": "Active", "latitude": 26.850130023596396, "longitude": 81.00713531584118, "geofence_radius_m": 100},
-                {"name": "Ashiyana", "code": "BR003", "city": "Lucknow", "status": "Active", "latitude": 26.79601399706687, "longitude": 80.9208545762198, "geofence_radius_m": 100},
-                {"name": "Hazratganj", "code": "BR004", "city": "Lucknow", "status": "Active", "latitude": 26.84924030483742, "longitude": 80.94773860240677, "geofence_radius_m": 100},
-                {"name": "Vikas Nagar", "code": "BR005", "city": "Lucknow", "status": "Active", "latitude": 26.90188397262733, "longitude": 80.95513690261241, "geofence_radius_m": 100},
-            ]
             for branch in default_branches:
                 db.add(models.Store(**branch))
-            db.commit()
+        else:
+            for branch in default_branches:
+                store = db.query(models.Store).filter(models.Store.code == branch["code"]).first()
+                if store and (not store.latitude or not store.longitude):
+                    store.latitude = branch["latitude"]
+                    store.longitude = branch["longitude"]
+                    store.geofence_radius_m = store.geofence_radius_m or 100
+        db.commit()
 
 
 def ensure_default_master_data():
@@ -478,7 +525,7 @@ app = FastAPI(title="IDSPL Scheme Management ERP")
 
 @app.middleware("http")
 async def brand_promotor_limited_access(request: Request, call_next):
-    """Brand Promotor accounts may use Dashboard, Schemes, and Attendance only."""
+    """Brand Promotor accounts may use Home and Attendance only."""
     token = request.headers.get("Authorization", "")
     if token.startswith("Bearer "):
         try:
@@ -488,21 +535,19 @@ async def brand_promotor_limited_access(request: Request, call_next):
             if payload.get("role") == "BrandPartner":
                 allowed = {
                     "/attendance", "/attendance.html", "/home", "/home.html",
-                    "/dashboard", "/dashboard.html", "/api/me", "/api/attendance",
-                    "/dashboard-stats", "/brands", "/categories", "/subcategories",
-                    "/products", "/stores", "/schemes", "/auth/login", "/openapi.json", "/docs",
+                    "/api/me", "/stores", "/auth/login", "/openapi.json", "/docs",
                 }
                 static_html = request.url.path.startswith("/static/") and request.url.path.endswith(".html")
-                scheme_request = request.url.path == "/schemes" or request.url.path.startswith("/schemes/")
-                if request.url.path not in allowed and not scheme_request and not request.url.path.startswith("/static/"):
+                attendance_request = request.url.path == "/api/attendance" or request.url.path.startswith("/api/attendance/")
+                if request.url.path not in allowed and not attendance_request and not request.url.path.startswith("/static/"):
                     return JSONResponse(
                         status_code=403,
-                        content={"detail": "Brand Promotor access is limited to Dashboard, Schemes, and Attendance."},
+                        content={"detail": "Brand Promotor access is limited to Home and Attendance."},
                     )
                 if static_html and not request.url.path.endswith("/attendance.html"):
                     return JSONResponse(
                         status_code=403,
-                        content={"detail": "Brand Promotor access is limited to Dashboard, Schemes, and Attendance."},
+                        content={"detail": "Brand Promotor access is limited to Home and Attendance."},
                     )
         except Exception:
             pass
@@ -1875,6 +1920,12 @@ def service_worker_file():
     return FileResponse("static/sw.js", media_type="application/javascript")
 
 
+@app.get("/offline")
+@app.get("/offline.html")
+def offline_page():
+    return serve_html("static/offline.html")
+
+
 # ============================================================
 # AUTH: SIGNUP / LOGIN / CURRENT USER
 # ============================================================
@@ -1952,11 +2003,11 @@ def signup(user: schemas.UserSignup, db: Session = Depends(get_db)):
 
     existing = (
         db.query(models.User)
-        .filter((models.User.username == user.username) | (models.User.email == user.email))
+        .filter(models.User.email == user.email)
         .first()
     )
     if existing:
-        raise HTTPException(status_code=400, detail="Username or email already registered")
+        raise HTTPException(status_code=400, detail="Email already registered")
 
     if user.role not in VALID_ROLES:
         raise HTTPException(status_code=400, detail=f"Role must be one of {VALID_ROLES}")
@@ -2338,8 +2389,8 @@ def save_attendance(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    if attendance.action not in {"checkin", "second", "checkout"}:
-        raise HTTPException(status_code=400, detail="Action must be checkin, second, or checkout")
+    if attendance.action not in {"checkin", "checkout"}:
+        raise HTTPException(status_code=400, detail="Action must be checkin or checkout")
     if current_user.store_id is None:
         raise HTTPException(status_code=400, detail="No outlet is assigned to this account")
     store = db.query(models.Store).filter(models.Store.id == current_user.store_id).first()
@@ -2360,13 +2411,17 @@ def save_attendance(
         models.AttendanceRecord.attendance_date == captured_at.date(),
     ).first()
     if not record:
+        if attendance.action == "checkout":
+            raise HTTPException(status_code=409, detail="Punch in is required before punch out")
         record = models.AttendanceRecord(
             user_id=current_user.id,
             store_id=current_user.store_id,
             attendance_date=captured_at.date(),
         )
         db.add(record)
-    prefix = "checkin" if attendance.action == "checkin" else "second_punch" if attendance.action == "second" else "checkout"
+    if attendance.action == "checkout" and record.checkin_at is None:
+        raise HTTPException(status_code=409, detail="Punch in is required before punch out")
+    prefix = "checkin" if attendance.action == "checkin" else "checkout"
     if getattr(record, f"{prefix}_at") is not None:
         raise HTTPException(status_code=409, detail=f"{attendance.action.title()} already recorded")
     setattr(record, f"{prefix}_at", captured_at)
@@ -2399,6 +2454,43 @@ def list_attendance(
         }
         for record in records
     ]
+
+
+@app.get("/api/attendance/{record_id}/selfies")
+def get_attendance_selfies(
+    record_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Return the saved punch-in and punch-out selfies for one attendance record.
+
+    Employees can only view their own record. Admin can view any employee's
+    record. Keeping the images behind this small on-demand endpoint avoids
+    loading every Base64 selfie just to render attendance tables.
+    """
+    record = db.query(models.AttendanceRecord).filter(
+        models.AttendanceRecord.id == record_id
+    ).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Attendance record not found")
+    if current_user.role != "Admin" and record.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You are not allowed to view these attendance images")
+
+    user = db.query(models.User).filter(models.User.id == record.user_id).first()
+    store = db.query(models.Store).filter(models.Store.id == record.store_id).first() if record.store_id else None
+    return {
+        "id": record.id,
+        "user_id": record.user_id,
+        "username": user.username if user else None,
+        "outlet_name": store.name if store else None,
+        "attendance_date": record.attendance_date.isoformat(),
+        "checkin_at": record.checkin_at,
+        "second_punch_at": record.second_punch_at,
+        "checkout_at": record.checkout_at,
+        "checkin_selfie": record.checkin_selfie,
+        "second_punch_selfie": record.second_punch_selfie,
+        "checkout_selfie": record.checkout_selfie,
+    }
 
 
 @app.post("/api/attendance/location")
@@ -2447,40 +2539,110 @@ def save_attendance_location(
 @app.get("/api/attendance/admin-summary")
 def attendance_admin_summary(
     store_id: Optional[int] = Query(None),
+    from_date: Optional[date] = Query(None),
+    to_date: Optional[date] = Query(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.require_roles("Admin")),
 ):
     today = india_today()
+    start_date = from_date or today
+    end_date = to_date or today
+    if start_date > end_date:
+        start_date, end_date = end_date, start_date
+    single_day = start_date == end_date
+    days_in_range = (end_date - start_date).days + 1
+
     user_query = db.query(models.User).filter(models.User.status == "Active")
     if store_id is not None:
         user_query = user_query.filter(models.User.store_id == store_id)
     users = user_query.all()
+    stores_by_id = {
+        store.id: store for store in db.query(models.Store).all()
+    }
+    outlet_abbreviations = {
+        "hazratganj": "HZT",
+        "alambagh": "ALM",
+        "ashiyana": "ASH",
+        "gomtinagar": "GNG",
+        "gomti nagar": "GNG",
+        "vikas nagar": "VKN",
+        "vikasnagar": "VKN",
+    }
+
     record_query = db.query(models.AttendanceRecord).filter(
-        models.AttendanceRecord.attendance_date == today,
+        models.AttendanceRecord.attendance_date >= start_date,
+        models.AttendanceRecord.attendance_date <= end_date,
         models.AttendanceRecord.user_id.in_([user.id for user in users] or [-1]),
     )
-    records = record_query.all()
-    by_user = {record.user_id: record for record in records}
+    records_by_user = {}
+    for record in record_query.all():
+        records_by_user.setdefault(record.user_id, []).append(record)
+
+    range_start_dt = datetime.combine(start_date, datetime.min.time())
+    range_end_dt = datetime.combine(end_date + timedelta(days=1), datetime.min.time())
+
     rows = []
+    present_total = 0
+    absent_total = 0
     for user in users:
-        record = by_user.get(user.id)
+        outlet = stores_by_id.get(user.store_id)
+        outlet_name = outlet.name if outlet else None
+        outlet_abbreviation = outlet_abbreviations.get(
+            (outlet_name or "").strip().lower(),
+            outlet.code if outlet and outlet.code else "—",
+        )
+        user_records = sorted(records_by_user.get(user.id, []), key=lambda r: r.attendance_date)
+        present_days = sum(1 for r in user_records if r.checkin_at)
+        absent_days = days_in_range - present_days
+        present_total += present_days
+        absent_total += absent_days
+
         points = db.query(models.AttendanceLocationPoint).filter(
             models.AttendanceLocationPoint.user_id == user.id,
-            models.AttendanceLocationPoint.captured_at >= datetime.combine(today, datetime.min.time()),
+            models.AttendanceLocationPoint.captured_at >= range_start_dt,
+            models.AttendanceLocationPoint.captured_at < range_end_dt,
         ).all()
-        rows.append({
-            "user_id": user.id, "username": user.username, "outlet_id": user.store_id,
-            "status": "Present" if record and record.checkin_at else "Absent",
-            "checkin_at": record.checkin_at if record else None,
-            "checkout_at": record.checkout_at if record else None,
-            "route_distance_m": round(sum(point.route_distance_m or 0 for point in points), 1),
-            "max_distance_from_store_m": round(max((point.distance_from_store_m or 0 for point in points), default=0), 1),
-            "max_distance_at": max(points, key=lambda point: point.distance_from_store_m or 0).captured_at if points else None,
-            "last_latitude": points[-1].latitude if points else None,
-            "last_longitude": points[-1].longitude if points else None,
-            "location_points": len(points),
-        })
-    return {"date": today, "total": len(users), "present": sum(row["status"] == "Present" for row in rows), "absent": sum(row["status"] == "Absent" for row in rows), "rows": rows}
+        max_point = max(points, key=lambda point: point.distance_from_store_m or 0) if points else None
+
+        if single_day:
+            record = user_records[0] if user_records else None
+            rows.append({
+                "user_id": user.id, "username": user.username, "outlet_id": user.store_id,
+                "outlet_name": outlet_name, "outlet_abbreviation": outlet_abbreviation,
+                "status": "Present" if record and record.checkin_at else "Absent",
+                "present_days": present_days, "days_in_range": days_in_range,
+                "checkin_at": record.checkin_at if record else None,
+                "checkout_at": record.checkout_at if record else None,
+                "route_distance_m": round(sum(point.route_distance_m or 0 for point in points), 1),
+                "max_distance_from_store_m": round(max_point.distance_from_store_m, 1) if max_point and max_point.distance_from_store_m else 0,
+                "max_distance_at": max_point.captured_at if max_point else None,
+                "last_latitude": points[-1].latitude if points else None,
+                "last_longitude": points[-1].longitude if points else None,
+                "location_points": len(points),
+            })
+        else:
+            rows.append({
+                "user_id": user.id, "username": user.username, "outlet_id": user.store_id,
+                "outlet_name": outlet_name, "outlet_abbreviation": outlet_abbreviation,
+                "status": f"{present_days}/{days_in_range} Present",
+                "present_days": present_days, "days_in_range": days_in_range,
+                "checkin_at": None,
+                "checkout_at": None,
+                "route_distance_m": round(sum(point.route_distance_m or 0 for point in points), 1),
+                "max_distance_from_store_m": round(max_point.distance_from_store_m, 1) if max_point and max_point.distance_from_store_m else 0,
+                "max_distance_at": max_point.captured_at if max_point else None,
+                "last_latitude": points[-1].latitude if points else None,
+                "last_longitude": points[-1].longitude if points else None,
+                "location_points": len(points),
+            })
+
+    return {
+        "from_date": start_date, "to_date": end_date, "single_day": single_day, "days_in_range": days_in_range,
+        "total": len(users) * days_in_range if not single_day else len(users),
+        "present": present_total if not single_day else sum(row["status"] == "Present" for row in rows),
+        "absent": absent_total if not single_day else sum(row["status"] == "Absent" for row in rows),
+        "rows": rows,
+    }
 
 
 @app.get("/api/users", response_model=List[schemas.UserAdminOut])

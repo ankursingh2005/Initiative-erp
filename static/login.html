@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#1c1c1c" />
   <meta name="mobile-web-app-capable" content="yes" />
   <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="stylesheet" href="static/app-shell.css" /><script src="static/app-shell.js"></script>
   <title>Initiative ERP - Login</title>
   <link rel="icon" href="static/Initiative%20logo.png" type="image/png" />
   <style>
@@ -148,8 +149,9 @@
 
     @media (max-width: 880px) {
       body { flex-direction: column; }
-      .brand-panel { flex: none; padding: 30px 24px 40px; }
-      .brand-copy h1 { font-size: 26px; }
+      .brand-panel { flex:none; min-height:auto; padding:18px 24px; justify-content:center; }
+      .brand-panel::before,.brand-copy,.trust-line { display:none; }
+      .brand-mark { justify-content:center; }
       .form-panel { flex: none; min-width: 0; padding: 30px 24px 44px; }
     }
   </style>
@@ -221,6 +223,12 @@
       window.addEventListener('load', () => {
         navigator.serviceWorker.register(appUrl('/sw.js')).catch(() => {});
       });
+    }
+
+    const authMessage = sessionStorage.getItem('authMessage');
+    if (authMessage) {
+      document.getElementById('msg').textContent = authMessage;
+      sessionStorage.removeItem('authMessage');
     }
 
     async function login() {

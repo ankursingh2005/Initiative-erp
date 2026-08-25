@@ -6,7 +6,8 @@
   <meta name="theme-color" content="#000000" />
   <meta name="mobile-web-app-capable" content="yes" />
   <link rel="manifest" href="manifest.webmanifest" />
-  <title>Initiative ERP - Dashboard</title>
+  <link rel="stylesheet" href="static/app-shell.css" /><script src="static/app-shell.js"></script>
+  <title>Initiative ERP - Schemes</title>
   <link rel="icon" href="static/Initiative%20logo.png" type="image/png" />
   <style>
     :root {
@@ -68,6 +69,7 @@
     }
     .back-btn:hover { background: rgba(255,255,255,0.12); border-color: #ffffff; }
     .header-actions { display: flex; align-items: center; gap: 10px; }
+    .header-left { display: flex; align-items: center; gap: 14px; }
     .modal-backdrop {
       position: fixed;
       inset: 0;
@@ -1117,7 +1119,7 @@
       </div>
 
       <div class="records-panel">
-        <h4>Uploaded Rows in Dashboard</h4>
+        <h4>Uploaded Rows in Schemes</h4>
         <p class="records-hint">Scroll sideways to see all columns →</p>
         <div class="records-scroll">
           <table class="styled-table" style="table-layout:auto;">
