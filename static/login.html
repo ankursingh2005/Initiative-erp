@@ -27,6 +27,10 @@
       font-family: 'Manrope', sans-serif;
       display: flex;
       min-height: 100vh;
+      background:
+        radial-gradient(circle at 14% 12%, rgba(21,94,239,.10) 0%, transparent 31%),
+        radial-gradient(circle at 86% 88%, rgba(20,20,26,.09) 0%, transparent 30%),
+        linear-gradient(135deg,#f1f5ff 0%,#fafafa 55%,#f2f3f6 100%);
     }
 
     /* ---------------- Left brand panel ---------------- */
@@ -107,16 +111,16 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      background: var(--panel);
-      padding: 32px;
+      background: transparent;
+      padding: 28px;
     }
-    .form-wrap { width: 100%; max-width: 360px; }
+    .form-wrap { width: 100%; max-width: 460px; padding:34px 38px 32px; border:1px solid var(--line); border-radius:18px; background:#fff; box-shadow:0 24px 55px rgba(12,35,59,.14); }
     .brand-panel { display: none; }
-    .mobile-brand { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 30px; }
-    .mobile-brand img { width: 58px; height: 58px; border: 1px solid var(--line); border-radius: 14px; object-fit: cover; box-shadow: 0 8px 22px rgba(20,20,26,.1); }
-    .mobile-brand strong { display: block; color: var(--ink); font: italic 900 27px 'Arial Black',Impact,sans-serif; letter-spacing: -.5px; }
-    .mobile-brand small { display: block; margin-top: 2px; color: var(--ink-soft); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
-    .form-wrap h2 { margin: 0 0 6px; font-size: 27px; font-weight: 800; color: var(--ink); letter-spacing: -0.01em; }
+    .mobile-brand { display: flex; flex-direction:row; align-items: center; justify-content: center; gap: 14px; margin-bottom: 20px; text-align:left; }
+    .mobile-brand img { width: 66px; height: 66px; border: 1px solid var(--line); border-radius: 16px; object-fit: cover; box-shadow: 0 8px 22px rgba(20,20,26,.1); }
+    .mobile-brand strong { display: block; color: var(--ink); font: italic 900 32px 'Arial Black',Impact,sans-serif; letter-spacing: -1px; line-height:1; }
+    .mobile-brand small { display: block; margin-top: 6px; color: var(--ink-soft); font-size: 10px; letter-spacing: .15em; text-transform: uppercase; }
+    .form-wrap h2 { margin: 0 0 22px; text-align:center; font-size: 27px; font-weight: 800; color: var(--ink); letter-spacing: -0.01em; }
     .form-wrap .lede { margin: 0 0 30px; font-size: 14px; color: var(--ink-soft); line-height: 1.5; }
 
     label {
@@ -148,18 +152,19 @@
     button.submit:hover { box-shadow: 0 10px 22px rgba(21,94,239,0.32); transform: translateY(-1px); }
     button.submit svg { width: 16px; height: 16px; }
 
-    .msg { min-height: 20px; margin-top: 12px; color: #c0392b; text-align: center; font-size: 13.5px; }
-    .links { margin-top: 20px; text-align: center; }
+    .msg { margin-top: 12px; color: #c0392b; text-align: center; font-size: 13.5px; }
+    .msg:empty { display:none; }
+    .links { margin-top: 26px; text-align: center; }
     .links a { color: var(--ink); text-decoration: none; font-weight: 700; font-size: 13.5px; }
     .links a:hover { text-decoration: underline; }
     .hint { margin-top: 10px; text-align: center; font-size: 12px; color: #8a8f99; }
 
     @media (max-width: 1100px), (hover: none) and (pointer: coarse) {
       html,body { height:auto; min-height:100%; }
-      body { display:block; background:#fff; overflow-x:hidden; }
+      body { display:block; overflow-x:hidden; }
       .brand-panel { display:none; }
       .form-panel { width:100%; min-width:0; min-height:100dvh; padding:max(28px,env(safe-area-inset-top)) 22px max(36px,env(safe-area-inset-bottom)); }
-      .form-wrap { max-width:420px; }
+      .form-wrap { max-width:460px; padding:30px 24px; }
       .mobile-brand { display:flex; }
       .form-wrap h2,.form-wrap .lede { text-align:center; }
       input { min-height:50px; font-size:16px; }
@@ -167,9 +172,10 @@
     }
     @media (max-width: 380px) {
       .form-panel { padding-left:16px; padding-right:16px; }
-      .mobile-brand { margin-bottom:24px; }
-      .mobile-brand img { width:52px; height:52px; }
-      .mobile-brand strong { font-size:24px; }
+      .form-wrap { padding:26px 18px; border-radius:15px; }
+      .mobile-brand { margin-bottom:18px; gap:11px; }
+      .mobile-brand img { width:58px; height:58px; }
+      .mobile-brand strong { font-size:28px; }
     }
   </style>
 </head>
@@ -206,10 +212,9 @@
     <div class="form-wrap">
       <div class="mobile-brand">
         <img src="static/Initiative%20logo.png" alt="Initiative Logo" />
-        <div><strong>Initiative</strong><small>Electronics Megastore &middot; ERP</small></div>
+        <div><strong>Initiative</strong><small>Electronics Megastore</small></div>
       </div>
       <h2>Sign in</h2>
-      <p class="lede">Access your schemes, purchase orders, and reports.</p>
 
       <label for="username">Username / Email</label>
       <input id="username" name="username" type="text" placeholder="Enter username or email" autocomplete="username" autocapitalize="none" />

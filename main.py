@@ -215,6 +215,7 @@ def ensure_default_branches():
             {"name": "Ashiyana", "code": "BR003", "city": "Lucknow", "status": "Active", "latitude": 26.79601399706687, "longitude": 80.9208545762198, "geofence_radius_m": 100},
             {"name": "Hazratganj", "code": "BR004", "city": "Lucknow", "status": "Active", "latitude": 26.84924030483742, "longitude": 80.94773860240677, "geofence_radius_m": 100},
             {"name": "Vikas Nagar", "code": "BR005", "city": "Lucknow", "status": "Active", "latitude": 26.90188397262733, "longitude": 80.95513690261241, "geofence_radius_m": 100},
+            {"name": "Warehouse", "code": "MWH", "city": "Lucknow", "status": "Active", "latitude": None, "longitude": None, "geofence_radius_m": 100},
         ]
         if db.query(models.Store).count() == 0:
             for branch in default_branches:
@@ -222,7 +223,9 @@ def ensure_default_branches():
         else:
             for branch in default_branches:
                 store = db.query(models.Store).filter(models.Store.code == branch["code"]).first()
-                if store and (not store.latitude or not store.longitude):
+                if not store:
+                    db.add(models.Store(**branch))
+                elif branch["latitude"] is not None and (not store.latitude or not store.longitude):
                     store.latitude = branch["latitude"]
                     store.longitude = branch["longitude"]
                     store.geofence_radius_m = store.geofence_radius_m or 100
@@ -568,7 +571,7 @@ async def handle_unexpected_error(request: Request, exc: Exception):
 # "static" folder sitting next to this file.
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-VALID_ROLES = ["Admin", "CategoryManager", "BrandManager", "BrandPartner", "SupportingStaff", "Accounts", "MISExecutive"]
+VALID_ROLES = ["Admin", "CategoryManager", "BrandManager", "BrandPartner", "SupportingStaff", "Accounts", "MISExecutive", "CustomerCare", "Other"]
 
 
 def normalize_category_code(raw_value: Optional[str]) -> Optional[str]:
@@ -2780,15 +2783,30 @@ def delete_user(
         {"uploaded_by": None}
     )
 
+    # Attendance belongs to the employee account itself.  These tables use
+    # required foreign keys, so they cannot be detached like upload/audit
+    # records.  Remove the location trail first, followed by daily attendance,
+    # before deleting the login.  This makes Admin deletion work whether or
+    # not the employee has punched in previously.
+    db.query(models.AttendanceLocationPoint).filter(
+        models.AttendanceLocationPoint.user_id == target_user.id
+    ).delete(synchronize_session=False)
+    db.query(models.AttendanceRecord).filter(
+        models.AttendanceRecord.user_id == target_user.id
+    ).delete(synchronize_session=False)
+    db.query(models.UserBrand).filter(
+        models.UserBrand.user_id == target_user.id
+    ).delete(synchronize_session=False)
+
     try:
         db.delete(target_user)
         db.commit()
-    except IntegrityError:
+    except IntegrityError as exc:
         db.rollback()
         raise HTTPException(
             status_code=400,
-            detail=f"Unable to delete {deleted_username}: this account still has linked records.",
-        )
+            detail=f"Unable to delete {deleted_username}. A protected system record still references this account.",
+        ) from exc
 
     return {"message": f"Account '{deleted_username}' deleted"}
 
