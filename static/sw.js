@@ -1,4 +1,4 @@
-const CACHE='idspl-static-v15';
+const CACHE='idspl-static-v16';
 const BASE=new URL('./',self.registration.scope).pathname.replace(/\/$/,'');
 const asset=path=>BASE+path;
 const STATIC=[asset('/offline'),asset('/manifest.webmanifest'),asset('/static/app-shell.css'),asset('/static/app-shell.js'),asset('/static/Initiative%20logo.png'),asset('/static/icons/icon-192.png'),asset('/static/icons/icon-512.png'),asset('/static/icons/icon-maskable-512.png')];
