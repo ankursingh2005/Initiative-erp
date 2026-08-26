@@ -34,6 +34,22 @@ def india_datetime(value: datetime) -> datetime:
 
 def india_today() -> date:
     return datetime.now(INDIA_TZ).date()
+
+
+ATTENDANCE_CLOCK_TOLERANCE_SECONDS = 5 * 60
+
+
+def verified_attendance_time(device_time: datetime) -> datetime:
+    """Return authoritative server IST and reject a manipulated device clock."""
+    submitted_time = india_datetime(device_time)
+    server_time = datetime.now(INDIA_TZ).replace(tzinfo=None)
+    clock_difference = abs((submitted_time - server_time).total_seconds())
+    if clock_difference > ATTENDANCE_CLOCK_TOLERANCE_SECONDS:
+        raise HTTPException(
+            status_code=400,
+            detail="Attendance blocked: your device date or time is incorrect. Enable automatic date and time, then try again.",
+        )
+    return server_time
 import smtplib
 from email.mime.text import MIMEText
 from dotenv import load_dotenv
@@ -2408,7 +2424,9 @@ def save_attendance(
     allowed_radius = store.geofence_radius_m or 100
     if actual_distance > allowed_radius:
         raise HTTPException(status_code=403, detail=f"Attendance blocked: you are {round(actual_distance)} m from {store.name}; maximum allowed distance is {round(allowed_radius)} m")
-    captured_at = india_datetime(attendance.captured_at)
+    # Never trust the phone clock as the saved punch time.  It is checked only
+    # as an anti-tampering signal; the database always receives server IST.
+    captured_at = verified_attendance_time(attendance.captured_at)
     record = db.query(models.AttendanceRecord).filter(
         models.AttendanceRecord.user_id == current_user.id,
         models.AttendanceRecord.attendance_date == captured_at.date(),
@@ -2515,10 +2533,13 @@ def save_attendance_location(
     actual_distance = 2 * radius * math.atan2(math.sqrt(value), math.sqrt(1 - value))
     if actual_distance > (store.geofence_radius_m or 100):
         raise HTTPException(status_code=403, detail=f"Location tracking blocked outside {store.name} geofence")
+    # Location trails also use server IST so changing the phone clock cannot
+    # move GPS points to another day or reorder the route history.
+    captured_at = datetime.now(INDIA_TZ).replace(tzinfo=None)
     previous = db.query(models.AttendanceLocationPoint).filter(
             models.AttendanceLocationPoint.user_id == current_user.id,
-            models.AttendanceLocationPoint.captured_at >= datetime.combine(india_datetime(point.captured_at).date(), datetime.min.time()),
-            models.AttendanceLocationPoint.captured_at < india_datetime(point.captured_at),
+            models.AttendanceLocationPoint.captured_at >= datetime.combine(captured_at.date(), datetime.min.time()),
+            models.AttendanceLocationPoint.captured_at < captured_at,
         ).order_by(models.AttendanceLocationPoint.captured_at.desc()).first()
     route_distance = 0
     if previous:
@@ -2529,7 +2550,7 @@ def save_attendance_location(
         value = math.sin(lat_delta / 2) ** 2 + math.cos(previous.latitude * radians) * math.cos(point.latitude * radians) * math.sin(lon_delta / 2) ** 2
         route_distance = 2 * radius * math.atan2(math.sqrt(value), math.sqrt(1 - value))
     location = models.AttendanceLocationPoint(
-        user_id=current_user.id, store_id=store.id, captured_at=india_datetime(point.captured_at),
+        user_id=current_user.id, store_id=store.id, captured_at=captured_at,
         latitude=point.latitude, longitude=point.longitude,
         accuracy_m=point.accuracy_m, distance_from_store_m=point.distance_from_store_m,
         route_distance_m=route_distance,
