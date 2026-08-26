@@ -100,8 +100,10 @@
 
     /* ---------------- Right sign-in panel ---------------- */
     .form-panel {
-      flex: 0.85;
-      min-width: 340px;
+      flex: 1;
+      width: 100%;
+      min-width: 0;
+      min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -109,6 +111,11 @@
       padding: 32px;
     }
     .form-wrap { width: 100%; max-width: 360px; }
+    .brand-panel { display: none; }
+    .mobile-brand { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 30px; }
+    .mobile-brand img { width: 58px; height: 58px; border: 1px solid var(--line); border-radius: 14px; object-fit: cover; box-shadow: 0 8px 22px rgba(20,20,26,.1); }
+    .mobile-brand strong { display: block; color: var(--ink); font: italic 900 27px 'Arial Black',Impact,sans-serif; letter-spacing: -.5px; }
+    .mobile-brand small { display: block; margin-top: 2px; color: var(--ink-soft); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
     .form-wrap h2 { margin: 0 0 6px; font-size: 27px; font-weight: 800; color: var(--ink); letter-spacing: -0.01em; }
     .form-wrap .lede { margin: 0 0 30px; font-size: 14px; color: var(--ink-soft); line-height: 1.5; }
 
@@ -147,12 +154,22 @@
     .links a:hover { text-decoration: underline; }
     .hint { margin-top: 10px; text-align: center; font-size: 12px; color: #8a8f99; }
 
-    @media (max-width: 880px) {
-      body { flex-direction: column; }
-      .brand-panel { flex:none; min-height:auto; padding:18px 24px; justify-content:center; }
-      .brand-panel::before,.brand-copy,.trust-line { display:none; }
-      .brand-mark { justify-content:center; }
-      .form-panel { flex: none; min-width: 0; padding: 30px 24px 44px; }
+    @media (max-width: 1100px), (hover: none) and (pointer: coarse) {
+      html,body { height:auto; min-height:100%; }
+      body { display:block; background:#fff; overflow-x:hidden; }
+      .brand-panel { display:none; }
+      .form-panel { width:100%; min-width:0; min-height:100dvh; padding:max(28px,env(safe-area-inset-top)) 22px max(36px,env(safe-area-inset-bottom)); }
+      .form-wrap { max-width:420px; }
+      .mobile-brand { display:flex; }
+      .form-wrap h2,.form-wrap .lede { text-align:center; }
+      input { min-height:50px; font-size:16px; }
+      button.submit { min-height:50px; }
+    }
+    @media (max-width: 380px) {
+      .form-panel { padding-left:16px; padding-right:16px; }
+      .mobile-brand { margin-bottom:24px; }
+      .mobile-brand img { width:52px; height:52px; }
+      .mobile-brand strong { font-size:24px; }
     }
   </style>
 </head>
@@ -187,13 +204,17 @@
 
   <div class="form-panel">
     <div class="form-wrap">
+      <div class="mobile-brand">
+        <img src="static/Initiative%20logo.png" alt="Initiative Logo" />
+        <div><strong>Initiative</strong><small>Electronics Megastore &middot; ERP</small></div>
+      </div>
       <h2>Sign in</h2>
       <p class="lede">Access your schemes, purchase orders, and reports.</p>
 
       <label for="username">Username / Email</label>
-      <input id="username" name="username" type="text" placeholder="Enter username or email" />
+      <input id="username" name="username" type="text" placeholder="Enter username or email" autocomplete="username" autocapitalize="none" />
       <label for="password">Password</label>
-      <input id="password" name="password" type="password" placeholder="Enter password" />
+      <input id="password" name="password" type="password" placeholder="Enter password" autocomplete="current-password" />
 
       <button type="button" class="submit" onclick="login()">
         Sign in
