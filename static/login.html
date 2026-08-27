@@ -245,6 +245,14 @@
       return path.startsWith('/') ? `${appBasePath}${path}` : `${appBasePath}/${path}`;
     }
 
+    // Opening an existing installed shortcut may still start at /login. If a
+    // saved session exists, continue directly without showing the login form.
+    const savedToken = localStorage.getItem('token');
+    const savedRole = localStorage.getItem('role');
+    if (savedToken) {
+      window.location.replace(appUrl(savedRole === 'BrandPartner' ? '/attendance' : '/home'));
+    }
+
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register(appUrl('/sw.js')).catch(() => {});

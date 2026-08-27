@@ -15,7 +15,10 @@ import models
 # --------------------------------------------------------------------
 SECRET_KEY = os.getenv("SECRET_KEY", "CHANGE_THIS_TO_A_LONG_RANDOM_SECRET_BEFORE_GOING_LIVE")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 8  # login stays valid for 8 hours
+# Installed mobile users should not have to sign in every workday. Keep the
+# duration configurable for deployments while defaulting to one year. A user
+# can still be revoked immediately by setting their account status inactive.
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", str(60 * 24 * 365)))
 
 # This tells FastAPI's /docs page where to send username/password to get a token.
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
@@ -52,7 +55,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         raise credentials_exception
 
     user = db.query(models.User).filter(models.User.id == user_id).first()
-    if user is None:
+    if user is None or user.status != "Active":
         raise credentials_exception
     return user
 
