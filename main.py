@@ -2528,11 +2528,17 @@ def save_attendance_location(
     lon_delta = (point.longitude - store.longitude) * radians
     value = math.sin(lat_delta / 2) ** 2 + math.cos(store.latitude * radians) * math.cos(point.latitude * radians) * math.sin(lon_delta / 2) ** 2
     actual_distance = 2 * radius * math.atan2(math.sqrt(value), math.sqrt(1 - value))
-    if actual_distance > (store.geofence_radius_m or 100):
-        raise HTTPException(status_code=403, detail=f"Location tracking blocked outside {store.name} geofence")
     # Location trails also use server IST so changing the phone clock cannot
     # move GPS points to another day or reorder the route history.
     captured_at = datetime.now(INDIA_TZ).replace(tzinfo=None)
+    active_record = db.query(models.AttendanceRecord).filter(
+        models.AttendanceRecord.user_id == current_user.id,
+        models.AttendanceRecord.attendance_date == captured_at.date(),
+        models.AttendanceRecord.checkin_at.isnot(None),
+        models.AttendanceRecord.checkout_at.is_(None),
+    ).first()
+    if not active_record:
+        raise HTTPException(status_code=409, detail="Location tracking is available only during working hours")
     previous = db.query(models.AttendanceLocationPoint).filter(
             models.AttendanceLocationPoint.user_id == current_user.id,
             models.AttendanceLocationPoint.captured_at >= datetime.combine(captured_at.date(), datetime.min.time()),
@@ -2625,6 +2631,19 @@ def attendance_admin_summary(
             models.AttendanceLocationPoint.captured_at >= range_start_dt,
             models.AttendanceLocationPoint.captured_at < range_end_dt,
         ).all()
+        work_windows = [
+            (
+                record.checkin_at,
+                record.checkout_at
+                or (datetime.now(INDIA_TZ).replace(tzinfo=None) if record.attendance_date == today
+                    else datetime.combine(record.attendance_date + timedelta(days=1), datetime.min.time())),
+            )
+            for record in user_records if record.checkin_at
+        ]
+        points = [
+            point for point in points
+            if any(start <= point.captured_at <= end for start, end in work_windows)
+        ]
         max_point = max(points, key=lambda point: point.distance_from_store_m or 0) if points else None
         punch_distances = [
             (distance, timestamp)

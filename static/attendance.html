@@ -136,6 +136,8 @@ let locationWatch=null;function locationEvent(message,severity){state.events=sta
 </script>
 <script>
 let geofenceAlertOutside=false;
+let lastLocationUploadAt=0;
+async function uploadWorkingLocation(p,d){const now=Date.now();if(now-lastLocationUploadAt<60000)return;lastLocationUploadAt=now;const token=localStorage.getItem('token');if(!token)return;try{const response=await fetch('/api/attendance/location',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({captured_at:new Date().toISOString(),latitude:p.coords.latitude,longitude:p.coords.longitude,accuracy_m:p.coords.accuracy||null,distance_from_store_m:d})});if(!response.ok)lastLocationUploadAt=0}catch(error){lastLocationUploadAt=0}}
 stopApprovedTracking();
 startApprovedTracking=function(){
   if(locationWatch!==null||!navigator.geolocation)return;
@@ -144,6 +146,7 @@ startApprovedTracking=function(){
     position=p;
     state.locations=state.locations||[];
     state.locations.push({at:new Date().toISOString(),latitude:p.coords.latitude,longitude:p.coords.longitude,distance:d});
+    uploadWorkingLocation(p,d);
     if(d>100&&!geofenceAlertOutside){
       geofenceAlertOutside=true;
       locationEvent('User moved more than 100 m from assigned '+assignedOutlet()+' outlet','warn');
@@ -217,7 +220,7 @@ const downloadMenu=document.createElement('details');downloadMenu.className='dow
 async function downloadAttendance(format){const params=new URLSearchParams({format,date:dateInput.value});if(outletSelect.value)params.set('store_id',outletSelect.value);const activeFilter=metrics.find(metric=>metric.classList.contains('active-filter'))?.dataset.filter;if(activeFilter&&activeFilter!=='all')params.set('status',activeFilter);const button=downloadMenu.querySelector('[data-format="'+format+'"]'),original=button.textContent;button.disabled=true;button.textContent='Preparing...';try{const response=await fetch('/api/attendance/admin-export?'+params,{headers:{Authorization:'Bearer '+localStorage.getItem('token')}});if(!response.ok)throw new Error('Export failed');const blob=await response.blob(),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='attendance-'+dateInput.value+'.'+format;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);downloadMenu.open=false}catch(error){alert('Unable to download attendance. Please try again.')}finally{button.disabled=false;button.textContent=original}}
 downloadMenu.addEventListener('click',event=>{const button=event.target.closest('[data-format]');if(button)downloadAttendance(button.dataset.format)});wrap.appendChild(dateControl);wrap.appendChild(outletSelect);wrap.appendChild(downloadMenu);head.appendChild(wrap);const todayGrid=document.querySelector('.grid');if(todayGrid&&!document.querySelector('.admin-compact-title')){const compactTitle=document.createElement('div');compactTitle.className='admin-compact-title';compactTitle.innerHTML='<h3>My Attendance</h3><p>Review your attendance records and previous days.</p>';todayGrid.before(compactTitle)}
 function applyFilter(){if(dateInput.value)refreshAdminOutlet(panel,outletSelect.value,dateInput.value,dateInput.value)}
-dateInput.onchange=applyFilter;outletSelect.onchange=applyFilter}initializeAdminDashboard();
+dateInput.onchange=applyFilter;outletSelect.onchange=applyFilter;setInterval(()=>{if(!document.hidden)applyFilter()},60000)}initializeAdminDashboard();
 </script>
 <script>
 function rollbackRejectedAttendance(item,action){
