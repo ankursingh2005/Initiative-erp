@@ -253,14 +253,14 @@
     <p>Sign up for Initiative ERP</p>
     <form id="signupForm" novalidate>
       <label for="username">Username</label>
-      <input id="username" type="text" placeholder="Username" autocomplete="username" autocapitalize="none" required />
+      <input id="username" type="text" placeholder="Username" autocomplete="off" autocapitalize="none" spellcheck="false" required />
       <label for="email">Email</label>
-      <input id="email" type="email" placeholder="Email" autocomplete="email" inputmode="email" autocapitalize="none" required />
+      <input id="email" type="email" placeholder="Email" autocomplete="off" inputmode="email" autocapitalize="none" spellcheck="false" required />
       <label for="password">Password</label>
       <input id="password" type="password" placeholder="Password" autocomplete="new-password" required />
 
       <label for="inviteCode">Invite Code</label>
-      <input id="inviteCode" type="password" placeholder="Enter invite code" required />
+      <input id="inviteCode" type="password" placeholder="Enter invite code" autocomplete="new-password" required />
       <p class="helper" style="margin-top:4px;">Each role has its own code (e.g. Admin, Accounts, MIS Executive). Category Managers need their category's code; Brand Managers/Partners need their brand's code. Ask your Admin if you don't have yours.</p>
 
       <label for="role">Role</label>
@@ -310,6 +310,28 @@
   </div>
 
   <script>
+    // Do not restore another person's signup details when this page is opened
+    // again through browser history on a shared device.
+    let signupFieldTouched = false;
+    function clearPreviousSignupCredentials() {
+      if (signupFieldTouched) return;
+      ['username', 'email', 'password', 'inviteCode'].forEach(id => {
+        const field = document.getElementById(id);
+        if (field) field.value = '';
+      });
+    }
+    ['username', 'email', 'password', 'inviteCode'].forEach(id => {
+      document.getElementById(id)?.addEventListener('input', event => {
+        if (event.isTrusted) signupFieldTouched = true;
+      });
+    });
+    window.addEventListener('pageshow', () => {
+      signupFieldTouched = false;
+      clearPreviousSignupCredentials();
+      setTimeout(clearPreviousSignupCredentials, 250);
+      setTimeout(clearPreviousSignupCredentials, 1000);
+    });
+
     let signupSuccessTimeout = null;
 
     function appUrl(path) {

@@ -1959,6 +1959,7 @@ def signup(user: schemas.UserSignup, db: Session = Depends(get_db)):
     # Override any of these in your environment (Render dashboard ->
     # Environment, or a local .env file) without changing code:
     #   SIGNUP_CODE_ADMIN, SIGNUP_CODE_ACCOUNTS, SIGNUP_CODE_MIS,
+    #   SIGNUP_CODE_OWNER, SIGNUP_CODE_HR,
     #   SIGNUP_CODE_CAT_HA, SIGNUP_CODE_CAT_HE, SIGNUP_CODE_CAT_IT,
     #   SIGNUP_CODE_CAT_MOBILE, SIGNUP_CODE_UNIVERSAL
     # Brand codes are not env vars -- they're always "INITIATIVE@<BRAND NAME>"
@@ -1966,10 +1967,10 @@ def signup(user: schemas.UserSignup, db: Session = Depends(get_db)):
     # --------------------------------------------------------------
     ROLE_INVITE_CODES = {
         "Admin": os.getenv("SIGNUP_CODE_ADMIN", "Initiative@#%_-Admin"),
-        "Owner": os.getenv("SIGNUP_CODE_OWNER", "Initiative@1999"),
-        "HR": os.getenv("SIGNUP_CODE_HR", "Initiative@SecureHR"),
         "Accounts": os.getenv("SIGNUP_CODE_ACCOUNTS", "Initiative/AC"),
         "MISExecutive": os.getenv("SIGNUP_CODE_MIS", "Initiative%MS"),
+        "Owner": os.getenv("SIGNUP_CODE_OWNER", "Initiative@1999"),
+        "HR": os.getenv("SIGNUP_CODE_HR", "Initiative@SecureHR"),
     }
     CATEGORY_INVITE_CODES = {
         "HA": os.getenv("SIGNUP_CODE_CAT_HA", "Initiative@HA"),

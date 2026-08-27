@@ -231,9 +231,9 @@
       <h2>Sign in</h2>
 
       <label for="username">Username / Email</label>
-      <input id="username" name="username" type="text" placeholder="Enter username or email" autocomplete="username" autocapitalize="none" />
+      <input id="username" type="text" placeholder="Enter username or email" autocomplete="off" autocapitalize="none" spellcheck="false" />
       <label for="password">Password</label>
-      <input id="password" name="password" type="password" placeholder="Enter password" autocomplete="current-password" />
+      <input id="password" type="password" placeholder="Enter password" autocomplete="new-password" />
 
       <button id="loginButton" type="button" class="submit" onclick="login()">
         <span id="loginButtonText">Sign in</span>
@@ -271,6 +271,28 @@
   </div>
 
   <script>
+    // Never expose the previous person's credentials on a shared browser.
+    // The delayed clears also catch Chrome restoring/autofilling fields after
+    // page paint, while the trusted-input flag protects anything the current
+    // person has already started typing.
+    let authFieldTouched = false;
+    function clearPreviousCredentials() {
+      if (authFieldTouched) return;
+      document.getElementById('username').value = '';
+      document.getElementById('password').value = '';
+    }
+    ['username', 'password'].forEach(id => {
+      document.getElementById(id).addEventListener('input', event => {
+        if (event.isTrusted) authFieldTouched = true;
+      });
+    });
+    window.addEventListener('pageshow', () => {
+      authFieldTouched = false;
+      clearPreviousCredentials();
+      setTimeout(clearPreviousCredentials, 250);
+      setTimeout(clearPreviousCredentials, 1000);
+    });
+
     function appUrl(path) {
       const currentPath = window.location.pathname;
       const appBasePath = currentPath === '/erp' || currentPath.startsWith('/erp/') ? '/erp' : '';
