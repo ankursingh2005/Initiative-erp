@@ -196,6 +196,7 @@ def ensure_database_schema():
     ensure_column("users", "store_id", "INTEGER")
     ensure_column("users", "category_code", "VARCHAR(20)")
     ensure_column("users", "status", "VARCHAR(20)")
+    ensure_column("users", "weekoff_day", "VARCHAR(10)")
     ensure_column("users", "created_date", "TIMESTAMP")
     ensure_column("users", "reset_token", "VARCHAR(100)")
     ensure_column("users", "reset_token_expires", "TIMESTAMP")
@@ -2151,6 +2152,24 @@ def get_me(current_user: models.User = Depends(auth.get_current_user)):
     return current_user
 
 
+WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+
+
+@app.put("/api/me/weekoff", response_model=schemas.UserOut)
+def update_my_weekoff(
+    payload: schemas.WeekoffUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    selected_day = (payload.weekoff_day or "").strip().title()
+    if selected_day not in WEEKDAYS:
+        raise HTTPException(status_code=400, detail="Week Off must be Monday through Sunday")
+    current_user.weekoff_day = selected_day
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
 @app.post("/auth/verify-password")
 def verify_own_password(
     payload: schemas.PasswordVerify,
@@ -2464,6 +2483,7 @@ def get_my_profile(current_user: models.User = Depends(auth.get_current_user)):
         "store_id": current_user.store_id,
         "category_code": current_user.category_code,
         "brand_ids": [ub.brand_id for ub in current_user.brands],
+        "weekoff_day": current_user.weekoff_day,
     }
 
 
@@ -2638,6 +2658,7 @@ def attendance_admin_summary(
     store_id: Optional[int] = Query(None),
     from_date: Optional[date] = Query(None),
     to_date: Optional[date] = Query(None),
+    weekoff_day: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.require_roles("Admin")),
 ):
@@ -2652,6 +2673,11 @@ def attendance_admin_summary(
     user_query = db.query(models.User).filter(models.User.status == "Active")
     if store_id is not None:
         user_query = user_query.filter(models.User.store_id == store_id)
+    if weekoff_day:
+        normalized_weekoff = weekoff_day.strip().title()
+        if normalized_weekoff not in WEEKDAYS:
+            raise HTTPException(status_code=400, detail="Week Off must be Monday through Sunday")
+        user_query = user_query.filter(models.User.weekoff_day == normalized_weekoff)
     users = user_query.all()
     stores_by_id = {
         store.id: store for store in db.query(models.Store).all()
@@ -2746,10 +2772,12 @@ def attendance_admin_summary(
 
         if single_day:
             record = user_records[0] if user_records else None
+            is_weekoff = user.weekoff_day == start_date.strftime("%A")
+            row_status = "Present" if record and record.checkin_at else ("Week Off" if is_weekoff else "Absent")
             rows.append({
                 "user_id": user.id, "username": user.username, "outlet_id": user.store_id,
                 "outlet_name": outlet_name, "outlet_abbreviation": outlet_abbreviation,
-                "status": "Present" if record and record.checkin_at else "Absent",
+                "status": row_status, "weekoff_day": user.weekoff_day,
                 "present_days": present_days, "days_in_range": days_in_range,
                 "history": history,
                 "checkin_at": record.checkin_at if record else None,
@@ -2765,7 +2793,7 @@ def attendance_admin_summary(
             rows.append({
                 "user_id": user.id, "username": user.username, "outlet_id": user.store_id,
                 "outlet_name": outlet_name, "outlet_abbreviation": outlet_abbreviation,
-                "status": f"{present_days}/{days_in_range} Present",
+                "status": f"{present_days}/{days_in_range} Present", "weekoff_day": user.weekoff_day,
                 "present_days": present_days, "days_in_range": days_in_range,
                 "history": history,
                 "checkin_at": None,
@@ -2788,8 +2816,9 @@ def attendance_admin_summary(
         # employee is Present when they attended on at least one selected day;
         # otherwise they are Absent. These two values therefore always add up
         # to the active-user headcount instead of multiplying users by days.
-        "present": sum(row["present_days"] > 0 for row in rows),
-        "absent": sum(row["present_days"] == 0 for row in rows),
+        "present": sum(row["status"] == "Present" for row in rows) if single_day else sum(row["present_days"] > 0 for row in rows),
+        "absent": sum(row["status"] == "Absent" for row in rows) if single_day else sum(row["present_days"] == 0 for row in rows),
+        "weekoff": sum(row["status"] == "Week Off" for row in rows) if single_day else 0,
         "rows": rows,
     }
 
@@ -2800,6 +2829,7 @@ def export_admin_attendance(
     attendance_date: date = Query(..., alias="date"),
     store_id: Optional[int] = Query(None),
     status: Optional[str] = Query(None),
+    weekoff_day: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.require_roles("Admin")),
 ):
@@ -2809,6 +2839,11 @@ def export_admin_attendance(
     user_query = db.query(models.User).filter(models.User.status == "Active")
     if store_id is not None:
         user_query = user_query.filter(models.User.store_id == store_id)
+    if weekoff_day:
+        normalized_weekoff = weekoff_day.strip().title()
+        if normalized_weekoff not in WEEKDAYS:
+            raise HTTPException(status_code=400, detail="Week Off must be Monday through Sunday")
+        user_query = user_query.filter(models.User.weekoff_day == normalized_weekoff)
     users = user_query.order_by(models.User.username).all()
     user_ids = [user.id for user in users]
     records = db.query(models.AttendanceRecord).filter(
@@ -2822,8 +2857,9 @@ def export_admin_attendance(
     rows = []
     for user in users:
         record = records_by_user.get(user.id)
-        row_status = "Present" if record and record.checkin_at else "Absent"
-        if status in {"Present", "Absent"} and row_status != status:
+        is_weekoff = user.weekoff_day == attendance_date.strftime("%A")
+        row_status = "Present" if record and record.checkin_at else ("Week Off" if is_weekoff else "Absent")
+        if status in {"Present", "Absent", "Week Off"} and row_status != status:
             continue
         points = db.query(models.AttendanceLocationPoint.distance_from_store_m).filter(
             models.AttendanceLocationPoint.user_id == user.id,

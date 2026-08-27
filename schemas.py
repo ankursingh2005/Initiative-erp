@@ -289,6 +289,7 @@ class UserOut(BaseModel):
     store_id: Optional[int]
     category_code: Optional[str]
     status: str
+    weekoff_day: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -325,6 +326,10 @@ class PasswordVerify(BaseModel):
     password: str
 
 
+class WeekoffUpdate(BaseModel):
+    weekoff_day: str
+
+
 class MyProfileOut(BaseModel):
     """Returned by GET /api/me. Used by the Purchase Orders page to scope a
     Category Manager's Division and Brand dropdowns to only what's assigned
@@ -335,6 +340,7 @@ class MyProfileOut(BaseModel):
     store_id: Optional[int]
     category_code: Optional[str]
     brand_ids: List[int] = []
+    weekoff_day: Optional[str] = None
 
 
 class AttendanceCreate(BaseModel):
