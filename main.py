@@ -2613,8 +2613,6 @@ def attendance_admin_summary(
     range_end_dt = datetime.combine(end_date + timedelta(days=1), datetime.min.time())
 
     rows = []
-    present_total = 0
-    absent_total = 0
     for user in users:
         outlet = stores_by_id.get(user.store_id)
         outlet_name = outlet.name if outlet else None
@@ -2624,9 +2622,6 @@ def attendance_admin_summary(
         )
         user_records = sorted(records_by_user.get(user.id, []), key=lambda r: r.attendance_date)
         present_days = sum(1 for r in user_records if r.checkin_at)
-        absent_days = days_in_range - present_days
-        present_total += present_days
-        absent_total += absent_days
 
         points = db.query(models.AttendanceLocationPoint).filter(
             models.AttendanceLocationPoint.user_id == user.id,
@@ -2688,8 +2683,12 @@ def attendance_admin_summary(
         # entries. It must remain 11 for 11 active users whether the selected
         # range is one day, one week, or one month.
         "total": len(users),
-        "present": present_total if not single_day else sum(row["status"] == "Present" for row in rows),
-        "absent": absent_total if not single_day else sum(row["status"] == "Absent" for row in rows),
+        # Present/Absent are also employee counts. Across a date range, an
+        # employee is Present when they attended on at least one selected day;
+        # otherwise they are Absent. These two values therefore always add up
+        # to the active-user headcount instead of multiplying users by days.
+        "present": sum(row["present_days"] > 0 for row in rows),
+        "absent": sum(row["present_days"] == 0 for row in rows),
         "rows": rows,
     }
 
