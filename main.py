@@ -2601,6 +2601,13 @@ def attendance_admin_summary(
     records_by_user = {}
     for record in record_query.all():
         records_by_user.setdefault(record.user_id, []).append(record)
+    all_records_by_user = defaultdict(list)
+    all_record_query = db.query(models.AttendanceRecord).filter(
+        models.AttendanceRecord.user_id.in_([user.id for user in users] or [-1]),
+        models.AttendanceRecord.checkin_at.isnot(None),
+    ).order_by(models.AttendanceRecord.attendance_date.desc())
+    for record in all_record_query.all():
+        all_records_by_user[record.user_id].append(record)
 
     range_start_dt = datetime.combine(start_date, datetime.min.time())
     range_end_dt = datetime.combine(end_date + timedelta(days=1), datetime.min.time())
@@ -2627,6 +2634,19 @@ def attendance_admin_summary(
             models.AttendanceLocationPoint.captured_at < range_end_dt,
         ).all()
         max_point = max(points, key=lambda point: point.distance_from_store_m or 0) if points else None
+        # Send only lightweight record metadata with the dashboard. Selfies are
+        # still fetched on demand for the date selected by the administrator.
+        history = [
+            {
+                "id": record.id,
+                "attendance_date": record.attendance_date.isoformat(),
+                "checkin_at": record.checkin_at,
+                "checkout_at": record.checkout_at,
+                "outlet_name": stores_by_id.get(record.store_id).name
+                if stores_by_id.get(record.store_id) else None,
+            }
+            for record in all_records_by_user[user.id]
+        ]
 
         if single_day:
             record = user_records[0] if user_records else None
@@ -2635,6 +2655,7 @@ def attendance_admin_summary(
                 "outlet_name": outlet_name, "outlet_abbreviation": outlet_abbreviation,
                 "status": "Present" if record and record.checkin_at else "Absent",
                 "present_days": present_days, "days_in_range": days_in_range,
+                "history": history,
                 "checkin_at": record.checkin_at if record else None,
                 "checkout_at": record.checkout_at if record else None,
                 "route_distance_m": round(sum(point.route_distance_m or 0 for point in points), 1),
@@ -2650,6 +2671,7 @@ def attendance_admin_summary(
                 "outlet_name": outlet_name, "outlet_abbreviation": outlet_abbreviation,
                 "status": f"{present_days}/{days_in_range} Present",
                 "present_days": present_days, "days_in_range": days_in_range,
+                "history": history,
                 "checkin_at": None,
                 "checkout_at": None,
                 "route_distance_m": round(sum(point.route_distance_m or 0 for point in points), 1),
@@ -2662,7 +2684,10 @@ def attendance_admin_summary(
 
     return {
         "from_date": start_date, "to_date": end_date, "single_day": single_day, "days_in_range": days_in_range,
-        "total": len(users) * days_in_range if not single_day else len(users),
+        # This metric is a headcount, not the number of possible attendance
+        # entries. It must remain 11 for 11 active users whether the selected
+        # range is one day, one week, or one month.
+        "total": len(users),
         "present": present_total if not single_day else sum(row["status"] == "Present" for row in rows),
         "absent": absent_total if not single_day else sum(row["status"] == "Absent" for row in rows),
         "rows": rows,
