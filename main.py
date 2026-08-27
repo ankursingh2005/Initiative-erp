@@ -2773,7 +2773,16 @@ def attendance_admin_summary(
         if single_day:
             record = user_records[0] if user_records else None
             is_weekoff = user.weekoff_day == start_date.strftime("%A")
-            row_status = "Present" if record and record.checkin_at else ("Week Off" if is_weekoff else "Absent")
+            # When Admin explicitly filters by an assigned Week Off day, the
+            # table is an assignment view: show Week Off rather than the
+            # selected calendar date's attendance result. Without that filter,
+            # normal daily attendance remains Present/Week Off/Absent.
+            row_status = (
+                "Week Off" if weekoff_day
+                else "Present" if record and record.checkin_at
+                else "Week Off" if is_weekoff
+                else "Absent"
+            )
             rows.append({
                 "user_id": user.id, "username": user.username, "outlet_id": user.store_id,
                 "outlet_name": outlet_name, "outlet_abbreviation": outlet_abbreviation,
