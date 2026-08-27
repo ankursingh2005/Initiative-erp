@@ -321,4 +321,20 @@ document.addEventListener('DOMContentLoaded',()=>document.querySelector('.app-mo
 new MutationObserver(syncMobileAttendanceUser).observe($('userName'),{childList:true,subtree:true});
 syncMobileAttendanceUser();
 </script>
+<script>
+// Owner and HR inherit the Admin attendance dashboard without changing the
+// stored role (User Management must still remain unavailable to them).
+(async function enableFullAttendanceAccess() {
+  const actualRole = localStorage.getItem('role');
+  if (!['Owner', 'HR'].includes(actualRole)) return;
+  document.body.classList.add('attendance-admin', 'admin-dashboard-loading');
+  localStorage.setItem('role', 'Admin');
+  const loading = loadAdminSummary();
+  localStorage.setItem('role', actualRole);
+  await loading;
+  localStorage.setItem('role', 'Admin');
+  initializeAdminDashboard();
+  localStorage.setItem('role', actualRole);
+})();
+</script>
 </body></html>

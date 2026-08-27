@@ -584,7 +584,7 @@ async def handle_unexpected_error(request: Request, exc: Exception):
 # "static" folder sitting next to this file.
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-VALID_ROLES = ["Admin", "CategoryManager", "BrandManager", "BrandPartner", "SupportingStaff", "Accounts", "MISExecutive", "CustomerCare", "Other"]
+VALID_ROLES = ["Admin", "Owner", "HR", "CategoryManager", "BrandManager", "BrandPartner", "SupportingStaff", "Accounts", "MISExecutive", "CustomerCare", "Other"]
 
 
 def normalize_category_code(raw_value: Optional[str]) -> Optional[str]:
@@ -1096,7 +1096,7 @@ def serve_html(path: str):
 
 
 def _get_price_list_access_scope(current_user: models.User, db: Session):
-    if current_user.role in {"Admin", "Accounts", "MISExecutive"}:
+    if current_user.role in {"Admin", "Owner", "HR", "Accounts", "MISExecutive"}:
         return None
     if current_user.role in {"BrandManager", "BrandPartner"}:
         brand_ids = [user_brand.brand_id for user_brand in (getattr(current_user, "brands", []) or [])]
@@ -1154,7 +1154,7 @@ def _filter_price_list_query(query, search: Optional[str]):
 
 
 def _serialize_price_list_item(item: models.PriceListItem, current_user: models.User) -> dict:
-    full_access = current_user.role in {"Admin", "Accounts", "MISExecutive"}
+    full_access = current_user.role in {"Admin", "Owner", "HR", "Accounts", "MISExecutive"}
     brand = getattr(item, "brand", None)
     return {
         "id": item.id,
@@ -1966,6 +1966,8 @@ def signup(user: schemas.UserSignup, db: Session = Depends(get_db)):
     # --------------------------------------------------------------
     ROLE_INVITE_CODES = {
         "Admin": os.getenv("SIGNUP_CODE_ADMIN", "Initiative@#%_-Admin"),
+        "Owner": os.getenv("SIGNUP_CODE_OWNER", "Initiative@1999"),
+        "HR": os.getenv("SIGNUP_CODE_HR", "Initiative@SecureHR"),
         "Accounts": os.getenv("SIGNUP_CODE_ACCOUNTS", "Initiative/AC"),
         "MISExecutive": os.getenv("SIGNUP_CODE_MIS", "Initiative%MS"),
     }
@@ -2167,7 +2169,7 @@ def verify_own_password(
 # ============================================================
 
 def get_sales_for_user(db: Session, current_user: models.User):
-    if current_user.role in ("Admin", "Accounts", "MISExecutive"):
+    if current_user.role in ("Admin", "Owner", "HR", "Accounts", "MISExecutive"):
         return db.query(models.Sale).all()
     if current_user.role == "StoreManager":
         return db.query(models.Sale).filter(models.Sale.store_id == current_user.store_id).all()
@@ -2187,7 +2189,7 @@ def get_sales_for_user(db: Session, current_user: models.User):
 
 
 def get_claims_for_user(db: Session, current_user: models.User):
-    if current_user.role in ("Admin", "Accounts", "MISExecutive"):
+    if current_user.role in ("Admin", "Owner", "HR", "Accounts", "MISExecutive"):
         return db.query(models.ClaimHeader).all()
 
     if current_user.role in ("BrandManager", "BrandPartner"):
@@ -2222,7 +2224,7 @@ def get_claims_for_user(db: Session, current_user: models.User):
 
 
 def can_user_access_sale(db: Session, current_user: models.User, sale: models.Sale) -> bool:
-    if current_user.role in ("Admin", "Accounts", "MISExecutive"):
+    if current_user.role in ("Admin", "Owner", "HR", "Accounts", "MISExecutive"):
         return True
 
     if current_user.role == "StoreManager":
@@ -2526,7 +2528,7 @@ def list_attendance(
     current_user: models.User = Depends(auth.get_current_user),
 ):
     query = db.query(models.AttendanceRecord)
-    if current_user.role != "Admin":
+    if not auth.has_admin_access(current_user):
         query = query.filter(models.AttendanceRecord.user_id == current_user.id)
     records = query.order_by(models.AttendanceRecord.attendance_date.desc()).all()
     users = {user.id: user.username for user in db.query(models.User).all()}
@@ -2558,7 +2560,7 @@ def get_attendance_selfies(
     ).first()
     if not record:
         raise HTTPException(status_code=404, detail="Attendance record not found")
-    if current_user.role != "Admin" and record.user_id != current_user.id:
+    if not auth.has_admin_access(current_user) and record.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="You are not allowed to view these attendance images")
 
     user = db.query(models.User).filter(models.User.id == record.user_id).first()
@@ -3009,7 +3011,7 @@ def export_admin_user_attendance(
 @app.get("/api/users", response_model=List[schemas.UserAdminOut])
 def list_users_for_admin(
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.require_roles("Admin")),
+    current_user: models.User = Depends(auth.require_user_management_admin),
 ):
     users = db.query(models.User).order_by(models.User.username).all()
     return [serialize_user_with_brands(u) for u in users]
@@ -3018,7 +3020,7 @@ def list_users_for_admin(
 @app.get("/api/users/count", response_model=schemas.UserCountOut)
 def count_registered_users(
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.require_roles("Admin")),
+    current_user: models.User = Depends(auth.require_user_management_admin),
 ):
     """Total number of accounts registered on this system, plus a
     breakdown by role, shown on the Admin dashboard."""
@@ -3032,7 +3034,7 @@ def admin_reset_user_password(
     user_id: int,
     payload: schemas.AdminPasswordReset,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.require_roles("Admin")),
+    current_user: models.User = Depends(auth.require_user_management_admin),
 ):
     """Admin-only account recovery: directly set a new password for any
     user. This replaces the old email-based forgot-password flow, since
@@ -3060,7 +3062,7 @@ def update_user_assignments(
     user_id: int,
     payload: schemas.UserAssignmentUpdate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.require_roles("Admin")),
+    current_user: models.User = Depends(auth.require_user_management_admin),
 ):
     """Assign which store, category (division), and brands a user — typically
     a CategoryManager — can see on the Purchase Orders page."""
@@ -3086,7 +3088,7 @@ def update_user_assignments(
 def delete_user(
     user_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.require_roles("Admin")),
+    current_user: models.User = Depends(auth.require_user_management_admin),
 ):
     """Admin-only: permanently delete a user account, regardless of what
     they've submitted/uploaded in the past. Purchase orders require an
@@ -3183,7 +3185,7 @@ ADMIN_ONLY_STATUSES = {"Approved", "Rejected", "Requested"}
 
 
 def assert_status_transition_allowed(current_user: models.User, purchase_order: models.PurchaseOrder, new_status: str):
-    if new_status in ADMIN_ONLY_STATUSES and current_user.role != "Admin":
+    if new_status in ADMIN_ONLY_STATUSES and not auth.has_admin_access(current_user):
         raise HTTPException(
             status_code=403,
             detail="Only Admin can approve, reject, or reopen a purchase order.",
@@ -3272,7 +3274,7 @@ def send_purchase_order_whatsapp_notification(purchase_order: models.PurchaseOrd
 
 
 def can_access_purchase_order(current_user: models.User, purchase_order: models.PurchaseOrder) -> bool:
-    return current_user.role in {"Admin", "MISExecutive"} or purchase_order.submitted_by_user_id == current_user.id
+    return auth.has_admin_access(current_user) or current_user.role == "MISExecutive" or purchase_order.submitted_by_user_id == current_user.id
 
 
 # ============================================================
@@ -3599,7 +3601,7 @@ def list_purchase_orders(
     current_user: models.User = Depends(auth.get_current_user),
 ):
     query = db.query(models.PurchaseOrder)
-    if current_user.role not in {"Admin", "MISExecutive"}:
+    if not auth.has_admin_access(current_user) and current_user.role != "MISExecutive":
         query = query.filter(models.PurchaseOrder.submitted_by_user_id == current_user.id)
     purchase_orders = query.order_by(models.PurchaseOrder.created_date.desc()).all()
     return [serialize_purchase_order(item) for item in purchase_orders]
@@ -3819,7 +3821,7 @@ def list_schemes(
     query = db.query(models.Scheme)
     if status:
         query = query.filter(models.Scheme.status == status)
-    if current_user.role != "Admin":
+    if not auth.has_admin_access(current_user):
         # Draft schemes hold whatever a document upload extracted and
         # haven't been reviewed yet. Only Admin should see those fields -
         # everyone else (including the promoter who attached the
@@ -3838,7 +3840,7 @@ def list_my_scheme_attachments(
     etc.) - those stay hidden until an Admin reviews and activates the
     Draft. Non-admins only ever see their own uploads."""
     query = db.query(models.SchemeAttachment).order_by(models.SchemeAttachment.id.desc())
-    if current_user.role != "Admin":
+    if not auth.has_admin_access(current_user):
         query = query.filter(models.SchemeAttachment.uploaded_by_user_id == current_user.id)
 
     rows = []
@@ -3997,7 +3999,7 @@ def upload_scheme_document(
     db.add(attachment)
     db.commit()
 
-    if current_user.role == "Admin":
+    if auth.has_admin_access(current_user):
         # Admin uploads still extract right away, same as before.
         extraction = extract_scheme_from_document(db, filename, content_type, raw_bytes)
         apply_scheme_extraction(db, db_scheme, attachment, extraction)
@@ -4015,7 +4017,7 @@ def upload_scheme_document(
             "Document attached and scheme fields pre-filled. Review and Activate when ready."
             if attachment.extraction_status == "Extracted"
             else "Document attached. An Admin will review it shortly."
-            if current_user.role != "Admin"
+            if not auth.has_admin_access(current_user)
             else "Document attached, but automatic extraction did not complete - fill the scheme fields manually before activating."
         ),
     }
@@ -4273,7 +4275,7 @@ def create_sale(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    allowed_roles = {"Admin", "StoreManager", "CategoryManager", "BrandManager", "BrandPartner", "Super Admin", "Management", "Branch Manager", "Sales Executive", "Scheme Manager"}
+    allowed_roles = {"Admin", "Owner", "HR", "StoreManager", "CategoryManager", "BrandManager", "BrandPartner", "Super Admin", "Management", "Branch Manager", "Sales Executive", "Scheme Manager"}
     if current_user.role not in allowed_roles:
         raise HTTPException(status_code=403, detail="You are not allowed to create sales")
 
@@ -4352,7 +4354,7 @@ def update_sale(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    if current_user.role not in ("Admin", "MISExecutive", "CategoryManager"):
+    if not auth.has_admin_access(current_user) and current_user.role not in ("MISExecutive", "CategoryManager"):
         raise HTTPException(status_code=403, detail="You are not allowed to edit sales")
 
     db_sale = db.query(models.Sale).filter(models.Sale.id == sale_id).first()
@@ -4430,7 +4432,7 @@ def delete_sale(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    if current_user.role != "Admin":
+    if not auth.has_admin_access(current_user):
         raise HTTPException(status_code=403, detail="You are not allowed to delete sales")
 
     sale = db.query(models.Sale).filter(models.Sale.id == sale_id).first()
@@ -5353,7 +5355,7 @@ def daily_profitability_meta(
         "date_to": date_bounds[1] if has_data else None,
         "categories": DP_CATEGORIES,
         "stores": stores,
-        "can_upload": current_user.role in ("Admin", "MISExecutive"),
+        "can_upload": auth.has_admin_access(current_user) or current_user.role == "MISExecutive",
     }
 
 
@@ -7361,7 +7363,7 @@ def ageing_stock_meta(
 ):
     upload_record = db.query(models.AgeingStockUpload).order_by(models.AgeingStockUpload.id.desc()).first()
     if not upload_record:
-        return {"has_data": False, "last_upload": None, "can_upload": current_user.role == "Admin"}
+        return {"has_data": False, "last_upload": None, "can_upload": auth.has_admin_access(current_user)}
 
     return {
         "has_data": True,
@@ -7373,7 +7375,7 @@ def ageing_stock_meta(
             "location_sheets_found": (upload_record.location_sheets_found or "").split(",") if upload_record.location_sheets_found else [],
             "unclassified_count": upload_record.unclassified_count,
         },
-        "can_upload": current_user.role == "Admin",
+        "can_upload": auth.has_admin_access(current_user),
     }
 
 
@@ -8616,7 +8618,7 @@ def analytics_meta(
         if row[0]
     ]
     if not upload_record:
-        return {"has_data": False, "divisions": [], "last_upload": None, "can_upload": current_user.role == "Admin"}
+        return {"has_data": False, "divisions": [], "last_upload": None, "can_upload": auth.has_admin_access(current_user)}
 
     return {
         "has_data": True,
@@ -8630,7 +8632,7 @@ def analytics_meta(
             "date_from": upload_record.date_from,
             "date_to": upload_record.date_to,
         },
-        "can_upload": current_user.role == "Admin",
+        "can_upload": auth.has_admin_access(current_user),
     }
 
 

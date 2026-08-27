@@ -23,6 +23,10 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", str(6
 # This tells FastAPI's /docs page where to send username/password to get a token.
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
+# Owner and HR have the same application-wide access as Admin. User
+# Management uses a separate strict guard below and remains Admin-only.
+ADMIN_ACCESS_ROLES = {"Admin", "Owner", "HR"}
+
 
 def hash_password(password: str) -> str:
     # Keep the work factor configurable. Ten rounds remains deliberately
@@ -70,10 +74,29 @@ def require_roles(*allowed_roles):
     Example: Depends(require_roles("Admin"))
     """
     def role_checker(current_user: models.User = Depends(get_current_user)):
-        if current_user.role not in allowed_roles:
+        inherited_admin_access = (
+            current_user.role in {"Owner", "HR"} and "Admin" in allowed_roles
+        )
+        if current_user.role not in allowed_roles and not inherited_admin_access:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Role '{current_user.role}' is not allowed to do this. Allowed: {allowed_roles}",
             )
         return current_user
     return role_checker
+
+
+def require_user_management_admin(
+    current_user: models.User = Depends(get_current_user),
+):
+    """Strict guard for account administration; Owner and HR are excluded."""
+    if current_user.role != "Admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User Management is available only to Admin",
+        )
+    return current_user
+
+
+def has_admin_access(user: models.User) -> bool:
+    return user.role in ADMIN_ACCESS_ROLES

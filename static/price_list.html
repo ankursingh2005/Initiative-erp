@@ -605,7 +605,7 @@
       const item = items.find(i => i.id === itemId);
       if (!item) return;
       document.getElementById('itemDialogTitle').textContent = 'Edit Item';
-      document.getElementById('itemDeleteBtn').classList.toggle('hidden', role !== 'Admin');
+      document.getElementById('itemDeleteBtn').classList.toggle('hidden', !['Admin', 'Owner', 'HR'].includes(role));
       document.getElementById('itemBrandSelect').value = item.brand_id;
       document.getElementById('itemBrandSelect').disabled = true;
       document.getElementById('itemDetailsInput').value = item.item_details;
