@@ -2444,7 +2444,9 @@ def save_attendance(
     setattr(record, f"{prefix}_selfie", attendance.selfie)
     setattr(record, f"{prefix}_latitude", attendance.latitude)
     setattr(record, f"{prefix}_longitude", attendance.longitude)
-    setattr(record, f"{prefix}_distance_m", attendance.distance_m)
+    # Store the distance calculated from the submitted coordinates and the
+    # outlet coordinates, never the phone's claimed distance value.
+    setattr(record, f"{prefix}_distance_m", actual_distance)
     setattr(record, f"{prefix}_accuracy_m", attendance.accuracy_m)
     db.commit()
     db.refresh(record)
@@ -2547,7 +2549,7 @@ def save_attendance_location(
     location = models.AttendanceLocationPoint(
         user_id=current_user.id, store_id=store.id, captured_at=captured_at,
         latitude=point.latitude, longitude=point.longitude,
-        accuracy_m=point.accuracy_m, distance_from_store_m=point.distance_from_store_m,
+        accuracy_m=point.accuracy_m, distance_from_store_m=actual_distance,
         route_distance_m=route_distance,
     )
     db.add(location)
@@ -2624,6 +2626,21 @@ def attendance_admin_summary(
             models.AttendanceLocationPoint.captured_at < range_end_dt,
         ).all()
         max_point = max(points, key=lambda point: point.distance_from_store_m or 0) if points else None
+        punch_distances = [
+            (distance, timestamp)
+            for record in user_records
+            for distance, timestamp in (
+                (record.checkin_distance_m, record.checkin_at),
+                (record.checkout_distance_m, record.checkout_at),
+            )
+            if distance is not None
+        ]
+        max_punch = max(punch_distances, key=lambda item: item[0]) if punch_distances else (0, None)
+        max_point_distance = max_point.distance_from_store_m if max_point and max_point.distance_from_store_m else 0
+        if max_punch[0] >= max_point_distance:
+            maximum_distance, maximum_distance_at = max_punch
+        else:
+            maximum_distance, maximum_distance_at = max_point_distance, max_point.captured_at
         # Send only lightweight record metadata with the dashboard. Selfies are
         # still fetched on demand for the date selected by the administrator.
         history = [
@@ -2649,8 +2666,8 @@ def attendance_admin_summary(
                 "checkin_at": record.checkin_at if record else None,
                 "checkout_at": record.checkout_at if record else None,
                 "route_distance_m": round(sum(point.route_distance_m or 0 for point in points), 1),
-                "max_distance_from_store_m": round(max_point.distance_from_store_m, 1) if max_point and max_point.distance_from_store_m else 0,
-                "max_distance_at": max_point.captured_at if max_point else None,
+                "max_distance_from_store_m": round(maximum_distance, 1),
+                "max_distance_at": maximum_distance_at,
                 "last_latitude": points[-1].latitude if points else None,
                 "last_longitude": points[-1].longitude if points else None,
                 "location_points": len(points),
@@ -2665,8 +2682,8 @@ def attendance_admin_summary(
                 "checkin_at": None,
                 "checkout_at": None,
                 "route_distance_m": round(sum(point.route_distance_m or 0 for point in points), 1),
-                "max_distance_from_store_m": round(max_point.distance_from_store_m, 1) if max_point and max_point.distance_from_store_m else 0,
-                "max_distance_at": max_point.captured_at if max_point else None,
+                "max_distance_from_store_m": round(maximum_distance, 1),
+                "max_distance_at": maximum_distance_at,
                 "last_latitude": points[-1].latitude if points else None,
                 "last_longitude": points[-1].longitude if points else None,
                 "location_points": len(points),
