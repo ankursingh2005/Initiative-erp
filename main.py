@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Query, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse, Response, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, RedirectResponse, StreamingResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from sqlalchemy import inspect, text, func, or_
@@ -48,7 +48,7 @@ def verified_attendance_time(_device_time: datetime) -> datetime:
 import smtplib
 from email.mime.text import MIMEText
 from dotenv import load_dotenv
-from openpyxl import load_workbook
+from openpyxl import load_workbook, Workbook
 
 load_dotenv()  # reads a local .env file (if present) into os.environ before
                 # anything below calls os.getenv() - e.g. SMTP_*, SECRET_KEY.
@@ -2703,6 +2703,221 @@ def attendance_admin_summary(
         "absent": sum(row["present_days"] == 0 for row in rows),
         "rows": rows,
     }
+
+
+@app.get("/api/attendance/admin-export")
+def export_admin_attendance(
+    export_format: str = Query("xlsx", alias="format"),
+    attendance_date: date = Query(..., alias="date"),
+    store_id: Optional[int] = Query(None),
+    status: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_roles("Admin")),
+):
+    """Download the selected day's admin attendance table as Excel or PDF."""
+    if export_format not in {"xlsx", "pdf"}:
+        raise HTTPException(status_code=400, detail="Format must be xlsx or pdf")
+    user_query = db.query(models.User).filter(models.User.status == "Active")
+    if store_id is not None:
+        user_query = user_query.filter(models.User.store_id == store_id)
+    users = user_query.order_by(models.User.username).all()
+    user_ids = [user.id for user in users]
+    records = db.query(models.AttendanceRecord).filter(
+        models.AttendanceRecord.user_id.in_(user_ids or [-1]),
+        models.AttendanceRecord.attendance_date == attendance_date,
+    ).all()
+    records_by_user = {record.user_id: record for record in records}
+    stores = {store.id: store for store in db.query(models.Store).all()}
+    start_dt = datetime.combine(attendance_date, datetime.min.time())
+    end_dt = start_dt + timedelta(days=1)
+    rows = []
+    for user in users:
+        record = records_by_user.get(user.id)
+        row_status = "Present" if record and record.checkin_at else "Absent"
+        if status in {"Present", "Absent"} and row_status != status:
+            continue
+        points = db.query(models.AttendanceLocationPoint.distance_from_store_m).filter(
+            models.AttendanceLocationPoint.user_id == user.id,
+            models.AttendanceLocationPoint.captured_at >= start_dt,
+            models.AttendanceLocationPoint.captured_at < end_dt,
+        ).all()
+        distances = [value for (value,) in points if value is not None]
+        if record:
+            distances.extend(value for value in (record.checkin_distance_m, record.checkout_distance_m) if value is not None)
+        store = stores.get(user.store_id)
+        rows.append([
+            user.username,
+            row_status,
+            record.checkin_at.strftime("%I:%M %p") if record and record.checkin_at else "-",
+            record.checkout_at.strftime("%I:%M %p") if record and record.checkout_at else "-",
+            store.name if store else "Unassigned",
+            f"{round(max(distances, default=0), 1)} m",
+        ])
+    headers = ["Employee", "Status", "Check-in", "Check-out", "Outlet", "Distance"]
+    filename_base = f"attendance-{attendance_date.isoformat()}"
+    if export_format == "xlsx":
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "Attendance"
+        sheet.append(["Attendance Date", attendance_date.strftime("%d-%m-%Y")])
+        sheet.append([])
+        sheet.append(headers)
+        for row in rows:
+            sheet.append(row)
+        for cell in sheet[3]:
+            cell.font = cell.font.copy(bold=True)
+        for column, width in zip("ABCDEF", [26, 14, 15, 15, 22, 16]):
+            sheet.column_dimensions[column].width = width
+        output = BytesIO()
+        workbook.save(output)
+        output.seek(0)
+        return StreamingResponse(output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f'attachment; filename="{filename_base}.xlsx"'})
+
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    output = BytesIO()
+    document = SimpleDocTemplate(output, pagesize=landscape(A4), rightMargin=12 * mm, leftMargin=12 * mm, topMargin=12 * mm, bottomMargin=12 * mm)
+    styles = getSampleStyleSheet()
+    date_style = styles["Normal"].clone("AttendanceReportDate")
+    date_style.alignment = 1
+    date_style.spaceBefore = 4
+    elements = [
+        Paragraph("Attendance Report", styles["Title"]),
+        Paragraph(attendance_date.strftime("%d %B %Y"), date_style),
+        Spacer(1, 6 * mm),
+    ]
+    table = Table([headers] + rows, repeatRows=1, colWidths=[48 * mm, 28 * mm, 30 * mm, 30 * mm, 42 * mm, 30 * mm])
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#155eef")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#d0d5dd")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 7),
+        ("TOPPADDING", (0, 0), (-1, -1), 7),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+    ]))
+    elements.append(table)
+    document.build(elements)
+    output.seek(0)
+    return StreamingResponse(output, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{filename_base}.pdf"'})
+
+
+@app.get("/api/attendance/admin-user-export")
+def export_admin_user_attendance(
+    username: str = Query(...),
+    export_format: str = Query("xlsx", alias="format"),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_roles("Admin")),
+):
+    """Download one employee's complete attendance history as Excel or PDF."""
+    if export_format not in {"xlsx", "pdf"}:
+        raise HTTPException(status_code=400, detail="Format must be xlsx or pdf")
+    user = db.query(models.User).filter(models.User.username == username).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    records = db.query(models.AttendanceRecord).filter(
+        models.AttendanceRecord.user_id == user.id
+    ).order_by(models.AttendanceRecord.attendance_date.desc()).all()
+    stores = {store.id: store.name for store in db.query(models.Store).all()}
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Full Attendance"
+    sheet.append(["Employee", user.username])
+    sheet.append(["Generated at", datetime.now(INDIA_TZ).strftime("%d-%m-%Y %I:%M %p")])
+    sheet.append([])
+    headers = [
+        "Date", "Day", "Status", "Punch In", "Punch Out", "Working Hours",
+        "Outlet", "Punch In Distance", "Punch Out Distance", "Max Distance",
+        "Punch In Photo", "Punch Out Photo",
+    ]
+    sheet.append(headers)
+    export_rows = []
+    for record in records:
+        start_dt = datetime.combine(record.attendance_date, datetime.min.time())
+        end_dt = start_dt + timedelta(days=1)
+        tracked = db.query(models.AttendanceLocationPoint.distance_from_store_m).filter(
+            models.AttendanceLocationPoint.user_id == user.id,
+            models.AttendanceLocationPoint.captured_at >= start_dt,
+            models.AttendanceLocationPoint.captured_at < end_dt,
+        ).all()
+        distances = [value for (value,) in tracked if value is not None]
+        distances.extend(value for value in (record.checkin_distance_m, record.checkout_distance_m) if value is not None)
+        if record.checkin_at and record.checkout_at:
+            minutes = max(0, int((record.checkout_at - record.checkin_at).total_seconds() // 60))
+            working_hours = f"{minutes // 60:02d}:{minutes % 60:02d}"
+        elif record.checkin_at:
+            working_hours = "In progress"
+        else:
+            working_hours = "-"
+        row_values = [
+            record.attendance_date.strftime("%d-%m-%Y"),
+            record.attendance_date.strftime("%A"),
+            "Present" if record.checkin_at else "Absent",
+            record.checkin_at.strftime("%I:%M %p") if record.checkin_at else "-",
+            record.checkout_at.strftime("%I:%M %p") if record.checkout_at else "-",
+            working_hours,
+            stores.get(record.store_id, "Unassigned"),
+            f"{round(record.checkin_distance_m or 0, 1)} m",
+            f"{round(record.checkout_distance_m or 0, 1)} m",
+            f"{round(max(distances, default=0), 1)} m",
+            "Yes" if record.checkin_selfie else "No",
+            "Yes" if record.checkout_selfie else "No",
+        ]
+        export_rows.append(row_values)
+        sheet.append(row_values)
+    safe_username = re.sub(r"[^A-Za-z0-9_-]+", "-", user.username).strip("-") or "employee"
+    if export_format == "pdf":
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A3, landscape
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib.units import mm
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        output = BytesIO()
+        document = SimpleDocTemplate(output, pagesize=landscape(A3), rightMargin=10 * mm, leftMargin=10 * mm, topMargin=10 * mm, bottomMargin=10 * mm)
+        styles = getSampleStyleSheet()
+        subtitle = styles["Normal"].clone("EmployeeAttendanceSubtitle")
+        subtitle.alignment = 1
+        elements = [
+            Paragraph(f"Attendance Report - {user.username}", styles["Title"]),
+            Paragraph("Complete attendance history", subtitle),
+            Spacer(1, 5 * mm),
+        ]
+        table = Table([headers] + export_rows, repeatRows=1, colWidths=[25 * mm, 27 * mm, 20 * mm, 25 * mm, 25 * mm, 28 * mm, 36 * mm, 31 * mm, 32 * mm, 28 * mm, 27 * mm, 28 * mm])
+        table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#155eef")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#d0d5dd")),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 4),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ]))
+        elements.append(table)
+        document.build(elements)
+        output.seek(0)
+        return StreamingResponse(output, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{safe_username}-full-attendance.pdf"'})
+    for cell in sheet[4]:
+        cell.font = cell.font.copy(bold=True)
+    widths = [14, 14, 12, 15, 15, 17, 22, 20, 21, 17, 18, 19]
+    for index, width in enumerate(widths, start=1):
+        sheet.column_dimensions[chr(64 + index)].width = width
+    sheet.freeze_panes = "A5"
+    output = BytesIO()
+    workbook.save(output)
+    output.seek(0)
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{safe_username}-full-attendance.xlsx"'},
+    )
 
 
 @app.get("/api/users", response_model=List[schemas.UserAdminOut])
