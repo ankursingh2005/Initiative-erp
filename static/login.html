@@ -235,8 +235,8 @@
       <label for="password">Password</label>
       <input id="password" name="password" type="password" placeholder="Enter password" autocomplete="current-password" />
 
-      <button type="button" class="submit" onclick="login()">
-        Sign in
+      <button id="loginButton" type="button" class="submit" onclick="login()">
+        <span id="loginButtonText">Sign in</span>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>
       </button>
       <div id="msg" class="msg"></div>
@@ -353,6 +353,9 @@
     document.addEventListener('keydown', event => { if (event.key === 'Escape') closePasswordReset(); });
 
     async function login() {
+      const button = document.getElementById('loginButton');
+      const buttonText = document.getElementById('loginButtonText');
+      if (button.disabled) return;
       const username = document.getElementById('username').value;
       const password = document.getElementById('password').value;
       const msg = document.getElementById('msg');
@@ -362,23 +365,30 @@
       form.append('username', username);
       form.append('password', password);
 
-      const response = await fetch(appUrl('/auth/login'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: form.toString()
-      });
-
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        msg.textContent = data.detail || 'Login failed';
-        return;
+      button.disabled = true;
+      buttonText.textContent = 'Signing in...';
+      try {
+        const response = await fetch(appUrl('/auth/login'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: form.toString()
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          msg.textContent = data.detail || 'Login failed';
+          return;
+        }
+        localStorage.setItem('token', data.access_token);
+        localStorage.setItem('role', data.role);
+        localStorage.setItem('username', data.username);
+        sessionStorage.setItem('showLoginSuccess', '1');
+        window.location.replace(appUrl(data.role === 'BrandPartner' ? '/attendance' : '/home'));
+      } catch (error) {
+        msg.textContent = 'Unable to sign in. Check your connection and try again.';
+      } finally {
+        button.disabled = false;
+        buttonText.textContent = 'Sign in';
       }
-
-      localStorage.setItem('token', data.access_token);
-      localStorage.setItem('role', data.role);
-      localStorage.setItem('username', data.username);
-      sessionStorage.setItem('showLoginSuccess', '1');
-      window.location.href = appUrl(data.role === 'BrandPartner' ? '/attendance' : '/home');
     }
 
     document.getElementById('password').addEventListener('keydown', (e) => {

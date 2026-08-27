@@ -301,7 +301,7 @@
         <div id="brandSummary" class="selected-list">No brands selected.</div>
       </div>
 
-      <button type="submit">Create Account</button>
+      <button id="signupButton" type="submit">Create Account</button>
       <div id="msg" class="msg"></div>
     </form>
     <a href="login">Already have an account? Login</a>
@@ -402,6 +402,8 @@
 
     async function signup(event) {
       event.preventDefault();
+      const button = document.getElementById("signupButton");
+      if (button.disabled) return;
       const msg = document.getElementById("msg");
       msg.textContent = "";
       const role = document.getElementById("role").value;
@@ -452,20 +454,30 @@
         payload.brand_ids = Array.from(document.getElementById("brandSelect").selectedOptions).map(o => Number(o.value));
       }
 
-      const response = await fetch(appUrl('/auth/signup'), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        msg.textContent = data.detail || "Signup failed";
-        return;
+      button.disabled = true;
+      button.textContent = "Creating account...";
+      try {
+        const response = await fetch(appUrl('/auth/signup'), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          msg.textContent = data.detail || "Signup failed";
+          return;
+        }
+        localStorage.setItem('token', data.access_token);
+        localStorage.setItem('role', data.role);
+        localStorage.setItem('username', data.username);
+        sessionStorage.setItem('showLoginSuccess', '1');
+        window.location.replace(appUrl(data.role === 'BrandPartner' ? '/attendance' : '/home'));
+      } catch (error) {
+        msg.textContent = "Unable to create the account. Check your connection and try again.";
+      } finally {
+        button.disabled = false;
+        button.textContent = "Create Account";
       }
-      msg.style.color = "#2e7d32";
-      msg.textContent = "Account created. You can now log in.";
-      showSignupSuccessPopup();
-      signupSuccessTimeout = setTimeout(() => window.location.href = appUrl('/login'), 1300);
     }
 
     loadOptions();

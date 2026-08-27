@@ -1946,7 +1946,7 @@ def offline_page():
 # AUTH: SIGNUP / LOGIN / CURRENT USER
 # ============================================================
 
-@app.post("/auth/signup", response_model=schemas.UserOut)
+@app.post("/auth/signup", response_model=schemas.Token)
 def signup(user: schemas.UserSignup, db: Session = Depends(get_db)):
     # --------------------------------------------------------------
     # Invite-code gate: the signup page is public (anyone can reach it
@@ -2053,7 +2053,15 @@ def signup(user: schemas.UserSignup, db: Session = Depends(get_db)):
             db.add(models.UserBrand(user_id=db_user.id, brand_id=brand_id))
         db.commit()
 
-    return db_user
+    # Sign the newly created account in immediately. This avoids forcing the
+    # user through a second form and a second password-hash operation.
+    token = auth.create_access_token({"user_id": db_user.id, "role": db_user.role})
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "role": db_user.role,
+        "username": db_user.username,
+    }
 
 
 @app.post("/auth/login", response_model=schemas.Token)

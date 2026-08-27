@@ -25,7 +25,11 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 
 def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    # Keep the work factor configurable. Ten rounds remains deliberately
+    # expensive for attackers while avoiding the noticeable multi-second
+    # signup delay seen on small hosted instances.
+    rounds = max(10, int(os.getenv("BCRYPT_ROUNDS", "10")))
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=rounds)).decode("utf-8")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
