@@ -36,20 +36,15 @@ def india_today() -> date:
     return datetime.now(INDIA_TZ).date()
 
 
-ATTENDANCE_CLOCK_TOLERANCE_SECONDS = 5 * 60
+def verified_attendance_time(_device_time: datetime) -> datetime:
+    """Return authoritative server IST without trusting the device clock.
 
-
-def verified_attendance_time(device_time: datetime) -> datetime:
-    """Return authoritative server IST and reject a manipulated device clock."""
-    submitted_time = india_datetime(device_time)
-    server_time = datetime.now(INDIA_TZ).replace(tzinfo=None)
-    clock_difference = abs((submitted_time - server_time).total_seconds())
-    if clock_difference > ATTENDANCE_CLOCK_TOLERANCE_SECONDS:
-        raise HTTPException(
-            status_code=400,
-            detail="Attendance blocked: your device date or time is incorrect. Enable automatic date and time, then try again.",
-        )
-    return server_time
+    Comparing the two clocks caused valid attendance to be rejected when a
+    browser or hosting instance had clock drift. Ignoring the submitted value
+    is both more reliable and more secure: changing a phone's date or time can
+    no longer backdate or forward-date the saved attendance record.
+    """
+    return datetime.now(INDIA_TZ).replace(tzinfo=None)
 import smtplib
 from email.mime.text import MIMEText
 from dotenv import load_dotenv
@@ -2424,8 +2419,8 @@ def save_attendance(
     allowed_radius = store.geofence_radius_m or 100
     if actual_distance > allowed_radius:
         raise HTTPException(status_code=403, detail=f"Attendance blocked: you are {round(actual_distance)} m from {store.name}; maximum allowed distance is {round(allowed_radius)} m")
-    # Never trust the phone clock as the saved punch time.  It is checked only
-    # as an anti-tampering signal; the database always receives server IST.
+    # Never trust the phone clock as the saved punch time. The database always
+    # receives authoritative server IST.
     captured_at = verified_attendance_time(attendance.captured_at)
     record = db.query(models.AttendanceRecord).filter(
         models.AttendanceRecord.user_id == current_user.id,
