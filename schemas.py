@@ -308,6 +308,16 @@ class AdminPasswordReset(BaseModel):
     new_password: str
 
 
+class PasswordResetRequest(BaseModel):
+    identifier: str
+
+
+class PasswordResetConfirm(BaseModel):
+    identifier: str
+    code: str
+    new_password: str
+
+
 class PasswordVerify(BaseModel):
     """Re-enter-password gate before revealing something sensitive (e.g.
     the User Management table) - checked against the logged-in user's own

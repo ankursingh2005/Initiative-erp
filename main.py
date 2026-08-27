@@ -21,6 +21,8 @@ from urllib.request import Request, urlopen
 from uuid import uuid4
 import base64
 import math
+import secrets
+import hashlib
 
 INDIA_TZ = timezone(timedelta(hours=5, minutes=30))
 
@@ -2074,6 +2076,63 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         "role": user.role,
         "username": user.username,
     }
+
+
+@app.post("/auth/password-reset/request")
+def request_password_reset(payload: schemas.PasswordResetRequest, db: Session = Depends(get_db)):
+    identifier = payload.identifier.strip()
+    user = db.query(models.User).filter(
+        (models.User.username == identifier) | (models.User.email == identifier)
+    ).first()
+    # Return the same message for unknown accounts to prevent account discovery.
+    if not user or not user.email or user.status != "Active":
+        return {"message": "If the account exists, a verification code has been sent to its registered email."}
+    smtp_password = os.getenv("SMTP_PASSWORD")
+    if not smtp_password:
+        raise HTTPException(status_code=503, detail="Password reset email is unavailable. Please contact your Admin.")
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    user.reset_token = hashlib.sha256(code.encode("utf-8")).hexdigest()
+    user.reset_token_expires = datetime.utcnow() + timedelta(minutes=15)
+    db.commit()
+    message = MIMEText(
+        f"Your Initiative ERP password reset code is: {code}\n\n"
+        "This code expires in 15 minutes. If you did not request it, ignore this email."
+    )
+    message["Subject"] = "Initiative ERP password reset code"
+    message["From"] = os.getenv("SMTP_FROM", "initiative.lucknow@gmail.com")
+    message["To"] = user.email
+    try:
+        with smtplib.SMTP(os.getenv("SMTP_HOST", "smtp.gmail.com"), int(os.getenv("SMTP_PORT", "587")), timeout=15) as server:
+            server.starttls()
+            server.login(os.getenv("SMTP_USER", "initiative.lucknow@gmail.com"), smtp_password)
+            server.send_message(message)
+    except Exception:
+        user.reset_token = None
+        user.reset_token_expires = None
+        db.commit()
+        raise HTTPException(status_code=503, detail="Unable to send the reset email. Please try again or contact your Admin.")
+    return {"message": "If the account exists, a verification code has been sent to its registered email."}
+
+
+@app.post("/auth/password-reset/confirm")
+def confirm_password_reset(payload: schemas.PasswordResetConfirm, db: Session = Depends(get_db)):
+    identifier = payload.identifier.strip()
+    if len(payload.new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must contain at least 8 characters")
+    user = db.query(models.User).filter(
+        (models.User.username == identifier) | (models.User.email == identifier)
+    ).first()
+    code_hash = hashlib.sha256(payload.code.strip().encode("utf-8")).hexdigest()
+    if (
+        not user or not user.reset_token or not secrets.compare_digest(user.reset_token, code_hash)
+        or not user.reset_token_expires or user.reset_token_expires < datetime.utcnow()
+    ):
+        raise HTTPException(status_code=400, detail="The verification code is invalid or expired")
+    user.password_hash = auth.hash_password(payload.new_password)
+    user.reset_token = None
+    user.reset_token_expires = None
+    db.commit()
+    return {"message": "Password reset successfully. You can now sign in."}
 
 
 @app.get("/me", response_model=schemas.UserOut)
@@ -4955,7 +5014,7 @@ def build_daily_profitability_workbook(merged_items: list, period_label: str) ->
 # shares the most name-tokens with it, and that attribution is listed in
 # "review_notes" so Admin can sanity-check anything non-obvious.
 
-DP_CATEGORIES = ["HA", "HE", "Computer", "Mobile", "Digital Camera", "Other"]
+DP_CATEGORIES = ["HA", "HE", "Computer", "Mobile", "Digital Camera", "Accessories", "Other"]
 
 # Busy's Bill-wise Profitability export is GST-exclusive. Every Sale Amount
 # and Purchase Price in the Daily Profitability report/dashboard is grossed
@@ -4990,15 +5049,17 @@ def dp_item_similarity(a: Optional[str], b: Optional[str]) -> float:
 
 # Accessories that ride along with a Mobile-category sale but are not a
 # phone/tablet themselves - adapters, cables, converters, speakers, etc.
-# These are pulled out into "Other" so the Mobile section only ever holds
-# actual handsets/tablets, never their accessories.
+# These are pulled out into "Accessories" so product-brand checks cannot
+# sweep them into Computer/Mobile and the report keeps accessories separate
+# from genuinely unclassified "Other" items.
 DP_ACCESSORY_KEYWORDS = (
     "ADAPTER", "ADAPTOR", "CABLE", "CONVERTER", "CONVERTOR", "CHARGER",
     "HDMI", "POWER BANK", "POWERBANK", "EARPHONE", "HEADPHONE",
     "EARBUD", "EARBUDS", "BUDS", "BATTERY",
     "NECK BAND", "NECKBAND", "NECK-BAND",
     "SMART WATCH", "SMARTWATCH", "TEMPERED GLASS", "SCREEN GUARD",
-    "MOBILE COVER", "BACK COVER", "PENDRIVE", "MEMORY CARD", "OTG",
+    "MOBILE COVER", "BACK COVER", "PENDRIVE", "PEN DRIVE", "FLASH DRIVE",
+    "USB DRIVE", "MEMORY CARD", "OTG",
     "KEYBOARD", "MOUSE",
     # Small laptop/desktop accessory, not a computer unit itself (e.g.
     # "Laptop Fan", "HP Laptop Fan Cooler") - without this it falls through
@@ -5052,7 +5113,7 @@ def dp_categorize(item_name: Optional[str]) -> str:
     # so e.g. an HP keyboard or a Lenovo mouse never gets swept into Computer
     # just because the brand also makes laptops.
     if any(k in n for k in DP_ACCESSORY_KEYWORDS):
-        return "Other"
+        return "Accessories"
 
     laptop_keywords = (
         "DELL", "LAPTOP", "BACK PACK", "BACKPACK", "LENOVO", "ASUS", "ACER",
@@ -5075,6 +5136,9 @@ def dp_categorize(item_name: Optional[str]) -> str:
         " FAN ", " WM ", "WASHING MACHINE", "MIXER GRINDER", "INDUCTION",
         "IN ICT", "CHIMNEY", "DISHWASHER", "VACUUM CLEANER", "AIR PURIFIER",
         "ROOM HEATER", "IRON BOX", "STEAM IRON", "AQUAGUARD", " RO ",
+        # Drinking-water and small kitchen appliances. These explicit product
+        # types must win regardless of brand (e.g. Voltas/Bajaj).
+        "WATER DISPENSER", "SANDWICH TOASTER",
         # Bare "IRON" (any brand - dry iron, steam iron, curling iron,
         # garment iron, etc.) as a standalone word, not just the two
         # specific compounds above.

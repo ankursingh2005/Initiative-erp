@@ -158,6 +158,20 @@
     .links a { color: var(--ink); text-decoration: none; font-weight: 700; font-size: 13.5px; }
     .links a:hover { text-decoration: underline; }
     .hint { margin-top: 10px; text-align: center; font-size: 12px; color: #8a8f99; }
+    .reset-link { display:block; width:100%; margin-top:12px; padding:0; border:0; color:var(--brand); background:none; cursor:pointer; font:700 13px inherit; text-align:center; }
+    .reset-link:hover { text-decoration:underline; }
+    .reset-modal { position:fixed; inset:0; z-index:20; display:none; align-items:center; justify-content:center; padding:20px; background:rgba(16,24,40,.62); backdrop-filter:blur(3px); }
+    .reset-modal.show { display:flex; }
+    .reset-dialog { width:min(100%,475px); max-height:92vh; overflow:auto; padding:30px 34px; border-radius:17px; background:#fff; box-shadow:0 28px 80px rgba(16,24,40,.35); }
+    .reset-dialog h2 { margin:0 0 8px; color:var(--ink); font-size:23px; }
+    .reset-dialog>p { margin:0 0 20px; color:var(--ink-soft); font-size:14px; line-height:1.55; }
+    .reset-dialog label { color:#667085; text-transform:none; letter-spacing:0; font-size:13px; }
+    .reset-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:22px; }
+    .reset-actions button { min-height:48px; padding:11px 18px; border-radius:9px; border:1px solid var(--line); background:#fff; cursor:pointer; font:800 14px inherit; }
+    .reset-actions .reset-primary { color:#fff; border-color:var(--brand); background:var(--brand); }
+    .reset-status { margin-top:13px; font-size:13px; line-height:1.45; color:#c0392b; }
+    .reset-status.ok { color:#087f5b; }
+    .reset-step[hidden] { display:none; }
 
     @media (max-width: 1100px), (hover: none) and (pointer: coarse) {
       html,body { height:auto; min-height:100%; }
@@ -228,7 +242,31 @@
       <div id="msg" class="msg"></div>
 
       <div class="links"><a href="signup">Create a new account</a></div>
-      <p class="hint">Forgot your password? Ask your Admin to reset it for you.</p>
+      <button type="button" class="reset-link" onclick="openPasswordReset()">Contact your admin to forgot password</button>
+    </div>
+  </div>
+
+  <div id="resetModal" class="reset-modal" role="dialog" aria-modal="true" aria-labelledby="resetTitle">
+    <div class="reset-dialog">
+      <h2 id="resetTitle">Reset password</h2>
+      <p id="resetDescription">Enter your username or registered email to receive a verification code.</p>
+      <div id="resetRequestStep" class="reset-step">
+        <label for="resetIdentifier">Username / Email</label>
+        <input id="resetIdentifier" type="text" autocomplete="username" placeholder="Enter username or registered email" />
+      </div>
+      <div id="resetConfirmStep" class="reset-step" hidden>
+        <label for="resetCode">Verification Code</label>
+        <input id="resetCode" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="Enter 6-digit code" />
+        <label for="resetNewPassword">New Password</label>
+        <input id="resetNewPassword" type="password" autocomplete="new-password" placeholder="Enter new password" />
+        <label for="resetConfirmPassword">Confirm Password</label>
+        <input id="resetConfirmPassword" type="password" autocomplete="new-password" placeholder="Confirm new password" />
+      </div>
+      <div id="resetStatus" class="reset-status"></div>
+      <div class="reset-actions">
+        <button type="button" onclick="closePasswordReset()">Cancel</button>
+        <button id="resetPrimary" type="button" class="reset-primary" onclick="submitPasswordReset()">Send Code</button>
+      </div>
     </div>
   </div>
 
@@ -264,6 +302,55 @@
       document.getElementById('msg').textContent = authMessage;
       sessionStorage.removeItem('authMessage');
     }
+
+    let resetCodeSent = false;
+    function openPasswordReset() {
+      resetCodeSent = false;
+      document.getElementById('resetRequestStep').hidden = false;
+      document.getElementById('resetConfirmStep').hidden = true;
+      document.getElementById('resetDescription').textContent = 'Enter your username or registered email to receive a verification code.';
+      document.getElementById('resetPrimary').textContent = 'Send Code';
+      document.getElementById('resetStatus').textContent = '';
+      document.getElementById('resetIdentifier').value = document.getElementById('username').value.trim();
+      document.getElementById('resetModal').classList.add('show');
+      setTimeout(() => document.getElementById('resetIdentifier').focus(), 0);
+    }
+    function closePasswordReset() { document.getElementById('resetModal').classList.remove('show'); }
+    async function submitPasswordReset() {
+      const identifier = document.getElementById('resetIdentifier').value.trim();
+      const status = document.getElementById('resetStatus');
+      const button = document.getElementById('resetPrimary');
+      status.className = 'reset-status'; status.textContent = '';
+      if (!identifier) { status.textContent = 'Enter your username or registered email.'; return; }
+      button.disabled = true;
+      try {
+        if (!resetCodeSent) {
+          const response = await fetch(appUrl('/auth/password-reset/request'), {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({identifier})});
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(data.detail || 'Unable to send verification code');
+          resetCodeSent = true;
+          document.getElementById('resetRequestStep').hidden = true;
+          document.getElementById('resetConfirmStep').hidden = false;
+          document.getElementById('resetDescription').textContent = 'Enter the verification code sent to your registered email and choose a new password.';
+          button.textContent = 'Reset Password';
+          status.className = 'reset-status ok'; status.textContent = data.message;
+          document.getElementById('resetCode').focus();
+        } else {
+          const code = document.getElementById('resetCode').value.trim(), newPassword = document.getElementById('resetNewPassword').value, confirmPassword = document.getElementById('resetConfirmPassword').value;
+          if (code.length !== 6) throw new Error('Enter the 6-digit verification code.');
+          if (newPassword.length < 8) throw new Error('Password must contain at least 8 characters.');
+          if (newPassword !== confirmPassword) throw new Error('Passwords do not match.');
+          const response = await fetch(appUrl('/auth/password-reset/confirm'), {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({identifier,code,new_password:newPassword})});
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(data.detail || 'Unable to reset password');
+          status.className = 'reset-status ok'; status.textContent = data.message;
+          setTimeout(closePasswordReset, 1400);
+        }
+      } catch (error) { status.textContent = error.message; }
+      finally { button.disabled = false; }
+    }
+    document.getElementById('resetModal').addEventListener('click', event => { if (event.target.id === 'resetModal') closePasswordReset(); });
+    document.addEventListener('keydown', event => { if (event.key === 'Escape') closePasswordReset(); });
 
     async function login() {
       const username = document.getElementById('username').value;
