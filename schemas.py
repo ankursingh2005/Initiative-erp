@@ -276,6 +276,7 @@ class UserSignup(BaseModel):
     role: str
     store_id: Optional[int] = None
     category_code: Optional[str] = None
+    category_codes: List[str] = []
     brand_ids: List[int] = []
     invite_code: str
 

@@ -225,6 +225,7 @@
       .helper{overflow-wrap:anywhere}
       a:last-child{margin-bottom:4px}
     }
+    .category-check-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:8px}.category-check{display:flex;align-items:center;gap:9px;min-height:44px;padding:9px 11px;border:1px solid #d0d5dd;border-radius:9px;background:#fff;cursor:pointer;font-weight:700}.category-check:hover{border-color:#155eef;background:#f5f8ff}.category-check input{width:18px!important;min-height:18px!important;height:18px;margin:0;accent-color:#155eef}.category-check.all-category{grid-column:1/-1;color:#0d3fb0;background:#eef4ff;border-color:#b9ceff}.category-check:has(input:checked){color:#0d3fb0;border-color:#155eef;background:#e8f0ff;box-shadow:0 0 0 1px #155eef22}
     @media (max-width: 380px) {
       body { padding-left:8px; padding-right:8px; }
       .card { padding:18px 14px 24px; }
@@ -261,7 +262,7 @@
 
       <label for="inviteCode">Invite Code</label>
       <input id="inviteCode" type="password" placeholder="Enter invite code" autocomplete="new-password" required />
-      <p class="helper" style="margin-top:4px;">Each role has its own code (e.g. Admin, Accounts, MIS Executive). Category Managers need their category's code; Brand Managers/Partners need their brand's code. Ask your Admin if you don't have yours.</p>
+      <p class="helper" style="margin-top:4px;">All roles use the universal invite code except Admin, which has a separate secure code.</p>
 
       <label for="role">Role</label>
       <select id="role" onchange="onRoleChange()" required>
@@ -287,14 +288,16 @@
       <div id="mandatoryMsg" class="mandatory-msg" style="display:none;"></div>
 
       <div id="categoryBox" class="role-box" style="display:none;">
-        <label for="categorySelect">Category Manager Category</label>
-        <select id="categorySelect">
-          <option value="HA">HA</option>
-          <option value="HE">HE</option>
-          <option value="IT">IT</option>
-          <option value="MH">Mobile</option>
-        </select>
-        <p class="helper">Choose the category this manager will control.</p>
+        <label>Category Manager Categories</label>
+        <div class="category-check-grid" id="categoryChecks">
+          <label class="category-check all-category"><input type="checkbox" value="ALL" onchange="toggleAllCategories(this)"><span>All Categories</span></label>
+          <label class="category-check"><input type="checkbox" value="HA" onchange="updateCategoryChecks()"><span>HA</span></label>
+          <label class="category-check"><input type="checkbox" value="HE" onchange="updateCategoryChecks()"><span>HE</span></label>
+          <label class="category-check"><input type="checkbox" value="IT" onchange="updateCategoryChecks()"><span>IT</span></label>
+          <label class="category-check"><input type="checkbox" value="MH" onchange="updateCategoryChecks()"><span>Mobile</span></label>
+        </div>
+        <div id="categorySummary" class="selected-list">No categories selected.</div>
+        <p class="helper">Select one or more categories. Choose All Categories for complete category responsibility.</p>
       </div>
 
       <div id="brandBox" style="display:none;">
@@ -408,6 +411,25 @@
       document.getElementById("brandSummary").textContent = selected.length ? `Selected brands: ${selected.join(", ")}` : "No brands selected.";
     }
 
+    function selectedCategoryCodes() {
+      const all = document.querySelector('#categoryChecks input[value="ALL"]');
+      if (all?.checked) return ['HA', 'HE', 'IT', 'MH'];
+      return Array.from(document.querySelectorAll('#categoryChecks input:not([value="ALL"]):checked')).map(input => input.value);
+    }
+
+    function updateCategoryChecks() {
+      const all = document.querySelector('#categoryChecks input[value="ALL"]');
+      const individual = Array.from(document.querySelectorAll('#categoryChecks input:not([value="ALL"])'));
+      all.checked = individual.length > 0 && individual.every(input => input.checked);
+      const selected = selectedCategoryCodes();
+      document.getElementById('categorySummary').textContent = selected.length === 4 ? 'Selected: All Categories' : selected.length ? `Selected: ${selected.join(', ')}` : 'No categories selected.';
+    }
+
+    function toggleAllCategories(allCheckbox) {
+      document.querySelectorAll('#categoryChecks input:not([value="ALL"])').forEach(input => { input.checked = allCheckbox.checked; });
+      updateCategoryChecks();
+    }
+
     function showMandatoryMessage(message) {
       const mandatoryMsg = document.getElementById("mandatoryMsg");
       mandatoryMsg.textContent = message;
@@ -445,8 +467,7 @@
       if (!document.getElementById("outletSelect").value) missingFields.push(fieldLabel("Assigned Outlet"));
 
       if (role === "CategoryManager") {
-        const categoryCode = document.getElementById("categorySelect").value;
-        if (!categoryCode) missingFields.push(fieldLabel("Category Manager Category"));
+        if (!selectedCategoryCodes().length) missingFields.push(fieldLabel("Category Manager Category"));
       }
 
       if (["BrandManager", "BrandPartner"].includes(role)) {
@@ -469,10 +490,12 @@
         invite_code: inviteCode,
         store_id: Number(document.getElementById("outletSelect").value),
         category_code: null,
+        category_codes: [],
         brand_ids: []
       };
       if (role === "CategoryManager") {
-        payload.category_code = document.getElementById("categorySelect").value || null;
+        payload.category_codes = selectedCategoryCodes();
+        payload.category_code = payload.category_codes.join(',');
       }
       if (["BrandManager", "BrandPartner"].includes(role)) {
         payload.brand_ids = Array.from(document.getElementById("brandSelect").selectedOptions).map(o => Number(o.value));

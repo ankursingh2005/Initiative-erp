@@ -607,6 +607,28 @@ def normalize_category_code(raw_value: Optional[str]) -> Optional[str]:
     raise HTTPException(status_code=400, detail="category_code must be one of: HA, HE, IT, MOBILE, OTHER")
 
 
+CATEGORY_MANAGER_CODES = {"HA", "HE", "IT", "MH"}
+
+
+def normalize_category_codes(raw_values) -> list:
+    values = raw_values if isinstance(raw_values, (list, tuple, set)) else str(raw_values or "").split(",")
+    normalized = []
+    for raw in values:
+        value = str(raw or "").strip().upper()
+        if not value:
+            continue
+        if value == "ALL":
+            return sorted(CATEGORY_MANAGER_CODES)
+        code = normalize_category_code(value)
+        if code and code not in normalized:
+            normalized.append(code)
+    return normalized
+
+
+def category_codes_for_user(user: models.User) -> set:
+    return set(normalize_category_codes(getattr(user, "category_code", None)))
+
+
 def normalize_reward_type(raw_value: str) -> str:
     value = (raw_value or "").strip().lower()
     if value in {"fixed", "fixed amount", "amount"}:
@@ -1104,14 +1126,14 @@ def _get_price_list_access_scope(current_user: models.User, db: Session):
         brand_ids = [user_brand.brand_id for user_brand in (getattr(current_user, "brands", []) or [])]
         return {"brand_ids": brand_ids}
     if current_user.role == "CategoryManager":
-        category_code = (current_user.category_code or "").strip().upper()
-        if not category_code:
+        category_codes = category_codes_for_user(current_user)
+        if not category_codes:
             return {"brand_ids": []}
         brand_rows = (
             db.query(models.Brand.id)
             .join(models.SubCategory, models.Brand.subcategory_id == models.SubCategory.id)
             .join(models.Category, models.SubCategory.category_id == models.Category.id)
-            .filter(func.upper(models.Category.code) == category_code)
+            .filter(func.upper(models.Category.code).in_(category_codes))
             .all()
         )
         return {"brand_ids": [brand_id for (brand_id,) in brand_rows]}
@@ -1957,75 +1979,30 @@ def offline_page():
 def signup(user: schemas.UserSignup, db: Session = Depends(get_db)):
     # --------------------------------------------------------------
     # Invite-code gate: the signup page is public (anyone can reach it
-    # once this app is on the Play/App Store), so each role -- and each
-    # Category Manager's category, and each Brand Manager/Partner's
-    # brand -- requires its own separate code. This means a code that
-    # leaks only exposes that one role/category/brand, not the whole
-    # system, and you can rotate a single one without affecting others.
+    # once this app is on the Play/App Store). Admin uses a separate secure
+    # code; every other role uses the universal code.
     #
     # Override any of these in your environment (Render dashboard ->
     # Environment, or a local .env file) without changing code:
-    #   SIGNUP_CODE_ADMIN, SIGNUP_CODE_ACCOUNTS, SIGNUP_CODE_MIS,
-    #   SIGNUP_CODE_OWNER, SIGNUP_CODE_HR,
-    #   SIGNUP_CODE_CAT_HA, SIGNUP_CODE_CAT_HE, SIGNUP_CODE_CAT_IT,
-    #   SIGNUP_CODE_CAT_MOBILE, SIGNUP_CODE_UNIVERSAL
-    # Brand codes are not env vars -- they're always "INITIATIVE@<BRAND NAME>"
-    # (uppercased, spaces removed), generated automatically per brand.
+    #   SIGNUP_CODE_ADMIN, SIGNUP_CODE_UNIVERSAL
     # --------------------------------------------------------------
-    ROLE_INVITE_CODES = {
-        "Admin": os.getenv("SIGNUP_CODE_ADMIN", "Initiative@#%_-Admin"),
-        "Accounts": os.getenv("SIGNUP_CODE_ACCOUNTS", "Initiative/AC"),
-        "MISExecutive": os.getenv("SIGNUP_CODE_MIS", "Initiative%MS"),
-        "Owner": os.getenv("SIGNUP_CODE_OWNER", "Initiative@1999"),
-        "HR": os.getenv("SIGNUP_CODE_HR", "Initiative@SecureHR"),
-    }
-    CATEGORY_INVITE_CODES = {
-        "HA": os.getenv("SIGNUP_CODE_CAT_HA", "Initiative@HA"),
-        "HE": os.getenv("SIGNUP_CODE_CAT_HE", "Initiative#HE"),
-        "IT": os.getenv("SIGNUP_CODE_CAT_IT", "Initiative-IT"),
-        "MH": os.getenv("SIGNUP_CODE_CAT_MOBILE", "Initiative_MO"),
-    }
+    ADMIN_INVITE_CODE = os.getenv("SIGNUP_CODE_ADMIN", "Initiative@#%_-Admin")
     UNIVERSAL_INVITE_CODE = os.getenv("SIGNUP_CODE_UNIVERSAL", "Initiative@Universal")
 
-    def brand_invite_code(brand_name: str) -> str:
-        normalized = re.sub(r"\s+", "", brand_name or "").upper()
-        return f"INITIATIVE@{normalized}"
-
     submitted_code = (user.invite_code or "").strip()
+    expected_invite_code = ADMIN_INVITE_CODE if user.role == "Admin" else UNIVERSAL_INVITE_CODE
+    if submitted_code != expected_invite_code:
+        detail = "Invalid Admin invite code" if user.role == "Admin" else "Invalid universal invite code"
+        raise HTTPException(status_code=403, detail=detail)
 
-    if user.role in ROLE_INVITE_CODES:
-        expected = ROLE_INVITE_CODES[user.role]
-        if submitted_code != expected:
-            raise HTTPException(status_code=403, detail="Invalid invite code for this role")
+    if user.role == "CategoryManager":
+        selected_categories = normalize_category_codes(user.category_codes or user.category_code)
+        if not selected_categories:
+            raise HTTPException(status_code=400, detail="Select at least one category")
 
-    elif user.role == "CategoryManager":
-        category_code = normalize_category_code(user.category_code)
-        expected = CATEGORY_INVITE_CODES.get(category_code)
-        if expected is None:
-            # No code configured for this category yet -- fall back to
-            # the universal code rather than locking everyone out.
-            expected = UNIVERSAL_INVITE_CODE
-        if submitted_code != expected:
-            raise HTTPException(status_code=403, detail="Invalid invite code for this category")
-
-    elif user.role in ("BrandManager", "BrandPartner"):
+    if user.role in ("BrandManager", "BrandPartner"):
         if not user.brand_ids:
             raise HTTPException(status_code=400, detail="Select at least one brand")
-        brands = db.query(models.Brand).filter(models.Brand.id.in_(user.brand_ids)).all()
-        matched = any(
-            submitted_code.strip().upper() == brand_invite_code(b.name)
-            for b in brands
-        )
-        if not matched:
-            raise HTTPException(
-                status_code=403,
-                detail="Invalid invite code for the selected brand(s). "
-                       "Code format: INITIATIVE@<BRAND NAME IN CAPITALS>",
-            )
-
-    else:
-        if submitted_code != UNIVERSAL_INVITE_CODE:
-            raise HTTPException(status_code=403, detail="Invalid invite code")
 
     existing = (
         db.query(models.User)
@@ -2051,7 +2028,7 @@ def signup(user: schemas.UserSignup, db: Session = Depends(get_db)):
         full_name=user.full_name,
         role=user.role,
         store_id=user.store_id,
-        category_code=normalize_category_code(user.category_code) if user.role in category_roles else None,
+        category_code=",".join(normalize_category_codes(user.category_codes or user.category_code)) if user.role in category_roles else None,
         status="Active",
     )
     db.add(db_user)
@@ -2200,12 +2177,13 @@ def get_sales_for_user(db: Session, current_user: models.User):
     if current_user.role == "StoreManager":
         return db.query(models.Sale).filter(models.Sale.store_id == current_user.store_id).all()
     if current_user.role == "CategoryManager":
-        if not current_user.category_code:
+        category_codes = category_codes_for_user(current_user)
+        if not category_codes:
             return []
         return (
             db.query(models.Sale)
             .join(models.Category, models.Sale.category_id == models.Category.id)
-            .filter(models.Category.code == current_user.category_code)
+            .filter(models.Category.code.in_(category_codes))
             .all()
         )
     if current_user.role in ("BrandManager", "BrandPartner"):
@@ -2236,13 +2214,14 @@ def get_claims_for_user(db: Session, current_user: models.User):
         )
 
     if current_user.role == "CategoryManager":
-        if not current_user.category_code:
+        category_codes = category_codes_for_user(current_user)
+        if not category_codes:
             return []
         return (
             db.query(models.ClaimHeader)
             .join(models.Sale, models.ClaimHeader.sale_id == models.Sale.id)
             .join(models.Category, models.Sale.category_id == models.Category.id)
-            .filter(models.Category.code == current_user.category_code)
+            .filter(models.Category.code.in_(category_codes))
             .all()
         )
 
@@ -2257,10 +2236,11 @@ def can_user_access_sale(db: Session, current_user: models.User, sale: models.Sa
         return current_user.store_id is not None and sale.store_id == current_user.store_id
 
     if current_user.role == "CategoryManager":
-        if not current_user.category_code:
+        category_codes = category_codes_for_user(current_user)
+        if not category_codes:
             return False
         sale_category = db.query(models.Category).filter(models.Category.id == sale.category_id).first()
-        return bool(sale_category and sale_category.code == current_user.category_code)
+        return bool(sale_category and sale_category.code in category_codes)
 
     if current_user.role in ("BrandManager", "BrandPartner"):
         brand_ids = [ub.brand_id for ub in current_user.brands]
@@ -3297,7 +3277,7 @@ def update_user_assignments(
     if payload.store_id is not None:
         target_user.store_id = payload.store_id
     if payload.category_code is not None:
-        target_user.category_code = normalize_category_code(payload.category_code)
+        target_user.category_code = ",".join(normalize_category_codes(payload.category_code)) or None
     if payload.brand_ids is not None:
         db.query(models.UserBrand).filter(models.UserBrand.user_id == target_user.id).delete()
         for brand_id in payload.brand_ids:
@@ -4508,10 +4488,11 @@ def create_sale(
             raise HTTPException(status_code=403, detail="You can only create sales for your assigned branch")
 
     if current_user.role == "CategoryManager":
-        if not current_user.category_code:
+        category_codes = category_codes_for_user(current_user)
+        if not category_codes:
             raise HTTPException(status_code=403, detail="You are not assigned to a category")
         sale_category = db.query(models.Category).filter(models.Category.id == sale.category_id).first()
-        if not sale_category or sale_category.code != current_user.category_code:
+        if not sale_category or sale_category.code not in category_codes:
             raise HTTPException(status_code=403, detail="You can only create sales for your assigned category")
 
     if current_user.role in {"BrandManager", "BrandPartner", "Scheme Manager"}:
@@ -4593,7 +4574,7 @@ def update_sale(
         if not can_user_access_sale(db, current_user, db_sale):
             raise HTTPException(status_code=403, detail="You can only edit sales in your access scope")
         sale_category = db.query(models.Category).filter(models.Category.id == sale.category_id).first()
-        if not sale_category or sale_category.code != current_user.category_code:
+        if not sale_category or sale_category.code not in category_codes_for_user(current_user):
             raise HTTPException(status_code=403, detail="You can only edit sales into your assigned category")
 
     duplicate_invoice = (
