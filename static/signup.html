@@ -402,7 +402,7 @@
           fetch(appUrl('/stores'))
         ]);
         if (!brandsResponse.ok || !storesResponse.ok) throw new Error('Unable to load account options');
-        const brands = await brandsResponse.json();
+        const brands = (await brandsResponse.json()).filter(brand => brand.name.trim().toLowerCase() !== 'samsung tablet');
         const stores = await storesResponse.json();
         brandSelect.innerHTML = brands.map(b => `<option value="${b.id}">${b.name}</option>`).join("");
         brandSelect.insertAdjacentHTML('afterbegin', '<option value="">Select brand</option>');
