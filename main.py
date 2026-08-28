@@ -585,7 +585,7 @@ async def handle_unexpected_error(request: Request, exc: Exception):
 # "static" folder sitting next to this file.
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-VALID_ROLES = ["Admin", "Owner", "HR", "CategoryManager", "BrandManager", "BrandPartner", "SupportingStaff", "Accounts", "MISExecutive", "CustomerCare", "Employee", "Other"]
+VALID_ROLES = ["Admin", "Owner", "HR", "CategoryManager", "BrandManager", "BrandPartner", "SupportingStaff", "Accounts", "MISExecutive", "CustomerCare", "Employee", "Cashier", "Other"]
 
 
 def normalize_category_code(raw_value: Optional[str]) -> Optional[str]:
@@ -2071,7 +2071,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         .first()
     )
     if not user or not auth.verify_password(form_data.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Incorrect username/email or password")
+        raise HTTPException(status_code=401, detail="Username or password incorrect")
     if user.status != "Active":
         raise HTTPException(status_code=403, detail="This account is not active")
 

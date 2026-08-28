@@ -382,6 +382,7 @@
       const password = document.getElementById('password').value;
       const msg = document.getElementById('msg');
       msg.textContent = '';
+      sessionStorage.removeItem('authMessage');
 
       const form = new URLSearchParams();
       form.append('username', username);
@@ -397,7 +398,9 @@
         });
         const data = await response.json().catch(() => ({}));
         if (!response.ok) {
-          msg.textContent = data.detail || 'Login failed';
+          msg.textContent = response.status === 401
+            ? 'Username or password incorrect.'
+            : (data.detail || 'Unable to sign in. Please try again.');
           return;
         }
         localStorage.setItem('token', data.access_token);
