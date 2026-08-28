@@ -84,8 +84,8 @@
     .nav-item:hover { background: color-mix(in srgb, var(--nav-color, var(--brand)) 10%, #fff); color: var(--ink); }
     .nav-item.active { background: color-mix(in srgb, var(--nav-color, var(--brand)) 14%, #fff); color: var(--nav-color, var(--brand-dark)); }
     .nav-item.active svg { color: var(--nav-color, var(--brand-dark)); }
-    .nav-item.n-scheme,.nav-item.n-po,.nav-item.n-ai,.nav-item.n-dp,.nav-item.n-price,.nav-item.n-age,.nav-item.n-calc { display:none; }
-    :is(.role-Admin,.role-Owner,.role-HR,.role-MISExecutive,.role-Accounts) .nav-item:is(.n-scheme,.n-po,.n-ai,.n-dp,.n-price,.n-age,.n-calc) { display:flex; }
+    .nav-item.n-scheme,.nav-item.n-po,.nav-item.n-ai,.nav-item.n-dp,.nav-item.n-price,.nav-item.n-age,.nav-item.n-calc,.nav-item.n-incentive { display:none; }
+    :is(.role-Admin,.role-Owner,.role-HR,.role-MISExecutive,.role-Accounts) .nav-item:is(.n-scheme,.n-po,.n-ai,.n-dp,.n-price,.n-age,.n-calc,.n-incentive) { display:flex; }
     :is(.role-CategoryManager,.role-BrandManager) .nav-item.n-scheme { display:flex; }
     .nav-item.n-mobile-logout { display:none; width:100%; border:0; background:transparent; text-align:left; }
     .nav-item.n-dash { --nav-color: var(--brand); }
@@ -96,6 +96,7 @@
     .nav-item.n-price { --nav-color: var(--price); }
     .nav-item.n-age { --nav-color: var(--age); }
     .nav-item.n-calc { --nav-color: var(--calc); }
+    .nav-item.n-incentive { --nav-color: #0f8a5f; }
     .nav-item.n-um { --nav-color: var(--um); }
     .sidebar-foot { padding: 16px 20px; border-top: 1px solid var(--line); }
     .sidebar-user { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
@@ -413,6 +414,10 @@
         <a class="nav-item n-calc" href="/scheme-calculator">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"></rect><path d="M8 6h8"></path><path d="M8 10h2"></path><path d="M12 10h2"></path><path d="M16 10h0"></path><path d="M8 14h2"></path><path d="M12 14h2"></path><path d="M16 14h0"></path><path d="M8 18h2"></path><path d="M12 18h2"></path></svg>
           Scheme Calculator
+        </a>
+        <a class="nav-item n-incentive" href="/incentive.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5"></path><path d="M4 19h16"></path><path d="M8 15l3-4 3 2 5-7"></path><circle cx="19" cy="6" r="2"></circle></svg>
+          Incentive Report
         </a>
         <a class="nav-item n-um" href="#user-management" id="navUserManagement" style="display:none;" onclick="revealUserManagement(event)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>

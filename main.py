@@ -21,6 +21,7 @@ from urllib.request import Request, urlopen
 from uuid import uuid4
 import base64
 import math
+import calendar
 import secrets
 import hashlib
 
@@ -1693,6 +1694,11 @@ def scheme_calculator_page():
     return serve_html("static/scheme_calculator.html")
 
 
+@app.get("/incentive.html")
+def incentive_page():
+    return serve_html("static/incentive.html")
+
+
 @app.get("/api/price-list/brands")
 def list_price_list_brands(
     current_user: models.User = Depends(auth.get_current_user),
@@ -2939,6 +2945,178 @@ def export_admin_attendance(
     document.build(elements)
     output.seek(0)
     return StreamingResponse(output, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{filename_base}.pdf"'})
+
+
+def _attendance_month_range(month: str):
+    if not re.fullmatch(r"\d{4}-\d{2}", month or ""):
+        raise HTTPException(status_code=400, detail="Month must use YYYY-MM format")
+    try:
+        year, month_number = map(int, month.split("-"))
+        start = date(year, month_number, 1)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid month")
+    return start, date(year, month_number, calendar.monthrange(year, month_number)[1])
+
+
+def _build_monthly_attendance_workbook(db: Session, users: list, month: str):
+    from openpyxl.formatting.rule import CellIsRule
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+
+    month_start, month_end = _attendance_month_range(month)
+    users = sorted(users, key=lambda user: ((user.store_id or 0), (user.full_name or user.username or "").lower(), user.id))
+    user_ids = [user.id for user in users]
+    records = db.query(models.AttendanceRecord).filter(
+        models.AttendanceRecord.user_id.in_(user_ids or [-1]),
+        models.AttendanceRecord.attendance_date >= month_start,
+        models.AttendanceRecord.attendance_date <= month_end,
+    ).order_by(models.AttendanceRecord.attendance_date).all()
+    records_by_key = {(record.user_id, record.attendance_date): record for record in records}
+    stores = {store.id: store for store in db.query(models.Store).all()}
+    days = month_end.day
+    today = india_today()
+
+    book = Workbook()
+    summary = book.active
+    summary.title = "Monthly Summary"
+    last_col = 3 + days + 4
+    last_letter = get_column_letter(last_col)
+    summary.merge_cells(start_row=1, start_column=1, end_row=1, end_column=last_col)
+    summary["A1"] = "MONTHLY ATTENDANCE SUMMARY"
+    summary.merge_cells(start_row=2, start_column=1, end_row=2, end_column=last_col)
+    summary["A2"] = month_start.strftime("%B %Y")
+    headers = ["Outlet", "Employee", "User ID"] + list(range(1, days + 1)) + ["Present", "Absent", "Week Off", "Total"]
+    summary.append([])
+    summary.append(headers)
+
+    navy, blue, white = "17365D", "4472C4", "FFFFFF"
+    pale_blue, pale_green, pale_red, pale_gray = "D9EAF7", "D9EAD3", "F4CCCC", "E7E6E6"
+    summary["A1"].fill = PatternFill("solid", fgColor=navy)
+    summary["A1"].font = Font(color=white, bold=True, size=16)
+    summary["A1"].alignment = Alignment(horizontal="center")
+    summary["A2"].fill = PatternFill("solid", fgColor=pale_blue)
+    summary["A2"].font = Font(color=navy, bold=True, size=12)
+    summary["A2"].alignment = Alignment(horizontal="center")
+    for cell in summary[4]:
+        cell.fill = PatternFill("solid", fgColor=blue)
+        cell.font = Font(color=white, bold=True)
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    first_day_col, last_day_col = 4, 3 + days
+    detail_rows = []
+    for row_no, user in enumerate(users, 5):
+        store = stores.get(user.store_id)
+        display_name = user.full_name or user.username
+        summary.cell(row_no, 1, store.name if store else "Unassigned")
+        summary.cell(row_no, 2, display_name)
+        summary.cell(row_no, 3, user.id)
+        for day_number in range(1, days + 1):
+            current_date = date(month_start.year, month_start.month, day_number)
+            record = records_by_key.get((user.id, current_date))
+            before_joining = bool(user.created_date and current_date < user.created_date.date())
+            if current_date > today or before_joining:
+                status = "-"
+            elif record and record.checkin_at:
+                status = "P"
+            elif user.weekoff_day == current_date.strftime("%A"):
+                status = "WO"
+            else:
+                status = "A"
+            cell = summary.cell(row_no, first_day_col + day_number - 1, status)
+            cell.alignment = Alignment(horizontal="center")
+            if record:
+                detail_rows.append([
+                    user.id, store.name if store else "Unassigned", display_name, current_date,
+                    current_date.strftime("%A"), status,
+                    record.checkin_at, record.checkout_at,
+                    record.checkin_distance_m or 0, record.checkout_distance_m or 0,
+                    "Yes" if record.checkin_selfie else "No", "Yes" if record.checkout_selfie else "No",
+                ])
+        day_start, day_end = get_column_letter(first_day_col), get_column_letter(last_day_col)
+        summary.cell(row_no, last_day_col + 1, f'=COUNTIF({day_start}{row_no}:{day_end}{row_no},"P")')
+        summary.cell(row_no, last_day_col + 2, f'=COUNTIF({day_start}{row_no}:{day_end}{row_no},"A")')
+        summary.cell(row_no, last_day_col + 3, f'=COUNTIF({day_start}{row_no}:{day_end}{row_no},"WO")')
+        present_cell = f"{get_column_letter(last_day_col + 1)}{row_no}"
+        summary.cell(row_no, last_day_col + 4, f'={present_cell}&"/{days}"')
+        summary.cell(row_no, last_day_col + 4).alignment = Alignment(horizontal="center")
+
+    data_end = max(5, 4 + len(users))
+    day_range = f"{get_column_letter(first_day_col)}5:{get_column_letter(last_day_col)}{data_end}"
+    for value, color in (("P", pale_green), ("A", pale_red), ("WO", pale_blue), ("-", pale_gray)):
+        summary.conditional_formatting.add(day_range, CellIsRule(operator="equal", formula=[f'"{value}"'], fill=PatternFill("solid", fgColor=color)))
+    thin = Side(style="thin", color="D0D5DD")
+    for row in summary.iter_rows(min_row=4, max_row=data_end, min_col=1, max_col=last_col):
+        for cell in row:
+            cell.border = Border(bottom=thin)
+    summary.column_dimensions["A"].width = 20
+    summary.column_dimensions["B"].width = 25
+    summary.column_dimensions["C"].hidden = True
+    for col in range(first_day_col, last_day_col + 1):
+        summary.column_dimensions[get_column_letter(col)].width = 6
+    for col in range(last_day_col + 1, last_col + 1):
+        summary.column_dimensions[get_column_letter(col)].width = 12
+    summary.freeze_panes = "D5"
+    summary.row_dimensions[4].height = 28
+    summary.sheet_view.showGridLines = False
+    summary.page_setup.orientation = "landscape"
+    summary.page_setup.fitToWidth = 1
+    summary.sheet_properties.pageSetUpPr.fitToPage = True
+    summary.print_title_rows = "1:4"
+
+    detail = book.create_sheet("Attendance Detail")
+    detail_headers = ["User ID", "Outlet", "Employee", "Date", "Day", "Status", "Punch In", "Punch Out", "Punch In Distance (m)", "Punch Out Distance (m)", "Punch In Photo", "Punch Out Photo"]
+    detail.append(detail_headers)
+    for row in detail_rows:
+        detail.append(row)
+    for cell in detail[1]:
+        cell.fill = PatternFill("solid", fgColor=navy)
+        cell.font = Font(color=white, bold=True)
+        cell.alignment = Alignment(horizontal="center")
+    for row_no in range(2, len(detail_rows) + 2):
+        detail.cell(row_no, 4).number_format = "dd-mmm-yyyy"
+        detail.cell(row_no, 7).number_format = "hh:mm AM/PM"
+        detail.cell(row_no, 8).number_format = "hh:mm AM/PM"
+        detail.cell(row_no, 9).number_format = '0.0'
+        detail.cell(row_no, 10).number_format = '0.0'
+    widths = [10, 20, 25, 14, 14, 11, 18, 18, 22, 23, 17, 18]
+    for index, width in enumerate(widths, 1):
+        detail.column_dimensions[get_column_letter(index)].width = width
+    detail.column_dimensions["A"].hidden = True
+    detail.freeze_panes = "B2"
+    detail.auto_filter.ref = f"A1:L{max(1, len(detail_rows) + 1)}"
+    detail.sheet_view.showGridLines = False
+    return book
+
+
+@app.get("/api/attendance/monthly-export")
+def export_monthly_attendance(
+    month: str = Query(...),
+    scope: str = Query("self"),
+    store_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Export a monthly attendance matrix for oneself or, for admins, all active employees."""
+    if scope not in {"self", "all"}:
+        raise HTTPException(status_code=400, detail="Scope must be self or all")
+    _attendance_month_range(month)
+    if scope == "all":
+        if current_user.role not in {"Admin", "Owner", "HR"}:
+            raise HTTPException(status_code=403, detail="Only attendance administrators can export all employees")
+        query = db.query(models.User).filter(models.User.status == "Active")
+        if store_id is not None:
+            query = query.filter(models.User.store_id == store_id)
+        users = query.all()
+        filename = f"all-outlets-attendance-{month}.xlsx" if store_id is None else f"outlet-attendance-{month}.xlsx"
+    else:
+        users = [current_user]
+        safe_name = re.sub(r"[^A-Za-z0-9_-]+", "-", current_user.username).strip("-") or "employee"
+        filename = f"{safe_name}-attendance-{month}.xlsx"
+    workbook = _build_monthly_attendance_workbook(db, users, month)
+    output = BytesIO()
+    workbook.save(output)
+    output.seek(0)
+    return StreamingResponse(output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
 @app.get("/api/attendance/admin-user-export")
@@ -8532,6 +8710,240 @@ def clear_ageing_stock_data(
     db.query(models.AgeingStockUpload).delete()
     db.commit()
     return {"message": "Ageing Stock Analysis data cleared", "deleted": deleted_count}
+
+
+INCENTIVE_MONTH_ALIASES = {"month", "months", "period", "sale month", "sales month"}
+INCENTIVE_OUTLET_ALIASES = {"outlet", "outlet name", "branch", "branch name", "store", "store name", "manager", "manager name"}
+INCENTIVE_SALES_ALIASES = {"total sale", "total sales", "sales", "sale", "sales amount", "sale amount", "monthly sales", "net sales"}
+
+
+def _incentive_header(value) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", str(value or "").strip().lower()).strip()
+
+
+def _incentive_number(value):
+    if value is None or value == "":
+        return None
+    if isinstance(value, (int, float, Decimal)) and not isinstance(value, bool):
+        return float(value)
+    cleaned = re.sub(r"[^0-9.()-]", "", str(value).strip()).replace("(", "-").replace(")", "")
+    try:
+        return float(cleaned) if cleaned not in {"", "-", "."} else None
+    except ValueError:
+        return None
+
+
+def _incentive_month(value) -> str:
+    if isinstance(value, (datetime, date)):
+        return value.strftime("%b %Y")
+    if isinstance(value, (int, float)) and 20000 < value < 80000:
+        # Excel's 1900 date system (including its historical leap-year offset).
+        return (datetime(1899, 12, 30) + timedelta(days=float(value))).strftime("%b %Y")
+    return str(value or "").strip()
+
+
+def parse_incentive_workbook(content: bytes) -> list:
+    try:
+        wb = load_workbook(BytesIO(content), data_only=True, read_only=True)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Could not read the Excel file: {exc}")
+
+    result = []
+    for ws in wb.worksheets:
+        rows = [list(row) for row in ws.iter_rows(min_row=1, max_row=min(ws.max_row, 10000), values_only=True)]
+        if not rows:
+            continue
+        width = min(max((len(r) for r in rows), default=0), 500)
+        rows = [(r + [None] * width)[:width] for r in rows]
+        scan_limit = min(15, len(rows))
+
+        # Long layout: Month | Outlet | Total Sales.
+        handled = False
+        for header_idx in range(scan_limit):
+            normalized = [_incentive_header(v) for v in rows[header_idx]]
+            outlet_col = next((i for i, h in enumerate(normalized) if h in INCENTIVE_OUTLET_ALIASES), None)
+            sales_col = next((i for i, h in enumerate(normalized) if h in INCENTIVE_SALES_ALIASES), None)
+            month_col = next((i for i, h in enumerate(normalized) if h in INCENTIVE_MONTH_ALIASES), None)
+            if outlet_col is None or sales_col is None:
+                continue
+            for row in rows[header_idx + 1:]:
+                sales = _incentive_number(row[sales_col])
+                outlet = str(row[outlet_col] or "").strip()
+                if sales is None or not outlet:
+                    continue
+                month = _incentive_month(row[month_col]) if month_col is not None else ws.title
+                result.append({"month": month or ws.title, "outlet": outlet, "total_sales": sales})
+            handled = True
+            break
+        if handled:
+            continue
+
+        # Grouped reference layout: manager/outlet names on one row and
+        # repeated Total Sale / Salary / Incentive columns on the next row.
+        for subheader_idx in range(1, scan_limit):
+            sales_cols = [i for i, v in enumerate(rows[subheader_idx]) if _incentive_header(v) in INCENTIVE_SALES_ALIASES]
+            if not sales_cols:
+                continue
+            month_col = next((i for i, v in enumerate(rows[subheader_idx - 1]) if _incentive_header(v) in INCENTIVE_MONTH_ALIASES), 0)
+            outlets = {}
+            for col in sales_cols:
+                name = ""
+                for lookup_col in range(col, -1, -1):
+                    candidate = str(rows[subheader_idx - 1][lookup_col] or "").strip()
+                    if candidate and _incentive_header(candidate) not in INCENTIVE_MONTH_ALIASES:
+                        name = candidate
+                        break
+                outlets[col] = name or f"Outlet {col + 1}"
+            for row in rows[subheader_idx + 1:]:
+                month = _incentive_month(row[month_col])
+                if not month:
+                    continue
+                for col, outlet in outlets.items():
+                    sales = _incentive_number(row[col])
+                    if sales is not None:
+                        result.append({"month": month, "outlet": outlet, "total_sales": sales})
+            handled = True
+            break
+        if handled:
+            continue
+
+        # Wide layout: Month | Outlet A | Outlet B | ...
+        for header_idx in range(scan_limit):
+            normalized = [_incentive_header(v) for v in rows[header_idx]]
+            month_col = next((i for i, h in enumerate(normalized) if h in INCENTIVE_MONTH_ALIASES), None)
+            if month_col is None:
+                continue
+            outlet_cols = [i for i, value in enumerate(rows[header_idx]) if i != month_col and str(value or "").strip()]
+            for row in rows[header_idx + 1:]:
+                month = _incentive_month(row[month_col])
+                if not month:
+                    continue
+                for col in outlet_cols:
+                    sales = _incentive_number(row[col])
+                    if sales is not None:
+                        result.append({"month": month, "outlet": str(rows[header_idx][col]).strip(), "total_sales": sales})
+            break
+
+    if not result:
+        raise HTTPException(status_code=400, detail="No readable sales rows found. Use Month, Outlet and Total Sales columns, or a Month row with outlet-wise sales columns.")
+    return result
+
+
+def calculate_incentive_rows(rows: list, profit_rate: float, incentive_rate: float) -> list:
+    calculated = []
+    for row in rows:
+        sales = round(float(row["total_sales"]), 2)
+        avg_profit = round(sales * profit_rate / 100.0, 2)
+        incentive = round(avg_profit * incentive_rate / 100.0, 2)
+        calculated.append({**row, "total_sales": sales, "avg_profit": avg_profit, "total_incentive": incentive})
+    return calculated
+
+
+@app.post("/api/incentive/calculate")
+def calculate_incentive_report(
+    file: UploadFile = File(...),
+    profit_rate: float = Form(7.0),
+    incentive_rate: float = Form(2.5),
+    current_user: models.User = Depends(auth.require_roles("Admin", "Owner", "Accounts", "MISExecutive", "HR")),
+):
+    if not (0 <= profit_rate <= 100 and 0 <= incentive_rate <= 100):
+        raise HTTPException(status_code=400, detail="Both rates must be between 0 and 100.")
+    content = file.file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+    rows = calculate_incentive_rows(parse_incentive_workbook(content), profit_rate, incentive_rate)
+    by_outlet = defaultdict(lambda: {"total_sales": 0.0, "avg_profit": 0.0, "total_incentive": 0.0})
+    for row in rows:
+        for field in ("total_sales", "avg_profit", "total_incentive"):
+            by_outlet[row["outlet"]][field] += row[field]
+    return {
+        "rows": rows,
+        "summary": [{"outlet": outlet, **{k: round(v, 2) for k, v in totals.items()}} for outlet, totals in sorted(by_outlet.items())],
+        "totals": {field: round(sum(r[field] for r in rows), 2) for field in ("total_sales", "avg_profit", "total_incentive")},
+        "profit_rate": profit_rate,
+        "incentive_rate": incentive_rate,
+    }
+
+
+@app.post("/api/incentive/export")
+def export_incentive_report(
+    file: UploadFile = File(...),
+    profit_rate: float = Form(7.0),
+    incentive_rate: float = Form(2.5),
+    current_user: models.User = Depends(auth.require_roles("Admin", "Owner", "Accounts", "MISExecutive", "HR")),
+):
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+
+    if not (0 <= profit_rate <= 100 and 0 <= incentive_rate <= 100):
+        raise HTTPException(status_code=400, detail="Both rates must be between 0 and 100.")
+    source_rows = parse_incentive_workbook(file.file.read())
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "Incentive Report"
+    sheet.merge_cells("A1:E1")
+    sheet["A1"] = "OUTLET-WISE MONTHLY SALES & INCENTIVE REPORT"
+    sheet["A2"], sheet["B2"] = "AVG Profit Rate", profit_rate / 100
+    sheet["D2"], sheet["E2"] = "Incentive Rate", incentive_rate / 100
+    sheet["B2"].number_format = sheet["E2"].number_format = "0.00%"
+    headers = ["Month", "Outlet", "Total Sales", "AVG Profit", "Total Incentive"]
+    for col, header in enumerate(headers, 1):
+        sheet.cell(4, col, header)
+    for row_no, row in enumerate(source_rows, 5):
+        sheet.cell(row_no, 1, row["month"])
+        sheet.cell(row_no, 2, row["outlet"])
+        sheet.cell(row_no, 3, round(float(row["total_sales"]), 2))
+        sheet.cell(row_no, 4, f"=C{row_no}*$B$2")
+        sheet.cell(row_no, 5, f"=D{row_no}*$E$2")
+    end_row = 4 + len(source_rows)
+    total_row = end_row + 1
+    sheet.cell(total_row, 2, "GRAND TOTAL")
+    for col in range(3, 6):
+        letter = get_column_letter(col)
+        sheet.cell(total_row, col, f"=SUM({letter}5:{letter}{end_row})")
+    navy, blue, pale, white = "17365D", "4472C4", "D9EAF7", "FFFFFF"
+    sheet["A1"].fill = PatternFill("solid", fgColor=navy)
+    sheet["A1"].font = Font(color=white, bold=True, size=15)
+    sheet["A1"].alignment = Alignment(horizontal="center")
+    for cell in sheet[4]:
+        cell.fill = PatternFill("solid", fgColor=blue); cell.font = Font(color=white, bold=True); cell.alignment = Alignment(horizontal="center")
+    for cell in sheet[total_row]:
+        cell.fill = PatternFill("solid", fgColor=pale); cell.font = Font(bold=True)
+    thin = Side(style="thin", color="B8C2CC")
+    for row in sheet.iter_rows(min_row=4, max_row=total_row, min_col=1, max_col=5):
+        for cell in row:
+            cell.border = Border(bottom=thin)
+    for col in range(3, 6):
+        for row_no in range(5, total_row + 1):
+            sheet.cell(row_no, col).number_format = '#,##0.00'
+    for col, width in enumerate((15, 28, 18, 18, 20), 1):
+        sheet.column_dimensions[get_column_letter(col)].width = width
+    sheet.freeze_panes = "A5"
+    sheet.auto_filter.ref = f"A4:E{end_row}"
+    sheet.sheet_view.showGridLines = False
+    sheet.row_dimensions[1].height = 26
+    sheet.page_setup.orientation = "landscape"
+    sheet.page_setup.fitToWidth = 1
+
+    summary = book.create_sheet("Outlet Summary")
+    summary.append(["Outlet", "Total Sales", "AVG Profit", "Total Incentive"])
+    outlets = sorted({str(r["outlet"]) for r in source_rows})
+    for idx, outlet in enumerate(outlets, 2):
+        summary.cell(idx, 1, outlet)
+        for col, source_letter in ((2, "C"), (3, "D"), (4, "E")):
+            summary.cell(idx, col, f'=SUMIF(\'Incentive Report\'!$B$5:$B${end_row},A{idx},\'Incentive Report\'!${source_letter}$5:${source_letter}${end_row})')
+            summary.cell(idx, col).number_format = '#,##0.00'
+    for cell in summary[1]:
+        cell.fill = PatternFill("solid", fgColor=navy); cell.font = Font(color=white, bold=True)
+    summary.column_dimensions["A"].width = 28
+    for letter in "BCD": summary.column_dimensions[letter].width = 18
+    summary.freeze_panes = "A2"
+    summary.sheet_view.showGridLines = False
+
+    output = BytesIO()
+    book.save(output)
+    filename = f"Outlet_Incentive_Report_{india_today().isoformat()}.xlsx"
+    return Response(output.getvalue(), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
 @app.post("/api/analytics/stage/{token}/commit")
