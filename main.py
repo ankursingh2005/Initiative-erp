@@ -2000,9 +2000,12 @@ def signup(user: schemas.UserSignup, db: Session = Depends(get_db)):
         if not selected_categories:
             raise HTTPException(status_code=400, detail="Select at least one category")
 
+    custom_brand_name = (user.brand_name_other or "").strip()
     if user.role in ("BrandManager", "BrandPartner"):
-        if not user.brand_ids:
+        if not user.brand_ids and not custom_brand_name:
             raise HTTPException(status_code=400, detail="Select at least one brand")
+        if custom_brand_name and not 2 <= len(custom_brand_name) <= 100:
+            raise HTTPException(status_code=400, detail="Brand name must contain 2 to 100 characters")
 
     existing = (
         db.query(models.User)
@@ -2036,7 +2039,16 @@ def signup(user: schemas.UserSignup, db: Session = Depends(get_db)):
     db.refresh(db_user)
 
     if user.role in ("BrandManager", "BrandPartner", "CategoryManager"):
-        for brand_id in user.brand_ids:
+        assigned_brand_ids = list(user.brand_ids)
+        if user.role in ("BrandManager", "BrandPartner") and custom_brand_name:
+            custom_brand = db.query(models.Brand).filter(func.lower(models.Brand.name) == custom_brand_name.lower()).first()
+            if custom_brand is None:
+                custom_brand = models.Brand(name=custom_brand_name, subcategory_id=None, is_seeded_default=False)
+                db.add(custom_brand)
+                db.flush()
+            if custom_brand.id not in assigned_brand_ids:
+                assigned_brand_ids.append(custom_brand.id)
+        for brand_id in assigned_brand_ids:
             db.add(models.UserBrand(user_id=db_user.id, brand_id=brand_id))
         db.commit()
 

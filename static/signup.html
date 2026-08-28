@@ -309,6 +309,7 @@
       <div id="brandBox" style="display:none;">
         <label for="brandSelect">Assigned Brand</label>
         <select id="brandSelect" onchange="updateBrandSummary()"></select>
+        <input id="brandNameOther" type="text" maxlength="100" placeholder="Enter brand name" style="display:none;" />
         <div id="brandSummary" class="selected-list">No brand selected.</div>
       </div>
 
@@ -405,6 +406,7 @@
         const stores = await storesResponse.json();
         brandSelect.innerHTML = brands.map(b => `<option value="${b.id}">${b.name}</option>`).join("");
         brandSelect.insertAdjacentHTML('afterbegin', '<option value="">Select brand</option>');
+        brandSelect.insertAdjacentHTML('beforeend', '<option value="__other__">Brand not listed — enter brand name</option>');
         outletSelect.innerHTML = '<option value="">Select outlet</option>' + stores
           .filter(store => store.status === 'Active')
           .map(store => `<option value="${store.id}">${store.code ? `${store.code} - ` : ''}${store.name}</option>`)
@@ -428,8 +430,14 @@
 
     function updateBrandSummary() {
       const brandSelect = document.getElementById("brandSelect");
+      const otherInput = document.getElementById("brandNameOther");
+      const enteringOther = brandSelect.value === "__other__";
+      otherInput.style.display = enteringOther ? "block" : "none";
+      otherInput.required = enteringOther;
+      if (!enteringOther) otherInput.value = "";
       const selected = Array.from(brandSelect.selectedOptions).map(option => option.textContent.trim()).filter(Boolean);
-      document.getElementById("brandSummary").textContent = selected.length ? `Selected brand: ${selected[0]}` : "No brand selected.";
+      document.getElementById("brandSummary").textContent = enteringOther ? "Enter the new brand name above." : selected.length ? `Selected brand: ${selected[0]}` : "No brand selected.";
+      if (enteringOther) setTimeout(() => otherInput.focus(), 0);
     }
 
     function selectedCategoryCodes() {
@@ -494,6 +502,7 @@
       if (["BrandManager", "BrandPartner"].includes(role)) {
         const selectedBrands = Array.from(document.getElementById("brandSelect").selectedOptions).filter(option => option.value);
         if (!selectedBrands.length) missingFields.push(fieldLabel("Assigned Brand"));
+        if (document.getElementById("brandSelect").value === "__other__" && !document.getElementById("brandNameOther").value.trim()) missingFields.push(fieldLabel("Brand Name"));
       }
 
       if (missingFields.length) {
@@ -512,14 +521,19 @@
         store_id: Number(document.getElementById("outletSelect").value),
         category_code: null,
         category_codes: [],
-        brand_ids: []
+        brand_ids: [],
+        brand_name_other: null
       };
       if (role === "CategoryManager") {
         payload.category_codes = selectedCategoryCodes();
         payload.category_code = payload.category_codes.join(',');
       }
       if (["BrandManager", "BrandPartner"].includes(role)) {
-        payload.brand_ids = Array.from(document.getElementById("brandSelect").selectedOptions).map(o => Number(o.value));
+        if (document.getElementById("brandSelect").value === "__other__") {
+          payload.brand_name_other = document.getElementById("brandNameOther").value.trim();
+        } else {
+          payload.brand_ids = Array.from(document.getElementById("brandSelect").selectedOptions).map(o => Number(o.value));
+        }
       }
 
       button.disabled = true;
