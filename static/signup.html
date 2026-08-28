@@ -273,17 +273,17 @@
       <label for="role">Role</label>
       <select id="role" onchange="onRoleChange()" required>
         <option value="">Select role</option>
-        <option value="Admin">Admin</option>
-        <option value="Owner">Owner</option>
-        <option value="HR">HR</option>
-        <option value="CategoryManager">Category Manager</option>
-        <option value="BrandManager">Brand Manager</option>
-        <option value="BrandPartner">Brand Promotor</option>
-        <option value="SupportingStaff">Supporting Staff</option>
         <option value="Accounts">Accounts</option>
-        <option value="MISExecutive">MIS Executive</option>
+        <option value="Admin">Admin</option>
+        <option value="BrandPartner">Brand Promotor</option>
+        <option value="CategoryManager">Category Manager</option>
         <option value="CustomerCare">Customer-Care</option>
+        <option value="Employee">Employee</option>
+        <option value="HR">HR</option>
+        <option value="MISExecutive">MIS Executive</option>
         <option value="Other">Other</option>
+        <option value="Owner">Owner</option>
+        <option value="SupportingStaff">Supporting Staff</option>
       </select>
 
       <label for="outletSelect">Assigned Outlet</label>
@@ -422,8 +422,8 @@
     function onRoleChange() {
       const role = document.getElementById("role").value;
       document.getElementById("categoryBox").style.display = role === "CategoryManager" ? "block" : "none";
-      document.getElementById("brandBox").style.display = ["BrandManager", "BrandPartner"].includes(role) ? "block" : "none";
-      if (! ["BrandManager", "BrandPartner"].includes(role)) {
+      document.getElementById("brandBox").style.display = role === "BrandPartner" ? "block" : "none";
+      if (role !== "BrandPartner") {
         document.getElementById("brandSummary").textContent = "No brand selected.";
       }
     }
@@ -499,7 +499,7 @@
         if (!selectedCategoryCodes().length) missingFields.push(fieldLabel("Category Manager Category"));
       }
 
-      if (["BrandManager", "BrandPartner"].includes(role)) {
+      if (role === "BrandPartner") {
         const selectedBrands = Array.from(document.getElementById("brandSelect").selectedOptions).filter(option => option.value);
         if (!selectedBrands.length) missingFields.push(fieldLabel("Assigned Brand"));
         if (document.getElementById("brandSelect").value === "__other__" && !document.getElementById("brandNameOther").value.trim()) missingFields.push(fieldLabel("Brand Name"));
@@ -528,7 +528,7 @@
         payload.category_codes = selectedCategoryCodes();
         payload.category_code = payload.category_codes.join(',');
       }
-      if (["BrandManager", "BrandPartner"].includes(role)) {
+      if (role === "BrandPartner") {
         if (document.getElementById("brandSelect").value === "__other__") {
           payload.brand_name_other = document.getElementById("brandNameOther").value.trim();
         } else {
