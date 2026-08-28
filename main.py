@@ -441,7 +441,6 @@ def ensure_default_master_data():
             "MH": [
                 "Apple", "Google", "iQOO", "Motorola", "Nothing", "OnePlus", "Oppo",
                 "Realme", "Readmi", "Samsung", "Vivo", "Philips", "Lenovo Tablet",
-                "Xiaomi Tablet",
             ],
             "IT": [
                 "Apple iMac", "Apple iPad", "Apple MacBook", "Dell", "HP", "Lenovo",
@@ -2335,10 +2334,11 @@ def list_brands(
     category_id: Optional[int] = None,
     db: Session = Depends(get_db),
 ):
-    # "Samsung Tablet" was a duplicate display name. Keep any historical
-    # database row available to old records, but expose only the canonical
-    # "Samsung" option in brand selectors.
-    query = db.query(models.Brand).filter(func.lower(models.Brand.name) != "samsung tablet")
+    # Tablet-suffixed duplicates remain available to historical records, but
+    # brand selectors expose only their canonical Samsung/Xiaomi brands.
+    query = db.query(models.Brand).filter(
+        ~func.lower(models.Brand.name).in_(["samsung tablet", "xiaomi tablet"])
+    )
     if subcategory_id is not None:
         query = query.filter(models.Brand.subcategory_id == subcategory_id)
     elif category_id is not None:
