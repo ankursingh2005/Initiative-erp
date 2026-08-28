@@ -2456,6 +2456,7 @@ def serialize_user_with_brands(user: models.User) -> dict:
         "category_code": user.category_code,
         "brand_ids": [ub.brand_id for ub in user.brands],
         "status": user.status,
+        "weekoff_day": user.weekoff_day,
         "created_date": user.created_date,
     }
 
@@ -2777,8 +2778,8 @@ def attendance_admin_summary(
                 "history": history,
                 "checkin_at": record.checkin_at if record else None,
                 "checkout_at": record.checkout_at if record else None,
-                "route_distance_m": round(sum(point.route_distance_m or 0 for point in points), 1),
-                "max_distance_from_store_m": round(maximum_distance, 1),
+                "route_distance_m": round(sum(point.route_distance_m or 0 for point in points)),
+                "max_distance_from_store_m": round(maximum_distance),
                 "max_distance_at": maximum_distance_at,
                 "last_latitude": points[-1].latitude if points else None,
                 "last_longitude": points[-1].longitude if points else None,
@@ -2793,8 +2794,8 @@ def attendance_admin_summary(
                 "history": history,
                 "checkin_at": None,
                 "checkout_at": None,
-                "route_distance_m": round(sum(point.route_distance_m or 0 for point in points), 1),
-                "max_distance_from_store_m": round(maximum_distance, 1),
+                "route_distance_m": round(sum(point.route_distance_m or 0 for point in points)),
+                "max_distance_from_store_m": round(maximum_distance),
                 "max_distance_at": maximum_distance_at,
                 "last_latitude": points[-1].latitude if points else None,
                 "last_longitude": points[-1].longitude if points else None,
@@ -2871,7 +2872,7 @@ def export_admin_attendance(
             record.checkin_at.strftime("%I:%M %p") if record and record.checkin_at else "-",
             record.checkout_at.strftime("%I:%M %p") if record and record.checkout_at else "-",
             store.name if store else "Unassigned",
-            f"{round(max(distances, default=0), 1)} m",
+            f"{round(max(distances, default=0))} m",
         ])
     headers = ["Employee", "Status", "Check-in", "Check-out", "Outlet", "Distance"]
     filename_base = f"attendance-{attendance_date.isoformat()}"
@@ -3009,7 +3010,7 @@ def _build_monthly_attendance_workbook(db: Session, users: list, month: str):
                     user.id, store.name if store else "Unassigned", display_name, current_date,
                     current_date.strftime("%A"), status,
                     record.checkin_at, record.checkout_at,
-                    record.checkin_distance_m or 0, record.checkout_distance_m or 0,
+                    round(record.checkin_distance_m or 0), round(record.checkout_distance_m or 0),
                     "Yes" if record.checkin_selfie else "No", "Yes" if record.checkout_selfie else "No",
                 ])
         day_start, day_end = get_column_letter(first_day_col), get_column_letter(last_day_col)
@@ -3154,9 +3155,9 @@ def export_admin_user_attendance(
             record.checkout_at.strftime("%I:%M %p") if record.checkout_at else "-",
             working_hours,
             stores.get(record.store_id, "Unassigned"),
-            f"{round(record.checkin_distance_m or 0, 1)} m",
-            f"{round(record.checkout_distance_m or 0, 1)} m",
-            f"{round(max(distances, default=0), 1)} m",
+            f"{round(record.checkin_distance_m or 0)} m",
+            f"{round(record.checkout_distance_m or 0)} m",
+            f"{round(max(distances, default=0))} m",
             "Yes" if record.checkin_selfie else "No",
             "Yes" if record.checkout_selfie else "No",
         ]
@@ -3258,7 +3259,7 @@ def admin_reset_user_password(
     target_user.reset_token_expires = None
     db.commit()
 
-    return {"message": f"Password reset for {target_user.username}"}
+    return {"message": "Reset Password Successfully", "username": target_user.username}
 
 
 @app.patch("/api/users/{user_id}/assignments", response_model=schemas.UserAdminOut)

@@ -225,7 +225,7 @@
       .helper{overflow-wrap:anywhere}
       a:last-child{margin-bottom:4px}
     }
-    .category-check-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:8px}.category-check{display:flex;align-items:center;gap:9px;min-height:44px;padding:9px 11px;border:1px solid #d0d5dd;border-radius:9px;background:#fff;cursor:pointer;font-weight:700}.category-check:hover{border-color:#155eef;background:#f5f8ff}.category-check input{width:18px!important;min-height:18px!important;height:18px;margin:0;accent-color:#155eef}.category-check.all-category{grid-column:1/-1;color:#0d3fb0;background:#eef4ff;border-color:#b9ceff}.category-check:has(input:checked){color:#0d3fb0;border-color:#155eef;background:#e8f0ff;box-shadow:0 0 0 1px #155eef22}
+    .password-visibility-field{position:relative;width:100%}.password-visibility-field input{width:100%;padding-right:50px}.visibility-toggle{position:absolute;right:5px;top:50%;display:grid;place-items:center;width:40px;height:40px;padding:0;transform:translateY(-50%);border:0;border-radius:8px;color:#667085;background:transparent;cursor:pointer}.visibility-toggle:hover{color:#155eef;background:#eef4ff}.visibility-toggle svg{width:21px;height:21px}.category-check-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:8px}.category-check{display:flex;align-items:center;gap:9px;min-height:44px;padding:9px 11px;border:1px solid #d0d5dd;border-radius:9px;background:#fff;cursor:pointer;font-weight:700}.category-check:hover{border-color:#155eef;background:#f5f8ff}.category-check input{width:18px!important;min-height:18px!important;height:18px;margin:0;accent-color:#155eef}.category-check.all-category{grid-column:1/-1;color:#0d3fb0;background:#eef4ff;border-color:#b9ceff}.category-check:has(input:checked){color:#0d3fb0;border-color:#155eef;background:#e8f0ff;box-shadow:0 0 0 1px #155eef22}
     @media (max-width: 380px) {
       body { padding-left:8px; padding-right:8px; }
       .card { padding:18px 14px 24px; }
@@ -261,7 +261,13 @@
       <input id="password" type="password" placeholder="Password" autocomplete="new-password" required />
 
       <label for="inviteCode">Invite Code</label>
-      <input id="inviteCode" type="password" placeholder="Enter invite code" autocomplete="new-password" required />
+      <div class="password-visibility-field">
+        <input id="inviteCode" type="password" placeholder="Enter invite code" autocomplete="new-password" required />
+        <button type="button" class="visibility-toggle" id="inviteCodeToggle" aria-label="Show invite code" aria-pressed="false" onclick="toggleInviteCodeVisibility()">
+          <svg class="eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+          <svg class="eye-closed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" hidden><path d="M3 3l18 18"></path><path d="M10.6 5.2A11.7 11.7 0 0 1 12 5c6.5 0 10 7 10 7a18 18 0 0 1-2.1 3.1"></path><path d="M6.6 6.6C3.6 8.6 2 12 2 12s3.5 7 10 7a10.8 10.8 0 0 0 4.2-.8"></path></svg>
+        </button>
+      </div>
       <p class="helper" style="margin-top:4px;">All roles use the universal invite code except Admin, which has a separate secure code.</p>
 
       <label for="role">Role</label>
@@ -301,9 +307,9 @@
       </div>
 
       <div id="brandBox" style="display:none;">
-        <label for="brandSelect">Assigned Brand(s)</label>
-        <select id="brandSelect" multiple size="4" onchange="updateBrandSummary()"></select>
-        <div id="brandSummary" class="selected-list">No brands selected.</div>
+        <label for="brandSelect">Assigned Brand</label>
+        <select id="brandSelect" onchange="updateBrandSummary()"></select>
+        <div id="brandSummary" class="selected-list">No brand selected.</div>
       </div>
 
       <button id="signupButton" type="submit">Create Account</button>
@@ -331,11 +337,26 @@
     window.addEventListener('pageshow', () => {
       signupFieldTouched = false;
       clearPreviousSignupCredentials();
+      const inviteInput = document.getElementById('inviteCode'), inviteToggle = document.getElementById('inviteCodeToggle');
+      inviteInput.type = 'password'; inviteToggle.setAttribute('aria-pressed', 'false'); inviteToggle.setAttribute('aria-label', 'Show invite code');
+      inviteToggle.querySelector('.eye-open').hidden = false; inviteToggle.querySelector('.eye-closed').hidden = true;
       setTimeout(clearPreviousSignupCredentials, 250);
       setTimeout(clearPreviousSignupCredentials, 1000);
     });
 
     let signupSuccessTimeout = null;
+
+    function toggleInviteCodeVisibility() {
+      const input = document.getElementById('inviteCode');
+      const button = document.getElementById('inviteCodeToggle');
+      const showing = input.type === 'text';
+      input.type = showing ? 'password' : 'text';
+      button.setAttribute('aria-pressed', String(!showing));
+      button.setAttribute('aria-label', showing ? 'Show invite code' : 'Hide invite code');
+      button.querySelector('.eye-open').hidden = !showing;
+      button.querySelector('.eye-closed').hidden = showing;
+      input.focus();
+    }
 
     function appUrl(path) {
       const currentPath = window.location.pathname;
@@ -383,7 +404,7 @@
         const brands = await brandsResponse.json();
         const stores = await storesResponse.json();
         brandSelect.innerHTML = brands.map(b => `<option value="${b.id}">${b.name}</option>`).join("");
-        brandSelect.size = Math.min(Math.max(brands.length, 4), 8);
+        brandSelect.insertAdjacentHTML('afterbegin', '<option value="">Select brand</option>');
         outletSelect.innerHTML = '<option value="">Select outlet</option>' + stores
           .filter(store => store.status === 'Active')
           .map(store => `<option value="${store.id}">${store.code ? `${store.code} - ` : ''}${store.name}</option>`)
@@ -401,14 +422,14 @@
       document.getElementById("categoryBox").style.display = role === "CategoryManager" ? "block" : "none";
       document.getElementById("brandBox").style.display = ["BrandManager", "BrandPartner"].includes(role) ? "block" : "none";
       if (! ["BrandManager", "BrandPartner"].includes(role)) {
-        document.getElementById("brandSummary").textContent = "No brands selected.";
+        document.getElementById("brandSummary").textContent = "No brand selected.";
       }
     }
 
     function updateBrandSummary() {
       const brandSelect = document.getElementById("brandSelect");
       const selected = Array.from(brandSelect.selectedOptions).map(option => option.textContent.trim()).filter(Boolean);
-      document.getElementById("brandSummary").textContent = selected.length ? `Selected brands: ${selected.join(", ")}` : "No brands selected.";
+      document.getElementById("brandSummary").textContent = selected.length ? `Selected brand: ${selected[0]}` : "No brand selected.";
     }
 
     function selectedCategoryCodes() {
@@ -472,7 +493,7 @@
 
       if (["BrandManager", "BrandPartner"].includes(role)) {
         const selectedBrands = Array.from(document.getElementById("brandSelect").selectedOptions).filter(option => option.value);
-        if (!selectedBrands.length) missingFields.push(fieldLabel("Assigned Brand(s)"));
+        if (!selectedBrands.length) missingFields.push(fieldLabel("Assigned Brand"));
       }
 
       if (missingFields.length) {

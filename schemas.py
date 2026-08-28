@@ -398,6 +398,7 @@ class UserAdminOut(BaseModel):
     category_code: Optional[str]
     brand_ids: List[int] = []
     status: str
+    weekoff_day: Optional[str] = None
     created_date: Optional[datetime] = None
 
 

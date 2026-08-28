@@ -479,7 +479,7 @@
             <table class="um-table">
               <thead>
                 <tr>
-                  <th>Username</th><th>Email</th><th>Role</th><th>Store/Category</th><th>Status</th><th>Registered</th><th>Actions</th>
+                  <th>Username</th><th>Email</th><th>Role</th><th>Store/Category</th><th>Week Off</th><th>Status</th><th>Registered</th><th>Actions</th>
                 </tr>
               </thead>
               <tbody id="userManagementTableBody"></tbody>
@@ -524,6 +524,14 @@
         <button type="button" class="btn-light" onclick="closeResetPasswordModal()">Cancel</button>
         <button type="button" class="btn-primary-modal" id="resetPasswordConfirmBtn" onclick="confirmResetPassword()">Reset Password</button>
       </div>
+    </div>
+  </div>
+
+  <div id="resetPasswordSuccessModal" style="position:fixed; inset:0; z-index:70; display:none; align-items:center; justify-content:center; padding:20px; background:rgba(16,24,40,.55); backdrop-filter:blur(3px);">
+    <div class="modal-card" style="max-width:360px; text-align:center;">
+      <div style="display:grid; place-items:center; width:58px; height:58px; margin:0 auto 14px; border-radius:50%; color:#fff; background:#059669; font-size:30px; font-weight:900;">&#10003;</div>
+      <h3 style="margin-bottom:8px; color:#067647;">Reset Password Successfully</h3>
+      <p id="resetPasswordSuccessText" style="margin-bottom:0;">The user can now sign in with the new password.</p>
     </div>
   </div>
 
@@ -651,6 +659,7 @@
           <td>${u.email}</td>
           <td>${u.role}</td>
           <td>${u.category_code || '-'}</td>
+          <td>${u.weekoff_day || 'Not selected'}</td>
           <td>${u.status}</td>
           <td>${formatDateShort(u.created_date)}</td>
           <td class="um-actions">
@@ -658,7 +667,7 @@
             <button type="button" class="um-delete-btn" onclick="openDeleteUserModal(${u.id}, '${String(u.username).replace(/'/g, "\\'")}')" ${u.username === username ? 'disabled title="You cannot delete your own account"' : ''}>Delete</button>
           </td>
         </tr>
-      `).join('') || '<tr><td colspan="7" class="empty">No registered accounts found</td></tr>';
+      `).join('') || '<tr><td colspan="8" class="empty">No registered accounts found</td></tr>';
     }
 
     let resetPasswordTargetId = null;
@@ -675,6 +684,12 @@
     function closeResetPasswordModal() {
       resetPasswordTargetId = null;
       document.getElementById('resetPasswordModal').style.display = 'none';
+    }
+    function showResetPasswordSuccess(usernameLabel) {
+      document.getElementById('resetPasswordSuccessText').textContent = `${usernameLabel}'s password has been reset successfully.`;
+      const modal = document.getElementById('resetPasswordSuccessModal');
+      modal.style.display = 'flex';
+      setTimeout(() => { modal.style.display = 'none'; }, 2200);
     }
     async function confirmResetPassword() {
       const err = document.getElementById('resetPasswordError');
@@ -710,10 +725,12 @@
           err.style.display = 'block';
           return;
         }
+        const resetUsername = document.getElementById('resetPasswordUsername').textContent || 'User';
         closeResetPasswordModal();
+        showResetPasswordSuccess(resetUsername);
         const msg = document.getElementById('userManagementMsg');
         msg.classList.add('success');
-        msg.textContent = data.message || 'Password reset successfully';
+        msg.textContent = 'Reset Password Successfully';
         setTimeout(() => { msg.textContent = ''; msg.classList.remove('success'); }, 2500);
       } finally {
         btn.disabled = false;
