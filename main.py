@@ -609,7 +609,7 @@ async def handle_unexpected_error(request: Request, exc: Exception):
 # "static" folder sitting next to this file.
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-VALID_ROLES = ["Admin", "Owner", "HR", "CategoryManager", "BrandManager", "BrandPartner", "SupportingStaff", "ServiceManager", "ServiceHead", "SalesExecutive", "AsstSalesManager", "LogisticManager", "Supervisor", "Assistant", "Loder", "Accounts", "MISExecutive", "ITEngineer", "CustomerCare", "Employee", "Cashier", "Other"]
+VALID_ROLES = ["Admin", "Owner", "HR", "CategoryManager", "BrandManager", "BrandPartner", "SupportingStaff", "ServiceManager", "ServiceHead", "SalesExecutive", "AsstSalesManager", "LogisticManager", "Supervisor", "Assistant", "Loder", "ACTechnicianA", "ACTechnicianB", "Accounts", "MISExecutive", "ITEngineer", "CustomerCare", "Employee", "Cashier", "Other"]
 
 
 def normalize_category_code(raw_value: Optional[str]) -> Optional[str]:
@@ -2041,7 +2041,7 @@ def signup(user: schemas.UserSignup, db: Session = Depends(get_db)):
     if user.role not in VALID_ROLES:
         raise HTTPException(status_code=400, detail=f"Role must be one of {VALID_ROLES}")
 
-    if user.role == "ServiceManager":
+    if user.role in {"ServiceManager", "ACTechnicianA", "ACTechnicianB"}:
         user.store_id = None
     elif user.store_id is not None:
         selected_store = db.query(models.Store).filter(models.Store.id == user.store_id).first()
@@ -2530,6 +2530,31 @@ def get_my_profile(current_user: models.User = Depends(auth.get_current_user)):
     }
 
 
+def compress_attendance_selfie(data_url: str) -> str:
+    """Normalize attendance selfies to a small JPEG before database storage."""
+    if not data_url:
+        return ""
+    try:
+        from PIL import Image, ImageOps
+        header, encoded = data_url.split(",", 1)
+        if not header.lower().startswith("data:image/"):
+            raise ValueError("Selfie must be an image data URL")
+        raw = base64.b64decode(encoded, validate=True)
+        if len(raw) > 8 * 1024 * 1024:
+            raise ValueError("Selfie image is too large")
+        with Image.open(BytesIO(raw)) as source:
+            if source.width * source.height > 20_000_000:
+                raise ValueError("Selfie image dimensions are too large")
+            image = ImageOps.exif_transpose(source).convert("RGB")
+            resampling = getattr(Image, "Resampling", Image)
+            image.thumbnail((480, 640), resampling.LANCZOS)
+            compressed = BytesIO()
+            image.save(compressed, format="JPEG", quality=55, optimize=True, progressive=True)
+        return "data:image/jpeg;base64," + base64.b64encode(compressed.getvalue()).decode("ascii")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Unable to process attendance selfie: {exc}")
+
+
 @app.post("/api/attendance", response_model=schemas.AttendanceOut)
 def save_attendance(
     attendance: schemas.AttendanceCreate,
@@ -2545,8 +2570,8 @@ def save_attendance(
         lon_delta = (attendance.longitude - candidate.longitude) * radians
         value = math.sin(lat_delta / 2) ** 2 + math.cos(candidate.latitude * radians) * math.cos(attendance.latitude * radians) * math.sin(lon_delta / 2) ** 2
         return 2 * radius * math.atan2(math.sqrt(value), math.sqrt(1 - value))
-    is_service_manager = current_user.role == "ServiceManager"
-    if is_service_manager:
+    can_mark_from_anywhere = current_user.role in {"ServiceManager", "ACTechnicianA", "ACTechnicianB"}
+    if can_mark_from_anywhere:
         available_stores = db.query(models.Store).filter(
             models.Store.status == "Active",
             models.Store.latitude.isnot(None),
@@ -2563,7 +2588,7 @@ def save_attendance(
             raise HTTPException(status_code=400, detail="Assigned outlet has no GPS coordinates")
         actual_distance = distance_to(store)
     allowed_radius = store.geofence_radius_m or 100
-    if not is_service_manager and actual_distance > allowed_radius:
+    if not can_mark_from_anywhere and actual_distance > allowed_radius:
         raise HTTPException(status_code=403, detail=f"Attendance blocked: you are {round(actual_distance)} m from {store.name}; maximum allowed distance is {round(allowed_radius)} m")
     # Never trust the phone clock as the saved punch time. The database always
     # receives authoritative server IST.
@@ -2587,7 +2612,7 @@ def save_attendance(
     if getattr(record, f"{prefix}_at") is not None:
         raise HTTPException(status_code=409, detail=f"{attendance.action.title()} already recorded")
     setattr(record, f"{prefix}_at", captured_at)
-    setattr(record, f"{prefix}_selfie", attendance.selfie)
+    setattr(record, f"{prefix}_selfie", compress_attendance_selfie(attendance.selfie))
     setattr(record, f"{prefix}_latitude", attendance.latitude)
     setattr(record, f"{prefix}_longitude", attendance.longitude)
     # Store the distance calculated from the submitted coordinates and the
@@ -2670,7 +2695,7 @@ def save_attendance_location(
         lon_delta = (point.longitude - candidate.longitude) * radians
         value = math.sin(lat_delta / 2) ** 2 + math.cos(candidate.latitude * radians) * math.cos(point.latitude * radians) * math.sin(lon_delta / 2) ** 2
         return 2 * radius * math.atan2(math.sqrt(value), math.sqrt(1 - value))
-    if current_user.role == "ServiceManager":
+    if current_user.role in {"ServiceManager", "ACTechnicianA", "ACTechnicianB"}:
         available_stores = db.query(models.Store).filter(models.Store.status == "Active", models.Store.latitude.isnot(None), models.Store.longitude.isnot(None)).all()
         if not available_stores:
             raise HTTPException(status_code=400, detail="No outlet GPS coordinates are configured")
@@ -2788,7 +2813,7 @@ def attendance_admin_summary(
         )
         user_records = sorted(records_by_user.get(user.id, []), key=lambda r: r.attendance_date)
         present_days = sum(1 for r in user_records if r.checkin_at)
-        if user.role == "ServiceManager" and user_records:
+        if user.role in {"ServiceManager", "ACTechnicianA", "ACTechnicianB"} and user_records:
             attendance_outlet = stores_by_id.get(user_records[-1].store_id)
             if attendance_outlet:
                 outlet = attendance_outlet

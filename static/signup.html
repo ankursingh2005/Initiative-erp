@@ -274,6 +274,8 @@
       <select id="role" onchange="onRoleChange()" required>
         <option value="">Select role</option>
         <option value="Accounts">Accounts</option>
+        <option value="ACTechnicianA">AC Technician - A</option>
+        <option value="ACTechnicianB">AC Technician - B</option>
         <option value="Admin">Admin</option>
         <option value="Assistant">Assistant</option>
         <option value="AsstSalesManager">Asst. Sales Manager</option>
@@ -434,11 +436,11 @@
 
     function onRoleChange() {
       const role = document.getElementById("role").value;
-      const serviceManager = role === "ServiceManager";
+      const canMarkFromAnywhere = ["ServiceManager", "ACTechnicianA", "ACTechnicianB"].includes(role);
       const outletSelect = document.getElementById("outletSelect");
-      document.getElementById("outletField").style.display = serviceManager ? "none" : "block";
-      outletSelect.required = !serviceManager;
-      if (serviceManager) outletSelect.value = "";
+      document.getElementById("outletField").style.display = canMarkFromAnywhere ? "none" : "block";
+      outletSelect.required = !canMarkFromAnywhere;
+      if (canMarkFromAnywhere) outletSelect.value = "";
       document.getElementById("categoryBox").style.display = role === "CategoryManager" ? "block" : "none";
       document.getElementById("brandBox").style.display = role === "BrandPartner" ? "block" : "none";
       if (role !== "BrandPartner") {
@@ -511,7 +513,7 @@
       if (!password) missingFields.push(fieldLabel("Password"));
       if (!inviteCode) missingFields.push(fieldLabel("Invite Code"));
       if (!role) missingFields.push(fieldLabel("Role"));
-      if (role !== "ServiceManager" && !document.getElementById("outletSelect").value) missingFields.push(fieldLabel("Assigned Outlet"));
+      if (!["ServiceManager", "ACTechnicianA", "ACTechnicianB"].includes(role) && !document.getElementById("outletSelect").value) missingFields.push(fieldLabel("Assigned Outlet"));
 
       if (role === "CategoryManager") {
         if (!selectedCategoryCodes().length) missingFields.push(fieldLabel("Category Manager Category"));
@@ -536,7 +538,7 @@
         password,
         role,
         invite_code: inviteCode,
-        store_id: role === "ServiceManager" ? null : Number(document.getElementById("outletSelect").value),
+        store_id: ["ServiceManager", "ACTechnicianA", "ACTechnicianB"].includes(role) ? null : Number(document.getElementById("outletSelect").value),
         category_code: null,
         category_codes: [],
         brand_ids: [],
