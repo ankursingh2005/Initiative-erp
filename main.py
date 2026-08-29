@@ -2771,6 +2771,9 @@ def attendance_admin_summary(
     stores_by_id = {
         store.id: store for store in db.query(models.Store).all()
     }
+    brands_by_id = {
+        brand.id: brand.name for brand in db.query(models.Brand).all()
+    }
     outlet_abbreviations = {
         "hazratganj": "HZT",
         "alambagh": "ALM",
@@ -2805,6 +2808,16 @@ def attendance_admin_summary(
 
     rows = []
     for user in users:
+        promoter_brand_names = [
+            brands_by_id[user_brand.brand_id]
+            for user_brand in user.brands
+            if user_brand.brand_id in brands_by_id
+        ] if user.role == "BrandPartner" else []
+        promoter_brand = ", ".join(promoter_brand_names)
+        attendance_display_name = (
+            f"{user.username} ({promoter_brand}-PRO)"
+            if promoter_brand else user.username
+        )
         outlet = stores_by_id.get(user.store_id)
         outlet_name = outlet.name if outlet else None
         outlet_abbreviation = outlet_abbreviations.get(
@@ -2884,7 +2897,9 @@ def attendance_admin_summary(
                 else "Absent"
             )
             rows.append({
-                "user_id": user.id, "username": user.username, "outlet_id": user.store_id,
+                "user_id": user.id, "username": attendance_display_name,
+                "account_username": user.username, "role": user.role,
+                "promoter_brand": promoter_brand, "outlet_id": user.store_id,
                 "outlet_name": outlet_name, "outlet_abbreviation": outlet_abbreviation,
                 "status": row_status, "weekoff_day": user.weekoff_day,
                 "present_days": present_days, "days_in_range": days_in_range,
@@ -2900,7 +2915,9 @@ def attendance_admin_summary(
             })
         else:
             rows.append({
-                "user_id": user.id, "username": user.username, "outlet_id": user.store_id,
+                "user_id": user.id, "username": attendance_display_name,
+                "account_username": user.username, "role": user.role,
+                "promoter_brand": promoter_brand, "outlet_id": user.store_id,
                 "outlet_name": outlet_name, "outlet_abbreviation": outlet_abbreviation,
                 "status": f"{present_days}/{days_in_range} Present", "weekoff_day": user.weekoff_day,
                 "present_days": present_days, "days_in_range": days_in_range,
@@ -3435,7 +3452,7 @@ def delete_user(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.require_user_management_admin),
 ):
-    """Admin-only: permanently delete a user account, regardless of what
+    """Admin/HR: permanently delete an allowed user account, regardless of what
     they've submitted/uploaded in the past. Purchase orders require an
     owning user (that column is NOT NULL), so any the deleted user
     submitted or approved are reassigned to the admin doing the deletion,
@@ -3449,6 +3466,8 @@ def delete_user(
 
     if target_user.id == current_user.id:
         raise HTTPException(status_code=400, detail="You cannot delete your own account.")
+    if current_user.role == "HR" and target_user.role == "Admin":
+        raise HTTPException(status_code=403, detail="HR cannot delete an Admin account.")
 
     deleted_username = target_user.username
 

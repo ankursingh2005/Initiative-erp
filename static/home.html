@@ -613,7 +613,7 @@
     }
 
     // ------------------------------------------------------------------
-    // User Management (Admin only) - moved here from the Schemes page.
+    // User Management (Admin and HR) - moved here from the Schemes page.
     // ------------------------------------------------------------------
     async function umFetch(url, options = {}) {
       const response = await fetch(appUrl(url), {
@@ -706,7 +706,7 @@
           <td>${formatDateShort(u.created_date)}</td>
           <td class="um-actions">
             <button type="button" class="um-reset-btn" onclick="openResetPasswordModal(${u.id}, '${String(u.username).replace(/'/g, "\\'")}')">Reset Password</button>
-            <button type="button" class="um-delete-btn" onclick="openDeleteUserModal(${u.id}, '${String(u.username).replace(/'/g, "\\'")}')" ${u.username === username ? 'disabled title="You cannot delete your own account"' : ''}>Delete</button>
+            <button type="button" class="um-delete-btn" onclick="openDeleteUserModal(${u.id}, '${String(u.username).replace(/'/g, "\\'")}')" ${(u.username === username || (role === 'HR' && u.role === 'Admin')) ? `disabled title="${u.username === username ? 'You cannot delete your own account' : 'HR cannot delete an Admin account'}"` : ''}>Delete</button>
           </td>
         </tr>
       `).join('') || `<tr><td colspan="8" class="empty">No ${userManagementRoleFilter === 'ALL' ? '' : userManagementRoleFilter + ' '}accounts found</td></tr>`;
@@ -918,7 +918,7 @@
       }
     }
 
-    if (role === 'Admin') {
+    if (role === 'Admin' || role === 'HR') {
       document.getElementById('navUserManagement').style.display = 'flex';
       document.getElementById('user-management').style.display = 'block';
     }

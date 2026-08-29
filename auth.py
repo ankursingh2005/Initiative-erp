@@ -89,11 +89,11 @@ def require_roles(*allowed_roles):
 def require_user_management_admin(
     current_user: models.User = Depends(get_current_user),
 ):
-    """Strict guard for account administration; Owner and HR are excluded."""
-    if current_user.role != "Admin":
+    """Allow Admin and HR to manage user accounts; Owner remains excluded."""
+    if current_user.role not in {"Admin", "HR"}:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="User Management is available only to Admin",
+            detail="User Management is available only to Admin and HR",
         )
     return current_user
 
