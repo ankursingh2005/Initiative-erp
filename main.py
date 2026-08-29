@@ -230,7 +230,8 @@ def ensure_default_branches():
             {"name": "Ashiyana", "code": "BR003", "city": "Lucknow", "status": "Active", "latitude": 26.79601399706687, "longitude": 80.9208545762198, "geofence_radius_m": 100},
             {"name": "Hazratganj", "code": "BR004", "city": "Lucknow", "status": "Active", "latitude": 26.84924030483742, "longitude": 80.94773860240677, "geofence_radius_m": 100},
             {"name": "Vikas Nagar", "code": "BR005", "city": "Lucknow", "status": "Active", "latitude": 26.90188397262733, "longitude": 80.95513690261241, "geofence_radius_m": 100},
-            {"name": "Warehouse", "code": "MWH", "city": "Lucknow", "status": "Active", "latitude": None, "longitude": None, "geofence_radius_m": 100},
+            {"name": "Warehouse", "code": "MWH", "city": "Lucknow", "status": "Active", "latitude": 26.779149508725354, "longitude": 80.88470873166187, "geofence_radius_m": 100},
+            {"name": "Head Office", "code": "HO", "city": "Lucknow", "status": "Active", "latitude": 26.84904218332385, "longitude": 80.94789353821966, "geofence_radius_m": 100},
         ]
         if db.query(models.Store).count() == 0:
             for branch in default_branches:
@@ -2715,6 +2716,9 @@ def attendance_admin_summary(
         "gomti nagar": "GNG",
         "vikas nagar": "VKN",
         "vikasnagar": "VKN",
+        "head office": "HO",
+        "head-office": "HO",
+        "warehouse": "MWH",
     }
 
     record_query = db.query(models.AttendanceRecord).filter(
