@@ -2486,7 +2486,19 @@ def list_stores(db: Session = Depends(get_db)):
 #  what's assigned to their account.)
 # ============================================================
 
-def serialize_user_with_brands(user: models.User) -> dict:
+def serialize_user_with_brands(user: models.User, db: Optional[Session] = None) -> dict:
+    brand_ids = [ub.brand_id for ub in user.brands]
+    brand_names = []
+    outlet = None
+    if db is not None:
+        if brand_ids:
+            brand_names = [
+                brand.name for brand in db.query(models.Brand)
+                .filter(models.Brand.id.in_(brand_ids))
+                .order_by(models.Brand.name).all()
+            ]
+        if user.store_id is not None:
+            outlet = db.query(models.Store).filter(models.Store.id == user.store_id).first()
     return {
         "id": user.id,
         "username": user.username,
@@ -2495,7 +2507,10 @@ def serialize_user_with_brands(user: models.User) -> dict:
         "role": user.role,
         "store_id": user.store_id,
         "category_code": user.category_code,
-        "brand_ids": [ub.brand_id for ub in user.brands],
+        "brand_ids": brand_ids,
+        "brand_names": brand_names,
+        "outlet_name": outlet.name if outlet else None,
+        "outlet_code": outlet.code if outlet else None,
         "status": user.status,
         "weekoff_day": user.weekoff_day,
         "created_date": user.created_date,
@@ -3301,7 +3316,7 @@ def list_users_for_admin(
     current_user: models.User = Depends(auth.require_user_management_admin),
 ):
     users = db.query(models.User).order_by(models.User.username).all()
-    return [serialize_user_with_brands(u) for u in users]
+    return [serialize_user_with_brands(u, db) for u in users]
 
 
 @app.get("/api/users/count", response_model=schemas.UserCountOut)
@@ -3368,7 +3383,7 @@ def update_user_assignments(
 
     db.commit()
     db.refresh(target_user)
-    return serialize_user_with_brands(target_user)
+    return serialize_user_with_brands(target_user, db)
 
 
 @app.delete("/api/users/{user_id}")

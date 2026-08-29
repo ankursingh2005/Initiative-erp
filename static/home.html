@@ -482,7 +482,7 @@
             <table class="um-table">
               <thead>
                 <tr>
-                  <th>Username</th><th>Email</th><th>Role</th><th>Store/Category</th><th>Week Off</th><th>Status</th><th>Registered</th><th>Actions</th>
+                  <th>Username</th><th>Email</th><th>Role</th><th>Outlet/Category</th><th>Week Off</th><th>Status</th><th>Registered</th><th>Actions</th>
                 </tr>
               </thead>
               <tbody id="userManagementTableBody"></tbody>
@@ -668,6 +668,17 @@
       renderUserManagementTable();
     }
 
+    function userAssignmentLabel(user) {
+      if (user.role === 'CategoryManager') {
+        const labels = { HA: 'HA', HE: 'HE', IT: 'IT', MH: 'Mobile' };
+        return String(user.category_code || '').split(',').map(code => labels[code.trim()] || code.trim()).filter(Boolean).join(', ') || '-';
+      }
+      if (user.role === 'BrandPartner' || user.role === 'BrandManager') {
+        return (user.brand_names || []).join(', ') || '-';
+      }
+      return user.outlet_name ? `${user.outlet_code ? user.outlet_code + ' - ' : ''}${user.outlet_name}` : '-';
+    }
+
     function renderUserManagementTable() {
       const tbody = document.getElementById('userManagementTableBody');
       const users = userManagementRoleFilter === 'ALL'
@@ -678,7 +689,7 @@
           <td>${u.username}</td>
           <td>${u.email}</td>
           <td>${u.role}</td>
-          <td>${u.category_code || '-'}</td>
+          <td>${userAssignmentLabel(u)}</td>
           <td>${u.weekoff_day || 'Not selected'}</td>
           <td>${u.status}</td>
           <td>${formatDateShort(u.created_date)}</td>

@@ -398,6 +398,9 @@ class UserAdminOut(BaseModel):
     store_id: Optional[int]
     category_code: Optional[str]
     brand_ids: List[int] = []
+    brand_names: List[str] = []
+    outlet_name: Optional[str] = None
+    outlet_code: Optional[str] = None
     status: str
     weekoff_day: Optional[str] = None
     created_date: Optional[datetime] = None
