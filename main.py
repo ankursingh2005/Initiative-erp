@@ -245,6 +245,29 @@ def ensure_default_branches():
                     store.latitude = branch["latitude"]
                     store.longitude = branch["longitude"]
                     store.geofence_radius_m = store.geofence_radius_m or 100
+
+        # One-time/idempotent outlet reassignment requested for the deployed
+        # Hazratganj accounts. Running this at startup ensures existing users
+        # are moved after deployment as soon as Head Office has been seeded.
+        head_office = db.query(models.Store).filter(models.Store.code == "HO").first()
+        if head_office:
+            head_office_emails = {
+                "singhankur7521@gmail.com",
+                "ashvriyamishra6671@gmail.com",
+                "ashwanis0025@gmail.com",
+                "jatinkumarsaini771@gmail.com",
+                "initiative.lucknow@gmail.com",
+                "raju.singh26101@gmail.com",
+                "srivastava.op@gmail.com",
+                "pooja.tripathiji@gmail.com",
+                "shreyashah19479@gmail.com",
+                "shubhampanday959@gmail.com",
+                "rajputswarnima8@gmail.com",
+                "tabish.syed24@gmail.com",
+            }
+            db.query(models.User).filter(
+                func.lower(models.User.email).in_(head_office_emails)
+            ).update({models.User.store_id: head_office.id}, synchronize_session=False)
         db.commit()
 
 
