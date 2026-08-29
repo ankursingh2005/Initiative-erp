@@ -2814,10 +2814,6 @@ def attendance_admin_summary(
             if user_brand.brand_id in brands_by_id
         ] if user.role == "BrandPartner" else []
         promoter_brand = ", ".join(promoter_brand_names)
-        attendance_display_name = (
-            f"{user.username} ({promoter_brand}-PRO)"
-            if promoter_brand else user.username
-        )
         outlet = stores_by_id.get(user.store_id)
         outlet_name = outlet.name if outlet else None
         outlet_abbreviation = outlet_abbreviations.get(
@@ -2897,8 +2893,7 @@ def attendance_admin_summary(
                 else "Absent"
             )
             rows.append({
-                "user_id": user.id, "username": attendance_display_name,
-                "account_username": user.username, "role": user.role,
+                "user_id": user.id, "username": user.username, "role": user.role,
                 "promoter_brand": promoter_brand, "outlet_id": user.store_id,
                 "outlet_name": outlet_name, "outlet_abbreviation": outlet_abbreviation,
                 "status": row_status, "weekoff_day": user.weekoff_day,
@@ -2915,8 +2910,7 @@ def attendance_admin_summary(
             })
         else:
             rows.append({
-                "user_id": user.id, "username": attendance_display_name,
-                "account_username": user.username, "role": user.role,
+                "user_id": user.id, "username": user.username, "role": user.role,
                 "promoter_brand": promoter_brand, "outlet_id": user.store_id,
                 "outlet_name": outlet_name, "outlet_abbreviation": outlet_abbreviation,
                 "status": f"{present_days}/{days_in_range} Present", "weekoff_day": user.weekoff_day,

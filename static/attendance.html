@@ -518,4 +518,29 @@ const WEEKOFF_DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday
   const wait=setInterval(()=>{if(profile){install();clearInterval(wait)}},500);setTimeout(()=>clearInterval(wait),15000);
 })();
 </script>
+<script>
+(function showPromoterBrandOnlyInAttendancePopup(){
+  document.addEventListener('click',async event=>{
+    const row=event.target.closest('.admin-row');
+    if(!row)return;
+    const accountName=row.cells?.[0]?.textContent?.trim();
+    if(!accountName)return;
+    try{
+      const response=await fetch('/api/users',{headers:{Authorization:'Bearer '+localStorage.getItem('token')}});
+      if(!response.ok)return;
+      const user=(await response.json()).find(item=>item.username===accountName);
+      if(user?.role!=='BrandPartner'||!user.brand_names?.length)return;
+      const modal=await new Promise(resolve=>{
+        let attempts=0;
+        const wait=setInterval(()=>{
+          const found=document.querySelector('.record-modal.show');
+          if(found||++attempts>20){clearInterval(wait);resolve(found)}
+        },25);
+      });
+      const heading=modal?.querySelector('.record-dialog h2');
+      if(heading)heading.textContent=accountName+' ('+user.brand_names.join(', ')+'-PRO)';
+    }catch(error){}
+  });
+})();
+</script>
 </body></html>
