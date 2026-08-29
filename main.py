@@ -5235,7 +5235,7 @@ def build_daily_profitability_workbook(merged_items: list, period_label: str) ->
     return buffer.getvalue()
 
 
-def build_division_outlet_daily_report(merged_items: list) -> bytes:
+def build_division_outlet_daily_report(merged_items: list, all_outlets: Optional[List[str]] = None) -> bytes:
     """Build a date-wise sales matrix with divisions on rows and outlets on columns."""
     import openpyxl as _openpyxl
     from openpyxl.styles import Alignment as _Alignment, Border as _Border, Font as _Font, PatternFill as _PatternFill, Side as _Side
@@ -5243,10 +5243,10 @@ def build_division_outlet_daily_report(merged_items: list) -> bytes:
 
     division_labels = {
         "HA": "HA", "HE": "HE", "Mobile": "MOBILE", "Computer": "COMPUTER",
-        "Digital Camera": "CAMERA", "Accessories": "ACCESSORY", "Other": "OTHER",
+        "Digital Camera": "CAMERA", "Accessories": "ACCESSORY",
     }
     divisions = [division for division in DP_CATEGORIES if any(item["category"] == division for item in merged_items)]
-    outlets = sorted({str(item.get("store") or "UNK").upper() for item in merged_items})
+    outlets = sorted(set(all_outlets or []) | {str(item.get("store") or "UNK").upper() for item in merged_items})
     dates = sorted({item["date"] for item in merged_items if item.get("date")})
     sales = defaultdict(float)
     for item in merged_items:
@@ -5356,7 +5356,7 @@ def build_division_outlet_daily_report(merged_items: list) -> bytes:
 # shares the most name-tokens with it, and that attribution is listed in
 # "review_notes" so Admin can sanity-check anything non-obvious.
 
-DP_CATEGORIES = ["HA", "HE", "Computer", "Mobile", "Digital Camera", "Accessories", "Other"]
+DP_CATEGORIES = ["HA", "HE", "Computer", "Mobile", "Digital Camera", "Accessories"]
 
 # Busy's Bill-wise Profitability export is GST-exclusive. Every Sale Amount
 # and Purchase Price in the Daily Profitability report/dashboard is grossed
@@ -5415,11 +5415,13 @@ def dp_categorize(item_name: Optional[str]) -> str:
     n = (item_name or "").upper()
     padded = f" {n} "
 
-    # Brand payouts/incentives (e.g. "Lenovo Payout") are not actual product
-    # sales - route to Other before any brand keyword below (LENOVO, HP,
-    # SAMSUNG, etc.) can sweep them into that brand's product category.
+    # Payout and other uncategorized non-PW lines are included in Accessories;
+    # PW vouchers themselves are excluded from profitability entirely.
     if "PAYOUT" in n:
-        return "Other"
+        return "Accessories"
+
+    if "INVERTER EB 1100" in n:
+        return "HA"
 
     # --- Mobile phones, first, before anything else can steal them ---
     # ASUS/dual-purpose brands make both laptops and phones, so a phone
@@ -5537,7 +5539,7 @@ def dp_categorize(item_name: Optional[str]) -> str:
         return "Mobile"
     if "SAMSUNG" in n and re.search(r"\b[AMS]\d{2,3}[A-Z]?\b", n):
         return "Mobile"
-    return "Other"
+    return "Accessories"
 
 
 def dp_is_ac_od_component(item_name: Optional[str]) -> bool:
@@ -5557,6 +5559,8 @@ def dp_merge_rows(rows: List["models.IntervalSaleUpload"]) -> tuple:
     groups = defaultdict(list)
     for r in rows:
         key = r.vch_no or f"__no_vch_{r.id}"
+        if "PW" in str(key).upper():
+            continue
         groups[key].append(r)
 
     merged = []
@@ -5627,13 +5631,7 @@ def dp_merge_rows(rows: List["models.IntervalSaleUpload"]) -> tuple:
             })
 
     for m in merged:
-        # Any voucher whose number contains "PW" (e.g. "PW/34/26-27") is
-        # always Other, regardless of what the item itself is - these are
-        # project/wholesale-type bills, not regular retail category sales.
-        if "PW" in str(m["vch"] or "").upper():
-            m["category"] = "Other"
-        else:
-            m["category"] = dp_categorize(m["item"])
+        m["category"] = dp_categorize(m["item"])
         m["sale"] = m["sale"] * DP_GST_FACTOR
         m["cost"] = m["cost"] * DP_GST_FACTOR
         m["margin"] = m["sale"] - m["cost"]
@@ -5838,7 +5836,12 @@ def daily_profitability_daily_report(
     merged = dp_apply_filters(merged, category, store)
     if not merged:
         raise HTTPException(status_code=404, detail="No rows match the selected filters.")
-    workbook_bytes = build_division_outlet_daily_report(merged)
+    all_outlets = sorted({
+        dp_extract_store(voucher)
+        for (voucher,) in db.query(models.IntervalSaleUpload.vch_no).distinct().all()
+        if voucher and "PW" not in voucher.upper()
+    })
+    workbook_bytes = build_division_outlet_daily_report(merged, all_outlets)
     filename_date = start_date.isoformat() if start_date and start_date == end_date else f"{start_date or 'first'}_{end_date or 'latest'}"
     return Response(
         content=workbook_bytes,
