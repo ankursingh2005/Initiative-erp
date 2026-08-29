@@ -5235,6 +5235,108 @@ def build_daily_profitability_workbook(merged_items: list, period_label: str) ->
     return buffer.getvalue()
 
 
+def build_division_outlet_daily_report(merged_items: list) -> bytes:
+    """Build a date-wise sales matrix with divisions on rows and outlets on columns."""
+    import openpyxl as _openpyxl
+    from openpyxl.styles import Alignment as _Alignment, Border as _Border, Font as _Font, PatternFill as _PatternFill, Side as _Side
+    from openpyxl.utils import get_column_letter as _get_column_letter
+
+    division_labels = {
+        "HA": "HA", "HE": "HE", "Mobile": "MOBILE", "Computer": "COMPUTER",
+        "Digital Camera": "CAMERA", "Accessories": "ACCESSORY", "Other": "OTHER",
+    }
+    divisions = [division for division in DP_CATEGORIES if any(item["category"] == division for item in merged_items)]
+    outlets = sorted({str(item.get("store") or "UNK").upper() for item in merged_items})
+    dates = sorted({item["date"] for item in merged_items if item.get("date")})
+    sales = defaultdict(float)
+    for item in merged_items:
+        sales[(item.get("date"), item["category"], str(item.get("store") or "UNK").upper())] += item["sale"]
+
+    wb = _openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Daily Report"
+    ws.sheet_view.showGridLines = False
+    thin = _Side(style="thin", color="000000")
+    border = _Border(left=thin, right=thin, top=thin, bottom=thin)
+    title_fill = _PatternFill("solid", fgColor="F8CBAD")
+    blue_fill = _PatternFill("solid", fgColor="9DC3E6")
+    header_font = _Font(name="Arial", size=11, bold=True)
+    body_font = _Font(name="Arial", size=10, bold=True)
+    number_format = '#,##0;[Red]-#,##0;-'
+    last_col = 3 + len(outlets)
+    total_col_letter = _get_column_letter(last_col)
+    row_no = 1
+    first_header_row = 2
+
+    for report_date in dates:
+        ws.merge_cells(start_row=row_no, start_column=1, end_row=row_no, end_column=last_col)
+        title = ws.cell(row_no, 1, f"Division Wise Sale Report {report_date.strftime('%d %b %Y').upper()}")
+        title.font = _Font(name="Arial", size=14, bold=True)
+        title.alignment = _Alignment(horizontal="center", vertical="center")
+        for cell in ws[row_no][:last_col]:
+            cell.fill = title_fill
+            cell.border = border
+        ws.row_dimensions[row_no].height = 24
+        row_no += 1
+
+        headers = ["SL no.", "Division", *outlets, "TOTAL VALUE"]
+        for col_no, header in enumerate(headers, 1):
+            cell = ws.cell(row_no, col_no, header)
+            cell.fill = blue_fill
+            cell.font = header_font
+            cell.border = border
+            cell.alignment = _Alignment(horizontal="center", vertical="center")
+        row_no += 1
+        first_division_row = row_no
+
+        for serial, division in enumerate(divisions, 1):
+            ws.cell(row_no, 1, serial)
+            ws.cell(row_no, 2, division_labels.get(division, division.upper()))
+            for outlet_index, outlet in enumerate(outlets, 3):
+                value = round(sales[(report_date, division, outlet)])
+                ws.cell(row_no, outlet_index, value if value else 0)
+            first_outlet_letter = _get_column_letter(3)
+            last_outlet_letter = _get_column_letter(2 + len(outlets))
+            ws.cell(row_no, last_col, f"=SUM({first_outlet_letter}{row_no}:{last_outlet_letter}{row_no})")
+            for cell in ws[row_no][:last_col]:
+                cell.border = border
+                cell.font = body_font
+                cell.alignment = _Alignment(horizontal="right" if cell.column >= 3 else "center" if cell.column == 1 else "left")
+                if cell.column >= 3:
+                    cell.number_format = number_format
+            row_no += 1
+
+        total_row = row_no
+        ws.merge_cells(start_row=total_row, start_column=1, end_row=total_row, end_column=2)
+        ws.cell(total_row, 1, "Total")
+        for col_no in range(3, last_col + 1):
+            col_letter = _get_column_letter(col_no)
+            ws.cell(total_row, col_no, f"=SUM({col_letter}{first_division_row}:{col_letter}{total_row - 1})")
+        for cell in ws[total_row][:last_col]:
+            cell.fill = blue_fill
+            cell.border = border
+            cell.font = header_font
+            cell.alignment = _Alignment(horizontal="center" if cell.column <= 2 else "right", vertical="center")
+            if cell.column >= 3:
+                cell.number_format = number_format
+        row_no += 2
+
+    ws.freeze_panes = "C3"
+    ws.column_dimensions["A"].width = 10
+    ws.column_dimensions["B"].width = 18
+    for col_no in range(3, last_col):
+        ws.column_dimensions[_get_column_letter(col_no)].width = 14
+    ws.column_dimensions[total_col_letter].width = 18
+    if len(dates) == 1:
+        ws.auto_filter.ref = f"A{first_header_row}:{total_col_letter}{row_no - 2}"
+    ws.page_setup.orientation = "landscape"
+    ws.page_setup.fitToWidth = 1
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    buffer = BytesIO()
+    wb.save(buffer)
+    return buffer.getvalue()
+
+
 # ============================================================
 # DAILY PROFITABILITY REPORT (home-page "Daily Profitability" tile)
 # ============================================================
@@ -5717,6 +5819,31 @@ def daily_profitability_download(
         content=workbook_bytes,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/api/daily-profitability/daily-report")
+def daily_profitability_daily_report(
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
+    category: Optional[str] = Query(None),
+    store: Optional[str] = Query(None),
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    rows = dp_filter_rows(db, start_date, end_date)
+    if not rows:
+        raise HTTPException(status_code=404, detail="No data available for the selected range.")
+    merged, _ = dp_merge_rows(rows)
+    merged = dp_apply_filters(merged, category, store)
+    if not merged:
+        raise HTTPException(status_code=404, detail="No rows match the selected filters.")
+    workbook_bytes = build_division_outlet_daily_report(merged)
+    filename_date = start_date.isoformat() if start_date and start_date == end_date else f"{start_date or 'first'}_{end_date or 'latest'}"
+    return Response(
+        content=workbook_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="Division_Wise_Daily_Report_{filename_date}.xlsx"'},
     )
 
 
