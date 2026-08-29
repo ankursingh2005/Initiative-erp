@@ -284,14 +284,17 @@
         <option value="ITEngineer">IT Engineer</option>
         <option value="MISExecutive">MIS Executive</option>
         <option value="Owner">Owner</option>
+        <option value="ServiceManager">Service Manager</option>
         <option value="SupportingStaff">Supporting Staff</option>
         <option value="Other">Other</option>
       </select>
 
-      <label for="outletSelect">Assigned Outlet</label>
-      <select id="outletSelect" required>
-        <option value="">Loading outlets...</option>
-      </select>
+      <div id="outletField">
+        <label for="outletSelect">Assigned Outlet</label>
+        <select id="outletSelect" required>
+          <option value="">Loading outlets...</option>
+        </select>
+      </div>
 
       <div id="mandatoryMsg" class="mandatory-msg" style="display:none;"></div>
 
@@ -424,6 +427,11 @@
 
     function onRoleChange() {
       const role = document.getElementById("role").value;
+      const serviceManager = role === "ServiceManager";
+      const outletSelect = document.getElementById("outletSelect");
+      document.getElementById("outletField").style.display = serviceManager ? "none" : "block";
+      outletSelect.required = !serviceManager;
+      if (serviceManager) outletSelect.value = "";
       document.getElementById("categoryBox").style.display = role === "CategoryManager" ? "block" : "none";
       document.getElementById("brandBox").style.display = role === "BrandPartner" ? "block" : "none";
       if (role !== "BrandPartner") {
@@ -496,7 +504,7 @@
       if (!password) missingFields.push(fieldLabel("Password"));
       if (!inviteCode) missingFields.push(fieldLabel("Invite Code"));
       if (!role) missingFields.push(fieldLabel("Role"));
-      if (!document.getElementById("outletSelect").value) missingFields.push(fieldLabel("Assigned Outlet"));
+      if (role !== "ServiceManager" && !document.getElementById("outletSelect").value) missingFields.push(fieldLabel("Assigned Outlet"));
 
       if (role === "CategoryManager") {
         if (!selectedCategoryCodes().length) missingFields.push(fieldLabel("Category Manager Category"));
@@ -521,7 +529,7 @@
         password,
         role,
         invite_code: inviteCode,
-        store_id: Number(document.getElementById("outletSelect").value),
+        store_id: role === "ServiceManager" ? null : Number(document.getElementById("outletSelect").value),
         category_code: null,
         category_codes: [],
         brand_ids: [],

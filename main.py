@@ -585,7 +585,7 @@ async def handle_unexpected_error(request: Request, exc: Exception):
 # "static" folder sitting next to this file.
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-VALID_ROLES = ["Admin", "Owner", "HR", "CategoryManager", "BrandManager", "BrandPartner", "SupportingStaff", "Accounts", "MISExecutive", "ITEngineer", "CustomerCare", "Employee", "Cashier", "Other"]
+VALID_ROLES = ["Admin", "Owner", "HR", "CategoryManager", "BrandManager", "BrandPartner", "SupportingStaff", "ServiceManager", "Accounts", "MISExecutive", "ITEngineer", "CustomerCare", "Employee", "Cashier", "Other"]
 
 
 def normalize_category_code(raw_value: Optional[str]) -> Optional[str]:
@@ -2017,7 +2017,9 @@ def signup(user: schemas.UserSignup, db: Session = Depends(get_db)):
     if user.role not in VALID_ROLES:
         raise HTTPException(status_code=400, detail=f"Role must be one of {VALID_ROLES}")
 
-    if user.store_id is not None:
+    if user.role == "ServiceManager":
+        user.store_id = None
+    elif user.store_id is not None:
         selected_store = db.query(models.Store).filter(models.Store.id == user.store_id).first()
         if selected_store is None or selected_store.status != "Active":
             raise HTTPException(status_code=400, detail="Select an active outlet")
@@ -2497,19 +2499,32 @@ def save_attendance(
 ):
     if attendance.action not in {"checkin", "checkout"}:
         raise HTTPException(status_code=400, detail="Action must be checkin or checkout")
-    if current_user.store_id is None:
-        raise HTTPException(status_code=400, detail="No outlet is assigned to this account")
-    store = db.query(models.Store).filter(models.Store.id == current_user.store_id).first()
-    if not store or store.latitude is None or store.longitude is None:
-        raise HTTPException(status_code=400, detail="Assigned outlet has no GPS coordinates")
     radius = 6371000
     radians = math.pi / 180
-    lat_delta = (attendance.latitude - store.latitude) * radians
-    lon_delta = (attendance.longitude - store.longitude) * radians
-    value = math.sin(lat_delta / 2) ** 2 + math.cos(store.latitude * radians) * math.cos(attendance.latitude * radians) * math.sin(lon_delta / 2) ** 2
-    actual_distance = 2 * radius * math.atan2(math.sqrt(value), math.sqrt(1 - value))
+    def distance_to(candidate):
+        lat_delta = (attendance.latitude - candidate.latitude) * radians
+        lon_delta = (attendance.longitude - candidate.longitude) * radians
+        value = math.sin(lat_delta / 2) ** 2 + math.cos(candidate.latitude * radians) * math.cos(attendance.latitude * radians) * math.sin(lon_delta / 2) ** 2
+        return 2 * radius * math.atan2(math.sqrt(value), math.sqrt(1 - value))
+    is_service_manager = current_user.role == "ServiceManager"
+    if is_service_manager:
+        available_stores = db.query(models.Store).filter(
+            models.Store.status == "Active",
+            models.Store.latitude.isnot(None),
+            models.Store.longitude.isnot(None),
+        ).all()
+        if not available_stores:
+            raise HTTPException(status_code=400, detail="No outlet GPS coordinates are configured")
+        store, actual_distance = min(((candidate, distance_to(candidate)) for candidate in available_stores), key=lambda pair: pair[1])
+    else:
+        if current_user.store_id is None:
+            raise HTTPException(status_code=400, detail="No outlet is assigned to this account")
+        store = db.query(models.Store).filter(models.Store.id == current_user.store_id).first()
+        if not store or store.latitude is None or store.longitude is None:
+            raise HTTPException(status_code=400, detail="Assigned outlet has no GPS coordinates")
+        actual_distance = distance_to(store)
     allowed_radius = store.geofence_radius_m or 100
-    if actual_distance > allowed_radius:
+    if not is_service_manager and actual_distance > allowed_radius:
         raise HTTPException(status_code=403, detail=f"Attendance blocked: you are {round(actual_distance)} m from {store.name}; maximum allowed distance is {round(allowed_radius)} m")
     # Never trust the phone clock as the saved punch time. The database always
     # receives authoritative server IST.
@@ -2523,7 +2538,7 @@ def save_attendance(
             raise HTTPException(status_code=409, detail="Punch in is required before punch out")
         record = models.AttendanceRecord(
             user_id=current_user.id,
-            store_id=current_user.store_id,
+            store_id=store.id,
             attendance_date=captured_at.date(),
         )
         db.add(record)
@@ -2609,17 +2624,25 @@ def save_attendance_location(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    if current_user.store_id is None:
-        raise HTTPException(status_code=400, detail="No outlet is assigned to this account")
-    store = db.query(models.Store).filter(models.Store.id == current_user.store_id).first()
-    if not store or store.latitude is None or store.longitude is None:
-        raise HTTPException(status_code=400, detail="Assigned outlet has no GPS coordinates")
     radius = 6371000
     radians = math.pi / 180
-    lat_delta = (point.latitude - store.latitude) * radians
-    lon_delta = (point.longitude - store.longitude) * radians
-    value = math.sin(lat_delta / 2) ** 2 + math.cos(store.latitude * radians) * math.cos(point.latitude * radians) * math.sin(lon_delta / 2) ** 2
-    actual_distance = 2 * radius * math.atan2(math.sqrt(value), math.sqrt(1 - value))
+    def distance_to(candidate):
+        lat_delta = (point.latitude - candidate.latitude) * radians
+        lon_delta = (point.longitude - candidate.longitude) * radians
+        value = math.sin(lat_delta / 2) ** 2 + math.cos(candidate.latitude * radians) * math.cos(point.latitude * radians) * math.sin(lon_delta / 2) ** 2
+        return 2 * radius * math.atan2(math.sqrt(value), math.sqrt(1 - value))
+    if current_user.role == "ServiceManager":
+        available_stores = db.query(models.Store).filter(models.Store.status == "Active", models.Store.latitude.isnot(None), models.Store.longitude.isnot(None)).all()
+        if not available_stores:
+            raise HTTPException(status_code=400, detail="No outlet GPS coordinates are configured")
+        store, actual_distance = min(((candidate, distance_to(candidate)) for candidate in available_stores), key=lambda pair: pair[1])
+    else:
+        if current_user.store_id is None:
+            raise HTTPException(status_code=400, detail="No outlet is assigned to this account")
+        store = db.query(models.Store).filter(models.Store.id == current_user.store_id).first()
+        if not store or store.latitude is None or store.longitude is None:
+            raise HTTPException(status_code=400, detail="Assigned outlet has no GPS coordinates")
+        actual_distance = distance_to(store)
     # Location trails also use server IST so changing the phone clock cannot
     # move GPS points to another day or reorder the route history.
     captured_at = datetime.now(INDIA_TZ).replace(tzinfo=None)
@@ -2723,6 +2746,14 @@ def attendance_admin_summary(
         )
         user_records = sorted(records_by_user.get(user.id, []), key=lambda r: r.attendance_date)
         present_days = sum(1 for r in user_records if r.checkin_at)
+        if user.role == "ServiceManager" and user_records:
+            attendance_outlet = stores_by_id.get(user_records[-1].store_id)
+            if attendance_outlet:
+                outlet = attendance_outlet
+                outlet_name = outlet.name
+                outlet_abbreviation = outlet_abbreviations.get(
+                    outlet_name.strip().lower(), outlet.code or "—"
+                )
 
         points = db.query(models.AttendanceLocationPoint).filter(
             models.AttendanceLocationPoint.user_id == user.id,

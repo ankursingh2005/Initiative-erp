@@ -457,4 +457,64 @@ const WEEKOFF_DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday
   if(!enhance()){const wait=setInterval(()=>{if(enhance())clearInterval(wait)},50);setTimeout(()=>clearInterval(wait),15000)}
 })();
 </script>
+<script>
+(function enableServiceManagerAttendance(){
+  function nearestServiceOutlet(p){
+    if(!p)return null;
+    const candidates=(liveStores||[]).filter(store=>store.status==='Active'&&Number.isFinite(Number(store.latitude))&&Number.isFinite(Number(store.longitude)));
+    const available=candidates.length?candidates:Object.entries(outlets).map(([name,coords])=>({name,latitude:coords[0],longitude:coords[1]}));
+    return available.map(store=>({store,distance:meters(p.coords.latitude,p.coords.longitude,[Number(store.latitude),Number(store.longitude)])})).sort((a,b)=>a.distance-b.distance)[0]||null;
+  }
+  function install(){
+    if(typeof assignedOutlet!=='function'||typeof checkLocation!=='function'||typeof openMark!=='function')return false;
+    const regularAssignedOutlet=function(){const store=(liveStores||[]).find(item=>item.id===profile?.store_id);if(store?.latitude&&store?.longitude)outlets[store.name]=[Number(store.latitude),Number(store.longitude)];return store?.name||'Hazratganj'};
+    assignedOutlet=function(){
+      if(profile?.role==='ServiceManager'){
+        const nearest=nearestServiceOutlet(position);if(nearest){outlets[nearest.store.name]=[Number(nearest.store.latitude),Number(nearest.store.longitude)];return nearest.store.name}
+        return 'Nearest outlet';
+      }
+      return regularAssignedOutlet();
+    };
+    checkLocation=function(){
+      if(!navigator.geolocation){setGps('Location is off or unavailable. Allow location in browser settings.','bad');return}
+      navigator.geolocation.getCurrentPosition(p=>{
+        position=p;
+        if(profile?.role==='ServiceManager'){
+          const nearest=nearestServiceOutlet(p);if(!nearest)return;
+          outlets[nearest.store.name]=[Number(nearest.store.latitude),Number(nearest.store.longitude)];
+          $('distance').textContent=formatDistance(nearest.distance);
+          $('outletText').textContent='Nearest outlet: '+nearest.store.name;
+          setGps(nearest.distance<=Number(nearest.store.geofence_radius_m||100)?'Present at '+nearest.store.name+' · '+formatDistance(nearest.distance):formatDistance(nearest.distance)+' from '+nearest.store.name,'ok');
+        }else{
+          const outletName=assignedOutlet(),d=meters(p.coords.latitude,p.coords.longitude,outlets[outletName]);
+          $('distance').textContent=formatDistance(d);setGps(d<=100?'Location verified inside '+outletName:'You are '+formatDistance(d)+' away. Move within 100 m of '+outletName+'.',d<=100?'ok':'bad');
+        }
+      },error=>{const messages={1:'Location permission was denied. Allow it in browser settings.',2:'Your location is unavailable. Turn on GPS and try again.',3:'Location timed out. Move outdoors and try again.'};setGps(messages[error.code]||'Unable to get your location.','bad')},{enableHighAccuracy:true,timeout:15000,maximumAge:5000});
+    };
+    openMark=async function(){
+      if(!position){setGps('Location is required before marking.','bad');checkLocation();return}
+      if(position.coords.accuracy>200){setGps('GPS accuracy is '+Math.round(position.coords.accuracy)+' m. Move outdoors and try again.','bad');return}
+      const outletName=assignedOutlet(),distance=meters(position.coords.latitude,position.coords.longitude,outlets[outletName]);
+      if(profile?.role!=='ServiceManager'&&distance>100){setGps('Location must be enabled and within 100 m before marking.','bad');return}
+      if(!window.isSecureContext||!navigator.mediaDevices?.getUserMedia){$('modalText').textContent='Camera requires HTTPS or localhost. Open the secure app URL and try again.';$('modal').classList.add('show');return}
+      $('modal').classList.add('show');$('capture').disabled=true;$('modalText').textContent='Preparing camera...';
+      try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'user'},width:{ideal:720},height:{ideal:960}},audio:false});$('camera').srcObject=stream;$('camera').style.display='block';$('capture').disabled=false;$('modalText').textContent='Look at the camera, then tap Capture & Mark.'}catch(error){$('modalText').textContent=error.name==='NotAllowedError'?'Camera permission was denied. Allow it in browser settings.':'The front camera is unavailable or already in use.'}
+    };
+    const regularTracking=startApprovedTracking;
+    startApprovedTracking=function(){
+      if(profile?.role!=='ServiceManager'){regularTracking();return}
+      if(locationWatch!==null||!navigator.geolocation)return;
+      locationWatch=navigator.geolocation.watchPosition(p=>{position=p;const nearest=nearestServiceOutlet(p);if(!nearest)return;outlets[nearest.store.name]=[Number(nearest.store.latitude),Number(nearest.store.longitude)];state.locations=state.locations||[];state.locations.push({at:new Date().toISOString(),latitude:p.coords.latitude,longitude:p.coords.longitude,distance:nearest.distance});uploadWorkingLocation(p,nearest.distance);$('distance').textContent=formatDistance(nearest.distance);$('outletText').textContent='Nearest outlet: '+nearest.store.name;save()},()=>{},{enableHighAccuracy:true,maximumAge:15000,timeout:15000});
+    };
+    if(profile?.role==='ServiceManager'){
+      $('outletText').textContent='Finding nearest outlet...';
+      const hint=document.querySelector('.grid .panel:first-child .hint:last-child');if(hint)hint.textContent='Your time, GPS position, nearest outlet, distance, and selfie are recorded. Service Managers may mark attendance from any location.';
+      checkLocation();
+    }
+    return true;
+  }
+  install();
+  const wait=setInterval(()=>{if(profile){install();clearInterval(wait)}},500);setTimeout(()=>clearInterval(wait),15000);
+})();
+</script>
 </body></html>
