@@ -299,12 +299,15 @@
       color: var(--muted); font-size: 13px; font-weight: 600; cursor: pointer;
     }
     .um-locked-hint svg { width: 17px; height: 17px; flex-shrink: 0; color: var(--um-dark); }
-    .um-summary { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
+    .um-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 8px; align-items: stretch; margin-bottom: 16px; }
     .um-pill {
-      display: inline-block; padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 700;
-      background: var(--um-soft); color: var(--um-dark); border: 1px solid transparent;
+      display: inline-flex; align-items: center; justify-content: center; width: 100%; min-height: 34px; padding: 6px 12px;
+      border-radius: 999px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer;
+      background: var(--um-soft); color: var(--um-dark); border: 1px solid transparent; white-space: nowrap;
     }
     .um-pill.total { background: var(--ink); color: #fff; }
+    .um-pill:hover { border-color: var(--um); transform: translateY(-1px); }
+    .um-pill.active { border-color: var(--um-dark); box-shadow: 0 0 0 2px color-mix(in srgb, var(--um) 20%, transparent); }
     .um-chevron { width: 20px; height: 20px; flex-shrink: 0; color: var(--muted); margin-top: 4px; transition: transform 0.2s ease; }
     .um-card.expanded .um-chevron { transform: rotate(90deg); }
     .um-detail { margin-top: 18px; }
@@ -629,14 +632,18 @@
       return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
     }
 
+    let userManagementUsers = [];
+    let userManagementRoleFilter = 'ALL';
+
     async function loadUserManagement() {
       try {
         const [usersRes, countRes] = await Promise.all([umFetch('/api/users'), umFetch('/api/users/count')]);
         if (!usersRes || !countRes || !usersRes.ok || !countRes.ok) return;
         const users = await usersRes.json();
         const countData = await countRes.json();
+        userManagementUsers = users;
         renderUserCountSummary(countData);
-        renderUserManagementTable(users);
+        renderUserManagementTable();
       } catch (e) {
         // Leave the section empty if user data can't be loaded right now.
       }
@@ -644,15 +651,28 @@
 
     function renderUserCountSummary(countData) {
       const wrap = document.getElementById('userCountSummary');
+      if (userManagementRoleFilter !== 'ALL' && !(userManagementRoleFilter in (countData.by_role || {}))) userManagementRoleFilter = 'ALL';
       const roleChips = Object.entries(countData.by_role || {})
         .sort((a, b) => b[1] - a[1])
-        .map(([roleName, count]) => `<span class="um-pill">${roleName}: ${count}</span>`)
+        .map(([roleName, count]) => `<button type="button" class="um-pill${userManagementRoleFilter === roleName ? ' active' : ''}" onclick='filterUserManagementByRole(${JSON.stringify(roleName)})'>${roleName}: ${count}</button>`)
         .join('');
-      wrap.innerHTML = `<span class="um-pill total">${countData.total} account${countData.total === 1 ? '' : 's'} registered</span>${roleChips}`;
+      wrap.innerHTML = `<button type="button" class="um-pill total${userManagementRoleFilter === 'ALL' ? ' active' : ''}" onclick="filterUserManagementByRole('ALL')">${countData.total} account${countData.total === 1 ? '' : 's'} registered</button>${roleChips}`;
     }
 
-    function renderUserManagementTable(users) {
+    function filterUserManagementByRole(roleName) {
+      userManagementRoleFilter = roleName;
+      document.querySelectorAll('#userCountSummary .um-pill').forEach(button => {
+        const isTotal = button.classList.contains('total');
+        button.classList.toggle('active', roleName === 'ALL' ? isTotal : !isTotal && button.textContent.startsWith(roleName + ':'));
+      });
+      renderUserManagementTable();
+    }
+
+    function renderUserManagementTable() {
       const tbody = document.getElementById('userManagementTableBody');
+      const users = userManagementRoleFilter === 'ALL'
+        ? userManagementUsers
+        : userManagementUsers.filter(user => user.role === userManagementRoleFilter);
       tbody.innerHTML = users.map(u => `
         <tr>
           <td>${u.username}</td>
@@ -667,7 +687,7 @@
             <button type="button" class="um-delete-btn" onclick="openDeleteUserModal(${u.id}, '${String(u.username).replace(/'/g, "\\'")}')" ${u.username === username ? 'disabled title="You cannot delete your own account"' : ''}>Delete</button>
           </td>
         </tr>
-      `).join('') || '<tr><td colspan="8" class="empty">No registered accounts found</td></tr>';
+      `).join('') || `<tr><td colspan="8" class="empty">No ${userManagementRoleFilter === 'ALL' ? '' : userManagementRoleFilter + ' '}accounts found</td></tr>`;
     }
 
     let resetPasswordTargetId = null;
