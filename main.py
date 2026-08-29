@@ -227,7 +227,7 @@ def ensure_default_branches():
         default_branches = [
             {"name": "Alambagh", "code": "BR001", "city": "Lucknow", "status": "Active", "latitude": 26.8023316384953, "longitude": 80.89578659627016, "geofence_radius_m": 100},
             {"name": "Gomtinagar", "code": "BR002", "city": "Lucknow", "status": "Active", "latitude": 26.850130023596396, "longitude": 81.00713531584118, "geofence_radius_m": 100},
-            {"name": "Ashiyana", "code": "BR003", "city": "Lucknow", "status": "Active", "latitude": 26.79601399706687, "longitude": 80.9208545762198, "geofence_radius_m": 100},
+            {"name": "Ashiyana", "code": "BR003", "city": "Lucknow", "status": "Active", "latitude": 26.795911774284612, "longitude": 80.92089772123978, "geofence_radius_m": 100},
             {"name": "Hazratganj", "code": "BR004", "city": "Lucknow", "status": "Active", "latitude": 26.84924030483742, "longitude": 80.94773860240677, "geofence_radius_m": 100},
             {"name": "Vikas Nagar", "code": "BR005", "city": "Lucknow", "status": "Active", "latitude": 26.90188397262733, "longitude": 80.95513690261241, "geofence_radius_m": 100},
             {"name": "Warehouse", "code": "MWH", "city": "Lucknow", "status": "Active", "latitude": 26.779149508725354, "longitude": 80.88470873166187, "geofence_radius_m": 100},
@@ -241,6 +241,12 @@ def ensure_default_branches():
                 store = db.query(models.Store).filter(models.Store.code == branch["code"]).first()
                 if not store:
                     db.add(models.Store(**branch))
+                elif branch["code"] == "BR003":
+                    # Keep the deployed Ashiyana geofence synchronized with
+                    # its verified location instead of retaining stale GPS.
+                    store.latitude = branch["latitude"]
+                    store.longitude = branch["longitude"]
+                    store.geofence_radius_m = store.geofence_radius_m or 100
                 elif branch["latitude"] is not None and (not store.latitude or not store.longitude):
                     store.latitude = branch["latitude"]
                     store.longitude = branch["longitude"]
