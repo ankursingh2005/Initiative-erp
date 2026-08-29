@@ -3033,13 +3033,24 @@ def _build_monthly_attendance_workbook(db: Session, users: list, month: str):
     from openpyxl.utils import get_column_letter
 
     month_start, month_end = _attendance_month_range(month)
-    users = sorted(users, key=lambda user: ((user.store_id or 0), (user.full_name or user.username or "").lower(), user.id))
     user_ids = [user.id for user in users]
     records = db.query(models.AttendanceRecord).filter(
         models.AttendanceRecord.user_id.in_(user_ids or [-1]),
         models.AttendanceRecord.attendance_date >= month_start,
         models.AttendanceRecord.attendance_date <= month_end,
     ).order_by(models.AttendanceRecord.attendance_date).all()
+    records_per_user = defaultdict(int)
+    for record in records:
+        records_per_user[record.user_id] += 1
+    unique_users = {}
+    for user in users:
+        display_key = (user.username or user.full_name or str(user.id)).strip().casefold()
+        current = unique_users.get(display_key)
+        user_rank = (records_per_user[user.id], user.store_id is not None, user.id)
+        current_rank = (records_per_user[current.id], current.store_id is not None, current.id) if current else None
+        if current is None or user_rank > current_rank:
+            unique_users[display_key] = user
+    users = sorted(unique_users.values(), key=lambda user: ((user.store_id or 0), (user.full_name or user.username or "").lower(), user.id))
     records_by_key = {(record.user_id, record.attendance_date): record for record in records}
     stores = {store.id: store for store in db.query(models.Store).all()}
     days = month_end.day
@@ -3048,13 +3059,13 @@ def _build_monthly_attendance_workbook(db: Session, users: list, month: str):
     book = Workbook()
     summary = book.active
     summary.title = "Monthly Summary"
-    last_col = 3 + days + 4
+    last_col = 2 + days + 4
     last_letter = get_column_letter(last_col)
     summary.merge_cells(start_row=1, start_column=1, end_row=1, end_column=last_col)
     summary["A1"] = "MONTHLY ATTENDANCE SUMMARY"
     summary.merge_cells(start_row=2, start_column=1, end_row=2, end_column=last_col)
     summary["A2"] = month_start.strftime("%B %Y")
-    headers = ["Outlet", "Employee", "User ID"] + list(range(1, days + 1)) + ["Present", "Absent", "Week Off", "Total"]
+    headers = ["Outlet", "Employee"] + list(range(1, days + 1)) + ["Present", "Absent", "Week Off", "Total"]
     summary.append([])
     summary.append(headers)
 
@@ -3068,23 +3079,25 @@ def _build_monthly_attendance_workbook(db: Session, users: list, month: str):
     }
     summary["A1"].fill = PatternFill("solid", fgColor=navy)
     summary["A1"].font = Font(color=white, bold=True, size=16)
-    summary["A1"].alignment = Alignment(horizontal="center")
+    summary["A1"].alignment = Alignment(horizontal="center", vertical="center")
     summary["A2"].fill = PatternFill("solid", fgColor=pale_blue)
     summary["A2"].font = Font(color=navy, bold=True, size=12)
-    summary["A2"].alignment = Alignment(horizontal="center")
+    summary["A2"].alignment = Alignment(horizontal="center", vertical="center")
     for cell in summary[4]:
         cell.fill = PatternFill("solid", fgColor=blue)
         cell.font = Font(color=white, bold=True)
         cell.alignment = Alignment(horizontal="center", vertical="center")
 
-    first_day_col, last_day_col = 4, 3 + days
+    first_day_col, last_day_col = 3, 2 + days
     detail_rows = []
     for row_no, user in enumerate(users, 5):
         store = stores.get(user.store_id)
         display_name = user.full_name or user.username
+        if store is None:
+            recorded_stores = [stores.get(record.store_id) for record in records if record.user_id == user.id and stores.get(record.store_id)]
+            store = recorded_stores[-1] if recorded_stores else None
         summary.cell(row_no, 1, store.name if store else "Unassigned")
         summary.cell(row_no, 2, display_name)
-        summary.cell(row_no, 3, user.id)
         for day_number in range(1, days + 1):
             current_date = date(month_start.year, month_start.month, day_number)
             record = records_by_key.get((user.id, current_date))
@@ -3101,8 +3114,9 @@ def _build_monthly_attendance_workbook(db: Session, users: list, month: str):
             cell.alignment = Alignment(horizontal="center")
             cell.fill = attendance_status_fills[status]
             if record:
+                record_store = stores.get(record.store_id) or store
                 detail_rows.append([
-                    user.id, store.name if store else "Unassigned", display_name, current_date,
+                    user.id, record_store.name if record_store else "Unassigned", display_name, current_date,
                     current_date.strftime("%A"), status,
                     record.checkin_at, record.checkout_at,
                     round(record.checkin_distance_m or 0), round(record.checkout_distance_m or 0),
@@ -3126,14 +3140,18 @@ def _build_monthly_attendance_workbook(db: Session, users: list, month: str):
             cell.border = Border(bottom=thin)
     summary.column_dimensions["A"].width = 20
     summary.column_dimensions["B"].width = 25
-    summary.column_dimensions["C"].hidden = True
     for col in range(first_day_col, last_day_col + 1):
         summary.column_dimensions[get_column_letter(col)].width = 6
     for col in range(last_day_col + 1, last_col + 1):
         summary.column_dimensions[get_column_letter(col)].width = 12
-    summary.freeze_panes = "D5"
-    summary.row_dimensions[4].height = 28
+    summary.freeze_panes = "A5"
+    summary.row_dimensions[1].height = 34
+    summary.row_dimensions[2].height = 25
+    summary.row_dimensions[3].height = 10
+    summary.row_dimensions[4].height = 30
     summary.sheet_view.showGridLines = False
+    summary.sheet_view.zoomScale = 85
+    summary.auto_filter.ref = f"A4:{last_letter}{data_end}"
     summary.page_setup.orientation = "landscape"
     summary.page_setup.fitToWidth = 1
     summary.sheet_properties.pageSetUpPr.fitToPage = True
