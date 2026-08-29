@@ -482,7 +482,7 @@
             <table class="um-table">
               <thead>
                 <tr>
-                  <th>Username</th><th>Email</th><th>Role</th><th>Outlet/Category</th><th>Week Off</th><th>Status</th><th>Registered</th><th>Actions</th>
+                  <th>Username</th><th>Email</th><th>Role</th><th>Outlet/Category/Brand</th><th>Week Off</th><th>Status</th><th>Registered</th><th>Actions</th>
                 </tr>
               </thead>
               <tbody id="userManagementTableBody"></tbody>
@@ -669,14 +669,25 @@
     }
 
     function userAssignmentLabel(user) {
+      const outletCodes = {
+        'hazratganj': 'HZT', 'alambagh': 'ALM', 'ashiyana': 'ASH',
+        'gomtinagar': 'GNG', 'gomti nagar': 'GNG', 'vikas nagar': 'VKN',
+        'warehouse': 'WH', 'head office': 'HO', 'head-office': 'HO'
+      };
+      const outletName = String(user.outlet_name || '').trim();
+      const outletCode = outletCodes[outletName.toLowerCase()] || user.outlet_code || '';
+      const outletLabel = outletCode || outletName;
       if (user.role === 'CategoryManager') {
         const labels = { HA: 'HA', HE: 'HE', IT: 'IT', MH: 'Mobile' };
-        return String(user.category_code || '').split(',').map(code => labels[code.trim()] || code.trim()).filter(Boolean).join(', ') || '-';
+        const categories = String(user.category_code || '').split(',').map(code => labels[code.trim()] || code.trim()).filter(Boolean).join(', ');
+        return [outletLabel, categories].filter(Boolean).join(' / ') || '-';
       }
       if (user.role === 'BrandPartner' || user.role === 'BrandManager') {
-        return (user.brand_names || []).join(', ') || '-';
+        const brands = (user.brand_names || []).join(', ');
+        return [outletLabel, brands].filter(Boolean).join(' / ') || '-';
       }
-      return user.outlet_name ? `${user.outlet_code ? user.outlet_code + ' - ' : ''}${user.outlet_name}` : '-';
+      if (user.role === 'ServiceManager') return 'Any Outlet';
+      return outletLabel || '-';
     }
 
     function renderUserManagementTable() {
