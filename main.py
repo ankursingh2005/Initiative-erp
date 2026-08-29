@@ -2986,7 +2986,13 @@ def _build_monthly_attendance_workbook(db: Session, users: list, month: str):
     summary.append(headers)
 
     navy, blue, white = "17365D", "4472C4", "FFFFFF"
-    pale_blue, pale_green, pale_red, pale_gray = "D9EAF7", "D9EAD3", "F4CCCC", "E7E6E6"
+    pale_blue, pale_green, pale_red, pale_orange, pale_gray = "D9EAF7", "D9EAD3", "F4CCCC", "F4B183", "E7E6E6"
+    attendance_status_fills = {
+        "P": PatternFill("solid", fgColor=pale_green),
+        "A": PatternFill("solid", fgColor=pale_red),
+        "WO": PatternFill("solid", fgColor=pale_orange),
+        "-": PatternFill("solid", fgColor=pale_gray),
+    }
     summary["A1"].fill = PatternFill("solid", fgColor=navy)
     summary["A1"].font = Font(color=white, bold=True, size=16)
     summary["A1"].alignment = Alignment(horizontal="center")
@@ -3020,6 +3026,7 @@ def _build_monthly_attendance_workbook(db: Session, users: list, month: str):
                 status = "A"
             cell = summary.cell(row_no, first_day_col + day_number - 1, status)
             cell.alignment = Alignment(horizontal="center")
+            cell.fill = attendance_status_fills[status]
             if record:
                 detail_rows.append([
                     user.id, store.name if store else "Unassigned", display_name, current_date,
@@ -3038,7 +3045,7 @@ def _build_monthly_attendance_workbook(db: Session, users: list, month: str):
 
     data_end = max(5, 4 + len(users))
     day_range = f"{get_column_letter(first_day_col)}5:{get_column_letter(last_day_col)}{data_end}"
-    for value, color in (("P", pale_green), ("A", pale_red), ("WO", pale_blue), ("-", pale_gray)):
+    for value, color in (("P", pale_green), ("A", pale_red), ("WO", pale_orange), ("-", pale_gray)):
         summary.conditional_formatting.add(day_range, CellIsRule(operator="equal", formula=[f'"{value}"'], fill=PatternFill("solid", fgColor=color)))
     thin = Side(style="thin", color="D0D5DD")
     for row in summary.iter_rows(min_row=4, max_row=data_end, min_col=1, max_col=last_col):
@@ -3070,6 +3077,8 @@ def _build_monthly_attendance_workbook(db: Session, users: list, month: str):
         cell.alignment = Alignment(horizontal="center")
     for row_no in range(2, len(detail_rows) + 2):
         detail.cell(row_no, 4).number_format = "dd-mmm-yyyy"
+        detail.cell(row_no, 6).fill = attendance_status_fills.get(detail.cell(row_no, 6).value, attendance_status_fills["-"])
+        detail.cell(row_no, 6).alignment = Alignment(horizontal="center")
         detail.cell(row_no, 7).number_format = "hh:mm AM/PM"
         detail.cell(row_no, 8).number_format = "hh:mm AM/PM"
         detail.cell(row_no, 9).number_format = '0.0'

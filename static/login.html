@@ -399,7 +399,7 @@
         const data = await response.json().catch(() => ({}));
         if (!response.ok) {
           msg.textContent = response.status === 401
-            ? 'Username or password incorrect.'
+            ? 'Username/Password incorrect'
             : (data.detail || 'Unable to sign in. Please try again.');
           return;
         }

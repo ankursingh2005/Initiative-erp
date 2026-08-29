@@ -102,6 +102,12 @@
   .record-close{display:block;width:100%;min-height:46px;margin-top:10px}
 }
 </style>
+<style>
+.attendance-admin .admin-dashboard-panel .summary{grid-template-columns:repeat(4,minmax(0,1fr))}
+.attendance-admin .admin-dashboard-panel .summary .metric.weekoff-metric{color:#a15c00;background:linear-gradient(135deg,#fff4df,#ffd99a)}
+.attendance-admin .admin-dashboard-panel .summary .metric.weekoff-metric:after{content:"WO";font-size:34px}
+@media(max-width:760px){.attendance-admin .admin-dashboard-panel .summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
 </head>
 <body>
 <header class="top"><a class="brand" href="/home"><img src="static/Initiative%20logo.png" alt="Initiative Logo"><span>Initiative<small>ERP</small></span></a><div class="top-actions"><label class="weekoff-control"><span id="weekoffLabel">Week Off</span><select id="weekoffSelect" aria-label="Choose your weekly off day"><option value="">Week Off</option><option>Monday</option><option>Tuesday</option><option>Wednesday</option><option>Thursday</option><option>Friday</option><option>Saturday</option><option>Sunday</option></select></label><a class="back" href="/home" title="Back to Home" style="display:inline-flex;align-items:center;gap:6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>Back</a></div></header>
@@ -425,6 +431,30 @@ const WEEKOFF_DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday
     }
   }
   enhance();setTimeout(enhance,700);setTimeout(enhance,1800);
+})();
+</script>
+<script>
+(function addWeekOffSummaryCard(){
+  function enhance(){
+    const panel=document.querySelector('.admin-dashboard-panel'),summary=panel?.querySelector('.summary');
+    if(!panel||!summary)return false;
+    const firstLabel=summary.querySelector('.metric span');if(firstLabel)firstLabel.textContent='Total Users';
+    let card=summary.querySelector('.weekoff-metric');
+    if(!card){
+      card=document.createElement('div');card.className='metric weekoff-metric';card.dataset.filter='Week Off';card.tabIndex=0;card.setAttribute('role','button');card.setAttribute('aria-label','Show week off employees');card.innerHTML='<span>Week Off</span><strong>0</strong>';summary.appendChild(card);
+    }
+    const tableWrap=panel.querySelector('table')?.parentElement,toggle=panel.querySelector('.admin-users-toggle');
+    function sync(){const rows=[...(panel.querySelector('tbody')?.rows||[])];card.querySelector('strong').textContent=rows.filter(row=>row.cells[1]?.textContent.trim()==='Week Off').length}
+    function filterWeekOff(){
+      const rows=[...(panel.querySelector('tbody')?.rows||[])];for(const row of rows)row.hidden=row.cells[1]?.textContent.trim()!=='Week Off';
+      summary.querySelectorAll('.metric').forEach(metric=>metric.classList.toggle('active-filter',metric===card));
+      if(tableWrap)tableWrap.hidden=false;if(toggle){toggle.setAttribute('aria-expanded','true');toggle.querySelector('span').textContent='Hide employees'}
+    }
+    card.onclick=filterWeekOff;card.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();filterWeekOff()}};
+    const body=panel.querySelector('tbody');if(body&&!body.dataset.weekoffSummaryObserver){body.dataset.weekoffSummaryObserver='true';new MutationObserver(sync).observe(body,{childList:true,subtree:true})}
+    sync();return true;
+  }
+  if(!enhance()){const wait=setInterval(()=>{if(enhance())clearInterval(wait)},50);setTimeout(()=>clearInterval(wait),15000)}
 })();
 </script>
 </body></html>
