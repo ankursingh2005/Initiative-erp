@@ -2036,13 +2036,17 @@ def signup(user: schemas.UserSignup, db: Session = Depends(get_db)):
         if custom_brand_name and not 2 <= len(custom_brand_name) <= 100:
             raise HTTPException(status_code=400, detail="Brand name must contain 2 to 100 characters")
 
+    normalized_email = (user.email or "").strip().lower()
+    if not normalized_email:
+        raise HTTPException(status_code=400, detail="Email is required")
+
     existing = (
         db.query(models.User)
-        .filter(models.User.email == user.email)
+        .filter(func.lower(models.User.email) == normalized_email)
         .first()
     )
     if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
+        raise HTTPException(status_code=409, detail="Only one account can be created with this email address")
 
     if user.role not in VALID_ROLES:
         raise HTTPException(status_code=400, detail=f"Role must be one of {VALID_ROLES}")
@@ -2057,7 +2061,7 @@ def signup(user: schemas.UserSignup, db: Session = Depends(get_db)):
     category_roles = {"CategoryManager"}
     db_user = models.User(
         username=user.username,
-        email=user.email,
+        email=normalized_email,
         password_hash=auth.hash_password(user.password),
         full_name=user.full_name,
         role=user.role,
@@ -2066,7 +2070,13 @@ def signup(user: schemas.UserSignup, db: Session = Depends(get_db)):
         status="Active",
     )
     db.add(db_user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # The database uniqueness constraint also protects against two
+        # simultaneous signup requests using the same email address.
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Only one account can be created with this email address")
     db.refresh(db_user)
 
     if user.role in ("BrandManager", "BrandPartner", "CategoryManager"):
@@ -2099,7 +2109,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     identifier = (form_data.username or "").strip()
     user = (
         db.query(models.User)
-        .filter((models.User.username == identifier) | (models.User.email == identifier))
+        .filter((models.User.username == identifier) | (func.lower(models.User.email) == identifier.lower()))
         .first()
     )
     if not user or not auth.verify_password(form_data.password, user.password_hash):
@@ -2120,7 +2130,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 def request_password_reset(payload: schemas.PasswordResetRequest, db: Session = Depends(get_db)):
     identifier = payload.identifier.strip()
     user = db.query(models.User).filter(
-        (models.User.username == identifier) | (models.User.email == identifier)
+        (models.User.username == identifier) | (func.lower(models.User.email) == identifier.lower())
     ).first()
     # Return the same message for unknown accounts to prevent account discovery.
     if not user or not user.email or user.status != "Active":
@@ -2158,7 +2168,7 @@ def confirm_password_reset(payload: schemas.PasswordResetConfirm, db: Session = 
     if len(payload.new_password) < 8:
         raise HTTPException(status_code=400, detail="Password must contain at least 8 characters")
     user = db.query(models.User).filter(
-        (models.User.username == identifier) | (models.User.email == identifier)
+        (models.User.username == identifier) | (func.lower(models.User.email) == identifier.lower())
     ).first()
     code_hash = hashlib.sha256(payload.code.strip().encode("utf-8")).hexdigest()
     if (
