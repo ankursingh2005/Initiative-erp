@@ -2869,6 +2869,26 @@ def attendance_admin_summary(
             point for point in points
             if any(start <= point.captured_at <= end for start, end in work_windows)
         ]
+        latest_point = max(points, key=lambda point: point.captured_at) if points else None
+        day_record = user_records[0] if single_day and user_records else None
+        tracking_open = bool(day_record and day_record.checkin_at and not day_record.checkout_at)
+        location_active = bool(
+            tracking_open
+            and start_date == today
+            and latest_point
+            and latest_point.captured_at >= datetime.now(INDIA_TZ).replace(tzinfo=None) - timedelta(minutes=3)
+        )
+        current_distance = (
+            latest_point.distance_from_store_m if latest_point
+            else day_record.checkin_distance_m if day_record and day_record.checkin_at
+            else None
+        )
+        location_tracking_status = (
+            "Active" if location_active
+            else "Inactive" if tracking_open
+            else "Completed" if day_record and day_record.checkout_at
+            else "Not started"
+        )
         max_point = max(points, key=lambda point: point.distance_from_store_m or 0) if points else None
         punch_distances = [
             (distance, timestamp)
@@ -2924,9 +2944,12 @@ def attendance_admin_summary(
                 "route_distance_m": round(sum(point.route_distance_m or 0 for point in points)),
                 "max_distance_from_store_m": round(maximum_distance),
                 "max_distance_at": maximum_distance_at,
-                "last_latitude": points[-1].latitude if points else None,
-                "last_longitude": points[-1].longitude if points else None,
+                "last_latitude": latest_point.latitude if latest_point else None,
+                "last_longitude": latest_point.longitude if latest_point else None,
                 "location_points": len(points),
+                "current_distance_from_store_m": round(current_distance) if current_distance is not None else None,
+                "location_tracking_status": location_tracking_status,
+                "last_location_at": latest_point.captured_at if latest_point else None,
             })
         else:
             rows.append({
@@ -2941,9 +2964,12 @@ def attendance_admin_summary(
                 "route_distance_m": round(sum(point.route_distance_m or 0 for point in points)),
                 "max_distance_from_store_m": round(maximum_distance),
                 "max_distance_at": maximum_distance_at,
-                "last_latitude": points[-1].latitude if points else None,
-                "last_longitude": points[-1].longitude if points else None,
+                "last_latitude": latest_point.latitude if latest_point else None,
+                "last_longitude": latest_point.longitude if latest_point else None,
                 "location_points": len(points),
+                "current_distance_from_store_m": round(current_distance) if current_distance is not None else None,
+                "location_tracking_status": location_tracking_status,
+                "last_location_at": latest_point.captured_at if latest_point else None,
             })
 
     return {
