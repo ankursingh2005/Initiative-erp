@@ -201,6 +201,10 @@ def ensure_database_schema():
     ensure_column("users", "created_date", "TIMESTAMP")
     ensure_column("users", "reset_token", "VARCHAR(100)")
     ensure_column("users", "reset_token_expires", "TIMESTAMP")
+    # Correct the legacy role spelling without leaving existing accounts
+    # under a role that can no longer be selected during signup.
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE users SET role = 'Loader' WHERE role = 'Loder'"))
 
     ensure_column("claim_headers", "claim_no", "VARCHAR(50)")
     ensure_column("claim_headers", "brand_id", "INTEGER")
@@ -615,7 +619,7 @@ async def handle_unexpected_error(request: Request, exc: Exception):
 # "static" folder sitting next to this file.
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-VALID_ROLES = ["Admin", "Owner", "HR", "CategoryManager", "BrandManager", "BrandPartner", "SupportingStaff", "ServiceManager", "ServiceHead", "SalesExecutive", "AsstSalesManager", "LogisticManager", "Supervisor", "Assistant", "Loder", "ACTechnicianA", "ACTechnicianB", "Accounts", "MISExecutive", "ITEngineer", "CustomerCare", "Employee", "Cashier", "Other"]
+VALID_ROLES = ["Admin", "Owner", "HR", "CategoryManager", "BrandManager", "BrandPartner", "SupportingStaff", "ServiceManager", "ServiceHead", "SalesExecutive", "AsstSalesManager", "LogisticManager", "Supervisor", "Assistant", "Loader", "ACTechnicianA", "ACTechnicianB", "Accounts", "MISExecutive", "ITEngineer", "CustomerCare", "Employee", "Cashier", "Other"]
 
 
 def normalize_category_code(raw_value: Optional[str]) -> Optional[str]:
