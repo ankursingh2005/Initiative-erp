@@ -674,6 +674,9 @@
 
     function filterUserManagementByRole(roleName) {
       userManagementRoleFilter = roleName;
+      userManagementSearchQuery = '';
+      const searchInput = document.getElementById('userManagementSearch');
+      if (searchInput) searchInput.value = '';
       document.querySelectorAll('#userCountSummary .um-pill').forEach(button => {
         const isTotal = button.classList.contains('total');
         button.classList.toggle('active', roleName === 'ALL' ? isTotal : !isTotal && button.textContent.startsWith(roleName + ':'));
