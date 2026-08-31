@@ -6962,6 +6962,25 @@ def read_ageing_sheet_rows(worksheet) -> List[dict]:
     return out
 
 
+def detect_ageing_location_code(worksheet) -> Optional[str]:
+    """Resolve a location from its tab name or Tally Material Centre label."""
+    candidates = [str(worksheet.title or "")]
+    for row in worksheet.iter_rows(min_row=1, max_row=10, max_col=6, values_only=True):
+        for value in row:
+            text = str(value or "").strip()
+            if "material" in text.lower() and "centre" in text.lower():
+                candidates.append(text)
+
+    definitions = {**AGEING_LOCATION_DEFINITIONS, **AGEING_EXCLUDED_LOCATION_ALIASES}
+    for candidate in candidates:
+        normalized = re.sub(r"[^a-z0-9]", "", candidate.lower())
+        for code, definition in definitions.items():
+            aliases = definition["aliases"] if isinstance(definition, dict) else definition
+            if normalized in aliases or any(normalized.endswith(alias) for alias in aliases):
+                return code
+    return None
+
+
 # Category classification keyword rules, checked in this order. Each is
 # (category_code, category_name, [substrings to look for in the
 # normalized/uppercased item text]). Matched top-down - HE/IT/HA product-
@@ -7665,11 +7684,8 @@ def parse_ageing_stock_workbook(content: bytes, db: Session) -> tuple:
             all_data_rows = read_ageing_sheet_rows(worksheet)
             continue
 
-        excluded_code = None
-        for code, aliases in AGEING_EXCLUDED_LOCATION_ALIASES.items():
-            if title_normalized in aliases:
-                excluded_code = code
-                break
+        detected_code = detect_ageing_location_code(worksheet)
+        excluded_code = detected_code if detected_code in AGEING_EXCLUDED_LOCATION_ALIASES else None
         if excluded_code:
             for row in read_ageing_sheet_rows(worksheet):
                 key = normalize_ageing_item_key(row.get("item_details"))
@@ -7677,11 +7693,7 @@ def parse_ageing_stock_workbook(content: bytes, db: Session) -> tuple:
                     excluded_item_keys.add(key)
             continue
 
-        matched_code = None
-        for code, definition in AGEING_LOCATION_DEFINITIONS.items():
-            if title_normalized in definition["aliases"]:
-                matched_code = code
-                break
+        matched_code = detected_code if detected_code in AGEING_LOCATION_DEFINITIONS else None
         if not matched_code:
             continue
 
@@ -8189,6 +8201,13 @@ def build_ageing_export_dataset(report: dict, active_age_fields: List[str], acti
     def item_qty_in_active_durations(item: dict) -> float:
         return sum(item.get(f) or 0 for f in active_age_fields)
 
+    def item_matches_location_total(item: dict) -> bool:
+        location_total = sum(
+            location_qty_for_durations(item, field, active_age_fields)
+            for field in AGEING_LOCATION_FIELDS
+        )
+        return abs(item_qty_in_active_durations(item) - location_total) < 0.005
+
     headers = ["Item Details", "Unit", "Closing Qty"]
     headers += [AGEING_AGE_LABELS[f] for f in active_age_fields]
     headers += [loc_labels[f] for f in location_fields]
@@ -8205,7 +8224,10 @@ def build_ageing_export_dataset(report: dict, active_age_fields: List[str], acti
         brands_out = []
         cat_totals = zero_totals()
         for brand_bucket in cat["brands"]:
-            filtered_items = [it for it in brand_bucket["items"] if item_qty_in_active_durations(it) > 0]
+            filtered_items = [
+                it for it in brand_bucket["items"]
+                if item_qty_in_active_durations(it) > 0 and item_matches_location_total(it)
+            ]
             if not filtered_items:
                 continue
             rows = []

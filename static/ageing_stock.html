@@ -714,8 +714,12 @@
       return activeAgeCols().reduce((sum, [bucketKey]) => sum + (Number(locationBuckets[bucketKey]) || 0), 0);
     }
 
-    function itemQtyInActiveBranches(item) {
-      return activeLocCols().reduce((sum, [key]) => sum + locationQtyForDurations(item, key), 0);
+    function itemQtyInAllBranches(item) {
+      return Object.keys(LOC_LABELS).reduce((sum, key) => sum + locationQtyForDurations(item, key), 0);
+    }
+
+    function itemQuantitiesReconcile(item) {
+      return Math.abs(itemQtyInActiveDurations(item) - itemQtyInAllBranches(item)) < 0.005;
     }
 
     // "Present At" list, scoped to the same selected duration(s) - a
@@ -741,7 +745,7 @@
         for (const brand of cat.brands) {
           const items = brand.items.filter(it =>
             itemQtyInActiveDurations(it) > 0 &&
-            itemQtyInActiveBranches(it) > 0 &&
+            itemQuantitiesReconcile(it) &&
             (!selectedItemCategory || classifyItemCategory(it.item_details) === selectedItemCategory)
           );
           if (!items.length) continue;
