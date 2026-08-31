@@ -17,7 +17,7 @@ import re
 import difflib
 import importlib
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import Request as URLRequest, urlopen
 from uuid import uuid4
 import base64
 import math
@@ -1097,7 +1097,7 @@ def extract_scheme_from_document(db: Session, filename: str, content_type: str, 
         ],
     }).encode("utf-8")
 
-    request = Request(
+    request = URLRequest(
         "https://api.anthropic.com/v1/messages",
         data=payload,
         headers={
@@ -1427,7 +1427,7 @@ def _call_anthropic_vision(content_block: dict, instructions: str) -> str:
         ],
     }).encode("utf-8")
 
-    request = Request(
+    request = URLRequest(
         "https://api.anthropic.com/v1/messages",
         data=payload,
         headers={
@@ -1543,7 +1543,7 @@ def _call_openai_compatible_vision(api_key: str, base_url: str, model: str, imag
         ],
     }).encode("utf-8")
 
-    request = Request(
+    request = URLRequest(
         base_url,
         data=payload,
         headers={
@@ -2949,6 +2949,126 @@ def attendance_admin_summary(
     }
 
 
+def build_daily_attendance_whatsapp_report(db: Session, report_date: date) -> str:
+    """Build an outlet-wise headcount summary for one attendance date."""
+    users = db.query(models.User).filter(models.User.status == "Active").all()
+    records = db.query(models.AttendanceRecord).filter(
+        models.AttendanceRecord.attendance_date == report_date,
+        models.AttendanceRecord.user_id.in_([user.id for user in users] or [-1]),
+    ).all()
+    records_by_user = {record.user_id: record for record in records}
+    stores = {store.id: store for store in db.query(models.Store).all()}
+    outlet_totals = defaultdict(lambda: {"total": 0, "present": 0, "absent": 0, "weekoff": 0})
+
+    for user in users:
+        record = records_by_user.get(user.id)
+        store_id = record.store_id if record and record.store_id else user.store_id
+        store = stores.get(store_id)
+        outlet = (store.code or store.name).strip() if store else "Unassigned"
+        status = (
+            "present" if record and record.checkin_at
+            else "weekoff" if user.weekoff_day == report_date.strftime("%A")
+            else "absent"
+        )
+        outlet_totals[outlet]["total"] += 1
+        outlet_totals[outlet][status] += 1
+
+    overall = {
+        field: sum(values[field] for values in outlet_totals.values())
+        for field in ("total", "present", "absent", "weekoff")
+    }
+    lines = [
+        "*Daily Attendance Report*",
+        report_date.strftime("%d %B %Y"),
+        "",
+        f"*Overall* - Total Employees: {overall['total']} | Present: {overall['present']} | Absent: {overall['absent']} | Week Off: {overall['weekoff']}",
+        "",
+        "*Outlet-wise Summary*",
+    ]
+    for outlet in sorted(outlet_totals, key=str.casefold):
+        values = outlet_totals[outlet]
+        lines.append(
+            f"{outlet}: Total {values['total']} | Present {values['present']} | "
+            f"Absent {values['absent']} | Week Off {values['weekoff']}"
+        )
+    return "\n".join(lines)
+
+
+def send_attendance_whatsapp_report(db: Session, report_date: date) -> dict:
+    access_token = os.getenv("WHATSAPP_ACCESS_TOKEN")
+    phone_number_id = os.getenv("WHATSAPP_PHONE_NUMBER_ID")
+    recipients = [
+        value.strip() for value in os.getenv(
+            "WHATSAPP_ATTENDANCE_RECIPIENTS", "917521956646"
+        ).split(",") if value.strip()
+    ]
+    if not access_token or not phone_number_id:
+        raise HTTPException(status_code=503, detail="WhatsApp Cloud API is not configured on Render.")
+    if not recipients:
+        raise HTTPException(status_code=503, detail="No attendance WhatsApp recipient is configured.")
+
+    message = build_daily_attendance_whatsapp_report(db, report_date)
+    api_version = os.getenv("WHATSAPP_API_VERSION", "v23.0")
+    endpoint = f"https://graph.facebook.com/{api_version}/{phone_number_id}/messages"
+    template_name = os.getenv("WHATSAPP_ATTENDANCE_TEMPLATE", "").strip()
+    template_language = os.getenv("WHATSAPP_ATTENDANCE_TEMPLATE_LANGUAGE", "en_US").strip()
+    failures = 0
+
+    for recipient in recipients:
+        if template_name:
+            body = {
+                "messaging_product": "whatsapp", "to": recipient, "type": "template",
+                "template": {
+                    "name": template_name,
+                    "language": {"code": template_language},
+                    "components": [{
+                        "type": "body",
+                        "parameters": [{"type": "text", "text": message.replace("\n", " | ")}],
+                    }],
+                },
+            }
+        else:
+            body = {
+                "messaging_product": "whatsapp", "to": recipient, "type": "text",
+                "text": {"body": message},
+            }
+        api_request = URLRequest(
+            endpoint, data=json.dumps(body).encode("utf-8"),
+            headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urlopen(api_request, timeout=15):
+                pass
+        except (HTTPError, URLError, TimeoutError):
+            failures += 1
+
+    if failures:
+        raise HTTPException(status_code=502, detail=f"WhatsApp failed for {failures} recipient(s).")
+    return {
+        "message": f"Attendance report sent to {len(recipients)} WhatsApp recipient(s).",
+        "report_date": report_date.isoformat(), "recipients": len(recipients),
+    }
+
+
+@app.post("/api/attendance/whatsapp-send")
+def admin_send_attendance_whatsapp(
+    attendance_date: Optional[date] = Query(None, alias="date"),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_roles("Admin")),
+):
+    return send_attendance_whatsapp_report(db, attendance_date or india_today())
+
+
+@app.post("/api/attendance/whatsapp-daily")
+def scheduled_send_attendance_whatsapp(request: Request, db: Session = Depends(get_db)):
+    expected_secret = os.getenv("ATTENDANCE_WHATSAPP_CRON_SECRET", "")
+    supplied_secret = request.headers.get("X-Cron-Secret", "")
+    if not expected_secret or not secrets.compare_digest(expected_secret, supplied_secret):
+        raise HTTPException(status_code=401, detail="Invalid scheduler secret")
+    return send_attendance_whatsapp_report(db, india_today())
+
+
 @app.get("/api/attendance/admin-export")
 def export_admin_attendance(
     export_format: str = Query("xlsx", alias="format"),
@@ -3617,7 +3737,7 @@ def send_purchase_order_whatsapp_notification(purchase_order: models.PurchaseOrd
             "type": "text",
             "text": {"body": message},
         }).encode("utf-8")
-        request = Request(
+        request = URLRequest(
             endpoint,
             data=payload,
             headers={

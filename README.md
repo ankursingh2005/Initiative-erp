@@ -146,6 +146,23 @@ To send an alert to MIS Executive through WhatsApp, configure a WhatsApp Cloud A
 
 The PO is saved even when WhatsApp is not configured or its provider rejects a message. WhatsApp Business may require an approved message template for business-initiated alerts outside the customer service window.
 
+### Daily attendance WhatsApp report
+
+The Admin Attendance Dashboard has a **Send WhatsApp** button. It sends the selected date's overall and outlet-wise Total Employees, Present, Absent, and Week Off counts.
+
+Configure these additional Render environment variables:
+
+- `WHATSAPP_ATTENDANCE_RECIPIENTS` - comma-separated international-format numbers; defaults to `917521956646`
+- `ATTENDANCE_WHATSAPP_CRON_SECRET` - a long random value used only by the scheduler
+- `WHATSAPP_ATTENDANCE_TEMPLATE` - optional approved Meta template name whose body is `Daily attendance report: {{1}}`; recommended for automatic daily messages
+- `WHATSAPP_ATTENDANCE_TEMPLATE_LANGUAGE` - optional; defaults to `en_US`
+
+Render Free cannot run a reliable internal 1:00 PM job because the service sleeps. Configure an external scheduler for **13:00 Asia/Kolkata** (or **07:30 UTC**) to send a `POST` request to:
+
+`https://YOUR-SERVICE.onrender.com/api/attendance/whatsapp-daily`
+
+Add request header `X-Cron-Secret` with the exact value configured in `ATTENDANCE_WHATSAPP_CRON_SECRET`. The incoming scheduler request wakes a sleeping free service. Use an approved WhatsApp template for automatic business-initiated delivery outside the customer-service window.
+
 ## Account recovery (Admin-managed, no email)
 
 There is no "forgot password" email flow. A locked-out user is told on the login page to ask their Admin. Instead:

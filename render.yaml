@@ -19,6 +19,21 @@ services:
       # generate it.
       - key: SMTP_PASSWORD
         sync: false
+      # WhatsApp Cloud API credentials and daily attendance delivery.
+      - key: WHATSAPP_ACCESS_TOKEN
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_ATTENDANCE_RECIPIENTS
+        value: "917521956646"
+      - key: ATTENDANCE_WHATSAPP_CRON_SECRET
+        sync: false
+      # Optional approved Meta template with one body variable containing
+      # the complete attendance summary. Recommended for scheduled messages.
+      - key: WHATSAPP_ATTENDANCE_TEMPLATE
+        sync: false
+      - key: WHATSAPP_ATTENDANCE_TEMPLATE_LANGUAGE
+        value: en_US
       # Anthropic API key used to read attached scheme documents
       # (image/PDF/Excel) and pre-fill Scheme Maintenance drafts, and also
       # used for the IDS Price System's image/PDF price list upload if set.
