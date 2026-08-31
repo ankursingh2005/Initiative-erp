@@ -308,6 +308,14 @@
     .um-pill.total { background: var(--ink); color: #fff; }
     .um-pill:hover { border-color: var(--um); transform: translateY(-1px); }
     .um-pill.active { border-color: var(--um-dark); box-shadow: 0 0 0 2px color-mix(in srgb, var(--um) 20%, transparent); }
+    .um-search { position: relative; margin-bottom: 14px; }
+    .um-search input {
+      width: 100%; min-height: 42px; padding: 10px 42px 10px 14px;
+      border: 1px solid var(--line); border-radius: 10px; background: #fff;
+      color: var(--ink); font: inherit; font-size: 13.5px;
+    }
+    .um-search input:focus { outline: none; border-color: var(--um); box-shadow: 0 0 0 3px color-mix(in srgb, var(--um) 16%, transparent); }
+    .um-search svg { position: absolute; top: 50%; right: 14px; width: 18px; height: 18px; color: var(--muted); pointer-events: none; transform: translateY(-50%); }
     .um-chevron { width: 20px; height: 20px; flex-shrink: 0; color: var(--muted); margin-top: 4px; transition: transform 0.2s ease; }
     .um-card.expanded .um-chevron { transform: rotate(90deg); }
     .um-detail { margin-top: 18px; }
@@ -478,6 +486,10 @@
         </div>
         <div id="umDetail" class="um-detail" style="display:none;">
           <div id="userCountSummary" class="um-summary"></div>
+          <label class="um-search" for="userManagementSearch">
+            <input id="userManagementSearch" type="search" placeholder="Search by username or email" autocomplete="off" oninput="searchUserManagement(this.value)" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
+          </label>
           <div class="um-table-wrap">
             <table class="um-table">
               <thead>
@@ -634,6 +646,7 @@
 
     let userManagementUsers = [];
     let userManagementRoleFilter = 'ALL';
+    let userManagementSearchQuery = '';
 
     async function loadUserManagement() {
       try {
@@ -668,6 +681,11 @@
       renderUserManagementTable();
     }
 
+    function searchUserManagement(value) {
+      userManagementSearchQuery = String(value || '').trim().toLowerCase();
+      renderUserManagementTable();
+    }
+
     function userAssignmentLabel(user) {
       const outletCodes = {
         'hazratganj': 'HZT', 'alambagh': 'ALM', 'ashiyana': 'ASH',
@@ -692,9 +710,15 @@
 
     function renderUserManagementTable() {
       const tbody = document.getElementById('userManagementTableBody');
-      const users = userManagementRoleFilter === 'ALL'
+      let users = userManagementRoleFilter === 'ALL'
         ? userManagementUsers
         : userManagementUsers.filter(user => user.role === userManagementRoleFilter);
+      if (userManagementSearchQuery) {
+        users = users.filter(user =>
+          String(user.username || '').toLowerCase().includes(userManagementSearchQuery) ||
+          String(user.email || '').toLowerCase().includes(userManagementSearchQuery)
+        );
+      }
       tbody.innerHTML = users.map(u => `
         <tr>
           <td>${u.username}</td>
@@ -709,7 +733,7 @@
             <button type="button" class="um-delete-btn" onclick="openDeleteUserModal(${u.id}, '${String(u.username).replace(/'/g, "\\'")}')" ${(u.username === username || (role === 'HR' && u.role === 'Admin')) ? `disabled title="${u.username === username ? 'You cannot delete your own account' : 'HR cannot delete an Admin account'}"` : ''}>Delete</button>
           </td>
         </tr>
-      `).join('') || `<tr><td colspan="8" class="empty">No ${userManagementRoleFilter === 'ALL' ? '' : userManagementRoleFilter + ' '}accounts found</td></tr>`;
+      `).join('') || `<tr><td colspan="8" class="empty">${userManagementSearchQuery ? 'No users match this username or email' : `No ${userManagementRoleFilter === 'ALL' ? '' : userManagementRoleFilter + ' '}accounts found`}</td></tr>`;
     }
 
     let resetPasswordTargetId = null;
