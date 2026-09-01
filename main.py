@@ -2590,7 +2590,7 @@ def save_attendance(
         lon_delta = (attendance.longitude - candidate.longitude) * radians
         value = math.sin(lat_delta / 2) ** 2 + math.cos(candidate.latitude * radians) * math.cos(attendance.latitude * radians) * math.sin(lon_delta / 2) ** 2
         return 2 * radius * math.atan2(math.sqrt(value), math.sqrt(1 - value))
-    can_mark_from_anywhere = current_user.role in {"ServiceManager", "ACTechnicianA", "ACTechnicianB"}
+    can_mark_from_anywhere = current_user.role in {"Admin", "HR", "ServiceManager", "ACTechnicianA", "ACTechnicianB"}
     if can_mark_from_anywhere:
         available_stores = db.query(models.Store).filter(
             models.Store.status == "Active",
@@ -2715,7 +2715,7 @@ def save_attendance_location(
         lon_delta = (point.longitude - candidate.longitude) * radians
         value = math.sin(lat_delta / 2) ** 2 + math.cos(candidate.latitude * radians) * math.cos(point.latitude * radians) * math.sin(lon_delta / 2) ** 2
         return 2 * radius * math.atan2(math.sqrt(value), math.sqrt(1 - value))
-    if current_user.role in {"ServiceManager", "ACTechnicianA", "ACTechnicianB"}:
+    if current_user.role in {"Admin", "HR", "ServiceManager", "ACTechnicianA", "ACTechnicianB"}:
         available_stores = db.query(models.Store).filter(models.Store.status == "Active", models.Store.latitude.isnot(None), models.Store.longitude.isnot(None)).all()
         if not available_stores:
             raise HTTPException(status_code=400, detail="No outlet GPS coordinates are configured")

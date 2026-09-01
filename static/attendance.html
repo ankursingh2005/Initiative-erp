@@ -454,7 +454,7 @@ const WEEKOFF_DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday
 </script>
 <script>
 (function enableServiceManagerAttendance(){
-  function canMarkFromAnywhere(){return ['ServiceManager','ACTechnicianA','ACTechnicianB'].includes(profile?.role)}
+  function canMarkFromAnywhere(){return ['Admin','HR','ServiceManager','ACTechnicianA','ACTechnicianB'].includes(profile?.role)}
   function nearestServiceOutlet(p){
     if(!p)return null;
     const candidates=(liveStores||[]).filter(store=>store.status==='Active'&&Number.isFinite(Number(store.latitude))&&Number.isFinite(Number(store.longitude)));
