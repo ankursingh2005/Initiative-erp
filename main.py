@@ -2972,6 +2972,16 @@ def attendance_admin_summary(
                 "last_location_at": latest_point.captured_at if latest_point else None,
             })
 
+    if single_day:
+        # Keep the daily dashboard in punch order: the first employee to mark
+        # attendance is first, the second is next, and so on. Employees who
+        # have not checked in remain below them in a predictable name order.
+        rows.sort(key=lambda row: (
+            row["checkin_at"] is None,
+            row["checkin_at"] or datetime.max,
+            row["username"].casefold(),
+        ))
+
     return {
         "from_date": start_date, "to_date": end_date, "single_day": single_day, "days_in_range": days_in_range,
         # This metric is a headcount, not the number of possible attendance
