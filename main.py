@@ -6141,6 +6141,15 @@ def daily_profitability_daily_report(
     merged = dp_apply_filters(merged, category, store)
     if not merged:
         raise HTTPException(status_code=404, detail="No rows match the selected filters.")
+    # The standalone division-wise Daily Report must show Busy's original
+    # GST-exclusive values. dp_merge_rows adds estimated GST for the main
+    # profitability dashboard/report, so reverse that uplift only for this
+    # endpoint and leave every other profitability view unchanged.
+    for item in merged:
+        item["sale"] /= DP_GST_FACTOR
+        item["cost"] /= DP_GST_FACTOR
+        item["margin"] = item["sale"] - item["cost"]
+        item["pl_pct"] = (item["margin"] / item["cost"]) if item["cost"] else 0.0
     all_outlets = sorted({
         dp_extract_store(voucher)
         for (voucher,) in db.query(models.IntervalSaleUpload.vch_no).distinct().all()
