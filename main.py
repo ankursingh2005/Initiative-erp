@@ -5708,6 +5708,9 @@ DP_ACCESSORY_KEYWORDS = (
     "MOBILE COVER", "BACK COVER", "PENDRIVE", "PEN DRIVE", "FLASH DRIVE",
     "USB DRIVE", "MEMORY CARD", "OTG",
     "KEYBOARD", "MOUSE",
+    # Printer consumables, including HP GT-series cartridge/ink bottles
+    # (e.g. "HP Cartridge Ink GT53/GT52Bottle 7K3W9AA").
+    "CARTRIDGE", "INK BOTTLE", "INKBOTTLE", "INK REFILL", "TONER",
     # Small laptop/desktop accessory, not a computer unit itself (e.g.
     # "Laptop Fan", "HP Laptop Fan Cooler") - without this it falls through
     # to the laptop_keywords check below, which matches bare "LAPTOP" as a
