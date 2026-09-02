@@ -9214,7 +9214,52 @@ def _incentive_month(value) -> str:
     return str(value or "").strip()
 
 
-def parse_incentive_workbook(content: bytes) -> list:
+def _incentive_month_from_filename(filename: Optional[str]) -> str:
+    stem = re.sub(r"[_-]+", " ", (filename or "").rsplit(".", 1)[0])
+    match = re.search(
+        r"\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\b.*?\b(20\d{2})\b",
+        stem,
+        re.IGNORECASE,
+    )
+    if not match:
+        return stem.strip() or "Uploaded Report"
+    parsed = datetime.strptime(match.group(1)[:3].title(), "%b")
+    return f"{parsed.strftime('%b')} {match.group(2)}"
+
+
+def _parse_incentive_outlet_category_rows(rows: list, month: str) -> Optional[list]:
+    """Parse reports shaped as Outlets | Category | Sale.
+
+    An outlet name starts a block and each category sale becomes one source
+    row. The following TOTAL line is skipped so outlet totals can be rebuilt
+    without double-counting while category detail remains available.
+    """
+    header_idx = next((
+        idx for idx, row in enumerate(rows[:15])
+        if any(_incentive_header(value) == "outlets" for value in row)
+        and any(_incentive_header(value) == "category" for value in row)
+        and any(_incentive_header(value) in {"sale", "sales", "total sale", "total sales"} for value in row)
+    ), None)
+    if header_idx is None:
+        return None
+    parsed, current_outlet = [], None
+    ignored_outlets = {"outlets", "sum all branch", "grand total", "total"}
+    for row in rows[header_idx + 1:]:
+        outlet_value = str(row[0] or "").strip() if row else ""
+        category_value = str(row[1] or "").strip() if len(row) > 1 else ""
+        sale = _incentive_number(row[2]) if len(row) > 2 else None
+        if outlet_value and _incentive_header(outlet_value) not in ignored_outlets:
+            current_outlet = outlet_value
+        if not current_outlet:
+            continue
+        if _incentive_header(category_value) == "total":
+            current_outlet = None
+        elif category_value and sale is not None:
+            parsed.append({"month": month, "outlet": current_outlet, "category": category_value, "total_sales": sale})
+    return parsed
+
+
+def parse_incentive_workbook(content: bytes, filename: Optional[str] = None) -> list:
     try:
         wb = load_workbook(BytesIO(content), data_only=True, read_only=True)
     except Exception as exc:
@@ -9228,6 +9273,13 @@ def parse_incentive_workbook(content: bytes) -> list:
         width = min(max((len(r) for r in rows), default=0), 500)
         rows = [(r + [None] * width)[:width] for r in rows]
         scan_limit = min(15, len(rows))
+
+        outlet_category_rows = _parse_incentive_outlet_category_rows(
+            rows, _incentive_month_from_filename(filename)
+        )
+        if outlet_category_rows is not None:
+            result.extend(outlet_category_rows)
+            continue
 
         # Long layout: Month | Outlet | Total Sales.
         handled = False
@@ -9301,14 +9353,96 @@ def parse_incentive_workbook(content: bytes) -> list:
     return result
 
 
+def parse_incentive_pdf(content: bytes, filename: Optional[str] = None) -> list:
+    try:
+        from pypdf import PdfReader
+        reader = PdfReader(BytesIO(content))
+        text = "\n".join(page.extract_text() or "" for page in reader.pages)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Could not read the PDF file: {exc}")
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="The PDF has no selectable text. Export it from Excel instead of uploading a scanned image PDF.")
+
+    month = _incentive_month_from_filename(filename)
+    lines = [re.sub(r"\s+", " ", line).strip() for line in text.splitlines() if line.strip()]
+    category_pattern = r"(?:MOB|COM|DC|HA|HE|ACC(?:\s+COM|\s+UNB)?)"
+    ignored = {"outlets", "category", "sale", "base table total monthly sale"}
+    parsed, current_outlet = [], None
+    for index, line in enumerate(lines):
+        # Some PDF exporters keep all three table cells on one text line.
+        category_row = re.match(rf"^(.+?)\s+({category_pattern})\s+([₹,0-9.() -]+)$", line, re.IGNORECASE)
+        if category_row:
+            sale = _incentive_number(category_row.group(3))
+            if sale is not None:
+                parsed.append({"month": month, "outlet": category_row.group(1).strip(), "category": category_row.group(2).upper(), "total_sales": sale})
+            continue
+        combined = re.match(rf"^(.+?)\s+TOTAL\s+([₹,0-9.() -]+)$", line, re.IGNORECASE)
+        if combined:
+            continue
+        total = re.match(r"^TOTAL\s+([₹,0-9.() -]+)$", line, re.IGNORECASE)
+        if total and current_outlet:
+            current_outlet = None
+            continue
+        category_only = re.match(rf"^({category_pattern})\s+([₹,0-9.() -]+)$", line, re.IGNORECASE)
+        if category_only and current_outlet:
+            sale = _incentive_number(category_only.group(2))
+            if sale is not None:
+                parsed.append({"month": month, "outlet": current_outlet, "category": category_only.group(1).upper(), "total_sales": sale})
+            continue
+        normalized = _incentive_header(line)
+        next_line = lines[index + 1] if index + 1 < len(lines) else ""
+        if normalized not in ignored and not re.match(rf"^(?:{category_pattern}|TOTAL)\b", line, re.IGNORECASE) and re.match(rf"^{category_pattern}\b", next_line, re.IGNORECASE):
+            current_outlet = line
+    if not parsed:
+        raise HTTPException(status_code=400, detail="No readable outlet/category sales rows found in the PDF. Use an exported text PDF with Outlets, Category and Sale columns.")
+    return parsed
+
+
+def parse_incentive_upload(content: bytes, filename: Optional[str]) -> list:
+    extension = (filename or "").lower().rsplit(".", 1)[-1]
+    if extension == "pdf":
+        return parse_incentive_pdf(content, filename)
+    if extension in {"xlsx", "xlsm"}:
+        return parse_incentive_workbook(content, filename)
+    raise HTTPException(status_code=400, detail="Upload an Excel (.xlsx/.xlsm) or PDF (.pdf) file.")
+
+
 def calculate_incentive_rows(rows: list, profit_rate: float, incentive_rate: float) -> list:
     calculated = []
     for row in rows:
         sales = round(float(row["total_sales"]), 2)
         avg_profit = round(sales * profit_rate / 100.0, 2)
         incentive = round(avg_profit * incentive_rate / 100.0, 2)
-        calculated.append({**row, "total_sales": sales, "avg_profit": avg_profit, "total_incentive": incentive})
+        calculated.append({**row, "outlet": _incentive_outlet_short_name(row["outlet"]), "total_sales": sales, "avg_profit": avg_profit, "total_incentive": incentive})
     return calculated
+
+
+def _incentive_outlet_short_name(value: Optional[str]) -> str:
+    original = str(value or "").strip()
+    normalized = _incentive_header(original).replace(" ", "")
+    return {
+        "alambagh": "ALM", "alm": "ALM",
+        "ashiyana": "ASH", "ash": "ASH",
+        "gomtinagar": "GNG", "gng": "GNG",
+        "hazratganj": "HZT", "hzt": "HZT",
+        "vikasnagar": "VKN", "vkn": "VKN",
+    }.get(normalized, original)
+
+
+def _incentive_report_category(value: Optional[str]) -> str:
+    normalized = _incentive_header(value).upper()
+    return normalized if normalized in {"HA", "HE", "MOB", "COM", "DC"} else "ACC"
+
+
+def _incentive_outlet_groups(outlet: str) -> list:
+    normalized = _incentive_header(outlet).replace(" ", "")
+    if normalized in {"alambagh", "alm"}:
+        return [("HA + HE", ("HA", "HE")), ("MOB + DC + ACC", ("MOB", "DC", "ACC")), ("COM", ("COM",))]
+    if normalized in {"hazratganj", "hzt"}:
+        return [("HA + HE", ("HA", "HE")), ("MOB + COM + DC + ACC", ("MOB", "COM", "DC", "ACC"))]
+    if normalized in {"gomtinagar", "gng", "ashiyana", "ash", "vikasnagar", "vkn"}:
+        return [("ALL", ("HA", "HE", "MOB", "COM", "DC", "ACC"))]
+    return [("ALL", ("HA", "HE", "MOB", "COM", "DC", "ACC"))]
 
 
 @app.post("/api/incentive/calculate")
@@ -9323,15 +9457,48 @@ def calculate_incentive_report(
     content = file.file.read()
     if not content:
         raise HTTPException(status_code=400, detail="Uploaded file is empty.")
-    rows = calculate_incentive_rows(parse_incentive_workbook(content), profit_rate, incentive_rate)
+    rows = calculate_incentive_rows(parse_incentive_upload(content, file.filename), profit_rate, incentive_rate)
     by_outlet = defaultdict(lambda: {"total_sales": 0.0, "avg_profit": 0.0, "total_incentive": 0.0})
+    by_outlet_category = defaultdict(lambda: {category: {"total_sales": 0.0, "avg_profit": 0.0, "total_incentive": 0.0} for category in ("HA", "HE", "MOB", "COM", "DC", "ACC")})
     for row in rows:
         for field in ("total_sales", "avg_profit", "total_incentive"):
             by_outlet[row["outlet"]][field] += row[field]
+        category = _incentive_report_category(row.get("category"))
+        by_outlet_category[row["outlet"]][category]["total_sales"] += row["total_sales"]
+        by_outlet_category[row["outlet"]][category]["avg_profit"] += row["avg_profit"]
+        by_outlet_category[row["outlet"]][category]["total_incentive"] += row["total_incentive"]
+    # Preserve the original outlet report's calculation order: calculate
+    # profit from the outlet total, then incentive from that profit. This
+    # avoids category-level rounding changing the existing report by cents.
+    for totals in by_outlet.values():
+        totals["avg_profit"] = round(totals["total_sales"] * profit_rate / 100.0, 2)
+        totals["total_incentive"] = round(totals["avg_profit"] * incentive_rate / 100.0, 2)
+    grand_sales = round(sum(totals["total_sales"] for totals in by_outlet.values()), 2)
+    grand_profit = round(grand_sales * profit_rate / 100.0, 2)
+    grand_incentive = round(grand_profit * incentive_rate / 100.0, 2)
+    grouped_summary = []
+    for outlet, categories in sorted(by_outlet_category.items()):
+        for label, category_names in _incentive_outlet_groups(outlet):
+            grouped_summary.append({
+                "outlet": outlet,
+                "group": label,
+                "total_sales": round(sum(categories[name]["total_sales"] for name in category_names), 2),
+                "avg_profit": round(sum(categories[name]["avg_profit"] for name in category_names), 2),
+                "total_incentive": round(sum(categories[name]["total_incentive"] for name in category_names), 2),
+            })
     return {
         "rows": rows,
         "summary": [{"outlet": outlet, **{k: round(v, 2) for k, v in totals.items()}} for outlet, totals in sorted(by_outlet.items())],
-        "totals": {field: round(sum(r[field] for r in rows), 2) for field in ("total_sales", "avg_profit", "total_incentive")},
+        "category_summary": [{
+            "outlet": outlet,
+            "categories": {category: {field: round(value, 2) for field, value in values.items()} for category, values in categories.items()},
+            "total": {
+                "avg_profit": by_outlet[outlet]["avg_profit"],
+                "total_incentive": by_outlet[outlet]["total_incentive"],
+            },
+        } for outlet, categories in sorted(by_outlet_category.items())],
+        "grouped_summary": grouped_summary,
+        "totals": {"total_sales": grand_sales, "avg_profit": grand_profit, "total_incentive": grand_incentive},
         "profit_rate": profit_rate,
         "incentive_rate": incentive_rate,
     }
@@ -9349,7 +9516,19 @@ def export_incentive_report(
 
     if not (0 <= profit_rate <= 100 and 0 <= incentive_rate <= 100):
         raise HTTPException(status_code=400, detail="Both rates must be between 0 and 100.")
-    source_rows = parse_incentive_workbook(file.file.read())
+    content = file.file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+    parsed_rows = parse_incentive_upload(content, file.filename)
+    source_totals = defaultdict(float)
+    for row in parsed_rows:
+        source_totals[(row["month"], _incentive_outlet_short_name(row["outlet"]))] += float(row["total_sales"])
+    # Keep the existing downloadable outlet report unchanged even though the
+    # parser now retains category detail for the additional on-screen matrix.
+    source_rows = [
+        {"month": month, "outlet": outlet, "total_sales": round(total, 2)}
+        for (month, outlet), total in sorted(source_totals.items())
+    ]
     book = Workbook()
     sheet = book.active
     sheet.title = "Incentive Report"
@@ -9378,7 +9557,9 @@ def export_incentive_report(
     sheet["A1"].font = Font(color=white, bold=True, size=15)
     sheet["A1"].alignment = Alignment(horizontal="center")
     for cell in sheet[4]:
-        cell.fill = PatternFill("solid", fgColor=blue); cell.font = Font(color=white, bold=True); cell.alignment = Alignment(horizontal="center")
+        cell.fill = PatternFill("solid", fgColor=blue)
+        cell.font = Font(color=white, bold=True)
+        cell.alignment = Alignment(horizontal="left" if cell.column <= 2 else "right", vertical="center")
     for cell in sheet[total_row]:
         cell.fill = PatternFill("solid", fgColor=pale); cell.font = Font(bold=True)
     thin = Side(style="thin", color="B8C2CC")
@@ -9388,6 +9569,10 @@ def export_incentive_report(
     for col in range(3, 6):
         for row_no in range(5, total_row + 1):
             sheet.cell(row_no, col).number_format = '#,##0.00'
+            sheet.cell(row_no, col).alignment = Alignment(horizontal="right", vertical="center")
+    for row_no in range(5, total_row + 1):
+        for col in range(1, 3):
+            sheet.cell(row_no, col).alignment = Alignment(horizontal="left", vertical="center")
     for col, width in enumerate((15, 28, 18, 18, 20), 1):
         sheet.column_dimensions[get_column_letter(col)].width = width
     sheet.freeze_panes = "A5"
@@ -9397,20 +9582,74 @@ def export_incentive_report(
     sheet.page_setup.orientation = "landscape"
     sheet.page_setup.fitToWidth = 1
 
-    summary = book.create_sheet("Outlet Summary")
-    summary.append(["Outlet", "Total Sales", "AVG Profit", "Total Incentive"])
-    outlets = sorted({str(r["outlet"]) for r in source_rows})
-    for idx, outlet in enumerate(outlets, 2):
-        summary.cell(idx, 1, outlet)
-        for col, source_letter in ((2, "C"), (3, "D"), (4, "E")):
-            summary.cell(idx, col, f'=SUMIF(\'Incentive Report\'!$B$5:$B${end_row},A{idx},\'Incentive Report\'!${source_letter}$5:${source_letter}${end_row})')
-            summary.cell(idx, col).number_format = '#,##0.00'
-    for cell in summary[1]:
-        cell.fill = PatternFill("solid", fgColor=navy); cell.font = Font(color=white, bold=True)
-    summary.column_dimensions["A"].width = 28
-    for letter in "BCD": summary.column_dimensions[letter].width = 18
-    summary.freeze_panes = "A2"
-    summary.sheet_view.showGridLines = False
+    calculated_detail = calculate_incentive_rows(parsed_rows, profit_rate, incentive_rate)
+    export_categories = ("HA", "HE", "MOB", "COM", "DC", "ACC")
+    category_totals = defaultdict(lambda: {category: {"avg_profit": 0.0, "total_incentive": 0.0, "total_sales": 0.0} for category in export_categories})
+    for row in calculated_detail:
+        category = _incentive_report_category(row.get("category"))
+        for field in ("total_sales", "avg_profit", "total_incentive"):
+            category_totals[row["outlet"]][category][field] += row[field]
+
+    category_sheet = book.create_sheet("Category-wise Report")
+    category_sheet.merge_cells("A1:I1")
+    category_sheet["A1"] = "CATEGORY-WISE AVG PROFIT & INCENTIVE"
+    category_sheet["A1"].fill = PatternFill("solid", fgColor=navy)
+    category_sheet["A1"].font = Font(color=white, bold=True, size=14)
+    category_sheet["A1"].alignment = Alignment(horizontal="center")
+    category_sheet.append([])
+    category_sheet.append(["Outlet", "Metric", *export_categories, "TOTAL"])
+    for cell in category_sheet[3]:
+        cell.fill = PatternFill("solid", fgColor=blue)
+        cell.font = Font(color=white, bold=True)
+        cell.alignment = Alignment(horizontal="left" if cell.column <= 2 else "right", vertical="center")
+    row_no = 4
+    for outlet, categories in sorted(category_totals.items()):
+        for metric_label, field in (("AVG Profit", "avg_profit"), ("Total Incentive", "total_incentive")):
+            category_sheet.cell(row_no, 1, outlet)
+            category_sheet.cell(row_no, 2, metric_label)
+            for col_no, category in enumerate(export_categories, 3):
+                category_sheet.cell(row_no, col_no, round(categories[category][field], 2))
+            category_sheet.cell(row_no, 9, f"=SUM(C{row_no}:H{row_no})")
+            for cell in category_sheet[row_no][:9]:
+                cell.border = Border(bottom=thin)
+                cell.alignment = Alignment(horizontal="left" if cell.column <= 2 else "right", vertical="center")
+                if cell.column >= 3: cell.number_format = '#,##0.00'
+            row_no += 1
+    category_sheet.freeze_panes = "C4"
+    category_sheet.sheet_view.showGridLines = False
+    category_sheet.column_dimensions["A"].width = 14
+    category_sheet.column_dimensions["B"].width = 20
+    for letter in "CDEFGHI": category_sheet.column_dimensions[letter].width = 17
+
+    group_sheet = book.create_sheet("Group-wise Report")
+    group_sheet.merge_cells("A1:E1")
+    group_sheet["A1"] = "OUTLET GROUP-WISE SALES, AVG PROFIT & INCENTIVE"
+    group_sheet["A1"].fill = PatternFill("solid", fgColor=navy)
+    group_sheet["A1"].font = Font(color=white, bold=True, size=14)
+    group_sheet["A1"].alignment = Alignment(horizontal="center")
+    group_sheet.append([])
+    group_sheet.append(["Outlet", "Category Group", "Total Sales", "AVG Profit", "Total Incentive"])
+    for cell in group_sheet[3]:
+        cell.fill = PatternFill("solid", fgColor=blue)
+        cell.font = Font(color=white, bold=True)
+        cell.alignment = Alignment(horizontal="left" if cell.column <= 2 else "right", vertical="center")
+    row_no = 4
+    for outlet, categories in sorted(category_totals.items()):
+        for label, category_names in _incentive_outlet_groups(outlet):
+            group_sheet.cell(row_no, 1, outlet)
+            group_sheet.cell(row_no, 2, label)
+            for col_no, field in ((3, "total_sales"), (4, "avg_profit"), (5, "total_incentive")):
+                group_sheet.cell(row_no, col_no, round(sum(categories[name][field] for name in category_names), 2))
+                group_sheet.cell(row_no, col_no).number_format = '#,##0.00'
+            for cell in group_sheet[row_no][:5]:
+                cell.border = Border(bottom=thin)
+                cell.alignment = Alignment(horizontal="left" if cell.column <= 2 else "right", vertical="center")
+            row_no += 1
+    group_sheet.freeze_panes = "A4"
+    group_sheet.sheet_view.showGridLines = False
+    group_sheet.column_dimensions["A"].width = 14
+    group_sheet.column_dimensions["B"].width = 30
+    for letter in "CDE": group_sheet.column_dimensions[letter].width = 20
 
     output = BytesIO()
     book.save(output)
