@@ -5728,6 +5728,16 @@ def dp_categorize(item_name: Optional[str]) -> str:
     if "INVERTER EB 1100" in n:
         return "HA"
 
+    # Faber built-in kitchen appliances. These model lines previously fell
+    # through to the Accessories fallback because the profitability
+    # classifier had no HOB/HOOD product-type rule.
+    faber_ha_models = (
+        "FABER HOB COOKTOP SUPERIA HT904 BR AI N",
+        "FABER HOOD EVEREST 3D IN HCSCFLLG60",
+    )
+    if any(model in n for model in faber_ha_models):
+        return "HA"
+
     # --- Mobile phones, first, before anything else can steal them ---
     # ASUS/dual-purpose brands make both laptops and phones, so a phone
     # model name (ROG Phone, Zenfone) must win over the laptop check below.
