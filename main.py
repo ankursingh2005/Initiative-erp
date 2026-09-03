@@ -5800,7 +5800,10 @@ def dp_categorize(item_name: Optional[str]) -> str:
         "ROOM HEATER", "IRON BOX", "STEAM IRON", "AQUAGUARD", " RO ",
         # Drinking-water and small kitchen appliances. These explicit product
         # types must win regardless of brand (e.g. Voltas/Bajaj).
-        "WATER DISPENSER", "SANDWICH TOASTER",
+        # Accept both the standard spelling and the common inventory spelling
+        # "dispensor" so every water-dispenser model (including Blue Star
+        # BWD3FMRGA) is classified as Home Appliances.
+        "WATER DISPENSER", "WATER DISPENSOR", "SANDWICH TOASTER",
         # Bare "IRON" (any brand - dry iron, steam iron, curling iron,
         # garment iron, etc.) as a standalone word, not just the two
         # specific compounds above.
