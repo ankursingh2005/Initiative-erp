@@ -2759,6 +2759,7 @@ def attendance_admin_summary(
     from_date: Optional[date] = Query(None),
     to_date: Optional[date] = Query(None),
     weekoff_day: Optional[str] = Query(None),
+    emp_category: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.require_roles("Admin")),
 ):
@@ -2779,6 +2780,28 @@ def attendance_admin_summary(
             raise HTTPException(status_code=400, detail="Week Off must be Monday through Sunday")
         user_query = user_query.filter(models.User.weekoff_day == normalized_weekoff)
     users = user_query.all()
+    if emp_category:
+        normalized_category = emp_category.strip().lower()
+        valid_categories = {"ids_emp", "brand_pro", "ac_retails", "ac_projects"}
+        if normalized_category not in valid_categories:
+            raise HTTPException(status_code=400, detail="Invalid employee category")
+
+        ac_retail_emails = {"cdsood@gmail.com", "jagritiawasthi123@gmail.com"}
+        ac_retail_names = {"chandra dutt sood", "jagriti"}
+
+        def category_for(user):
+            email = (user.email or "").strip().lower()
+            name = (user.full_name or "").strip().lower()
+            username = (user.username or "").strip().lower()
+            if email in ac_retail_emails or name in ac_retail_names:
+                return "ac_retails"
+            if user.role in {"ServiceManager", "ACTechnicianA"} or "zubair" in name or "zubair" in username:
+                return "ac_projects"
+            if user.role == "BrandPartner":
+                return "brand_pro"
+            return "ids_emp"
+
+        users = [user for user in users if category_for(user) == normalized_category]
     stores_by_id = {
         store.id: store for store in db.query(models.Store).all()
     }
