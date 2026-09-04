@@ -2602,6 +2602,12 @@ def save_attendance(
     # Never trust the phone clock as the saved punch time. The database always
     # receives authoritative server IST.
     captured_at = verified_attendance_time(attendance.captured_at)
+    approved_leave = db.query(models.AttendanceLeave).filter(
+        models.AttendanceLeave.user_id == current_user.id,
+        models.AttendanceLeave.leave_date == captured_at.date(),
+    ).first()
+    if approved_leave:
+        raise HTTPException(status_code=409, detail="Your status is Leave today. Change it to Working before marking attendance")
     record = db.query(models.AttendanceRecord).filter(
         models.AttendanceRecord.user_id == current_user.id,
         models.AttendanceRecord.attendance_date == captured_at.date(),
@@ -2753,6 +2759,46 @@ def save_attendance_location(
     return {"id": location.id, "route_distance_m": route_distance}
 
 
+@app.get("/api/me/attendance-status")
+def get_my_attendance_status(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    leave_date = india_today()
+    leave = db.query(models.AttendanceLeave).filter(
+        models.AttendanceLeave.user_id == current_user.id,
+        models.AttendanceLeave.leave_date == leave_date,
+    ).first()
+    return {"date": leave_date, "status": "Leave" if leave else "Working"}
+
+
+@app.put("/api/me/attendance-status")
+def set_my_attendance_status(
+    payload: schemas.MyAttendanceStatusUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    leave_date = india_today()
+    existing = db.query(models.AttendanceLeave).filter(
+        models.AttendanceLeave.user_id == current_user.id,
+        models.AttendanceLeave.leave_date == leave_date,
+    ).first()
+    if payload.on_leave:
+        attendance = db.query(models.AttendanceRecord).filter(
+            models.AttendanceRecord.user_id == current_user.id,
+            models.AttendanceRecord.attendance_date == leave_date,
+            models.AttendanceRecord.checkin_at.isnot(None),
+        ).first()
+        if attendance:
+            raise HTTPException(status_code=409, detail="Attendance is already marked for today")
+        if not existing:
+            db.add(models.AttendanceLeave(user_id=current_user.id, leave_date=leave_date, created_by=current_user.id))
+    elif existing:
+        db.delete(existing)
+    db.commit()
+    return {"date": leave_date, "status": "Leave" if payload.on_leave else "Working"}
+
+
 @app.get("/api/attendance/admin-summary")
 def attendance_admin_summary(
     store_id: Optional[int] = Query(None),
@@ -2805,6 +2851,11 @@ def attendance_admin_summary(
     stores_by_id = {
         store.id: store for store in db.query(models.Store).all()
     }
+    leave_user_ids = {
+        item.user_id for item in db.query(models.AttendanceLeave).filter(
+            models.AttendanceLeave.leave_date == start_date
+        ).all()
+    } if single_day else set()
     brands_by_id = {
         brand.id: brand.name for brand in db.query(models.Brand).all()
     }
@@ -2941,6 +2992,7 @@ def attendance_admin_summary(
             row_status = (
                 "Week Off" if weekoff_day
                 else "Present" if record and record.checkin_at
+                else "Leave" if user.id in leave_user_ids
                 else "Week Off" if is_weekoff
                 else "Absent"
             )
@@ -3007,6 +3059,7 @@ def attendance_admin_summary(
         "present": sum(row["status"] == "Present" for row in rows) if single_day else sum(row["present_days"] > 0 for row in rows),
         "absent": sum(row["status"] == "Absent" for row in rows) if single_day else sum(row["present_days"] == 0 for row in rows),
         "weekoff": sum(row["status"] == "Week Off" for row in rows) if single_day else 0,
+        "leave": sum(row["status"] == "Leave" for row in rows) if single_day else 0,
         "rows": rows,
     }
 

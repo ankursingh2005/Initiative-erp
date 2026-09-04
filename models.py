@@ -426,6 +426,15 @@ class AttendanceLocationPoint(Base):
     route_distance_m = Column(Float, default=0)
 
 
+class AttendanceLeave(Base):
+    __tablename__ = "attendance_leaves"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    leave_date = Column(Date, nullable=False, index=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 # ============================================================
 # PURCHASE ORDER REQUESTS
 # ============================================================

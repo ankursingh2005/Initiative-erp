@@ -106,9 +106,12 @@
 }
 </style>
 <style>
-.attendance-admin .admin-dashboard-panel .summary{grid-template-columns:repeat(4,minmax(0,1fr))}
+.attendance-admin .admin-dashboard-panel .summary{grid-template-columns:repeat(5,minmax(0,1fr))}
 .attendance-admin .admin-dashboard-panel .summary .metric.weekoff-metric{color:#a15c00;background:linear-gradient(135deg,#fff4df,#ffd99a)}
 .attendance-admin .admin-dashboard-panel .summary .metric.weekoff-metric:after{content:"WO";font-size:34px}
+.attendance-admin .admin-dashboard-panel .summary .metric.leave-metric{color:#7137a8;background:linear-gradient(135deg,#f5ebff,#dfc3fa)}
+.attendance-admin .admin-dashboard-panel .summary .metric.leave-metric:after{content:"L";font-size:38px}.badge.leave{color:#7137a8;background:#f3e8ff}
+@media(min-width:761px){.attendance-admin .admin-dashboard-panel .admin-filters{grid-template-columns:repeat(7,minmax(0,1fr))}}
 @media(max-width:760px){.attendance-admin .admin-dashboard-panel .summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .top{height:80px;padding:0 24px;background:#fff;border-bottom:1px solid var(--line);color:var(--ink);box-shadow:0 4px 14px #10182812}
 .top .brand{gap:12px;color:var(--ink);font-size:24px;line-height:1;font-weight:800}
@@ -116,9 +119,10 @@
 .page-chip{display:inline-flex;align-items:center;padding:7px 14px;border-radius:999px;color:#fff;background:#0e594d;font-size:13px;font-weight:800;letter-spacing:.01em}
 .top-actions{gap:12px}
 .top .weekoff-control select{height:42px;min-width:130px;border-color:var(--line);color:var(--ink);background:#fff}
+.personal-leave-control{display:flex}.personal-leave-control select{height:42px;min-width:105px;border-color:#c9b2e4;color:#7137a8;background:#faf5ff;font-weight:800}
 .top .back{display:inline-flex;align-items:center;justify-content:center;gap:5px;height:42px;padding:0 16px;border:1px solid #b9c8e8;border-radius:8px;color:var(--blue);background:#f7f9ff;font-size:14px;font-weight:800;transition:background .15s,border-color .15s}
 .top .back:hover{border-color:var(--blue);background:var(--soft)}
-@media(max-width:760px){.top{min-height:68px;height:auto;padding:10px 14px;flex-wrap:nowrap}.top .brand{font-size:18px;white-space:nowrap}.page-chip{padding:6px 9px;font-size:10px}.top-actions{gap:6px}.top .weekoff-control{display:none}.top .back{height:42px;padding:0 11px;font-size:12px}}
+@media(max-width:760px){.top{min-height:68px;height:auto;padding:10px 14px;flex-wrap:nowrap}.top .brand{font-size:18px;white-space:nowrap}.page-chip{padding:6px 9px;font-size:10px}.top-actions{gap:6px}.top .weekoff-control{display:none}.personal-leave-control select{min-width:88px;height:42px;padding:7px 8px;font-size:12px}.top .back{height:42px;padding:0 11px;font-size:12px}}
 /* Phone-first controls: comfortable touch targets and no clipped actions. */
 @media(max-width:600px){
   body{font-size:14px;-webkit-text-size-adjust:100%}
@@ -166,7 +170,7 @@
 </style>
 </head>
 <body>
-<header class="top"><a class="brand" href="/home"><span>Initiative ERP</span><b class="page-chip">Attendance</b></a><div class="top-actions"><label class="weekoff-control"><span id="weekoffLabel">Week Off</span><select id="weekoffSelect" aria-label="Choose your weekly off day"><option value="">Week Off</option><option>Monday</option><option>Tuesday</option><option>Wednesday</option><option>Thursday</option><option>Friday</option><option>Saturday</option><option>Sunday</option></select></label><a class="back" href="/home" title="Back to Home"><span aria-hidden="true">&#8592;</span> Back</a></div></header>
+<header class="top"><a class="brand" href="/home"><span>Initiative ERP</span><b class="page-chip">Attendance</b></a><div class="top-actions"><label class="weekoff-control"><span id="weekoffLabel">Week Off</span><select id="weekoffSelect" aria-label="Choose your weekly off day"><option value="">Week Off</option><option>Monday</option><option>Tuesday</option><option>Wednesday</option><option>Thursday</option><option>Friday</option><option>Saturday</option><option>Sunday</option></select></label><label class="personal-leave-control"><select id="personalWorkStatus" aria-label="Choose today's work status"><option value="working">Working</option><option value="leave">Leave</option></select></label><a class="back" href="/home" title="Back to Home"><span aria-hidden="true">&#8592;</span> Back</a></div></header>
 <main><section class="head"><div class="mobile-attendance-user" aria-label="Signed-in user"><span id="mobileAttendanceAvatar" class="mobile-attendance-avatar">?</span><span id="mobileAttendanceName" class="mobile-attendance-name">User</span></div><div><h1>My Attendance</h1><p>Mark attendance securely from your assigned outlet.</p></div><label class="date">Today <input id="date" type="date" readonly></label></section>
 <div class="grid"><section class="panel"><div class="panelHead"><h2>Today</h2><span id="todayBadge" class="badge warn">Not marked</span></div><div class="body"><div class="identity"><div id="avatar" class="avatar">?</div><div><strong id="userName">Signed-in user</strong><small id="userRole">Loading account...</small><small id="selectedWeekoff">Your weekly off: Not selected</small></div></div><div class="location">● <span id="outletText">Checking assigned outlet...</span></div><div class="state"><i id="gpsDot" class="dot"></i><span id="gpsText">Checking your live location...</span></div><button id="mark" class="primary mark">Punch In</button><button id="checkout" class="secondary mark" style="display:none;margin-top:10px">Punch Out</button><p id="checkoutInfo" class="hint"></p><p class="hint">Your current time, GPS position, distance from the outlet, and selfie are recorded together. Attendance is accepted only within 100 meters.</p></div></section>
 <section class="panel"><div class="panelHead"><h2>Today’s record</h2><span id="sync" class="badge warn">Checking</span></div><div class="body"><div class="summary"><div class="metric"><span>Marked at</span><strong id="markedAt">--:--</strong></div><div class="metric"><span>Distance</span><strong id="distance">-- m</strong></div><div class="metric"><span>Work hours</span><strong id="hours">00:00</strong></div></div><div class="history"><div id="recordText" class="empty">No attendance marked today.</div></div></div></section></div>
@@ -510,6 +514,19 @@ const WEEKOFF_DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday
 })();
 </script>
 <script>
+(function addLeaveSummaryCard(){
+  function enhance(){
+    const panel=document.querySelector('.admin-dashboard-panel'),summary=panel?.querySelector('.summary'),body=panel?.querySelector('tbody');if(!panel||!summary||!body)return false;
+    let card=summary.querySelector('.leave-metric');if(!card){card=document.createElement('div');card.className='metric leave-metric';card.dataset.filter='Leave';card.tabIndex=0;card.setAttribute('role','button');card.setAttribute('aria-label','Show employees on leave');card.innerHTML='<span>Leave</span><strong>0</strong>';summary.appendChild(card)}
+    const tableWrap=body.closest('table')?.parentElement,toggle=panel.querySelector('.admin-users-toggle');
+    function sync(){const rows=[...body.rows];card.querySelector('strong').textContent=rows.filter(row=>row.cells[1]?.textContent.trim()==='Leave').length;body.querySelectorAll('.badge').forEach(badge=>{if(badge.textContent.trim()==='Leave'){badge.classList.remove('bad','ok','weekoff');badge.classList.add('leave')}})}
+    function filterLeave(){for(const row of body.rows)row.hidden=row.cells[1]?.textContent.trim()!=='Leave';summary.querySelectorAll('.metric').forEach(metric=>metric.classList.toggle('active-filter',metric===card));if(tableWrap)tableWrap.hidden=false;if(toggle){toggle.setAttribute('aria-expanded','true');toggle.querySelector('span').textContent='Hide employees'}}
+    card.onclick=filterLeave;card.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();filterLeave()}};new MutationObserver(sync).observe(body,{childList:true,subtree:true});sync();return true;
+  }
+  if(!enhance()){const wait=setInterval(()=>{if(enhance())clearInterval(wait)},50);setTimeout(()=>clearInterval(wait),15000)}
+})();
+</script>
+<script>
 (function enableServiceManagerAttendance(){
   function canMarkFromAnywhere(){return false}
   function nearestServiceOutlet(p){
@@ -649,6 +666,14 @@ const WEEKOFF_DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday
     return true;
   }
   if(!install()){const wait=setInterval(()=>{if(install())clearInterval(wait)},250);setTimeout(()=>clearInterval(wait),15000)}
+})();
+</script>
+<script>
+(async function enablePersonalWorkStatus(){
+  const select=document.getElementById('personalWorkStatus'),token=localStorage.getItem('token');if(!select||!token)return;
+  function applyStatus(status){const onLeave=status==='Leave';select.value=onLeave?'leave':'working';select.dataset.status=status;const mark=document.getElementById('mark'),checkout=document.getElementById('checkout');if(onLeave){if(mark){mark.disabled=true;mark.textContent='On Leave Today'}if(checkout)checkout.disabled=true;setGps('You selected Leave for today. Choose Working to mark attendance.','ok')}}
+  try{const response=await fetch('/api/me/attendance-status',{headers:{Authorization:'Bearer '+token}});if(response.ok)applyStatus((await response.json()).status)}catch(error){}
+  select.onchange=async()=>{const requested=select.value==='leave',previous=select.dataset.status||'Working';select.disabled=true;try{const response=await fetch('/api/me/attendance-status',{method:'PUT',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({on_leave:requested})});const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.detail||'Unable to update status');location.reload()}catch(error){alert(error.message||'Unable to update status');applyStatus(previous)}finally{select.disabled=false}};
 })();
 </script>
 </body></html>

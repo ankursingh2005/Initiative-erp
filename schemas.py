@@ -332,6 +332,10 @@ class WeekoffUpdate(BaseModel):
     weekoff_day: str
 
 
+class MyAttendanceStatusUpdate(BaseModel):
+    on_leave: bool
+
+
 class MyProfileOut(BaseModel):
     """Returned by GET /api/me. Used by the Purchase Orders page to scope a
     Category Manager's Division and Brand dropdowns to only what's assigned
