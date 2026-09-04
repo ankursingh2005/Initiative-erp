@@ -67,14 +67,15 @@
   .avg-stat-text{min-width:0}
   .avg-stat-text span{font-size:8px;line-height:1.25}
   .avg-stat-text strong{font-size:13px;white-space:nowrap}
-  .history-card{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-items:center;gap:10px 6px;padding:12px}
+  .history-card{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:start;gap:12px 8px;padding:14px}
   .history-card-head,.history-punches{display:contents}
   .history-card-head .h-date{grid-column:1/-1;grid-row:1}
   .history-punches .punch:nth-child(1){grid-column:1;grid-row:2}
   .history-punches .punch:nth-child(2){grid-column:2;grid-row:2}
-  .history-card-head .h-spent{grid-column:3;grid-row:2;justify-self:start;min-width:0}
-  .selfie-actions{grid-column:4;grid-row:2;align-self:center;justify-content:flex-end;margin:0}
-  .view-selfies{min-width:50px;min-height:42px;padding:7px 9px;white-space:nowrap}
+  .history-card-head .h-spent{grid-column:3;grid-row:2;justify-self:stretch;min-width:0}
+  .history-card-head .h-spent b{display:block;max-width:100%;white-space:normal;overflow-wrap:anywhere;line-height:1.35}
+  .selfie-actions{grid-column:1/-1;grid-row:3;align-self:stretch;justify-content:stretch;margin:0}
+  .view-selfies{width:100%;min-width:0;min-height:46px;padding:9px 12px;white-space:nowrap}
   .panelHead{align-items:flex-start;flex-wrap:wrap}
   .admin-filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%;gap:6px}
   .admin-filters select,.admin-filters input{width:100%;min-width:0}
@@ -272,7 +273,7 @@ function myRecords(){return state.records.filter(item=>item.userId===profile?.id
 function yesterdayDate(){const d=new Date(today+'T00:00:00');d.setDate(d.getDate()-1);return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kolkata'}).format(d)}
 function dateLabel(dateStr){if(dateStr===today)return'Today';if(dateStr===yesterdayDate())return'Yesterday';const p=dateStr.split('-');return p[2]+'-'+p[1]+'-'+p[0]}
 function effectiveOut(item){if(item.out)return item.out;if(item.date!==today)return item.date+'T23:59:00';return null}
-function timeSpentLabel(item){const out=effectiveOut(item);if(item.at&&out)return workingHours(item.at,out)+'Hrs';if(item.at)return workingHours(item.at,new Date().toISOString())+'Hrs (ongoing)';return'--'}
+function timeSpentLabel(item){const out=effectiveOut(item);if(item.at&&out)return workingHours(item.at,out)+' Hrs';if(item.at)return workingHours(item.at,new Date().toISOString())+' Hrs (ongoing)';return'--'}
 function avgTimeOfDay(times){const valid=times.filter(Boolean);if(!valid.length)return'--:--';const totalMin=valid.reduce((sum,t)=>{const d=new Date(t);return sum+d.getHours()*60+d.getMinutes()},0),avg=Math.round(totalMin/valid.length),d=new Date();d.setHours(Math.floor(avg/60),avg%60,0,0);return d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}
 function avgDuration(items){const durations=items.filter(i=>i.at).map(i=>(new Date(effectiveOut(i)||Date.now())-new Date(i.at))/60000).filter(m=>m>0);if(!durations.length)return'--:--';const avg=Math.round(durations.reduce((a,b)=>a+b,0)/durations.length);return String(Math.floor(avg/60)).padStart(2,'0')+':'+String(avg%60).padStart(2,'0')}
 function populateMonths(){const picker=$('summaryMonth'),selected=picker.value||today.slice(0,7);if(!picker.options.length){const current=new Date(today+'T00:00:00');for(let offset=0;offset<24;offset++){const d=new Date(current.getFullYear(),current.getMonth()-offset,1),key=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'),option=document.createElement('option');option.value=key;option.textContent=monthLabel(key);picker.appendChild(option)}}picker.value=selected}
