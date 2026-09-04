@@ -184,6 +184,30 @@
     @keyframes shadesOn{0%,69%,100%{opacity:0;transform:translateY(-12px)}73%,96%{opacity:1;transform:translateY(0)}}
     @keyframes laughBubble{0%,73%,100%{opacity:0;transform:scale(.7)}77%,94%{opacity:1;transform:scale(1)}}
     @keyframes comicFlash{0%,62%,66%,100%{opacity:0;transform:scale(.2)}64%{opacity:1;transform:scale(2.2)}}
+    /* ---------------- Janmashtami celebration ---------------- */
+    .janmashtami-scene{position:absolute;inset:0;display:grid;place-items:center;overflow:hidden;pointer-events:none;perspective:900px;background:radial-gradient(circle at 50% 42%,#fffef4 0 12%,#fff3c4 40%,#dff7ee 72%,#cceef2 100%)}
+    .janmashtami-scene::before{content:'';position:absolute;inset:0;opacity:.25;background-image:radial-gradient(circle,#fff 0 2px,transparent 3px);background-size:42px 42px;animation:festivalSparkle 4s linear infinite}
+    .festival-halo{position:absolute;left:50%;top:49%;width:190px;height:190px;border:2px solid #fff9;border-radius:50%;translate:-50% -50%;box-shadow:0 0 0 18px #fff3,0 0 0 36px #f7c9482e,0 0 60px #fff}
+    .bal-krishna{position:absolute;z-index:4;left:25%;bottom:-5%;height:105%;width:auto;translate:-50% 0;object-fit:contain;filter:drop-shadow(0 18px 16px #164e6370);transform-origin:50% 85%;animation:krishnaComeAlive 7s cubic-bezier(.2,.85,.25,1) infinite}
+    .festival-feather{position:absolute;z-index:2;font-size:clamp(35px,5vw,60px);filter:drop-shadow(0 6px 8px #0b615e55);animation:featherSway 3s ease-in-out infinite alternate}
+    .festival-feather.left{left:9%;top:15%;rotate:-24deg}.festival-feather.right{right:9%;top:15%;rotate:24deg;animation-delay:-1.5s}
+    .festival-pot{position:absolute;z-index:3;right:17%;bottom:20%;font-size:clamp(38px,6vw,68px);filter:drop-shadow(0 8px 5px #7c2d1240);animation:potFloat 2.2s ease-in-out infinite}
+    .festival-flute{position:absolute;z-index:3;left:15%;bottom:23%;font-size:clamp(38px,6vw,68px);rotate:-22deg;filter:drop-shadow(0 7px 5px #7c2d1240);animation:fluteGlow 2.2s ease-in-out infinite alternate}
+    .krishna-symbol{position:absolute;z-index:4;left:50%;top:45%;translate:-50% -50%;font-size:clamp(58px,9vw,96px);filter:drop-shadow(0 10px 8px #123d7955);animation:krishnaFloat 2.6s ease-in-out infinite}
+    .festival-copy{position:absolute;z-index:5;left:65%;bottom:22%;width:min(62%,620px);translate:-50% 0;padding:12px 24px 10px;border:1px solid #fff9;border-radius:18px;background:#fffaf0d9;box-shadow:0 10px 30px #7c2d1224;backdrop-filter:blur(3px);text-align:center;color:#17466f;transform-style:preserve-3d;animation:wishPopOut 7s cubic-bezier(.2,.9,.25,1) infinite}
+    .festival-copy strong{display:block;font-family:Georgia,'Times New Roman',serif;font-size:clamp(25px,4.3vw,48px);font-weight:700;line-height:1.05;color:#9a3f12;letter-spacing:.01em;text-shadow:0 2px 0 #fff,0 5px 0 #7c2d12,0 14px 24px #7c2d124d;transform:translateZ(55px)}
+    .festival-copy span{display:block;margin-top:7px;font-size:clamp(10px,1.5vw,14px);font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#15527b;text-shadow:0 1px #fff}
+    .festival-dots{position:absolute;inset:0;z-index:1}
+    .festival-dots i{position:absolute;width:7px;height:7px;border-radius:50%;background:#fff;box-shadow:0 0 12px #fff;animation:festivalTwinkle 1.8s ease-in-out infinite alternate}
+    .festival-dots i:nth-child(1){left:25%;top:18%}.festival-dots i:nth-child(2){left:74%;top:30%;animation-delay:-.6s}.festival-dots i:nth-child(3){left:31%;top:65%;animation-delay:-1.2s}.festival-dots i:nth-child(4){left:68%;top:70%;animation-delay:-.9s}
+    @keyframes festivalSparkle{to{background-position:42px 42px}}
+    @keyframes festivalTwinkle{to{scale:2;opacity:.35}}
+    @keyframes featherSway{to{transform:rotate(10deg) translateY(-7px)}}
+    @keyframes potFloat{50%{transform:translateY(-8px) rotate(4deg)}}
+    @keyframes fluteGlow{to{transform:translateY(-6px);filter:drop-shadow(0 7px 8px #f59e0b99)}}
+    @keyframes krishnaFloat{50%{transform:translateY(-9px) scale(1.04)}}
+    @keyframes krishnaComeAlive{0%{opacity:0;transform:translateZ(-600px) scale(.2) rotateY(-24deg)}13%{opacity:1;transform:translateZ(120px) scale(1.1) rotateY(4deg)}20%,55%{opacity:1;transform:translateZ(0) translateY(0) scale(1) rotateY(0)}63%{transform:translateZ(65px) translateY(-8px) scale(1.04) rotateY(-3deg)}72%{transform:translateZ(15px) translateY(0) scale(1) rotateY(3deg)}82%{transform:translateZ(70px) translateY(-7px) scale(1.04) rotateY(0)}100%{opacity:0;transform:translateZ(260px) translateY(-12px) scale(1.18)}}
+    @keyframes wishPopOut{0%{opacity:0;transform:translateZ(-700px) scale(.12) rotateX(24deg)}12%{opacity:1;transform:translateZ(110px) scale(1.12) rotateX(-3deg);box-shadow:0 26px 55px #7c2d1255}18%,84%{opacity:1;transform:translateZ(0) scale(1) rotateX(0);box-shadow:0 12px 32px #7c2d1233}92%{opacity:1;transform:translateZ(70px) scale(1.06)}100%{opacity:0;transform:translateZ(260px) scale(1.28)}}
     .stat-card {
       background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px;
       border-top: 3px solid var(--sc-color, var(--brand));
@@ -216,7 +240,7 @@
       .nav-item.n-mobile-logout { display:flex; color:var(--red); --nav-color:var(--red); }
       .sidebar-foot { display: none; }
     }
-    @media (max-width: 560px) { .infinity-stage{min-height:180px;padding:10px}.infinity-title{bottom:8px;font-size:10px}.infinity-track-shadow{stroke-width:40}.infinity-track{stroke-width:22}.dino-actor{font-size:38px}.dino-sword{left:27px;font-size:27px}.dino-gun{left:-20px;font-size:23px}.dino-shades{left:7px;font-size:20px}.dino-laugh{left:38px;font-size:10px} }
+    @media (max-width: 560px) { .infinity-stage{min-height:210px;padding:10px}.infinity-title{bottom:8px;font-size:10px}.infinity-track-shadow{stroke-width:40}.infinity-track{stroke-width:22px}.festival-halo{width:130px;height:130px}.bal-krishna{left:23%;height:86%;bottom:5%}.festival-copy{left:64%;bottom:12%;width:70%;padding:9px 10px 8px;border-radius:13px}.festival-copy strong{font-size:clamp(20px,6vw,28px)}.festival-copy span{font-size:8px;letter-spacing:.08em}.festival-pot{display:none}.festival-flute{display:none} }
 
     /* Phone-safe layout also applies when Chrome is forced into Desktop Site
        mode, where width-based media queries alone may not activate. */
@@ -460,16 +484,23 @@
         </div>
       </div>
 
-      <div class="infinity-stage" aria-label="Animated dinosaur traveling around an infinity loop">
+      <div class="infinity-stage" aria-label="Happy Krishna Janmashtami celebration">
         <svg class="infinity-visual" viewBox="0 0 820 260" role="img" aria-labelledby="infinityTitle infinityDescription">
-          <title id="infinityTitle">Infinite possibilities</title>
-          <desc id="infinityDescription">A dinosaur continuously travels around a colorful infinity-shaped track.</desc>
+          <title id="infinityTitle">Happy Krishna Janmashtami</title>
+          <desc id="infinityDescription">A festive Krishna Janmashtami greeting with a flute, peacock feathers and dahi handi.</desc>
           <defs><linearGradient id="infinityGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#155eef"/><stop offset=".48" stop-color="#8b5cf6"/><stop offset="1" stop-color="#f97316"/></linearGradient></defs>
           <path class="infinity-track-shadow" d="M410 130 C315 5 120 20 105 130 C90 240 285 255 410 130 C535 5 730 20 715 130 C700 240 505 255 410 130 Z"/>
           <path id="infinityTrack" class="infinity-track" d="M410 130 C315 5 120 20 105 130 C90 240 285 255 410 130 C535 5 730 20 715 130 C700 240 505 255 410 130 Z"/>
           <path class="infinity-dash" d="M410 130 C315 5 120 20 105 130 C90 240 285 255 410 130 C535 5 730 20 715 130 C700 240 505 255 410 130 Z"/>
         </svg>
-        <div class="dino-battle" aria-hidden="true"><span class="scene-sun"></span><span class="scene-cloud"></span><span class="scene-ground"></span><span class="scene-caption">READY...</span><span class="run-dust dust-one"></span><span class="run-dust dust-two"></span><span class="slash"></span><span class="slash two"></span><span class="slash three"></span><span class="shot-line"></span><span class="comic-flash"></span><span class="impact-word">POW!</span><span class="ko-stars">⭐💫⭐</span><div class="dino-actor dino-one"><span class="dino-shadow"></span><span class="dino-face">🦖</span><span class="dino-sword">⚔️</span></div><div class="dino-actor dino-two"><span class="dino-shadow"></span><span class="dino-face">🦖</span><span class="dino-gun">🔫</span><span class="dino-shades">🕶️</span><span class="dino-laugh">HA! HA!</span></div><div class="initiative-reveal"><span>Welcome to Initiative</span></div></div>
+        <div class="janmashtami-scene" aria-hidden="true">
+          <div class="festival-dots"><i></i><i></i><i></i><i></i></div>
+          <span class="festival-halo"></span>
+          <img class="bal-krishna" src="static/bal-krishna-3d.png" alt="" />
+          <span class="festival-feather left">🦚</span><span class="festival-feather right">🦚</span>
+          <span class="festival-flute">🪈</span><span class="festival-pot">🏺</span>
+          <div class="festival-copy"><strong>Happy Krishna Janmashtami</strong><span>Best Wishes to All Initiative Family</span></div>
+        </div>
       </div>
 
       <div class="um-card" id="user-management" style="display:none;">
