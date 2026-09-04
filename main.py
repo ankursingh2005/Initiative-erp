@@ -2590,25 +2590,14 @@ def save_attendance(
         lon_delta = (attendance.longitude - candidate.longitude) * radians
         value = math.sin(lat_delta / 2) ** 2 + math.cos(candidate.latitude * radians) * math.cos(attendance.latitude * radians) * math.sin(lon_delta / 2) ** 2
         return 2 * radius * math.atan2(math.sqrt(value), math.sqrt(1 - value))
-    can_mark_from_anywhere = current_user.role in {"Admin", "HR", "ServiceManager", "ACTechnicianA", "ACTechnicianB"}
-    if can_mark_from_anywhere:
-        available_stores = db.query(models.Store).filter(
-            models.Store.status == "Active",
-            models.Store.latitude.isnot(None),
-            models.Store.longitude.isnot(None),
-        ).all()
-        if not available_stores:
-            raise HTTPException(status_code=400, detail="No outlet GPS coordinates are configured")
-        store, actual_distance = min(((candidate, distance_to(candidate)) for candidate in available_stores), key=lambda pair: pair[1])
-    else:
-        if current_user.store_id is None:
-            raise HTTPException(status_code=400, detail="No outlet is assigned to this account")
-        store = db.query(models.Store).filter(models.Store.id == current_user.store_id).first()
-        if not store or store.latitude is None or store.longitude is None:
-            raise HTTPException(status_code=400, detail="Assigned outlet has no GPS coordinates")
-        actual_distance = distance_to(store)
-    allowed_radius = store.geofence_radius_m or 100
-    if not can_mark_from_anywhere and actual_distance > allowed_radius:
+    if current_user.store_id is None:
+        raise HTTPException(status_code=400, detail="No outlet is assigned to this account")
+    store = db.query(models.Store).filter(models.Store.id == current_user.store_id).first()
+    if not store or store.latitude is None or store.longitude is None:
+        raise HTTPException(status_code=400, detail="Assigned outlet has no GPS coordinates")
+    actual_distance = distance_to(store)
+    allowed_radius = min(store.geofence_radius_m or 100, 100)
+    if actual_distance > allowed_radius:
         raise HTTPException(status_code=403, detail=f"Attendance blocked: you are {round(actual_distance)} m from {store.name}; maximum allowed distance is {round(allowed_radius)} m")
     # Never trust the phone clock as the saved punch time. The database always
     # receives authoritative server IST.
@@ -2715,18 +2704,20 @@ def save_attendance_location(
         lon_delta = (point.longitude - candidate.longitude) * radians
         value = math.sin(lat_delta / 2) ** 2 + math.cos(candidate.latitude * radians) * math.cos(point.latitude * radians) * math.sin(lon_delta / 2) ** 2
         return 2 * radius * math.atan2(math.sqrt(value), math.sqrt(1 - value))
-    if current_user.role in {"Admin", "HR", "ServiceManager", "ACTechnicianA", "ACTechnicianB"}:
-        available_stores = db.query(models.Store).filter(models.Store.status == "Active", models.Store.latitude.isnot(None), models.Store.longitude.isnot(None)).all()
-        if not available_stores:
-            raise HTTPException(status_code=400, detail="No outlet GPS coordinates are configured")
-        store, actual_distance = min(((candidate, distance_to(candidate)) for candidate in available_stores), key=lambda pair: pair[1])
-    else:
-        if current_user.store_id is None:
-            raise HTTPException(status_code=400, detail="No outlet is assigned to this account")
-        store = db.query(models.Store).filter(models.Store.id == current_user.store_id).first()
-        if not store or store.latitude is None or store.longitude is None:
-            raise HTTPException(status_code=400, detail="Assigned outlet has no GPS coordinates")
-        actual_distance = distance_to(store)
+    if current_user.store_id is None:
+        raise HTTPException(status_code=400, detail="No outlet is assigned to this account")
+    store = db.query(models.Store).filter(models.Store.id == current_user.store_id).first()
+    if not store or store.latitude is None or store.longitude is None:
+        raise HTTPException(status_code=400, detail="Assigned outlet has no GPS coordinates")
+    actual_distance = distance_to(store)
+    # Office/outlet employees cannot create a misleading location trail from
+    # outside the same geofence that was required for their punch-in.  Ignore
+    # poor background fixes too; indoor network positioning can drift by
+    # hundreds of metres even when the employee has not moved.
+    if point.accuracy_m is not None and point.accuracy_m > 200:
+        raise HTTPException(status_code=422, detail="GPS reading is not accurate enough")
+    if actual_distance > min(store.geofence_radius_m or 100, 100):
+        raise HTTPException(status_code=403, detail="Location point is outside the assigned outlet geofence")
     # Location trails also use server IST so changing the phone clock cannot
     # move GPS points to another day or reorder the route history.
     captured_at = datetime.now(INDIA_TZ).replace(tzinfo=None)
@@ -2842,15 +2833,6 @@ def attendance_admin_summary(
         )
         user_records = sorted(records_by_user.get(user.id, []), key=lambda r: r.attendance_date)
         present_days = sum(1 for r in user_records if r.checkin_at)
-        if user.role in {"ServiceManager", "ACTechnicianA", "ACTechnicianB"} and user_records:
-            attendance_outlet = stores_by_id.get(user_records[-1].store_id)
-            if attendance_outlet:
-                outlet = attendance_outlet
-                outlet_name = outlet.name
-                outlet_abbreviation = outlet_abbreviations.get(
-                    outlet_name.strip().lower(), outlet.code or "—"
-                )
-
         points = db.query(models.AttendanceLocationPoint).filter(
             models.AttendanceLocationPoint.user_id == user.id,
             models.AttendanceLocationPoint.captured_at >= range_start_dt,
@@ -2869,6 +2851,13 @@ def attendance_admin_summary(
             point for point in points
             if any(start <= point.captured_at <= end for start, end in work_windows)
         ]
+        if outlet:
+            allowed_radius = min(outlet.geofence_radius_m or 100, 100)
+            points = [
+                point for point in points
+                if (point.distance_from_store_m is None or point.distance_from_store_m <= allowed_radius)
+                and (point.accuracy_m is None or point.accuracy_m <= 200)
+            ]
         latest_point = max(points, key=lambda point: point.captured_at) if points else None
         day_record = user_records[0] if single_day and user_records else None
         tracking_open = bool(day_record and day_record.checkin_at and not day_record.checkout_at)
