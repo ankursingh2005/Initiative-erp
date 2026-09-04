@@ -2945,7 +2945,7 @@ def attendance_admin_summary(
                 else "Absent"
             )
             rows.append({
-                "user_id": user.id, "username": user.username, "email": user.email, "role": user.role,
+                "user_id": user.id, "username": user.username, "display_name": user.full_name or user.username, "email": user.email, "role": user.role,
                 "promoter_brand": promoter_brand, "outlet_id": user.store_id,
                 "outlet_name": outlet_name, "outlet_abbreviation": outlet_abbreviation,
                 "status": row_status, "weekoff_day": user.weekoff_day,
@@ -2965,7 +2965,7 @@ def attendance_admin_summary(
             })
         else:
             rows.append({
-                "user_id": user.id, "username": user.username, "email": user.email, "role": user.role,
+                "user_id": user.id, "username": user.username, "display_name": user.full_name or user.username, "email": user.email, "role": user.role,
                 "promoter_brand": promoter_brand, "outlet_id": user.store_id,
                 "outlet_name": outlet_name, "outlet_abbreviation": outlet_abbreviation,
                 "status": f"{present_days}/{days_in_range} Present", "weekoff_day": user.weekoff_day,
