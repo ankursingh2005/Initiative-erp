@@ -528,10 +528,10 @@ const WEEKOFF_DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday
 </script>
 <script>
 (function enableServiceManagerAttendance(){
-  function canMarkFromAnywhere(){return false}
+  function canMarkFromAnywhere(){return ['ServiceManager','ACTechnicianA','ACTechnicianB','HR'].includes(profile?.role)}
   function nearestServiceOutlet(p){
     if(!p)return null;
-    const candidates=(liveStores||[]).filter(store=>store.status==='Active'&&Number.isFinite(Number(store.latitude))&&Number.isFinite(Number(store.longitude)));
+    const candidates=(liveStores||[]).filter(store=>store.status==='Active'&&store.latitude!=null&&store.longitude!=null&&Number.isFinite(Number(store.latitude))&&Number.isFinite(Number(store.longitude)));
     const available=candidates.length?candidates:Object.entries(outlets).map(([name,coords])=>({name,latitude:coords[0],longitude:coords[1]}));
     return available.map(store=>({store,distance:meters(p.coords.latitude,p.coords.longitude,[Number(store.latitude),Number(store.longitude)])})).sort((a,b)=>a.distance-b.distance)[0]||null;
   }
@@ -577,9 +577,13 @@ const WEEKOFF_DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday
       locationWatch=navigator.geolocation.watchPosition(p=>{position=p;const nearest=nearestServiceOutlet(p);if(!nearest)return;outlets[nearest.store.name]=[Number(nearest.store.latitude),Number(nearest.store.longitude)];state.locations=state.locations||[];state.locations.push({at:new Date().toISOString(),latitude:p.coords.latitude,longitude:p.coords.longitude,distance:nearest.distance});uploadWorkingLocation(p,nearest.distance);$('distance').textContent=formatDistance(nearest.distance);$('outletText').textContent='Nearest outlet: '+nearest.store.name;save()},()=>{},{enableHighAccuracy:true,maximumAge:15000,timeout:15000});
     };
     if(canMarkFromAnywhere()){
+      stopApprovedTracking();
+      geofenceAlertOutside=false;
+      document.querySelector('.head h1 + p').textContent='Mark attendance from any location.';
       $('outletText').textContent='Finding nearest outlet...';
       const hint=document.querySelector('.grid .panel:first-child .hint:last-child');if(hint)hint.textContent='Your time, GPS position, nearest outlet, distance, and selfie are recorded. Your role may mark attendance from any location.';
       checkLocation();
+      updateStages();
     }
     return true;
   }
