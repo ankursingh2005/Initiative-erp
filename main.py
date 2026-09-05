@@ -9538,6 +9538,29 @@ def _incentive_outlet_groups(outlet: str) -> list:
     return [("ALL", ("HA", "HE", "MOB", "COM", "DC", "ACC"))]
 
 
+EXACT_INCENTIVE_RATES = {
+    ("ALM", "HA + HE"): 85,
+    ("ALM", "MOB + DC + ACC"): 13,
+    ("ALM", "COM"): 78,
+    ("GNG", "ALL"): 52,
+    ("HZT", "HA + HE"): 65,
+    ("HZT", "MOB + COM + DC + ACC"): 60,
+    ("VKN", "ALL"): 55,
+}
+
+
+def exact_incentive_summary(grouped_summary: list) -> list:
+    results = []
+    for row in grouped_summary:
+        rate = EXACT_INCENTIVE_RATES.get((_incentive_outlet_short_name(row["outlet"]), row["group"]))
+        amount = None if rate is None else float(
+            (Decimal(str(row["total_incentive"])) * Decimal(rate) / Decimal(100))
+            .quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        )
+        results.append({**row, "applied_rate": rate, "exact_incentive": amount})
+    return results
+
+
 @app.post("/api/incentive/calculate")
 def calculate_incentive_report(
     file: UploadFile = File(...),
@@ -9591,10 +9614,89 @@ def calculate_incentive_report(
             },
         } for outlet, categories in sorted(by_outlet_category.items())],
         "grouped_summary": grouped_summary,
+        "exact_summary": exact_incentive_summary(grouped_summary),
         "totals": {"total_sales": grand_sales, "avg_profit": grand_profit, "total_incentive": grand_incentive},
         "profit_rate": profit_rate,
         "incentive_rate": incentive_rate,
     }
+
+
+@app.post("/api/incentive/exact-export")
+def export_exact_incentive_report(
+    file: UploadFile = File(...),
+    profit_rate: float = Form(7.0),
+    incentive_rate: float = Form(2.5),
+    format: str = Query("xlsx"),
+    current_user: models.User = Depends(auth.require_roles("Admin", "Owner", "Accounts", "MISExecutive", "HR")),
+):
+    if format not in {"xlsx", "pdf"}:
+        raise HTTPException(status_code=400, detail="Format must be xlsx or pdf")
+    rows = calculate_incentive_report(file, profit_rate, incentive_rate, current_user)["exact_summary"]
+    headers = ["Outlet", "Category Group", "Total Incentive", "Applied Percentage", "Exact Incentive"]
+    output = BytesIO()
+    if format == "xlsx":
+        from openpyxl.styles import Alignment, Font, PatternFill
+        book = Workbook()
+        sheet = book.active
+        sheet.title = "Exact Incentive"
+        sheet.append(["EXACT INCENTIVE BY OUTLET & CATEGORY GROUP"])
+        sheet.merge_cells("A1:E1")
+        sheet.append(["Amounts in INR. ASH percentage is pending."])
+        sheet.merge_cells("A2:E2")
+        sheet.append(headers)
+        for row in rows:
+            sheet.append([row["outlet"], row["group"], row["total_incentive"],
+                          "Pending" if row["applied_rate"] is None else row["applied_rate"] / 100,
+                          "Pending" if row["exact_incentive"] is None else row["exact_incentive"]])
+        for cell in [sheet["A1"], *sheet[3]]:
+            cell.fill = PatternFill("solid", fgColor="17365D")
+            cell.font = Font(color="FFFFFF", bold=True)
+        for cells in sheet.iter_rows(min_row=4):
+            for cell in cells[2:]:
+                cell.number_format = "0%" if cell.column == 4 else '#,##0.00'
+                cell.alignment = Alignment(horizontal="right")
+        for letter, width in zip("ABCDE", (14, 32, 23, 23, 23)):
+            sheet.column_dimensions[letter].width = width
+        sheet.freeze_panes = "C4"
+        sheet.auto_filter.ref = f"A3:E{sheet.max_row}"
+        sheet.sheet_view.showGridLines = False
+        book.save(output)
+        media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    else:
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from xml.sax.saxutils import escape
+        styles = getSampleStyleSheet()
+        document = SimpleDocTemplate(output, pagesize=landscape(A4), leftMargin=30, rightMargin=30, topMargin=30, bottomMargin=30)
+        data = [headers]
+        for row in rows:
+            data.append([Paragraph(escape(str(row["outlet"])), styles["BodyText"]),
+                         Paragraph(escape(str(row["group"])), styles["BodyText"]),
+                         f'{row["total_incentive"]:,.2f}',
+                         "Pending" if row["applied_rate"] is None else f'{row["applied_rate"]}%',
+                         "Pending" if row["exact_incentive"] is None else f'{row["exact_incentive"]:,.2f}'])
+        # Fit all five columns within landscape A4's available width.
+        table = Table(data, colWidths=[60, 210, 155, 170, 125], repeatRows=1)
+        table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#17365D")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 10),
+            ("ALIGN", (2, 0), (-1, -1), "RIGHT"),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("TOPPADDING", (0, 0), (-1, -1), 10),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F4F7FB")]),
+            ("LINEBELOW", (0, 0), (-1, -1), .4, colors.HexColor("#DCE3EC")),
+        ]))
+        document.build([Paragraph("Exact Incentive by Outlet &amp; Category Group", styles["Heading1"]),
+                        Paragraph("Amounts in INR. Group total incentive multiplied by applied percentage. ASH remains pending.", styles["BodyText"]),
+                        Spacer(1, 16), table])
+        media_type = "application/pdf"
+    filename = f"Exact_Incentive_Report_{india_today().isoformat()}.{format}"
+    return Response(output.getvalue(), media_type=media_type, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
 @app.post("/api/incentive/export")
@@ -9743,6 +9845,38 @@ def export_incentive_report(
     group_sheet.column_dimensions["A"].width = 14
     group_sheet.column_dimensions["B"].width = 30
     for letter in "CDE": group_sheet.column_dimensions[letter].width = 20
+
+    exact_sheet = book.create_sheet("Exact Incentive Report")
+    exact_sheet.merge_cells("A1:E1")
+    exact_sheet["A1"] = "EXACT INCENTIVE BY OUTLET & CATEGORY GROUP"
+    exact_sheet["A1"].fill = PatternFill("solid", fgColor=navy)
+    exact_sheet["A1"].font = Font(color=white, bold=True, size=14)
+    exact_sheet["A1"].alignment = Alignment(horizontal="center")
+    exact_sheet.merge_cells("A2:E2")
+    exact_sheet["A2"] = "Exact incentive = group total incentive × applied rate. ASH rate is pending."
+    exact_sheet.append(["Outlet", "Category Group", "Total Incentive", "Applied Rate", "Exact Incentive"])
+    for cell in exact_sheet[3]:
+        cell.fill = PatternFill("solid", fgColor=blue)
+        cell.font = Font(color=white, bold=True)
+    for exact_row in range(4, row_no):
+        outlet = group_sheet.cell(exact_row, 1).value
+        label = group_sheet.cell(exact_row, 2).value
+        rate = EXACT_INCENTIVE_RATES.get((outlet, label))
+        exact_sheet.cell(exact_row, 1, outlet)
+        exact_sheet.cell(exact_row, 2, label)
+        exact_sheet.cell(exact_row, 3, f"='Group-wise Report'!E{exact_row}")
+        exact_sheet.cell(exact_row, 4, "Pending" if rate is None else rate / 100)
+        exact_sheet.cell(exact_row, 5, f'=IF(ISNUMBER(D{exact_row}),ROUND(C{exact_row}*D{exact_row},2),"Pending")')
+        exact_sheet.cell(exact_row, 4).number_format = '0%'
+        for col in (3, 5):
+            exact_sheet.cell(exact_row, col).number_format = '#,##0.00'
+        for cell in exact_sheet[exact_row]:
+            cell.border = Border(bottom=thin)
+            cell.alignment = Alignment(horizontal="left" if cell.column <= 2 else "right")
+    exact_sheet.freeze_panes = "C4"
+    exact_sheet.sheet_view.showGridLines = False
+    for letter, width in zip("ABCDE", (14, 32, 22, 18, 22)):
+        exact_sheet.column_dimensions[letter].width = width
 
     output = BytesIO()
     book.save(output)
