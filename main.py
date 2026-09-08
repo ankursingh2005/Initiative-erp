@@ -4198,6 +4198,8 @@ def send_purchase_order_email_endpoint(
         raise HTTPException(status_code=400, detail="No supplier emails on file for this brand or supplier yet. Add at least one first.")
 
     notification_status = send_purchase_order_email(purchase_order, recipients)
+    if notification_status.startswith("Not sent:"):
+        raise HTTPException(status_code=503, detail=notification_status)
     return {"sent_to": recipients, "notification_status": notification_status}
 
 

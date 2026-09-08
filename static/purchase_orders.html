@@ -690,6 +690,7 @@
       label.textContent = 'Sending...';
       try {
         const result = await api(`/api/purchase-orders/${id}/send-email`, { method: 'POST' });
+        if (!/^Emailed to /i.test(result.notification_status || '')) throw new Error(result.notification_status || 'Email sending was not confirmed.');
         btn.classList.remove('sending');
         btn.classList.add('sent');
         label.textContent = 'PO Sent';
@@ -698,6 +699,7 @@
         await loadOrders();
       } catch (e) {
         btn.classList.remove('sending');
+        btn.classList.remove('sent');
         btn.disabled = false;
         label.textContent = 'Send PO';
         message.className = 'message';
@@ -855,11 +857,14 @@
       try {
         const id = document.getElementById('processId').value;
         const result = await api(`/api/purchase-orders/${id}/send-email`, { method: 'POST' });
+        if (!/^Emailed to /i.test(result.notification_status || '')) throw new Error(result.notification_status || 'Email sending was not confirmed.');
         message.className = 'message success';
         message.textContent = `Order finalized and ${result.notification_status} (${result.sent_to.join(', ')})`;
       } catch (e) {
         message.className = 'message';
         message.textContent = `Order finalized, but the email did not go out: ${e.message}`;
+        await loadOrders();
+        return;
       }
 
       await loadOrders();
