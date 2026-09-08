@@ -287,6 +287,9 @@
       </div>
 
       <div class="section-block">
+        <label for="poEmailMessage">Email message (optional)</label>
+        <textarea id="poEmailMessage" rows="4" maxlength="10000" aria-describedby="poEmailMessageHint" placeholder="Write a message for the supplier..."></textarea>
+        <p class="hint" id="poEmailMessageHint">This text will appear in your email with the PDF attachment. Leave blank to send only the attachment.</p>
         <div class="po-send-wrap">
           <button id="sendPoBtn" class="po-send-btn" type="button" onclick="sendPoEmail()">
             <span class="po-send-ring" id="sendPoRing">
@@ -299,7 +302,7 @@
                 <svg viewBox="0 0 24 24"><path d="M4 12.5L9.5 18L20 6"></path></svg>
               </span>
             </span>
-            <span class="po-send-label" id="sendPoLabel">Email PDF</span>
+            <span class="po-send-label" id="sendPoLabel">SEND PO</span>
           </button>
         </div>
         <div id="sendEmailMessage" class="message" style="text-align:center;"></div>
@@ -727,7 +730,7 @@
       const id = document.getElementById('processId').value;
       const btn = document.getElementById('sendPoBtn');
       if (btn.disabled) return;
-      const retryLabel = orders.find(order => order.id === Number(id))?.email_sent_at ? 'Save & resend PDF' : 'Email PDF';
+      const retryLabel = 'SEND PO';
       const label = document.getElementById('sendPoLabel');
       const message = document.getElementById('sendEmailMessage');
       message.className = 'message';
@@ -757,7 +760,7 @@
         if (!/^Emailed to /i.test(result.notification_status || '')) throw new Error(result.notification_status || 'Email sending was not confirmed.');
         btn.classList.remove('sending');
         btn.classList.add('sent');
-        label.textContent = 'PO Sent';
+        label.textContent = 'PO SENT';
         message.className = 'message success';
         message.textContent = `${result.notification_status} To: ${result.sent_to.join(', ')}. Accepted for sending; recipient inbox delivery is not confirmed.`;
         await loadOrders();
@@ -804,6 +807,7 @@
         document.getElementById('processCustomAddressWrap').classList.add('hidden');
       }
       document.getElementById('processRemarks').value = order.remarks || '';
+      document.getElementById('poEmailMessage').value = '';
 
       const processItemsBody = document.getElementById('processItemsBody');
       processItemsBody.innerHTML = '';
@@ -829,7 +833,7 @@
       const sendPoBtn = document.getElementById('sendPoBtn');
       sendPoBtn.classList.remove('sending', 'sent');
       sendPoBtn.disabled = !isApprovedOrLater;
-      document.getElementById('sendPoLabel').textContent = order.email_sent_at ? 'Save & resend PDF' : 'Email PDF';
+      document.getElementById('sendPoLabel').textContent = 'SEND PO';
       if (order.email_sent_at) document.getElementById('sendEmailMessage').textContent = 'Update the details and check the email addresses before resending. Saved supplier and brand contacts also receive the email.';
 
       loadSupplierProfile();
@@ -1358,7 +1362,7 @@
         await document.fonts.ready;
         const canvas = await html2canvas(host.querySelector('.po-sheet-page'), { scale: 2, backgroundColor: '#ffffff', useCORS: true });
         const pdf = purchaseOrderPdfFromCanvas(canvas);
-        return await api('/api/purchase-orders/' + id + '/send-email', { method: 'POST', body: JSON.stringify({ pdf_base64: pdf.output('datauristring').split(',')[1] }) });
+        return await api('/api/purchase-orders/' + id + '/send-email', { method: 'POST', body: JSON.stringify({ pdf_base64: pdf.output('datauristring').split(',')[1], email_message: document.getElementById('poEmailMessage').value }) });
       } finally { host.remove(); }
     }
 

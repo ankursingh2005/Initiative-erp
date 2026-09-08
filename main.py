@@ -4115,7 +4115,7 @@ def delete_supplier_email(
     return {"deleted": True}
 
 
-def send_purchase_order_email(purchase_order: models.PurchaseOrder, recipients: List[str], pdf_bytes: bytes) -> str:
+def send_purchase_order_email(purchase_order: models.PurchaseOrder, recipients: List[str], pdf_bytes: bytes, email_message: str = "") -> str:
     """Send via configured Gmail HTTPS API or the existing SMTP transport."""
     provider = os.getenv("PO_EMAIL_PROVIDER", "smtp").strip().lower()
     if provider not in {"smtp", "gmail"}:
@@ -4130,25 +4130,8 @@ def send_purchase_order_email(purchase_order: models.PurchaseOrder, recipients: 
         print("[PO email] Not sent: SMTP_PASSWORD not set (or no recipients).")
         return "Not sent: SMTP is not configured (set SMTP_PASSWORD on the host)."
 
-    lines = [
-        f"Purchase Order: {purchase_order.request_no}",
-        f"Date: {purchase_order.request_date}",
-        f"Brand: {purchase_order.brand_name or '-'}",
-        f"Division: {purchase_order.division or '-'}",
-        f"Delivery address: {purchase_order.delivery_address or '-'}",
-        "",
-        "Items:",
-    ]
-    for item in purchase_order.items:
-        variant = f" ({item.variant})" if item.variant else ""
-        lines.append(f"  - {item.product_name}{variant} x {item.quantity} {item.unit or 'Nos'}")
-    if purchase_order.remarks:
-        lines.append("")
-        lines.append(f"Remarks: {purchase_order.remarks}")
-    body = "\n".join(lines)
-
     message = EmailMessage()
-    message.set_content(body + "\n\nPlease find the purchase order attached as a PDF.")
+    message.set_content(email_message or "")
     filename = re.sub(r"[^a-zA-Z0-9_-]", "_", purchase_order.busy_po_number or purchase_order.request_no) + ".pdf"
     message.add_attachment(pdf_bytes, maintype="application", subtype="pdf", filename=filename)
     message["Subject"] = f"Purchase Order {purchase_order.request_no} - {purchase_order.brand_name or ''}"
@@ -4214,7 +4197,7 @@ def send_purchase_order_email_endpoint(
         raise HTTPException(status_code=400, detail="Invalid PDF attachment encoding")
     if not pdf_bytes.startswith(b"%PDF-") or b"%%EOF" not in pdf_bytes[-1024:]:
         raise HTTPException(status_code=400, detail="A valid purchase order PDF attachment is required")
-    notification_status = send_purchase_order_email(purchase_order, recipients, pdf_bytes)
+    notification_status = send_purchase_order_email(purchase_order, recipients, pdf_bytes, payload.email_message)
     if notification_status.startswith("Not sent:"):
         raise HTTPException(status_code=503, detail=notification_status)
     purchase_order.email_sent_at = datetime.now(timezone.utc)
