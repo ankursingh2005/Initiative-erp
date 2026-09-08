@@ -504,6 +504,10 @@ class BrandSupplierEmailOut(BrandSupplierEmailCreate):
         from_attributes = True
 
 
+class SendPurchaseOrderEmailRequest(BaseModel):
+    pdf_base64: str = Field(..., min_length=1, max_length=14000000)
+
+
 class SendPurchaseOrderEmailResult(BaseModel):
     sent_to: List[str]
     notification_status: str
@@ -632,6 +636,8 @@ class PurchaseOrderOut(BaseModel):
     processing_notes: Optional[str]
     exported_to_busy: bool = False
     exported_to_busy_at: Optional[datetime] = None
+    email_sent_at: Optional[datetime] = None
+    email_sent_to: Optional[str] = None
     submitted_by_user_id: int
     submitted_by_username: Optional[str] = None
     approved_by_username: Optional[str] = None

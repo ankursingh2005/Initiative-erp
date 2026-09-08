@@ -165,6 +165,7 @@
     }
     @keyframes poCheckDraw { to { stroke-dashoffset:0; } }
   </style>
+  <link rel="stylesheet" href="static/purchase-orders-ui.css" />
 </head>
 <body>
   <header><div class="brand">INITIATIVE DATA SYSTEMS (P) LTD.</div><div class="header-right"><span id="userName"></span><button class="back-btn" onclick="go('/home')">&larr; Back</button><button class="btn-light" onclick="openLogoutModal()">Log out</button></div></header>
@@ -180,12 +181,25 @@
     </div>
   </div>
   <main>
-    <div class="title-row"><div><h1>Purchase Order Requests</h1><p class="subtitle">Category managers raise stock requests, Admin approves or rejects them, then MIS finalizes with the supplier.</p></div><div class="filters"><select id="statusFilter" onchange="renderOrders()"><option value="">All statuses</option><option>Requested</option><option>Approved</option><option>Rejected</option><option>Ordered</option><option>Cancelled</option></select><select id="poDateField" onchange="renderOrders()"><option value="request_date">Filter by Request Date</option><option value="ordered_date">Filter by Ordered Date</option></select><label class="filter-date-label">From<input id="poDateFrom" type="date" onchange="renderOrders()" /></label><label class="filter-date-label">To<input id="poDateTo" type="date" onchange="renderOrders()" /></label><button type="button" class="btn-outline" onclick="clearPoDateFilter()">Clear dates</button></div></div>
+    <div class="po-hero">
+      <div><p class="eyebrow">INITIATIVE / PURCHASING</p><h1>Purchase orders</h1><p class="subtitle">Request stock. Get approval. Send your order.</p></div>
+      <button class="btn hidden" id="newRequestShortcut" type="button" onclick="showRequestForm()">+ New purchase request</button>
+    </div>
+    <div class="workflow-guide" aria-label="Purchase order steps"><span><b>1</b> Add products</span><span class="step-arrow" aria-hidden="true">&rarr;</span><span><b>2</b> Get admin approval</span><span class="step-arrow" aria-hidden="true">&rarr;</span><span><b>3</b> Email the PDF to your supplier</span></div>
+    <div class="po-overview" aria-label="Order summary">
+      <button class="overview-tile" type="button" onclick="setQuickFilter('')"><span>All requests</span><strong id="countAll">&ndash;</strong><small>View every request &rarr;</small></button>
+      <button class="overview-tile tone-amber" type="button" onclick="setQuickFilter('Requested')"><span>Awaiting approval</span><strong id="countWaiting">&ndash;</strong><small>Waiting for admin review &rarr;</small></button>
+      <button class="overview-tile tone-blue" type="button" onclick="setQuickFilter('ready')"><span>Ready to send</span><strong id="countReady">&ndash;</strong><small>Approved, not yet emailed &rarr;</small></button>
+      <button class="overview-tile tone-green" type="button" onclick="setQuickFilter('sent')"><span>Successfully sent</span><strong id="countSent">&ndash;</strong><small>View emailed orders &rarr;</small></button>
+    </div>
+    <div class="filter-panel">
+      <div class="search-field"><label for="poSearch">Find an order</label><input id="poSearch" type="search" placeholder="Search PO number, supplier, brand or product..." oninput="renderOrders()" /></div>
+      <div class="filters"><select aria-label="Order status" id="statusFilter" onchange="renderOrders()"><option value="">All statuses</option><option>Requested</option><option>Approved</option><option>Rejected</option><option>Ordered</option><option>Cancelled</option><option value="ready">Ready to send</option><option value="sent">Successfully sent</option></select><select aria-label="Date to filter by" id="poDateField" onchange="renderOrders()"><option value="request_date">Filter by Request Date</option><option value="ordered_date">Filter by Ordered Date</option></select><label class="filter-date-label">From<input id="poDateFrom" type="date" onchange="renderOrders()" /></label><label class="filter-date-label">To<input id="poDateTo" type="date" onchange="renderOrders()" /></label><button type="button" class="btn-outline" onclick="clearPoDateFilter()">Reset filters</button></div></div>
 
     <section class="card hidden" id="requisitionCard">
       <h2 class="collapsible-title" onclick="toggleSectionBody('requisitionBody', this)">New Purchase Request<span class="section-toggle-chevron">&#9662;</span></h2>
       <div class="section-body" id="requisitionBody">
-      <div class="section-head"><div><h2>Procurement details</h2><p>Division and Brand are scoped to your assigned category. Pick "Others" to type a brand that's not listed yet.</p></div></div>
+      <div class="section-head"><div><h2>1. Choose your branch & brand</h2><p>Choose where the stock is needed and which brand you want to order.</p></div></div>
       <div class="form-grid">
         <div><label for="cmDivision">Division / category</label><select id="cmDivision" disabled><option value="">Loading...</option></select></div>
         <div><label for="cmBranch">Branch</label><select id="cmBranch"><option value="">Select branch</option></select></div>
@@ -194,9 +208,9 @@
       </div>
 
       <form id="poForm">
-        <div class="section-head" style="margin-top:22px"><div><h2>Requested Goods</h2><p>List each product and the quantity needed.</p></div><button class="btn-light" type="button" onclick="addItemRow('itemsBody')">Add item</button></div>
+        <div class="section-head" style="margin-top:22px"><div><h2>2. Add the products you need</h2><p>Enter a product and quantity. Fields marked * are required.</p></div><button class="btn-light" type="button" onclick="addItemRow('itemsBody')">Add item</button></div>
         <div class="table-wrap"><table><thead><tr><th>Product name *</th><th>Variant</th><th>Color</th><th>Req. qty *</th><th>Estimated price</th><th></th></tr></thead><tbody id="itemsBody"></tbody></table></div>
-        <div class="actions"><button class="btn" type="submit">Submit Purchase Request</button></div><div id="formMessage" class="message"></div>
+        <div class="actions"><button class="btn" type="submit">Send request for approval</button></div><div id="formMessage" class="message"></div>
       </form>
       </div>
     </section>
@@ -215,14 +229,18 @@
       <div id="orders" class="po-list"></div>
       </div>
     </section>
+    <section class="card">
+      <h2 class="collapsible-title" onclick="toggleSectionBody('sentPoBody', this)">Sent Purchase Order Report<span class="section-toggle-chevron">&#9662;</span></h2>
+      <div class="section-body" id="sentPoBody"><p>Successfully emailed purchase orders. Uses the filters above.</p><div id="sentPoReport" class="po-list"></div></div>
+    </section>
   </main>
 
   <div id="poPrintHost"></div>
 
   <dialog id="processDialog">
     <form class="modal" method="dialog" id="processForm">
-      <h2>Process Purchase Request</h2>
-      <p class="subtitle">Confirm the supplier, adjust items if needed, email the brand, then finalize.</p>
+      <h2>Prepare your purchase order</h2>
+      <p class="subtitle">Check the supplier and products, preview your PDF, then send your order.</p>
       <input id="processId" type="hidden" />
 
       <div class="readonly-summary">
@@ -281,7 +299,7 @@
                 <svg viewBox="0 0 24 24"><path d="M4 12.5L9.5 18L20 6"></path></svg>
               </span>
             </span>
-            <span class="po-send-label" id="sendPoLabel">Send PO</span>
+            <span class="po-send-label" id="sendPoLabel">Email PDF</span>
           </button>
         </div>
         <div id="sendEmailMessage" class="message" style="text-align:center;"></div>
@@ -301,8 +319,8 @@
         </div>
       </div>
 
-      <div class="actions"><button class="btn-light" type="button" onclick="processDialog.close()">Cancel</button><button class="btn-outline" type="button" onclick="viewPurchaseOrder()">View PO</button><button class="btn-outline" type="button" onclick="downloadPurchaseOrder('downloadMessage')">Download PDF</button><button class="btn-light" type="button" onclick="saveChanges()">Save Changes</button><button class="btn" type="button" id="finalOrderBtn" onclick="finalOrder()">Final Order</button></div>
-      <p class="hint">Use View PO to check everything first. Final Order sets status to Ordered, saves everything above, and emails the PO to every supplier address in the book — all in one click. Only available once Admin has approved the request.</p>
+      <div class="actions"><button class="btn-light" type="button" onclick="processDialog.close()">Cancel</button><button class="btn-outline" type="button" onclick="viewPurchaseOrder()">Preview PDF</button><button class="btn-outline" type="button" onclick="downloadPurchaseOrder('downloadMessage')">Download PDF</button><button class="btn-light" type="button" onclick="saveChanges()">Save Changes</button><button class="btn" type="button" id="finalOrderBtn" onclick="finalOrder()">Confirm &amp; email PDF</button></div>
+      <p class="hint">Preview PDF to check your order. Confirm &amp; email PDF saves the order as Ordered and emails it to the saved supplier and brand contacts. Admin approval is required.</p>
       <div id="downloadMessage" class="message"></div>
       <div id="processMessage" class="message"></div>
     </form>
@@ -316,7 +334,7 @@
       <div class="actions">
         <button class="btn-light" type="button" onclick="poPreviewDialog.close()">Close</button>
         <button class="btn-outline" type="button" onclick="downloadPurchaseOrder('poPreviewMessage')">Download PDF</button>
-        <button class="btn" type="button" id="previewFinalOrderBtn" onclick="poPreviewDialog.close(); finalOrder();">Looks good — Final Order</button>
+        <button class="btn" type="button" id="previewFinalOrderBtn" onclick="poPreviewDialog.close(); finalOrder();">Confirm &amp; email PDF</button>
       </div>
     </div>
   </dialog>
@@ -357,7 +375,7 @@
       if (!body) return;
       const isOpen = body.style.display === 'block';
       body.style.display = isOpen ? 'none' : 'block';
-      if (headerEl) headerEl.classList.toggle('open', !isOpen);
+      if (headerEl) { headerEl.classList.toggle('open', !isOpen); headerEl.setAttribute('aria-expanded', String(!isOpen)); }
     }
     const token = localStorage.getItem('token'); const role = localStorage.getItem('role') || ''; const username = localStorage.getItem('username') || '';
     if (!token) location.href = appUrl('/login'); document.getElementById('userName').textContent = username;
@@ -437,7 +455,7 @@
     });
 
     // ---- Item rows: shared between the create form and the process dialog --
-    function itemInput(name, placeholder, type = 'text', cls = '') { return `<input class="${cls}" data-field="${name}" type="${type}" placeholder="${placeholder}" />`; }
+    function itemInput(name, placeholder, type = 'text', cls = '') { return `<input class="${cls}" data-field="${name}" type="${type}" aria-label="${placeholder}" placeholder="${placeholder}" />`; }
     function addItemRow(bodyId = 'itemsBody') {
       const includeHsn = bodyId === 'processItemsBody';
       const row = document.createElement('tr');
@@ -510,6 +528,35 @@
       } catch (e) { message.textContent = e.message; }
     });
 
+    function updateOrderSummary() {
+      const scoped = isProcessor ? orders : orders.filter(o => o.submitted_by_username === username);
+      document.getElementById('countAll').textContent = scoped.length;
+      document.getElementById('countWaiting').textContent = scoped.filter(o => o.status === 'Requested').length;
+      document.getElementById('countReady').textContent = scoped.filter(o => ['Approved', 'Ordered'].includes(o.status) && !o.email_sent_at).length;
+      document.getElementById('countSent').textContent = scoped.filter(o => o.email_sent_at).length;
+      const selected = document.getElementById('statusFilter').value;
+      document.querySelectorAll('.overview-tile').forEach((tile, i) => tile.setAttribute('aria-pressed', String(['', 'Requested', 'ready', 'sent'][i] === selected)));
+    }
+
+    function setQuickFilter(value) {
+      document.getElementById('statusFilter').value = value;
+      document.getElementById('poSearch').value = '';
+      document.getElementById('poDateFrom').value = '';
+      document.getElementById('poDateTo').value = '';
+      renderOrders();
+      const bodyId = value === 'sent' ? 'sentPoBody' : 'myRequestsBody';
+      const body = document.getElementById(bodyId);
+      if (body.style.display !== 'block') toggleSectionBody(bodyId, body.previousElementSibling);
+      body.parentElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function showRequestForm() {
+      const body = document.getElementById('requisitionBody');
+      if (body.style.display !== 'block') toggleSectionBody('requisitionBody', body.previousElementSibling);
+      document.getElementById('requisitionCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      document.getElementById('cmBranch').focus({ preventScroll: true });
+    }
+
     function statusClass(status) {
       if (status === 'Ordered') return 'ordered';
       if (status === 'Cancelled') return 'cancelled';
@@ -526,7 +573,11 @@
       const dateTo = document.getElementById('poDateTo').value;
       const scoped = isProcessor ? orders : orders.filter(order => order.submitted_by_username === username);
       return scoped
-        .filter(order => !filter || order.status === filter)
+        .filter(order => !filter || (filter === 'sent' ? !!order.email_sent_at : filter === 'ready' ? ['Approved', 'Ordered'].includes(order.status) && !order.email_sent_at : order.status === filter))
+        .filter(order => {
+          const search = document.getElementById('poSearch').value.trim().toLowerCase();
+          return !search || [order.request_no, order.busy_po_number, order.supplier_name, order.brand_name, ...(order.items || []).map(item => item.product_name)].join(' ').toLowerCase().includes(search);
+        })
         .filter(order => {
           if (!dateFrom && !dateTo) return true;
           const rawDate = dateField === 'ordered_date' ? order.ordered_date : order.request_date;
@@ -539,15 +590,20 @@
     }
 
     function clearPoDateFilter() {
+      document.getElementById('poSearch').value = '';
+      document.getElementById('statusFilter').value = '';
+      document.getElementById('poDateField').value = 'request_date';
       document.getElementById('poDateFrom').value = '';
       document.getElementById('poDateTo').value = '';
       renderOrders();
     }
 
     function renderOrders() {
+      updateOrderSummary();
       const target = document.getElementById('orders');
       const visible = getScopedFilteredOrders();
-      if (!visible.length) { target.innerHTML = '<div class="po-row po-meta">No purchase requests found.</div>'; return; }
+      renderSentPoReport(visible);
+      if (!visible.length) { target.innerHTML = '<div class="empty-state"><strong>No matching requests</strong><p>Try a different search or reset your filters. To request stock, choose New purchase request.</p></div>'; return; }
       target.innerHTML = visible.map(order => {
         const items = order.items.map(item => `${escapeHtml(item.product_name)}${item.variant ? ` (${escapeHtml(item.variant)})` : ''} x ${item.quantity} ${escapeHtml(item.unit || 'Nos')}`).join('<br>');
         // Admin gets one-click Approve/Reject right on the card so a
@@ -555,8 +611,8 @@
         const approveRejectActions = (isAdmin && order.status === 'Requested')
           ? `<button class="btn-good" onclick="quickApprove(${order.id})">Approve</button><button class="btn-danger" onclick="quickReject(${order.id})">Reject</button>`
           : '';
-        const viewAction = `<button class="btn-outline" onclick="viewOrderPdf(${order.id})">View</button>`;
-        const processorActions = isProcessor ? `<button class="btn-light" onclick="openProcess(${order.id})">Process</button>` : '';
+        const viewAction = `<button class="btn-outline" onclick="viewOrderPdf(${order.id})">View PDF</button>`;
+        const processorActions = isProcessor ? `<button class="${order.email_sent_at ? 'btn-good' : 'btn-light'}" onclick="openProcess(${order.id})">${order.email_sent_at ? 'Success' : 'Prepare order'}</button>` : '';
         const deleteAction = isProcessor ? `<button class="btn-danger" onclick="deleteOrder(${order.id})">Delete</button>` : '';
         let busyBadge = '';
         if (isProcessor && order.status === 'Ordered') {
@@ -576,7 +632,7 @@
         orders = await api('/api/purchase-orders');
         if (isProcessor) {
           document.getElementById('listTitle').textContent = 'Purchase Order Queue';
-          document.getElementById('listHelp').textContent = 'All company requests. Verify details, then update status after entering the PO in Busy or emailing the supplier.';
+          document.getElementById('listHelp').textContent = 'Review each request, check supplier details, and send the purchase order as a PDF.';
           document.getElementById('exportActions').classList.remove('hidden');
         } else {
           document.getElementById('listTitle').textContent = 'My Purchase Requests';
@@ -681,7 +737,7 @@
       if (!saved) {
         btn.classList.remove('sending');
         btn.disabled = false;
-        label.textContent = 'Send PO';
+        label.textContent = 'Email PDF';
         message.className = 'message';
         message.textContent = document.getElementById('processMessage').textContent || 'Could not save supplier details before sending.';
         return;
@@ -689,7 +745,7 @@
 
       label.textContent = 'Sending...';
       try {
-        const result = await api(`/api/purchase-orders/${id}/send-email`, { method: 'POST' });
+        const result = await emailPurchaseOrderPdf(id);
         if (!/^Emailed to /i.test(result.notification_status || '')) throw new Error(result.notification_status || 'Email sending was not confirmed.');
         btn.classList.remove('sending');
         btn.classList.add('sent');
@@ -701,7 +757,7 @@
         btn.classList.remove('sending');
         btn.classList.remove('sent');
         btn.disabled = false;
-        label.textContent = 'Send PO';
+        label.textContent = 'Email PDF';
         message.className = 'message';
         message.textContent = e.message;
       }
@@ -764,7 +820,7 @@
       const sendPoBtn = document.getElementById('sendPoBtn');
       sendPoBtn.classList.remove('sending', 'sent');
       sendPoBtn.disabled = !isApprovedOrLater;
-      document.getElementById('sendPoLabel').textContent = 'Send PO';
+      document.getElementById('sendPoLabel').textContent = 'Email PDF';
 
       loadSupplierProfile();
       processDialog.showModal();
@@ -856,7 +912,7 @@
       message.textContent = 'Order finalized. Emailing supplier...';
       try {
         const id = document.getElementById('processId').value;
-        const result = await api(`/api/purchase-orders/${id}/send-email`, { method: 'POST' });
+        const result = await emailPurchaseOrderPdf(id);
         if (!/^Emailed to /i.test(result.notification_status || '')) throw new Error(result.notification_status || 'Email sending was not confirmed.');
         message.className = 'message success';
         message.textContent = `Order finalized and ${result.notification_status} (${result.sent_to.join(', ')})`;
@@ -1251,6 +1307,46 @@
     // produces a real downloadable PDF file (image placed on an A4 page).
     // No popup window is used, since pop-ups are blocked or render blank in
     // some browsers/WebViews.
+    function renderSentPoReport(visible) {
+      document.getElementById('sentPoReport').innerHTML = visible.filter(o => o.email_sent_at).map(o => {
+        const sentAt = new Date(o.email_sent_at + (/Z$|[+-]\d\d:\d\d$/.test(o.email_sent_at) ? '' : 'Z')).toLocaleString();
+        return '<article class="po-row"><div class="po-no">' + escapeHtml(o.request_no) + (o.busy_po_number ? ' | Busy: ' + escapeHtml(o.busy_po_number) : '') + '</div><div class="po-meta">' + escapeHtml(o.supplier_name || o.brand_name || '') + ' | Sent: ' + escapeHtml(sentAt) + '</div><div class="po-meta">To: ' + escapeHtml(o.email_sent_to || '') + '</div><div class="po-actions"><button class="btn-outline" onclick="viewOrderPdf(' + o.id + ')">View</button><span class="status ordered">Success</span></div></article>';
+      }).join('') || '<div class="po-row po-meta">No successfully sent purchase orders found.</div>';
+    }
+
+    function purchaseOrderPdfFromCanvas(canvas) {
+      const pdf = new window.jspdf.jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const width = pdf.internal.pageSize.getWidth() - 20;
+      const height = pdf.internal.pageSize.getHeight() - 20;
+      const sliceHeight = Math.floor(height * canvas.width / width);
+      for (let top = 0; top < canvas.height; top += sliceHeight) {
+        if (top) pdf.addPage();
+        const slice = document.createElement('canvas');
+        slice.width = canvas.width;
+        slice.height = Math.min(sliceHeight, canvas.height - top);
+        slice.getContext('2d').drawImage(canvas, 0, top, canvas.width, slice.height, 0, 0, slice.width, slice.height);
+        const renderedHeight = slice.height * width / slice.width;
+        const y = canvas.height <= sliceHeight ? (pdf.internal.pageSize.getHeight() - renderedHeight) / 2 : 10;
+        pdf.addImage(slice.toDataURL('image/jpeg', 0.95), 'JPEG', 10, y, width, renderedHeight);
+      }
+      return pdf;
+    }
+
+    async function emailPurchaseOrderPdf(id) {
+      if (!window.html2canvas || !window.jspdf) throw new Error('PDF library did not load. Reload the page and try again.');
+      const order = await api('/api/purchase-orders/' + id);
+      const host = document.createElement('div');
+      host.style.cssText = 'position:fixed;left:-10000px;top:0;width:850px;';
+      host.innerHTML = buildPoSheetHtml(order);
+      document.body.appendChild(host);
+      try {
+        await document.fonts.ready;
+        const canvas = await html2canvas(host.querySelector('.po-sheet-page'), { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+        const pdf = purchaseOrderPdfFromCanvas(canvas);
+        return await api('/api/purchase-orders/' + id + '/send-email', { method: 'POST', body: JSON.stringify({ pdf_base64: pdf.output('datauristring').split(',')[1] }) });
+      } finally { host.remove(); }
+    }
+
     async function downloadPurchaseOrder(messageElId = 'downloadMessage') {
       const id = previewReadonlyOrderId ?? Number(document.getElementById('processId').value);
       const order = orders.find(o => o.id === Number(id));
@@ -1272,15 +1368,7 @@
         const orderNo = (live ? live.orderNo : order.busy_po_number) || order.request_no;
         const fileBase = orderNo.replace(/[^a-zA-Z0-9-_]/g, '_');
 
-        const { jsPDF } = window.jspdf;
-        const imgData = canvas.toDataURL('image/jpeg', 0.95);
-        const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-        const pageWidth = pdf.internal.pageSize.getWidth();
-        const pageHeight = pdf.internal.pageSize.getHeight();
-        const imgWidth = pageWidth - 20;
-        const imgHeight = (canvas.height * imgWidth) / canvas.width;
-        const y = imgHeight < pageHeight - 20 ? (pageHeight - imgHeight) / 2 : 10;
-        pdf.addImage(imgData, 'JPEG', 10, y, imgWidth, Math.min(imgHeight, pageHeight - 20));
+        const pdf = purchaseOrderPdfFromCanvas(canvas);
         pdf.save(`${fileBase}.pdf`);
         message.className = 'message success';
         message.textContent = 'Downloaded.';
@@ -1293,7 +1381,19 @@
 
     // ---- Boot -----------------------------------------------------------
     if (isCategoryManager || isProcessor) { document.getElementById('requisitionCard').classList.remove('hidden'); }
+    document.querySelectorAll('.collapsible-title').forEach(title => {
+      const body = title.nextElementSibling;
+      title.setAttribute('role', 'button');
+      title.tabIndex = 0;
+      title.setAttribute('aria-controls', body.id);
+      title.setAttribute('aria-expanded', 'false');
+      title.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); title.click(); } });
+      toggleSectionBody(body.id, title);
+    });
+    document.querySelectorAll('.message').forEach(el => { el.setAttribute('role', 'status'); el.setAttribute('aria-live', 'polite'); });
+    if (isCategoryManager || isProcessor) document.getElementById('newRequestShortcut').classList.remove('hidden');
     addItemRow('itemsBody'); loadMasters(); loadOrders();
   </script>
 </body>
-</html>
+</
+    </div>

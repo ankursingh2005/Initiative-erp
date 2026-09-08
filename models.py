@@ -459,6 +459,8 @@ class PurchaseOrder(Base):
     processing_notes = Column(String(500), nullable=True)
     exported_to_busy = Column(Boolean, default=False, nullable=False)
     exported_to_busy_at = Column(DateTime, nullable=True)
+    email_sent_at = Column(DateTime, nullable=True)
+    email_sent_to = Column(Text, nullable=True)
     submitted_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     # Admin approval gate: a Category Manager's request must be Approved by
     # an Admin before MIS is allowed to send it to the supplier / finalize it

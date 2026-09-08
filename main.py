@@ -50,6 +50,7 @@ def verified_attendance_time(_device_time: datetime) -> datetime:
     return datetime.now(INDIA_TZ).replace(tzinfo=None)
 import smtplib
 from email.mime.text import MIMEText
+from email.message import EmailMessage
 from po_email import send_gmail
 from dotenv import load_dotenv
 from openpyxl import load_workbook, Workbook
@@ -178,6 +179,8 @@ def ensure_database_schema():
     ensure_column("purchase_orders", "supplier_gstin", "VARCHAR(30)")
     ensure_column("purchase_orders", "exported_to_busy", "BOOLEAN DEFAULT FALSE")
     ensure_column("purchase_orders", "exported_to_busy_at", "TIMESTAMP")
+    ensure_column("purchase_orders", "email_sent_at", "TIMESTAMP")
+    ensure_column("purchase_orders", "email_sent_to", "TEXT")
     ensure_column("purchase_orders", "approved_by_user_id", "INTEGER")
     ensure_column("purchase_orders", "approved_date", "TIMESTAMP")
     ensure_column("price_list_items", "model_no", "VARCHAR(100)")
@@ -3858,6 +3861,8 @@ def serialize_purchase_order(purchase_order: models.PurchaseOrder, notification_
         "processing_notes": purchase_order.processing_notes,
         "exported_to_busy": purchase_order.exported_to_busy,
         "exported_to_busy_at": purchase_order.exported_to_busy_at,
+        "email_sent_at": purchase_order.email_sent_at,
+        "email_sent_to": purchase_order.email_sent_to,
         "submitted_by_user_id": purchase_order.submitted_by_user_id,
         "submitted_by_username": purchase_order.submitted_by.username if purchase_order.submitted_by else None,
         "approved_by_username": (getattr(purchase_order, "approved_by", None).username if getattr(purchase_order, "approved_by", None) else None),
@@ -4110,7 +4115,7 @@ def delete_supplier_email(
     return {"deleted": True}
 
 
-def send_purchase_order_email(purchase_order: models.PurchaseOrder, recipients: List[str]) -> str:
+def send_purchase_order_email(purchase_order: models.PurchaseOrder, recipients: List[str], pdf_bytes: bytes) -> str:
     """Send via configured Gmail HTTPS API or the existing SMTP transport."""
     provider = os.getenv("PO_EMAIL_PROVIDER", "smtp").strip().lower()
     if provider not in {"smtp", "gmail"}:
@@ -4142,7 +4147,10 @@ def send_purchase_order_email(purchase_order: models.PurchaseOrder, recipients: 
         lines.append(f"Remarks: {purchase_order.remarks}")
     body = "\n".join(lines)
 
-    message = MIMEText(body)
+    message = EmailMessage()
+    message.set_content(body + "\n\nPlease find the purchase order attached as a PDF.")
+    filename = re.sub(r"[^a-zA-Z0-9_-]", "_", purchase_order.busy_po_number or purchase_order.request_no) + ".pdf"
+    message.add_attachment(pdf_bytes, maintype="application", subtype="pdf", filename=filename)
     message["Subject"] = f"Purchase Order {purchase_order.request_no} - {purchase_order.brand_name or ''}"
     message["From"] = smtp_from
     message["To"] = ", ".join(recipients)
@@ -4156,7 +4164,9 @@ def send_purchase_order_email(purchase_order: models.PurchaseOrder, recipients: 
         with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as server:
             server.starttls()
             server.login(smtp_user, smtp_password)
-            server.sendmail(smtp_from, recipients, message.as_string())
+            refused = server.sendmail(smtp_from, recipients, message.as_string())
+            if refused:
+                return "Not sent: some recipients were rejected. Check Sent mail before retrying."
     except Exception as exc:  # noqa: BLE001 - surface any SMTP failure to the caller
         print(f"[PO email] SMTP send failed ({type(exc).__name__}): {exc}")
         return f"Not sent: email delivery failed ({type(exc).__name__}: {exc})."
@@ -4167,6 +4177,7 @@ def send_purchase_order_email(purchase_order: models.PurchaseOrder, recipients: 
 @app.post("/api/purchase-orders/{purchase_order_id}/send-email", response_model=schemas.SendPurchaseOrderEmailResult)
 def send_purchase_order_email_endpoint(
     purchase_order_id: int,
+    payload: schemas.SendPurchaseOrderEmailRequest,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.require_roles("Admin", "MISExecutive")),
 ):
@@ -4197,9 +4208,18 @@ def send_purchase_order_email_endpoint(
     if not recipients:
         raise HTTPException(status_code=400, detail="No supplier emails on file for this brand or supplier yet. Add at least one first.")
 
-    notification_status = send_purchase_order_email(purchase_order, recipients)
+    try:
+        pdf_bytes = base64.b64decode(payload.pdf_base64, validate=True)
+    except (ValueError, base64.binascii.Error):
+        raise HTTPException(status_code=400, detail="Invalid PDF attachment encoding")
+    if not pdf_bytes.startswith(b"%PDF-") or b"%%EOF" not in pdf_bytes[-1024:]:
+        raise HTTPException(status_code=400, detail="A valid purchase order PDF attachment is required")
+    notification_status = send_purchase_order_email(purchase_order, recipients, pdf_bytes)
     if notification_status.startswith("Not sent:"):
         raise HTTPException(status_code=503, detail=notification_status)
+    purchase_order.email_sent_at = datetime.now(timezone.utc)
+    purchase_order.email_sent_to = ", ".join(recipients)
+    db.commit()
     return {"sent_to": recipients, "notification_status": notification_status}
 
 
