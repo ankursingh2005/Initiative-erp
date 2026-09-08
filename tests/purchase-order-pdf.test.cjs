@@ -8,7 +8,7 @@ test('all page scripts parse', () => { scripts.forEach(s => new vm.Script(s)); }
 function helper(name, next) { return html.slice(html.indexOf('    function ' + name), html.indexOf('    ' + next, html.indexOf('    function ' + name))); }
 test('sent report includes confirmed sends only and escapes supplier data', () => {
   const output = {};
-  const context = { document: { getElementById: () => output }, escapeHtml: s => String(s).replaceAll('<', '&lt;').replaceAll('>', '&gt;') };
+  const context = { isProcessor: false, document: { getElementById: () => output }, escapeHtml: s => String(s).replaceAll('<', '&lt;').replaceAll('>', '&gt;') };
   vm.createContext(context);
   vm.runInContext(helper('renderSentPoReport', 'function purchaseOrderPdfFromCanvas'), context);
   context.renderSentPoReport([{id:1,request_no:'UNSENT'}, {id:2,request_no:'SENT',supplier_name:'<supplier>',email_sent_at:'2026-09-08T10:00:00',email_sent_to:'vendor@example.com'}]);
@@ -54,4 +54,14 @@ test('Busy number validation rejects duplicates but permits same-order edits and
   assert.equal(context.busyNumberConflict('1','181'),undefined);
   assert.equal(context.busyNumberConflict('2','182'),undefined);
   assert.equal(context.busyNumberConflict('2','  '),null);
+});
+test('sent orders offer edit and resend only for processors', () => {
+  const context={isProcessor:true}; vm.createContext(context);
+  vm.runInContext(helper('orderProcessingActions','function renderOrders'),context);
+  const sent={id:7,email_sent_at:'2026-09-08'};
+  assert.match(context.orderProcessingActions(sent),/Success/);
+  assert.match(context.orderProcessingActions(sent),/Edit &amp; resend/);
+  assert.match(context.orderProcessingActions(sent),/openProcess\(7\)/);
+  assert.match(context.orderProcessingActions({id:8}),/Prepare order/);
+  context.isProcessor=false; assert.equal(context.orderProcessingActions(sent),'');
 });

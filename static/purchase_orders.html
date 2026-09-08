@@ -239,7 +239,7 @@
 
   <dialog id="processDialog">
     <form class="modal" method="dialog" id="processForm">
-      <h2>Prepare your purchase order</h2>
+      <h2 id="processDialogTitle">Prepare your purchase order</h2>
       <p class="subtitle">Check the supplier and products, preview your PDF, then send your order.</p>
       <input id="processId" type="hidden" />
 
@@ -598,6 +598,12 @@
       renderOrders();
     }
 
+    function orderProcessingActions(order) {
+      if (!isProcessor) return '';
+      if (order.email_sent_at) return '<span class="status ordered">Success</span><button class="btn-outline" type="button" onclick="openProcess(' + order.id + ')">Edit &amp; resend</button>';
+      return '<button class="btn-light" type="button" onclick="openProcess(' + order.id + ')">Prepare order</button>';
+    }
+
     function renderOrders() {
       updateOrderSummary();
       const target = document.getElementById('orders');
@@ -612,7 +618,7 @@
           ? `<button class="btn-good" onclick="quickApprove(${order.id})">Approve</button><button class="btn-danger" onclick="quickReject(${order.id})">Reject</button>`
           : '';
         const viewAction = `<button class="btn-outline" onclick="viewOrderPdf(${order.id})">View PDF</button>`;
-        const processorActions = isProcessor ? `<button class="${order.email_sent_at ? 'btn-good' : 'btn-light'}" onclick="openProcess(${order.id})">${order.email_sent_at ? 'Success' : 'Prepare order'}</button>` : '';
+        const processorActions = orderProcessingActions(order);
         const deleteAction = isProcessor ? `<button class="btn-danger" onclick="deleteOrder(${order.id})">Delete</button>` : '';
         let busyBadge = '';
         if (isProcessor && order.status === 'Ordered') {
@@ -720,6 +726,8 @@
     async function sendPoEmail() {
       const id = document.getElementById('processId').value;
       const btn = document.getElementById('sendPoBtn');
+      if (btn.disabled) return;
+      const retryLabel = orders.find(order => order.id === Number(id))?.email_sent_at ? 'Save & resend PDF' : 'Email PDF';
       const label = document.getElementById('sendPoLabel');
       const message = document.getElementById('sendEmailMessage');
       message.className = 'message';
@@ -737,7 +745,7 @@
       if (!saved) {
         btn.classList.remove('sending');
         btn.disabled = false;
-        label.textContent = 'Email PDF';
+        label.textContent = retryLabel;
         message.className = 'message';
         message.textContent = document.getElementById('processMessage').textContent || 'Could not save supplier details before sending.';
         return;
@@ -757,7 +765,7 @@
         btn.classList.remove('sending');
         btn.classList.remove('sent');
         btn.disabled = false;
-        label.textContent = 'Email PDF';
+        label.textContent = retryLabel;
         message.className = 'message';
         message.textContent = e.message;
       }
@@ -768,6 +776,7 @@
       const order = orders.find(item => item.id === id);
       if (!order) return;
       document.getElementById('processId').value = id;
+      document.getElementById('processDialogTitle').textContent = order.email_sent_at ? 'Edit & resend purchase order' : 'Prepare your purchase order';
 
       const store = masterStores.find(s => s.id === order.branch_id);
       document.getElementById('summaryDivision').textContent = order.division || '-';
@@ -820,7 +829,8 @@
       const sendPoBtn = document.getElementById('sendPoBtn');
       sendPoBtn.classList.remove('sending', 'sent');
       sendPoBtn.disabled = !isApprovedOrLater;
-      document.getElementById('sendPoLabel').textContent = 'Email PDF';
+      document.getElementById('sendPoLabel').textContent = order.email_sent_at ? 'Save & resend PDF' : 'Email PDF';
+      if (order.email_sent_at) document.getElementById('sendEmailMessage').textContent = 'Update the details and check the email addresses before resending. Saved supplier and brand contacts also receive the email.';
 
       loadSupplierProfile();
       processDialog.showModal();
@@ -1315,7 +1325,7 @@
     function renderSentPoReport(visible) {
       document.getElementById('sentPoReport').innerHTML = visible.filter(o => o.email_sent_at).map(o => {
         const sentAt = new Date(o.email_sent_at + (/Z$|[+-]\d\d:\d\d$/.test(o.email_sent_at) ? '' : 'Z')).toLocaleString();
-        return '<article class="po-row"><div class="po-no">' + escapeHtml(o.request_no) + (o.busy_po_number ? ' | Busy: ' + escapeHtml(o.busy_po_number) : '') + '</div><div class="po-meta">' + escapeHtml(o.supplier_name || o.brand_name || '') + ' | Sent: ' + escapeHtml(sentAt) + '</div><div class="po-meta">To: ' + escapeHtml(o.email_sent_to || '') + '</div><div class="po-actions"><button class="btn-outline" onclick="viewOrderPdf(' + o.id + ')">View</button><span class="status ordered">Success</span></div></article>';
+        return '<article class="po-row"><div class="po-no">' + escapeHtml(o.request_no) + (o.busy_po_number ? ' | Busy: ' + escapeHtml(o.busy_po_number) : '') + '</div><div class="po-meta">' + escapeHtml(o.supplier_name || o.brand_name || '') + ' | Sent: ' + escapeHtml(sentAt) + '</div><div class="po-meta">To: ' + escapeHtml(o.email_sent_to || '') + '</div><div class="po-actions"><button class="btn-outline" onclick="viewOrderPdf(' + o.id + ')">View</button>' + (isProcessor ? orderProcessingActions(o) : '<span class="status ordered">Success</span>') + '</div></article>';
       }).join('') || '<div class="po-row po-meta">No successfully sent purchase orders found.</div>';
     }
 
