@@ -3,7 +3,6 @@
 Initiative ERP is a web application for employee attendance, outlet incentives, sales schemes, pricing, purchase orders, and business reporting. It uses a Python FastAPI backend and HTML/CSS/JavaScript pages served by the same application.
 
 - **Website:** https://erp.initiative.co.in
-- **Live incentive page:** https://erp.initiative.co.in/incentive
 - **Hosting:** Render
 
 The website URL and hosting platform above are supplied by the project owner. The technical instructions below describe this repository; they do not confirm the settings or deployed revision of the live Render service.
