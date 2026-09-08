@@ -322,8 +322,8 @@
         </div>
       </div>
 
-      <div class="actions"><button class="btn-light" type="button" onclick="processDialog.close()">Cancel</button><button class="btn-outline" type="button" onclick="viewPurchaseOrder()">Preview PDF</button><button class="btn-outline" type="button" onclick="downloadPurchaseOrder('downloadMessage')">Download PDF</button><button class="btn-light" type="button" onclick="saveChanges()">Save Changes</button><button class="btn" type="button" id="finalOrderBtn" onclick="finalOrder()">Confirm &amp; email PDF</button></div>
-      <p class="hint">Preview PDF to check your order. Confirm &amp; email PDF saves the order as Ordered and emails it to the saved supplier and brand contacts. Admin approval is required.</p>
+      <div class="actions"><button class="btn-light" type="button" onclick="processDialog.close()">Cancel</button><button class="btn-outline" type="button" onclick="viewPurchaseOrder()">Preview PDF</button><button class="btn-light" type="button" onclick="saveChanges()">Save Changes</button><button class="btn" type="button" id="finalOrderBtn" onclick="finalOrder()">CONFIRM &amp; SEND PO</button></div>
+      <p class="hint">Preview PDF to check your order. CONFIRM &amp; SEND PO saves the order as Ordered and emails it to the saved supplier and brand contacts. Admin approval is required.</p>
       <div id="downloadMessage" class="message"></div>
       <div id="processMessage" class="message"></div>
     </form>
@@ -337,7 +337,7 @@
       <div class="actions">
         <button class="btn-light" type="button" onclick="poPreviewDialog.close()">Close</button>
         <button class="btn-outline" type="button" onclick="downloadPurchaseOrder('poPreviewMessage')">Download PDF</button>
-        <button class="btn" type="button" id="previewFinalOrderBtn" onclick="poPreviewDialog.close(); finalOrder();">Confirm &amp; email PDF</button>
+        <button class="btn" type="button" id="previewFinalOrderBtn" onclick="poPreviewDialog.close(); finalOrder();">CONFIRM &amp; SEND PO</button>
       </div>
     </div>
   </dialog>
@@ -829,6 +829,12 @@
       document.getElementById('approvalWaitingNotice').classList.toggle('hidden', isApprovedOrLater || order.status === 'Rejected' || order.status === 'Cancelled');
       const finalOrderBtn = document.getElementById('finalOrderBtn');
       finalOrderBtn.disabled = !isApprovedOrLater;
+      finalOrderBtn.textContent = 'CONFIRM & SEND PO';
+      finalOrderBtn.className = 'btn';
+      const previewSendBtn = document.getElementById('previewFinalOrderBtn');
+      previewSendBtn.textContent = 'CONFIRM & SEND PO';
+      previewSendBtn.className = 'btn';
+      previewSendBtn.disabled = !isApprovedOrLater;
       finalOrderBtn.title = isApprovedOrLater ? '' : 'Waiting for Admin approval';
       const sendPoBtn = document.getElementById('sendPoBtn');
       sendPoBtn.classList.remove('sending', 'sent');
@@ -923,27 +929,31 @@
     // then emails the PO to every address in the brand's email book in the
     // same click — no separate "Send PO Email" step needed to finalize.
     async function finalOrder() {
+      const buttons = [document.getElementById('finalOrderBtn'), document.getElementById('previewFinalOrderBtn')];
+      if (buttons[0].disabled) return;
       const message = document.getElementById('processMessage');
-      const saved = await savePurchaseOrder('Ordered');
-      if (!saved) return;
-
-      message.className = 'message';
-      message.textContent = 'Order finalized. Emailing supplier...';
+      buttons.forEach(btn => { btn.disabled = true; btn.textContent = 'SENDING...'; });
+      let sent = false;
       try {
+        const saved = await savePurchaseOrder('Ordered');
+        if (!saved) return;
+        message.className = 'message';
+        message.textContent = 'Order confirmed. Sending PO...';
         const id = document.getElementById('processId').value;
         const result = await emailPurchaseOrderPdf(id);
         if (!/^Emailed to /i.test(result.notification_status || '')) throw new Error(result.notification_status || 'Email sending was not confirmed.');
+        sent = true;
+        buttons.forEach(btn => { btn.textContent = 'CONFIRMED & SENT'; btn.className = 'btn-good'; });
         message.className = 'message success';
-        message.textContent = `Order finalized. ${result.notification_status} To: ${result.sent_to.join(', ')}. Accepted for sending; recipient inbox delivery is not confirmed.`;
+        message.textContent = 'Order confirmed. ' + result.notification_status + ' To: ' + result.sent_to.join(', ') + '. Accepted for sending; recipient inbox delivery is not confirmed.';
+        await loadOrders();
       } catch (e) {
         message.className = 'message';
-        message.textContent = `Order finalized, but the email did not go out: ${e.message}`;
+        message.textContent = 'Could not confirm email sending: ' + e.message;
         await loadOrders();
-        return;
+      } finally {
+        if (!sent) buttons.forEach(btn => { btn.disabled = false; btn.textContent = 'CONFIRM & SEND PO'; btn.className = 'btn'; });
       }
-
-      await loadOrders();
-      setTimeout(() => processDialog.close(), 900);
     }
 
     // ---- Reusable, styled confirm dialog (replaces native confirm()) ----
