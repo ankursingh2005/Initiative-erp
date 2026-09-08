@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pydantic import validator
 from datetime import date, datetime
 from typing import List, Optional
@@ -353,10 +353,10 @@ class AttendanceCreate(BaseModel):
     action: str
     captured_at: datetime
     selfie: str
-    latitude: float
-    longitude: float
-    distance_m: float
-    accuracy_m: Optional[float] = None
+    latitude: float = Field(ge=-90, le=90, allow_inf_nan=False)
+    longitude: float = Field(ge=-180, le=180, allow_inf_nan=False)
+    distance_m: float = Field(ge=0, allow_inf_nan=False)
+    accuracy_m: float = Field(ge=0, le=200, allow_inf_nan=False)
 
 
 class AttendanceOut(BaseModel):

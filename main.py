@@ -50,6 +50,7 @@ def verified_attendance_time(_device_time: datetime) -> datetime:
     return datetime.now(INDIA_TZ).replace(tzinfo=None)
 import smtplib
 from email.mime.text import MIMEText
+from po_email import send_gmail
 from dotenv import load_dotenv
 from openpyxl import load_workbook, Workbook
 
@@ -2554,6 +2555,8 @@ def compress_attendance_selfie(data_url: str) -> str:
     """Normalize attendance selfies to a small JPEG before database storage."""
     if not data_url:
         raise HTTPException(status_code=400, detail="Capture a fresh selfie before marking attendance")
+    if len(data_url) > 12 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Selfie image is too large")
     try:
         from PIL import Image, ImageOps
         header, encoded = data_url.split(",", 1)
@@ -2604,6 +2607,11 @@ def save_attendance(
     if attendance.action not in {"checkin", "checkout"}:
         raise HTTPException(status_code=400, detail="Action must be checkin or checkout")
     selfie = compress_attendance_selfie(attendance.selfie)
+    # Serialize punches for this account, including the first punch when no
+    # attendance row exists yet. A no-op UPDATE locks on PostgreSQL and SQLite.
+    db.query(models.User).filter(models.User.id == current_user.id).update(
+        {models.User.id: current_user.id}, synchronize_session=False
+    )
     radius = 6371000
     radians = math.pi / 180
     def distance_to(candidate):
@@ -4082,17 +4090,17 @@ def delete_supplier_email(
 
 
 def send_purchase_order_email(purchase_order: models.PurchaseOrder, recipients: List[str]) -> str:
-    """Email the finalized PO to every address on file for the brand (plus
-    the request's own supplier_email if set) in a single send. Host, user,
-    port, and from-address all default to the company Gmail mailbox
-    (initiative.lucknow@gmail.com), so on Render the only secret you need
-    to set is SMTP_PASSWORD (a Gmail App Password) - see README for setup."""
+    """Send via configured Gmail HTTPS API or the existing SMTP transport."""
+    provider = os.getenv("PO_EMAIL_PROVIDER", "smtp").strip().lower()
+    if provider not in {"smtp", "gmail"}:
+        return "Not sent: PO_EMAIL_PROVIDER must be gmail or smtp."
+    if not recipients:
+        return "Not sent: no supplier email recipients."
     smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
     smtp_user = os.getenv("SMTP_USER", "initiative.lucknow@gmail.com")
     smtp_password = os.getenv("SMTP_PASSWORD")
     smtp_from = os.getenv("SMTP_FROM", "initiative.lucknow@gmail.com")
-    smtp_port = int(os.getenv("SMTP_PORT", "587"))
-    if not (smtp_host and smtp_user and smtp_password and recipients):
+    if provider == "smtp" and not (smtp_host and smtp_user and smtp_password):
         print("[PO email] Not sent: SMTP_PASSWORD not set (or no recipients).")
         return "Not sent: SMTP is not configured (set SMTP_PASSWORD on the host)."
 
@@ -4118,7 +4126,12 @@ def send_purchase_order_email(purchase_order: models.PurchaseOrder, recipients: 
     message["From"] = smtp_from
     message["To"] = ", ".join(recipients)
 
+    if provider == "gmail":
+        result = send_gmail(message)
+        return f"Emailed to {len(recipients)} recipient(s). {result}" if result == "Accepted by Gmail for sending." else result
+
     try:
+        smtp_port = int(os.getenv("SMTP_PORT", "587"))
         with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as server:
             server.starttls()
             server.login(smtp_user, smtp_password)

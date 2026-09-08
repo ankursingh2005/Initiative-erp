@@ -171,7 +171,7 @@ Set production values in Render's environment settings. Keep local values in the
 
 ### Email sending
 
-SMTP is used by purchase-order email sending and password-reset requests. Configure the mailbox, credentials and sender appropriate to the deployment. The code includes Gmail defaults; these do not prove the live mailbox is configured. User management also provides a separate password-reset action for authorized staff.
+Purchase-order email supports SMTP or Gmail API over HTTPS. For Render Free and a personal Gmail trial sender, follow [Gmail PO setup](GMAIL_PO_SETUP.md) and set `PO_EMAIL_PROVIDER=gmail`. Password-reset requests still use their separate SMTP configuration. The code includes Gmail defaults; these do not prove the live mailbox is configured. User management also provides a separate password-reset action for authorized staff.
 
 ### WhatsApp attendance scheduling
 
