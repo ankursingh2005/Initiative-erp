@@ -226,6 +226,7 @@
           <button class="btn-good" type="button" onclick="exportForBusy()">Export for Busy</button>
         </div>
       </div>
+      <div id="busyExportNotice" class="hidden" style="margin-bottom:18px;padding:16px;border:1px solid #cbdcf4;border-radius:10px;background:#f0f6ff;"><p id="busyExportMessage" role="status" aria-live="polite" style="margin:0 0 12px;line-height:1.6;"></p><div class="po-actions"><button type="button" class="btn-good hidden" id="busyImportConfirmBtn" onclick="confirmBusyImport()">Mark as imported into Busy</button><button type="button" class="btn-light" id="busyImportLaterBtn" onclick="leaveBusyExportPending()">Close / keep pending</button></div></div>
       <div id="orders" class="po-list"></div>
       </div>
     </section>
@@ -1083,7 +1084,7 @@
     }
 
     function exportToExcel() {
-      if (typeof XLSX === 'undefined') { alert('Excel export library did not load. Check your internet connection and try again.'); return; }
+      if (typeof XLSX === 'undefined') { showBusyExportMessage('The Excel export tool did not load. Reload the page and try again.'); return; }
       const rows = exportRows();
       if (!rows.length) { alert('No purchase requests to export.'); return; }
       const worksheet = XLSX.utils.json_to_sheet(rows);
@@ -1101,9 +1102,42 @@
     // NOTE: this is a starting column layout. Once you export one voucher
     // from Busy (Administration -> Data Export/Import) and share it, these
     // column names/order can be matched exactly to what Busy expects.
+    let busyExportBatch = [];
+    function showBusyExportMessage(text) {
+      document.getElementById('busyExportNotice').classList.remove('hidden');
+      document.getElementById('busyExportMessage').textContent = text;
+    }
+    function leaveBusyExportPending() {
+      if (document.getElementById('busyImportConfirmBtn').disabled) return;
+      busyExportBatch = [];
+      document.getElementById('busyExportNotice').classList.add('hidden');
+      document.getElementById('busyImportConfirmBtn').classList.add('hidden');
+    }
+    async function confirmBusyImport() {
+      const button = document.getElementById('busyImportConfirmBtn');
+      if (!busyExportBatch.length || button.disabled) return;
+      button.disabled = true;
+      document.getElementById('busyImportLaterBtn').disabled = true;
+      try {
+        await api('/api/purchase-orders/mark-exported-to-busy', { method: 'POST', body: JSON.stringify({ purchase_order_ids: busyExportBatch }) });
+        busyExportBatch = [];
+        button.classList.add('hidden');
+        showBusyExportMessage('Marked as imported into Busy. These orders will be excluded from the next export.');
+        await loadOrders();
+      } catch (e) {
+        showBusyExportMessage('Could not update the export status: ' + e.message + '. You can try again.');
+      } finally {
+        button.disabled = false;
+        document.getElementById('busyImportLaterBtn').disabled = false;
+      }
+    }
     async function exportForBusy() {
+      if (busyExportBatch.length) {
+        showBusyExportMessage('Your previous download is waiting for confirmation. After importing it into Busy, select Mark as imported into Busy. Otherwise choose Close / keep pending to download again.');
+        return;
+      }
       const pending = orders.filter(o => o.status === 'Ordered' && !o.exported_to_busy);
-      if (!pending.length) { alert('No finalized orders are waiting to export. Everything already marked "Ordered" has been exported already.'); return; }
+      if (!pending.length) { showBusyExportMessage('No orders are ready to export. Confirm an order first; previously exported orders are excluded.'); return; }
       if (typeof XLSX === 'undefined') { alert('Excel export library did not load. Check your internet connection and try again.'); return; }
 
       const rows = [];
@@ -1133,13 +1167,9 @@
       const filename = `busy-import-${new Date().toISOString().slice(0,10)}.xlsx`;
       XLSX.writeFile(workbook, filename);
 
-      const confirmed = confirm(`Downloaded ${filename} with ${pending.length} order(s) / ${rows.length} line(s).\n\nOnce you've imported this file into Busy, click OK here to mark these ${pending.length} order(s) as exported so they aren't included in the next batch.\n\nClick Cancel to leave them pending (e.g. if the import didn't go through).`);
-      if (!confirmed) return;
-
-      try {
-        await api('/api/purchase-orders/mark-exported-to-busy', { method: 'POST', body: JSON.stringify({ purchase_order_ids: pending.map(o => o.id) }) });
-        await loadOrders();
-      } catch (e) { alert(`Downloaded the file, but could not mark orders as exported: ${e.message}`); }
+      busyExportBatch = pending.map(o => o.id);
+      document.getElementById('busyImportConfirmBtn').classList.remove('hidden');
+      showBusyExportMessage('Download started: ' + filename + ' (' + pending.length + ' orders, ' + rows.length + ' product lines). Import this file into Busy, then select Mark as imported into Busy. Downloading alone does not import your orders.');
     }
 
     function exportToPDF() {
