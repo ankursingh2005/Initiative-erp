@@ -77,3 +77,5 @@ dialog::backdrop { background:#10253b99; backdrop-filter:blur(3px); }
   .export-actions { flex-wrap:wrap; }.export-actions button { flex:1 1 100px; }
   .form-grid { grid-template-columns:1fr; }.span-2,.span-3 { grid-column:span 1; }
 }
+
+#submitRequestBtn.request-sent:disabled { opacity:1; background:#157653; color:#fff; }

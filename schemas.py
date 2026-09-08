@@ -505,6 +505,7 @@ class BrandSupplierEmailOut(BrandSupplierEmailCreate):
 
 
 class SendPurchaseOrderEmailRequest(BaseModel):
+    recipients: List[str] = Field(..., min_length=1, max_length=100)
     pdf_base64: str = Field(..., min_length=1, max_length=14000000)
     email_message: str = Field(default="", max_length=10000)
 

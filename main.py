@@ -4173,23 +4173,12 @@ def send_purchase_order_email_endpoint(
             detail="This purchase order must be Approved by Admin before it can be sent to the supplier.",
         )
 
-    recipients = set()
-    if purchase_order.brand_name:
-        brand_rows = db.query(models.BrandSupplierEmail).filter(models.BrandSupplierEmail.brand_name == purchase_order.brand_name).all()
-        recipients.update(row.email for row in brand_rows)
-    if purchase_order.supplier_name:
-        supplier_rows = (
-            db.query(models.SupplierEmail)
-            .filter(func.lower(models.SupplierEmail.supplier_name) == purchase_order.supplier_name.strip().lower())
-            .all()
-        )
-        recipients.update(row.email for row in supplier_rows)
-    if purchase_order.supplier_email:
-        recipients.add(purchase_order.supplier_email.strip().lower())
-    recipients = sorted(r for r in recipients if r)
-
+    # Only explicitly entered recipients are authorized for this send.
+    recipients = sorted({email.strip().lower() for email in payload.recipients if email.strip()})
     if not recipients:
-        raise HTTPException(status_code=400, detail="No supplier emails on file for this brand or supplier yet. Add at least one first.")
+        raise HTTPException(status_code=400, detail="Enter at least one recipient email address before sending.")
+    if any(not re.fullmatch(r"[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+", email) for email in recipients):
+        raise HTTPException(status_code=400, detail="Enter a valid email address in each recipient field.")
 
     try:
         pdf_bytes = base64.b64decode(payload.pdf_base64, validate=True)
