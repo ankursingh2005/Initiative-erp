@@ -2553,7 +2553,7 @@ def get_my_profile(current_user: models.User = Depends(auth.get_current_user)):
 def compress_attendance_selfie(data_url: str) -> str:
     """Normalize attendance selfies to a small JPEG before database storage."""
     if not data_url:
-        return ""
+        raise HTTPException(status_code=400, detail="Capture a fresh selfie before marking attendance")
     try:
         from PIL import Image, ImageOps
         header, encoded = data_url.split(",", 1)
@@ -2603,6 +2603,7 @@ def save_attendance(
 ):
     if attendance.action not in {"checkin", "checkout"}:
         raise HTTPException(status_code=400, detail="Action must be checkin or checkout")
+    selfie = compress_attendance_selfie(attendance.selfie)
     radius = 6371000
     radians = math.pi / 180
     def distance_to(candidate):
@@ -2643,7 +2644,7 @@ def save_attendance(
     if getattr(record, f"{prefix}_at") is not None:
         raise HTTPException(status_code=409, detail=f"{attendance.action.title()} already recorded")
     setattr(record, f"{prefix}_at", captured_at)
-    setattr(record, f"{prefix}_selfie", compress_attendance_selfie(attendance.selfie))
+    setattr(record, f"{prefix}_selfie", selfie)
     setattr(record, f"{prefix}_latitude", attendance.latitude)
     setattr(record, f"{prefix}_longitude", attendance.longitude)
     # Store the distance calculated from the submitted coordinates and the
