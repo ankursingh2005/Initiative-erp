@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Que
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, Response, RedirectResponse, StreamingResponse
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer, selectinload
 from sqlalchemy import inspect, text, func, or_
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
@@ -2666,18 +2666,23 @@ def save_attendance(
 
 @app.get("/api/attendance", response_model=List[schemas.AttendanceOut])
 def list_attendance(
+    scope: str = Query("all"),
+    include_selfies: bool = Query(True),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
     query = db.query(models.AttendanceRecord)
-    if not auth.has_admin_access(current_user):
+    if scope == "self" or not auth.has_admin_access(current_user):
         query = query.filter(models.AttendanceRecord.user_id == current_user.id)
+    selfie_columns = {"checkin_selfie", "second_punch_selfie", "checkout_selfie"}
+    if not include_selfies:
+        query = query.options(*(defer(getattr(models.AttendanceRecord, name)) for name in selfie_columns))
     records = query.order_by(models.AttendanceRecord.attendance_date.desc()).all()
     users = {user.id: user.username for user in db.query(models.User).all()}
     stores = {store.id: store.name for store in db.query(models.Store).all()}
     return [
         {
-            **{column.name: getattr(record, column.name) for column in models.AttendanceRecord.__table__.columns},
+            **{column.name: (None if not include_selfies and column.name in selfie_columns else getattr(record, column.name)) for column in models.AttendanceRecord.__table__.columns},
             "username": users.get(record.user_id),
             "outlet_name": stores.get(record.store_id),
         }
@@ -2846,7 +2851,7 @@ def attendance_admin_summary(
         if normalized_weekoff not in WEEKDAYS:
             raise HTTPException(status_code=400, detail="Week Off must be Monday through Sunday")
         user_query = user_query.filter(models.User.weekoff_day == normalized_weekoff)
-    users = user_query.all()
+    users = user_query.options(selectinload(models.User.brands)).all()
     if emp_category:
         normalized_category = emp_category.strip().lower()
         valid_categories = {"ids_emp", "brand_pro", "ac_retails", "ac_projects"}
@@ -2893,7 +2898,11 @@ def attendance_admin_summary(
         "warehouse": "MWH",
     }
 
-    record_query = db.query(models.AttendanceRecord).filter(
+    record_query = db.query(models.AttendanceRecord).options(
+        defer(models.AttendanceRecord.checkin_selfie),
+        defer(models.AttendanceRecord.second_punch_selfie),
+        defer(models.AttendanceRecord.checkout_selfie),
+    ).filter(
         models.AttendanceRecord.attendance_date >= start_date,
         models.AttendanceRecord.attendance_date <= end_date,
         models.AttendanceRecord.user_id.in_([user.id for user in users] or [-1]),
@@ -2902,7 +2911,11 @@ def attendance_admin_summary(
     for record in record_query.all():
         records_by_user.setdefault(record.user_id, []).append(record)
     all_records_by_user = defaultdict(list)
-    all_record_query = db.query(models.AttendanceRecord).filter(
+    all_record_query = db.query(models.AttendanceRecord).options(
+        defer(models.AttendanceRecord.checkin_selfie),
+        defer(models.AttendanceRecord.second_punch_selfie),
+        defer(models.AttendanceRecord.checkout_selfie),
+    ).filter(
         models.AttendanceRecord.user_id.in_([user.id for user in users] or [-1]),
         models.AttendanceRecord.checkin_at.isnot(None),
     ).order_by(models.AttendanceRecord.attendance_date.desc())
@@ -2911,6 +2924,14 @@ def attendance_admin_summary(
 
     range_start_dt = datetime.combine(start_date, datetime.min.time())
     range_end_dt = datetime.combine(end_date + timedelta(days=1), datetime.min.time())
+
+    points_by_user = defaultdict(list)
+    for point in db.query(models.AttendanceLocationPoint).filter(
+        models.AttendanceLocationPoint.user_id.in_([user.id for user in users] or [-1]),
+        models.AttendanceLocationPoint.captured_at >= range_start_dt,
+        models.AttendanceLocationPoint.captured_at < range_end_dt,
+    ).all():
+        points_by_user[point.user_id].append(point)
 
     rows = []
     for user in users:
@@ -2928,11 +2949,7 @@ def attendance_admin_summary(
         )
         user_records = sorted(records_by_user.get(user.id, []), key=lambda r: r.attendance_date)
         present_days = sum(1 for r in user_records if r.checkin_at)
-        points = db.query(models.AttendanceLocationPoint).filter(
-            models.AttendanceLocationPoint.user_id == user.id,
-            models.AttendanceLocationPoint.captured_at >= range_start_dt,
-            models.AttendanceLocationPoint.captured_at < range_end_dt,
-        ).all()
+        points = points_by_user.get(user.id, [])
         work_windows = [
             (
                 record.checkin_at,
@@ -3088,7 +3105,11 @@ def attendance_admin_summary(
 def build_daily_attendance_whatsapp_report(db: Session, report_date: date) -> str:
     """Build an outlet-wise headcount summary for one attendance date."""
     users = db.query(models.User).filter(models.User.status == "Active").all()
-    records = db.query(models.AttendanceRecord).filter(
+    records = db.query(models.AttendanceRecord).options(
+        defer(models.AttendanceRecord.checkin_selfie),
+        defer(models.AttendanceRecord.second_punch_selfie),
+        defer(models.AttendanceRecord.checkout_selfie),
+    ).filter(
         models.AttendanceRecord.attendance_date == report_date,
         models.AttendanceRecord.user_id.in_([user.id for user in users] or [-1]),
     ).all()
