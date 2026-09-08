@@ -47,3 +47,11 @@ test('section toggle updates visibility and accessible state', () => {
   context.toggleSectionBody('queue',header); assert.equal(body.style.display,'none'); assert.equal(attrs['aria-expanded'],'false'); assert.equal(opened,false);
   context.toggleSectionBody('queue',header); assert.equal(body.style.display,'block'); assert.equal(attrs['aria-expanded'],'true');
 });
+test('Busy number validation rejects duplicates but permits same-order edits and blanks', () => {
+  const context={orders:[{id:1,busy_po_number:'181',request_no:'REQ-1'},{id:2,busy_po_number:null}]};
+  vm.createContext(context); vm.runInContext(helper('busyNumberConflict','async function savePurchaseOrder'),context);
+  assert.equal(context.busyNumberConflict('2',' 181 ').request_no,'REQ-1');
+  assert.equal(context.busyNumberConflict('1','181'),undefined);
+  assert.equal(context.busyNumberConflict('2','182'),undefined);
+  assert.equal(context.busyNumberConflict('2','  '),null);
+});

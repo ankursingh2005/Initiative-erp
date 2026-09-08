@@ -231,7 +231,7 @@
     </section>
     <section class="card">
       <h2 class="collapsible-title" onclick="toggleSectionBody('sentPoBody', this)">Sent Purchase Order Report<span class="section-toggle-chevron">&#9662;</span></h2>
-      <div class="section-body" id="sentPoBody"><p>Successfully emailed purchase orders. Uses the filters above.</p><div id="sentPoReport" class="po-list"></div></div>
+      <div class="section-body" id="sentPoBody"><p>Emails accepted for sending. Inbox delivery is not confirmed. Check the recipient addresses below; if an email is missing, check Spam and the sender mailbox for a delivery-failure message. Uses the filters above.</p><div id="sentPoReport" class="po-list"></div></div>
     </section>
   </main>
 
@@ -311,7 +311,7 @@
         <div id="approvalWaitingNotice" class="message hidden" style="color:#b8860b;">Waiting for Admin approval. This can't be sent to the supplier or marked Ordered until Admin approves it.</div>
         <div class="form-grid" style="margin-top:12px">
           <div><label for="processStatus">Status</label><select id="processStatus" onchange="handleProcessStatusChange()"></select></div>
-          <div><label for="busyNumber">Busy PO number</label><input id="busyNumber" placeholder="IDS/PO/HA/181" /></div>
+          <div><label for="busyNumber">Busy PO number</label><input id="busyNumber" placeholder="Enter the PO number from Busy" aria-describedby="busyNumberHint" /><p class="hint" id="busyNumberHint">Use a different Busy PO number for each order. Leave blank if it is not available yet.</p></div>
           <div><label for="orderedDate">Ordered date</label><input id="orderedDate" type="date" /></div>
         </div>
         <div class="form-grid" style="margin-top:12px">
@@ -751,7 +751,7 @@
         btn.classList.add('sent');
         label.textContent = 'PO Sent';
         message.className = 'message success';
-        message.textContent = `${result.notification_status} (${result.sent_to.join(', ')})`;
+        message.textContent = `${result.notification_status} To: ${result.sent_to.join(', ')}. Accepted for sending; recipient inbox delivery is not confirmed.`;
         await loadOrders();
       } catch (e) {
         btn.classList.remove('sending');
@@ -847,6 +847,11 @@
 
     // Shared save logic. forcedStatus, when given, overrides whatever the
     // Status dropdown shows (used by Final Order to guarantee Requested -> Ordered).
+    function busyNumberConflict(id, value) {
+      const number = String(value || '').trim();
+      return number ? orders.find(order => Number(order.id) !== Number(id) && String(order.busy_po_number || '').trim() === number) : null;
+    }
+
     async function savePurchaseOrder(forcedStatus) {
       const id = document.getElementById('processId').value;
       const message = document.getElementById('processMessage');
@@ -878,7 +883,7 @@
           method: 'PATCH',
           body: JSON.stringify({
             status: forcedStatus || document.getElementById('processStatus').value,
-            busy_po_number: document.getElementById('busyNumber').value || null,
+            busy_po_number: document.getElementById('busyNumber').value.trim() || null,
             ordered_date: document.getElementById('orderedDate').value || null,
             processing_notes: document.getElementById('processNote').value || null,
             supplier_name: document.getElementById('processSupplier').value || null,
@@ -915,7 +920,7 @@
         const result = await emailPurchaseOrderPdf(id);
         if (!/^Emailed to /i.test(result.notification_status || '')) throw new Error(result.notification_status || 'Email sending was not confirmed.');
         message.className = 'message success';
-        message.textContent = `Order finalized and ${result.notification_status} (${result.sent_to.join(', ')})`;
+        message.textContent = `Order finalized. ${result.notification_status} To: ${result.sent_to.join(', ')}. Accepted for sending; recipient inbox delivery is not confirmed.`;
       } catch (e) {
         message.className = 'message';
         message.textContent = `Order finalized, but the email did not go out: ${e.message}`;

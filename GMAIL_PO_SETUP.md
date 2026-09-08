@@ -1,7 +1,7 @@
 # Purchase Order email on Render Free
 
 The existing **Send PO** action supports Gmail API over HTTPS. It sends the
-existing PO text and item list, not a PDF attachment. Existing Admin/MIS access
+PO summary and a PDF attachment generated from the purchase order preview. Existing Admin/MIS access
 and Approved/Ordered status requirements remain in effect.
 
 ## Authorize the trial sender
@@ -60,3 +60,14 @@ References:
 - https://developers.google.com/workspace/gmail/api/guides/sending
 - https://developers.google.com/identity/protocols/oauth2/native-app
 - https://developers.google.com/identity/protocols/oauth2#expiration
+
+## When a recipient cannot find a sent PO
+
+A green Success records provider acceptance, not confirmed inbox delivery.
+Check the exact To addresses in the sent PO report and compare them with the
+intended recipient. The application also uses saved brand and supplier contacts.
+In the authorized sender mailbox, find the PO in Sent and check its To header,
+then look for a Mail Delivery Subsystem or delivery-failure reply. Ask the recipient
+to search Spam and All Mail by the PO request number. A bounce message is needed
+to diagnose rejection, an invalid address, or mailbox limits. Do not repeatedly
+resend an accepted message before checking these records.

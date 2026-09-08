@@ -4307,6 +4307,25 @@ def update_purchase_order_status(
     if status_value != purchase_order.status:
         assert_status_transition_allowed(current_user, purchase_order, status_value)
 
+    # Status-only actions must preserve the existing Busy reference.
+    supplied_fields = getattr(payload, "model_fields_set", None)
+    if supplied_fields is None:
+        supplied_fields = payload.__fields_set__
+    busy_number = purchase_order.busy_po_number
+    if "busy_po_number" in supplied_fields:
+        busy_number = (payload.busy_po_number or "").strip() or None
+    if busy_number:
+        duplicate = db.query(models.PurchaseOrder).filter(
+            models.PurchaseOrder.busy_po_number == busy_number,
+            models.PurchaseOrder.id != purchase_order_id,
+        ).first()
+        if duplicate:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Busy PO number {busy_number} is already used by {duplicate.request_no}. "
+                       "Enter the correct unique PO number from Busy, or leave it blank until available.",
+            )
+
     if status_value == "Approved" and purchase_order.status != "Approved":
         purchase_order.approved_by_user_id = current_user.id
         purchase_order.approved_date = datetime.utcnow()
@@ -4317,9 +4336,11 @@ def update_purchase_order_status(
         purchase_order.approved_date = None
 
     purchase_order.status = status_value
-    purchase_order.busy_po_number = (payload.busy_po_number or "").strip() or None
-    purchase_order.ordered_date = payload.ordered_date
-    purchase_order.processing_notes = (payload.processing_notes or "").strip() or None
+    purchase_order.busy_po_number = busy_number
+    if "ordered_date" in supplied_fields:
+        purchase_order.ordered_date = payload.ordered_date
+    if "processing_notes" in supplied_fields:
+        purchase_order.processing_notes = (payload.processing_notes or "").strip() or None
 
     # Admin/MIS can fill in or correct procurement details while processing
     # a category manager's request. Only touch fields that were actually sent.
@@ -4349,7 +4370,19 @@ def update_purchase_order_status(
             raise HTTPException(status_code=400, detail="Every item needs a product name and quantity greater than zero")
         purchase_order.items = [models.PurchaseOrderItem(**item.dict()) for item in payload.items]
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        # Another user may have saved this number after our initial check.
+        constraint = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
+        if constraint == "purchase_orders_busy_po_number_key" or "UNIQUE constraint failed: purchase_orders.busy_po_number" in str(exc.orig):
+            raise HTTPException(
+                status_code=409,
+                detail=f"Busy PO number {busy_number} is already assigned to another purchase order. "
+                       "Enter the correct unique PO number from Busy, or leave it blank until available.",
+            ) from exc
+        raise
     db.refresh(purchase_order)
 
     if purchase_order.supplier_name:
