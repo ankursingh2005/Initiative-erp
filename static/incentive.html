@@ -42,6 +42,10 @@
     <div class="table-head"><div><h3>Exact Incentive by Outlet &amp; Category Group</h3><div class="category-legend">Group total incentive &times; applied percentage. ASH remains pending until its percentage is decided.</div></div><details class="exact-download" id="exactDownloadMenu"><summary class="btn download">Download &#9662;</summary><div class="exact-download-options"><button type="button" onclick="document.getElementById('exactDownloadMenu').open=false;downloadExactReport('xlsx',this)">Excel</button><button type="button" onclick="document.getElementById('exactDownloadMenu').open=false;downloadExactReport('pdf',this)">PDF</button></div></details></div>
     <div class="scroll"><table><thead><tr><th>Outlet</th><th>Category Group</th><th style="text-align:right">Total Incentive</th><th style="text-align:right">Applied Percentage</th><th style="text-align:right">Exact Incentive</th></tr></thead><tbody id="exactRows"></tbody></table></div>
   </section>
+  <section class="card table-card" id="remainingReport" hidden>
+    <div class="table-head"><div><h3>Remaining Amount After Incentive by Outlet &amp; Category Group</h3><div class="category-legend">Remaining amount = Total Incentive &minus; Exact Incentive. Amounts remain pending where the applied percentage is undecided.</div></div></div>
+    <div class="scroll"><table><thead><tr><th>Outlet</th><th>Category Group</th><th style="text-align:right">Total Incentive</th><th style="text-align:right">Exact Incentive</th><th style="text-align:right">Remaining Amount</th></tr></thead><tbody id="remainingRows"></tbody></table></div>
+  </section>
 </main>
 <script>
   const token=localStorage.getItem('token'); if(!token) location.href='/login';
@@ -69,8 +73,8 @@
   }
   function resetReport(){
     savedReport=null;
-    for(const id of ['kpis','categoryReport','groupedReport','exactReport'])document.getElementById(id).hidden=true;
-    for(const id of ['categoryRows','groupedRows','exactRows'])document.getElementById(id).innerHTML='';
+    for(const id of ['kpis','categoryReport','groupedReport','exactReport','remainingReport'])document.getElementById(id).hidden=true;
+    for(const id of ['categoryRows','groupedRows','exactRows','remainingRows'])document.getElementById(id).innerHTML='';
     document.getElementById('rows').innerHTML='<tr><td colspan="4" class="empty">Upload a sales workbook to begin.</td></tr>';
     document.getElementById('download').disabled=true;
   }
@@ -114,6 +118,11 @@
   function renderExactIncentive(rows){
     document.getElementById('exactRows').innerHTML=rows.map(r=>`<tr><td>${escapeHtml(r.outlet)}</td><td>${escapeHtml(r.group)}</td><td class="num">${money.format(r.total_incentive)}</td><td class="num">${r.applied_rate==null?'Pending':r.applied_rate+'%'}</td><td class="num">${r.exact_incentive==null?'Pending':money.format(r.exact_incentive)}</td></tr>`).join('');
     document.getElementById('exactReport').hidden=false;
+    document.getElementById('remainingRows').innerHTML=rows.map(r=>{
+      const remaining=r.exact_incentive==null?null:(Math.round(r.total_incentive*100)-Math.round(r.exact_incentive*100))/100;
+      return `<tr><td>${escapeHtml(r.outlet)}</td><td>${escapeHtml(r.group)}</td><td class="num">${money.format(r.total_incentive)}</td><td class="num">${r.exact_incentive==null?'Pending':money.format(r.exact_incentive)}</td><td class="num">${remaining==null?'Pending':money.format(remaining)}</td></tr>`;
+    }).join('');
+    document.getElementById('remainingReport').hidden=false;
   }
   async function calculate(){const btn=document.getElementById('calculate'),version=uploadVersion;try{btn.disabled=true;setMessage('Reading file and calculating incentives…');const response=await fetch('/api/incentive/calculate',{method:'POST',headers:{Authorization:`Bearer ${token}`},body:formData()});const data=await response.json();if(!response.ok)throw new Error(data.detail||'Calculation failed.');if(version!==uploadVersion)return;renderIncentive(data);savedReport=data;await persistUpload();setMessage(`${data.summary.length} outlets calculated successfully.`)}catch(e){setMessage(e.message,true)}finally{btn.disabled=false}}
   async function downloadExactReport(format,button){
