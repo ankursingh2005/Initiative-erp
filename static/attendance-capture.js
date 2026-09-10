@@ -52,9 +52,12 @@
         ready();
       })();
       const locationReady = (async () => {
-        const gps = await new Promise((resolve, reject) => {
+        // Reuse a recent page/tracking fix instead of forcing another GPS acquisition.
+        // Leave at least 30 seconds of the validity window for taking the selfie.
+        const cached = validGps(position) && Date.now() - position.timestamp <= 30000 ? position : null;
+        const gps = cached || await new Promise((resolve, reject) => {
           if (!navigator.geolocation) return reject(new Error('Location is unavailable.'));
-          navigator.geolocation.getCurrentPosition(resolve, reject, {enableHighAccuracy:true, timeout:15000, maximumAge:0});
+          navigator.geolocation.getCurrentPosition(resolve, reject, {enableHighAccuracy:true, timeout:15000, maximumAge:30000});
         });
         if (id !== session) return;
         if (!validGps(gps)) throw new Error('GPS reading is invalid or inaccurate. Please enable precise location and retry.');

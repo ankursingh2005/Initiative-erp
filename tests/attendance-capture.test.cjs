@@ -41,6 +41,35 @@ test('all attendance inline scripts parse',()=>{
 async function openCamera(t,action='checkout'){
   const opening=t.context.beginAction(action);await Promise.resolve();t.resolve();await opening;
 }
+
+test('recent accurate page location enables capture without waiting for another GPS fix',async()=>{
+  const t=setup();let requests=0;
+  t.context.position={timestamp:Date.now()-10000,coords:{latitude:0,longitude:0,accuracy:5}};
+  t.context.navigator.geolocation.getCurrentPosition=()=>{requests++};
+  await openCamera(t);
+  assert.equal(requests,0);assert.equal(t.$('capture').disabled,false);
+});
+
+test('stale or inaccurate page location requires a new GPS fix',async()=>{
+  for(const [age,accuracy] of [[31000,5],[1000,250]]){
+    const t=setup();let requests=0;
+    t.context.position={timestamp:Date.now()-age,coords:{latitude:0,longitude:0,accuracy}};
+    t.context.navigator.geolocation.getCurrentPosition=(resolve,reject,options)=>{
+      requests++;assert.equal(options.maximumAge,30000);
+      resolve({timestamp:Date.now(),coords:{latitude:0,longitude:0,accuracy:5}});
+    };
+    await openCamera(t);
+    assert.equal(requests,1);assert.equal(t.$('capture').disabled,false);
+  }
+});
+
+test('cached location outside the outlet still blocks capture',async()=>{
+  const t=setup();
+  t.context.position={timestamp:Date.now(),coords:{latitude:1,longitude:1,accuracy:5}};
+  t.context.meters=()=>500;
+  await openCamera(t);
+  assert.equal(t.$('capture').disabled,true);assert.equal(t.posts(),0);
+});
 test('account switching while camera open cannot submit',async()=>{
   const t=setup();await openCamera(t);t.context.localStorage.getItem=()=> 'different-token';
   await t.$('capture').onclick();assert.equal(t.posts(),0);
