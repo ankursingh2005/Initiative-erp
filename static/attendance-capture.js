@@ -29,34 +29,44 @@
     try {
       if (!navigator.onLine) throw new Error('Connect to the internet before marking attendance.');
       if (!navigator.mediaDevices?.getUserMedia) throw new Error('Camera is unavailable. Open the app over HTTPS and allow camera access.');
-      const gps = await new Promise((resolve, reject) => {
-        if (!navigator.geolocation) return reject(new Error('Location is unavailable.'));
-        navigator.geolocation.getCurrentPosition(resolve, reject, {enableHighAccuracy:true, timeout:15000, maximumAge:0});
-      });
-      if (id !== session) return;
-      if (!validGps(gps)) throw new Error('GPS reading is invalid or inaccurate. Please enable precise location and retry.');
-      position = gps;
-      const outlet = assignedOutlet(), distance = meters(gps.coords.latitude, gps.coords.longitude, outlets[outlet]);
-      const anywhere = ['ServiceManager','ACTechnicianA','ACTechnicianB','HR'].includes(profile.role);
-      if (gps.coords.accuracy > 200 || (!anywhere && distance > 100)) throw new Error('Verify your GPS location within the allowed outlet area and try again.');
-      active.gps = gps;
-      active.distance = distance;
-      const media = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'user'},width:{ideal:720},height:{ideal:960}},audio:false});
-      if (id !== session) { media.getTracks().forEach(track => track.stop()); return; }
-      stream = media;
       const video = $('camera');
-      video.srcObject = media;
-      video.style.display = 'block';
-      await video.play();
-      if (id !== session) return;
       const ready = () => {
         if (id !== session || video.readyState < 2 || !video.videoWidth || !video.videoHeight) return;
+        if (!active.gps) {
+          $('modalText').textContent = 'Camera ready. Verifying your location...';
+          return;
+        }
         $('capture').disabled = false;
         $('modalText').textContent = action === 'checkout' ? 'Look at the camera, then tap Capture & Punch Out.' : 'Look at the camera, then tap Capture & Punch In.';
         $('capture').textContent = action === 'checkout' ? 'Capture & Punch Out' : 'Capture & Punch In';
       };
-      video.onloadeddata = ready;
-      ready();
+      // Start the camera on the click, without waiting for a precise GPS fix.
+      const cameraReady = (async () => {
+        const media = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'user'},width:{ideal:720},height:{ideal:960}},audio:false});
+        if (id !== session) { media.getTracks().forEach(track => track.stop()); return; }
+        stream = media;
+        video.srcObject = media;
+        video.style.display = 'block';
+        video.onloadeddata = ready;
+        await video.play();
+        ready();
+      })();
+      const locationReady = (async () => {
+        const gps = await new Promise((resolve, reject) => {
+          if (!navigator.geolocation) return reject(new Error('Location is unavailable.'));
+          navigator.geolocation.getCurrentPosition(resolve, reject, {enableHighAccuracy:true, timeout:15000, maximumAge:0});
+        });
+        if (id !== session) return;
+        if (!validGps(gps)) throw new Error('GPS reading is invalid or inaccurate. Please enable precise location and retry.');
+        position = gps;
+        const outlet = assignedOutlet(), distance = meters(gps.coords.latitude, gps.coords.longitude, outlets[outlet]);
+        const anywhere = ['ServiceManager','ACTechnicianA','ACTechnicianB','HR'].includes(profile.role);
+        if (!anywhere && distance > 100) throw new Error('Verify your GPS location within the allowed outlet area and try again.');
+        active.gps = gps;
+        active.distance = distance;
+        ready();
+      })();
+      await Promise.all([cameraReady, locationReady]);
     } catch (error) {
       if (id !== session) return;
       closeModal();

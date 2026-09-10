@@ -653,5 +653,5 @@ const WEEKOFF_DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday
   select.onchange=async()=>{const requested=select.value==='leave',previous=select.dataset.status||'Working';select.disabled=true;try{const response=await fetch('/api/me/attendance-status',{method:'PUT',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({on_leave:requested})});const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.detail||'Unable to update status');location.reload()}catch(error){alert(error.message||'Unable to update status');applyStatus(previous)}finally{select.disabled=false}};
 })();
 </script>
-<script src="static/attendance-capture.js?v=2"></script>
+<script src="static/attendance-capture.js?v=3"></script>
 </body></html>

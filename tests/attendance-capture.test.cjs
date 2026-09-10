@@ -104,3 +104,26 @@ test('late history response cannot erase a newer punch-out',async()=>{
   pending[0]({ok:true,json:async()=>[{...record,checkout_at:null}]});assert.equal(await old,false);
   assert.equal(context.state.records[0].out,'2026-09-08T19:00:00+05:30');
 });
+
+
+test('camera preview starts before slow GPS, but capture waits for verified location',async()=>{
+  const t=setup();let resolveGps;
+  t.context.navigator.geolocation.getCurrentPosition=resolve=>{resolveGps=resolve};
+  const opening=t.context.beginAction('checkin');
+  t.resolve();await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(t.$('camera').srcObject,t.media);
+  assert.equal(t.$('camera').style.display,'block');
+  assert.equal(t.$('capture').disabled,true);
+  await t.$('capture').onclick();assert.equal(t.posts(),0);
+  resolveGps({timestamp:Date.now(),coords:{latitude:0,longitude:0,accuracy:5}});
+  await opening;assert.equal(t.$('capture').disabled,false);
+});
+
+test('GPS failure stops a camera stream that arrives after the session closes',async()=>{
+  const t=setup();
+  t.context.navigator.geolocation.getCurrentPosition=(resolve,reject)=>reject(new Error('GPS denied'));
+  await t.context.beginAction('checkin');
+  t.resolve();await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(t.stopped(),1);assert.equal(t.$('camera').srcObject,null);
+  assert.equal(t.$('capture').disabled,true);assert.equal(t.posts(),0);
+});
