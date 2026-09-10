@@ -3236,53 +3236,29 @@ def export_admin_attendance(
     store_id: Optional[int] = Query(None),
     status: Optional[str] = Query(None),
     weekoff_day: Optional[str] = Query(None),
+    emp_category: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.require_roles("Admin")),
 ):
     """Download the selected day's admin attendance table as Excel or PDF."""
     if export_format not in {"xlsx", "pdf"}:
         raise HTTPException(status_code=400, detail="Format must be xlsx or pdf")
-    user_query = db.query(models.User).filter(models.User.status == "Active")
-    if store_id is not None:
-        user_query = user_query.filter(models.User.store_id == store_id)
-    if weekoff_day:
-        normalized_weekoff = weekoff_day.strip().title()
-        if normalized_weekoff not in WEEKDAYS:
-            raise HTTPException(status_code=400, detail="Week Off must be Monday through Sunday")
-        user_query = user_query.filter(models.User.weekoff_day == normalized_weekoff)
-    users = user_query.order_by(models.User.username).all()
-    user_ids = [user.id for user in users]
-    records = db.query(models.AttendanceRecord).filter(
-        models.AttendanceRecord.user_id.in_(user_ids or [-1]),
-        models.AttendanceRecord.attendance_date == attendance_date,
-    ).all()
-    records_by_user = {record.user_id: record for record in records}
-    stores = {store.id: store for store in db.query(models.Store).all()}
-    start_dt = datetime.combine(attendance_date, datetime.min.time())
-    end_dt = start_dt + timedelta(days=1)
+    if status not in {None, "all", "Present", "Absent", "Week Off", "Leave"}:
+        raise HTTPException(status_code=400, detail="Invalid attendance status")
+    summary = attendance_admin_summary(
+        store_id=store_id, from_date=attendance_date, to_date=attendance_date,
+        weekoff_day=weekoff_day, emp_category=emp_category,
+        db=db, current_user=current_user,
+    )
     rows = []
-    for user in users:
-        record = records_by_user.get(user.id)
-        is_weekoff = user.weekoff_day == attendance_date.strftime("%A")
-        row_status = "Present" if record and record.checkin_at else ("Week Off" if is_weekoff else "Absent")
-        if status in {"Present", "Absent", "Week Off"} and row_status != status:
+    for row in summary["rows"]:
+        if status not in {None, "all"} and row["status"] != status:
             continue
-        points = db.query(models.AttendanceLocationPoint.distance_from_store_m).filter(
-            models.AttendanceLocationPoint.user_id == user.id,
-            models.AttendanceLocationPoint.captured_at >= start_dt,
-            models.AttendanceLocationPoint.captured_at < end_dt,
-        ).all()
-        distances = [value for (value,) in points if value is not None]
-        if record:
-            distances.extend(value for value in (record.checkin_distance_m, record.checkout_distance_m) if value is not None)
-        store = stores.get(user.store_id)
         rows.append([
-            user.username,
-            row_status,
-            record.checkin_at.strftime("%I:%M %p") if record and record.checkin_at else "-",
-            record.checkout_at.strftime("%I:%M %p") if record and record.checkout_at else "-",
-            store.name if store else "Unassigned",
-            f"{round(max(distances, default=0))} m",
+            row["display_name"], row["status"],
+            row["checkin_at"].strftime("%I:%M %p") if row["checkin_at"] else "-",
+            row["checkout_at"].strftime("%I:%M %p") if row["checkout_at"] else "-",
+            row["outlet_name"], f'{row["max_distance_from_store_m"]} m',
         ])
     headers = ["Employee", "Status", "Check-in", "Check-out", "Outlet", "Distance"]
     filename_base = f"attendance-{attendance_date.isoformat()}"
@@ -3511,6 +3487,10 @@ def export_monthly_attendance(
     month: str = Query(...),
     scope: str = Query("self"),
     store_id: Optional[int] = Query(None),
+    emp_category: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    weekoff_day: Optional[str] = Query(None),
+    attendance_date: Optional[date] = Query(None, alias="date"),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
@@ -3525,6 +3505,18 @@ def export_monthly_attendance(
         if store_id is not None:
             query = query.filter(models.User.store_id == store_id)
         users = query.all()
+        if status not in {None, "all", "Present", "Absent", "Week Off", "Leave"}:
+            raise HTTPException(status_code=400, detail="Invalid attendance status")
+        if emp_category or weekoff_day or status not in {None, "all"}:
+            filter_date = attendance_date or india_today()
+            summary = attendance_admin_summary(
+                store_id=store_id, from_date=filter_date, to_date=filter_date,
+                weekoff_day=weekoff_day, emp_category=emp_category,
+                db=db, current_user=current_user,
+            )
+            selected_ids = {row["user_id"] for row in summary["rows"]
+                            if status in {None, "all"} or row["status"] == status}
+            users = [user for user in users if user.id in selected_ids]
         filename = f"all-outlets-attendance-{month}.xlsx" if store_id is None else f"outlet-attendance-{month}.xlsx"
     else:
         users = [current_user]
