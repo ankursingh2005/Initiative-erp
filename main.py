@@ -3255,12 +3255,12 @@ def export_admin_attendance(
         if status not in {None, "all"} and row["status"] != status:
             continue
         rows.append([
-            row["display_name"], row["status"],
+            len(rows) + 1, row["display_name"], row["status"],
             row["checkin_at"].strftime("%I:%M %p") if row["checkin_at"] else "-",
             row["checkout_at"].strftime("%I:%M %p") if row["checkout_at"] else "-",
             row["outlet_name"], f'{row["max_distance_from_store_m"]} m',
         ])
-    headers = ["Employee", "Status", "Check-in", "Check-out", "Outlet", "Distance"]
+    headers = ["S_NO", "Employee", "Status", "Check-in", "Check-out", "Outlet", "Distance"]
     filename_base = f"attendance-{attendance_date.isoformat()}"
     if export_format == "xlsx":
         workbook = Workbook()
@@ -3273,7 +3273,7 @@ def export_admin_attendance(
             sheet.append(row)
         for cell in sheet[3]:
             cell.font = cell.font.copy(bold=True)
-        for column, width in zip("ABCDEF", [26, 14, 15, 15, 22, 16]):
+        for column, width in zip("ABCDEFG", [8, 26, 14, 15, 15, 22, 16]):
             sheet.column_dimensions[column].width = width
         output = BytesIO()
         workbook.save(output)
@@ -3296,7 +3296,7 @@ def export_admin_attendance(
         Paragraph(attendance_date.strftime("%d %B %Y"), date_style),
         Spacer(1, 6 * mm),
     ]
-    table = Table([headers] + rows, repeatRows=1, colWidths=[48 * mm, 28 * mm, 30 * mm, 30 * mm, 42 * mm, 30 * mm])
+    table = Table([headers] + rows, repeatRows=1, colWidths=[16 * mm, 48 * mm, 28 * mm, 30 * mm, 30 * mm, 42 * mm, 30 * mm])
     table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#155eef")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
