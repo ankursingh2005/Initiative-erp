@@ -5870,6 +5870,10 @@ def dp_categorize(item_name: Optional[str]) -> str:
     if "INVERTER EB 1100" in n:
         return "HA"
 
+    # This OTG is an oven, so it must precede the OTG accessory rule.
+    if re.search(r"\bBAJAJ\s+OTG\s+60\s+RCSS\b", n):
+        return "HA"
+
     # Faber built-in kitchen appliances. These model lines previously fell
     # through to the Accessories fallback because the profitability
     # classifier had no HOB/HOOD product-type rule.
@@ -9604,6 +9608,7 @@ EXACT_INCENTIVE_RATES = {
     ("ALM", "HA + HE"): 85,
     ("ALM", "MOB + DC + ACC"): 13,
     ("ALM", "COM"): 78,
+    ("ASH", "ALL"): 100,
     ("GNG", "ALL"): 52,
     ("HZT", "HA + HE"): 65,
     ("HZT", "MOB + COM + DC + ACC"): 60,
@@ -9703,7 +9708,7 @@ def export_exact_incentive_report(
         sheet.title = "Exact Incentive"
         sheet.append(["EXACT INCENTIVE BY OUTLET & CATEGORY GROUP"])
         sheet.merge_cells("A1:E1")
-        sheet.append(["Amounts in INR. ASH percentage is pending."])
+        sheet.append(["Amounts in INR. ASH percentage is 100%."])
         sheet.merge_cells("A2:E2")
         sheet.append(headers)
         for row in rows:
@@ -9754,7 +9759,7 @@ def export_exact_incentive_report(
             ("LINEBELOW", (0, 0), (-1, -1), .4, colors.HexColor("#DCE3EC")),
         ]))
         document.build([Paragraph("Exact Incentive by Outlet &amp; Category Group", styles["Heading1"]),
-                        Paragraph("Amounts in INR. Group total incentive multiplied by applied percentage. ASH remains pending.", styles["BodyText"]),
+                        Paragraph("Amounts in INR. Group total incentive multiplied by applied percentage. ASH uses 100%.", styles["BodyText"]),
                         Spacer(1, 16), table])
         media_type = "application/pdf"
     filename = f"Exact_Incentive_Report_{india_today().isoformat()}.{format}"
@@ -9915,7 +9920,7 @@ def export_incentive_report(
     exact_sheet["A1"].font = Font(color=white, bold=True, size=14)
     exact_sheet["A1"].alignment = Alignment(horizontal="center")
     exact_sheet.merge_cells("A2:E2")
-    exact_sheet["A2"] = "Exact incentive = group total incentive × applied rate. ASH rate is pending."
+    exact_sheet["A2"] = "Exact incentive = group total incentive × applied rate. ASH rate is 100%."
     exact_sheet.append(["Outlet", "Category Group", "Total Incentive", "Applied Rate", "Exact Incentive"])
     for cell in exact_sheet[3]:
         cell.fill = PatternFill("solid", fgColor=blue)
