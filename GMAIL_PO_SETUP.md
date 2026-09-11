@@ -59,7 +59,7 @@ PO_EMAIL_PROVIDER unless PASSWORD_RESET_EMAIL_PROVIDER is set explicitly.
 ## User password recovery
 
 Users select **Forgot password?** on the login page, enter their registered
-email, then enter the six-digit code and a new password (at least 8 characters).
+email, then enter the six-digit code and any non-empty new password.
 Email identifies the account because multiple users can share a username.
 Only Active accounts can reset. Users without access to their registered
 mailbox still need Admin/HR assistance.

@@ -124,8 +124,11 @@ class PasswordResetTests(unittest.TestCase):
 
     def test_password_length_validation(self):
         self.request()
-        self.assert_rejected(lambda: self.confirm(password='short'))
+        self.assert_rejected(lambda: self.confirm(password=''))
         self.assert_rejected(lambda: self.confirm(password='x' * 73))
+        self.confirm(password='7')
+        self.db.refresh(self.user)
+        self.assertTrue(auth.verify_password('7', self.user.password_hash))
 
 
 if __name__ == '__main__':

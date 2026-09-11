@@ -384,7 +384,7 @@
         } else {
           const code = document.getElementById('resetCode').value.trim(), newPassword = document.getElementById('resetNewPassword').value, confirmPassword = document.getElementById('resetConfirmPassword').value;
           if (!/^\d{6}$/.test(code)) throw new Error('Enter the 6-digit verification code.');
-          if (newPassword.length < 8) throw new Error('Password must contain at least 8 characters.');
+          if (!newPassword.length) throw new Error('Enter a new password.');
           if (newPassword !== confirmPassword) throw new Error('Passwords do not match.');
           const response = await fetch(appUrl('/auth/password-reset/confirm'), {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({identifier,code,new_password:newPassword})});
           const data = await response.json().catch(() => ({}));

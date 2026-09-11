@@ -75,8 +75,8 @@ def request_reset(payload, db):
 
 
 def confirm_reset(payload, db):
-    if len(payload.new_password) < 8 or len(payload.new_password.encode("utf-8")) > 72:
-        raise HTTPException(400, "Password must contain at least 8 characters and no more than 72 UTF-8 bytes.")
+    if not payload.new_password or len(payload.new_password.encode("utf-8")) > 72:
+        raise HTTPException(400, "Enter a password of no more than 72 UTF-8 bytes.")
     user = db.query(models.User).filter(func.lower(models.User.email) == payload.identifier.strip().lower(), models.User.status == "Active").first()
     now = datetime.utcnow()
     if not user or not user.reset_token or not user.reset_token_expires or user.reset_token_expires <= now:
