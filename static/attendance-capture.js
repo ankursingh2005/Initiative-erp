@@ -92,10 +92,13 @@
       if (current.day !== currentDay()) throw new Error('The attendance date changed. Refresh and capture again.');
       if (!validGps(current.gps)) throw new Error('Location expired. Please reopen the camera and capture again.');
       const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+      // Bound the upload itself, preserving aspect ratio without upscaling.
+      const scale = Math.min(1, 360 / video.videoWidth, 480 / video.videoHeight);
+      canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+      canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
       canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
       const payload = {action:current.action, captured_at:new Date().toISOString(),
-        selfie:canvas.toDataURL('image/jpeg', .75), latitude:current.gps.coords.latitude,
+        selfie:canvas.toDataURL('image/jpeg', .55), latitude:current.gps.coords.latitude,
         longitude:current.gps.coords.longitude, accuracy_m:current.gps.coords.accuracy,
         distance_m:current.distance};
       closeModal();

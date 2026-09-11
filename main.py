@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Query, Request
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response, RedirectResponse, StreamingResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session, defer, selectinload
@@ -578,6 +579,21 @@ ensure_default_branches()
 ensure_default_master_data()
 
 app = FastAPI(title="IDSPL Scheme Management ERP")
+app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=5)
+
+
+@app.middleware("http")
+async def bandwidth_cache_headers(request: Request, call_next):
+    response = await call_next(request)
+    path = request.url.path
+    if request.method in {"GET", "HEAD"} and response.status_code in {200, 206, 304}:
+        if path.startswith("/static/") and not request.headers.get("Authorization"):
+            # Images can be reused for a day; code/data revalidate via ETags.
+            media = path.lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".ico", ".svg", ".mp4"))
+            response.headers["Cache-Control"] = "public, max-age=86400" if media else "no-cache"
+        elif "text/html" in response.headers.get("content-type", ""):
+            response.headers["Cache-Control"] = "no-cache"
+    return response
 
 
 @app.middleware("http")
@@ -2530,9 +2546,9 @@ def compress_attendance_selfie(data_url: str) -> str:
                 raise ValueError("Selfie image dimensions are too large")
             image = ImageOps.exif_transpose(source).convert("RGB")
             resampling = getattr(Image, "Resampling", Image)
-            image.thumbnail((480, 640), resampling.LANCZOS)
+            image.thumbnail((360, 480), resampling.LANCZOS)
             compressed = BytesIO()
-            image.save(compressed, format="JPEG", quality=55, optimize=True, progressive=True)
+            image.save(compressed, format="JPEG", quality=45, optimize=True, progressive=True)
         return "data:image/jpeg;base64," + base64.b64encode(compressed.getvalue()).decode("ascii")
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Unable to process attendance selfie: {exc}")
