@@ -153,6 +153,7 @@
     button.submit svg { width: 16px; height: 16px; }
 
     .msg { margin-top: 12px; color: #c0392b; text-align: center; font-size: 13.5px; }
+    .msg.success { color: #087f5b; white-space: nowrap; font-size: clamp(9px, 2.65vw, 12px); line-height: 1.5; }
     .msg:empty { display:none; }
     .links { margin-top: 26px; text-align: center; }
     .links a { color: var(--ink); text-decoration: none; font-weight: 700; font-size: 13.5px; }
@@ -239,7 +240,7 @@
         <span id="loginButtonText">Sign in</span>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>
       </button>
-      <div id="msg" class="msg"></div>
+      <div id="msg" class="msg" aria-live="polite"></div>
 
       <div class="links"><a href="signup">Create a new account</a></div>
       <button type="button" class="reset-link" onclick="openPasswordReset()">Forgot password?</button>
@@ -391,6 +392,7 @@
           if (!response.ok) throw new Error(data.detail || 'Unable to reset password');
           status.className = 'reset-status ok'; status.textContent = data.message;
           document.getElementById('msg').textContent = data.message;
+          document.getElementById('msg').classList.add('success');
           document.getElementById('username').value = identifier;
           document.getElementById('password').value = '';
           resetBusy = false;
@@ -409,6 +411,7 @@
       const username = document.getElementById('username').value;
       const password = document.getElementById('password').value;
       const msg = document.getElementById('msg');
+      msg.classList.remove('success');
       msg.textContent = '';
       sessionStorage.removeItem('authMessage');
 
