@@ -242,17 +242,17 @@
       <div id="msg" class="msg"></div>
 
       <div class="links"><a href="signup">Create a new account</a></div>
-      <button type="button" class="reset-link" onclick="openPasswordReset()">Contact your admin to forgot password</button>
+      <button type="button" class="reset-link" onclick="openPasswordReset()">Forgot password?</button>
     </div>
   </div>
 
   <div id="resetModal" class="reset-modal" role="dialog" aria-modal="true" aria-labelledby="resetTitle">
     <div class="reset-dialog">
       <h2 id="resetTitle">Reset password</h2>
-      <p id="resetDescription">Enter your username or registered email to receive a verification code.</p>
+      <p id="resetDescription">Enter your registered email to receive a verification code.</p>
       <div id="resetRequestStep" class="reset-step">
-        <label for="resetIdentifier">Username / Email</label>
-        <input id="resetIdentifier" type="text" autocomplete="username" placeholder="Enter username or registered email" />
+        <label for="resetIdentifier">Registered Email</label>
+        <input id="resetIdentifier" type="email" autocomplete="email" placeholder="Enter registered email" />
       </div>
       <div id="resetConfirmStep" class="reset-step" hidden>
         <label for="resetCode">Verification Code</label>
@@ -264,6 +264,7 @@
       </div>
       <div id="resetStatus" class="reset-status"></div>
       <div class="reset-actions">
+        <button id="resetResend" type="button" hidden onclick="restartPasswordReset()">Resend / Change email</button>
         <button type="button" onclick="closePasswordReset()">Cancel</button>
         <button id="resetPrimary" type="button" class="reset-primary" onclick="submitPasswordReset()">Send Code</button>
       </div>
@@ -326,24 +327,46 @@
     }
 
     let resetCodeSent = false;
-    function openPasswordReset() {
+    let resetBusy = false;
+    function restartPasswordReset() {
+      if (resetBusy) return;
       resetCodeSent = false;
       document.getElementById('resetRequestStep').hidden = false;
       document.getElementById('resetConfirmStep').hidden = true;
-      document.getElementById('resetDescription').textContent = 'Enter your username or registered email to receive a verification code.';
+      document.getElementById('resetResend').hidden = true;
+      document.getElementById('resetPrimary').textContent = 'Send Code';
+      document.getElementById('resetDescription').textContent = 'Enter your registered email. Wait 60 seconds between code requests.';
+      document.getElementById('resetStatus').textContent = '';
+      ['resetCode', 'resetNewPassword', 'resetConfirmPassword'].forEach(id => document.getElementById(id).value = '');
+    }
+    function openPasswordReset() {
+      if (resetBusy) return;
+      restartPasswordReset();
+      resetCodeSent = false;
+      document.getElementById('resetRequestStep').hidden = false;
+      document.getElementById('resetConfirmStep').hidden = true;
+      document.getElementById('resetDescription').textContent = 'Enter your registered email to receive a verification code.';
       document.getElementById('resetPrimary').textContent = 'Send Code';
       document.getElementById('resetStatus').textContent = '';
-      document.getElementById('resetIdentifier').value = document.getElementById('username').value.trim();
+      const loginIdentifier = document.getElementById('username').value.trim();
+      document.getElementById('resetIdentifier').value = loginIdentifier.includes('@') ? loginIdentifier : '';
       document.getElementById('resetModal').classList.add('show');
       setTimeout(() => document.getElementById('resetIdentifier').focus(), 0);
     }
-    function closePasswordReset() { document.getElementById('resetModal').classList.remove('show'); }
+    function closePasswordReset() {
+      if (resetBusy) return;
+      document.getElementById('resetModal').classList.remove('show');
+      restartPasswordReset();
+    }
     async function submitPasswordReset() {
+      if (resetBusy) return;
       const identifier = document.getElementById('resetIdentifier').value.trim();
       const status = document.getElementById('resetStatus');
       const button = document.getElementById('resetPrimary');
       status.className = 'reset-status'; status.textContent = '';
-      if (!identifier) { status.textContent = 'Enter your username or registered email.'; return; }
+      if (!identifier) { status.textContent = 'Enter your registered email.'; return; }
+      if (!document.getElementById('resetIdentifier').checkValidity()) { status.textContent = 'Enter a valid email address.'; return; }
+      resetBusy = true;
       button.disabled = true;
       try {
         if (!resetCodeSent) {
@@ -353,23 +376,28 @@
           resetCodeSent = true;
           document.getElementById('resetRequestStep').hidden = true;
           document.getElementById('resetConfirmStep').hidden = false;
+          document.getElementById('resetResend').hidden = false;
           document.getElementById('resetDescription').textContent = 'Enter the verification code sent to your registered email and choose a new password.';
           button.textContent = 'Reset Password';
           status.className = 'reset-status ok'; status.textContent = data.message;
           document.getElementById('resetCode').focus();
         } else {
           const code = document.getElementById('resetCode').value.trim(), newPassword = document.getElementById('resetNewPassword').value, confirmPassword = document.getElementById('resetConfirmPassword').value;
-          if (code.length !== 6) throw new Error('Enter the 6-digit verification code.');
+          if (!/^\d{6}$/.test(code)) throw new Error('Enter the 6-digit verification code.');
           if (newPassword.length < 8) throw new Error('Password must contain at least 8 characters.');
           if (newPassword !== confirmPassword) throw new Error('Passwords do not match.');
           const response = await fetch(appUrl('/auth/password-reset/confirm'), {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({identifier,code,new_password:newPassword})});
           const data = await response.json().catch(() => ({}));
           if (!response.ok) throw new Error(data.detail || 'Unable to reset password');
           status.className = 'reset-status ok'; status.textContent = data.message;
-          setTimeout(closePasswordReset, 1400);
+          document.getElementById('msg').textContent = data.message;
+          document.getElementById('username').value = identifier;
+          document.getElementById('password').value = '';
+          resetBusy = false;
+          closePasswordReset();
         }
       } catch (error) { status.textContent = error.message; }
-      finally { button.disabled = false; }
+      finally { button.disabled = false; resetBusy = false; }
     }
     document.getElementById('resetModal').addEventListener('click', event => { if (event.target.id === 'resetModal') closePasswordReset(); });
     document.addEventListener('keydown', event => { if (event.key === 'Escape') closePasswordReset(); });

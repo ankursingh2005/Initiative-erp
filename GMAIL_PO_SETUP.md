@@ -53,8 +53,39 @@ does not authorize a different mailbox. For non-Google company mail, configure a
 provider-specific HTTPS transport, or use SMTP on hosting that permits it.
 
 The application does not automatically retry a Gmail send with an uncertain
-response. Check Sent mail before retrying. Password-reset SMTP is separate and
-is not changed by PO_EMAIL_PROVIDER.
+response. Check Sent mail before retrying. Password-reset email reuses
+PO_EMAIL_PROVIDER unless PASSWORD_RESET_EMAIL_PROVIDER is set explicitly.
+
+## User password recovery
+
+Users select **Forgot password?** on the login page, enter their registered
+email, then enter the six-digit code and a new password (at least 8 characters).
+Email identifies the account because multiple users can share a username.
+Only Active accounts can reset. Users without access to their registered
+mailbox still need Admin/HR assistance.
+
+For Gmail HTTPS delivery, set `PASSWORD_RESET_EMAIL_PROVIDER=gmail` on the
+host and supply the four `GMAIL_*` values described above. Existing configured
+Gmail PO credentials can be reused; each OTP counts toward that mailbox's
+shared sending allowance. For local development, copy those settings into
+the ignored `.env` file; `.env.gmail` is not automatically loaded by the app.
+Never put credentials in source code.
+
+Alternatively, set `PASSWORD_RESET_EMAIL_PROVIDER=smtp` with `SMTP_HOST`,
+`SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, and `SMTP_FROM` on a host that permits
+SMTP. The default host/port is smtp.gmail.com:587.
+
+Deploy/restart after updating the code and host environment. Startup adds
+the recovery-limit columns to existing databases. Codes expire after 15
+minutes, are single-use, and allow five verification attempts. Each account
+can request a code once per 60 seconds and at most five times per hour.
+Resending replaces the earlier code. The UI intentionally gives the same
+request message for missing/inactive accounts and throttled requests.
+
+Validate with an account you control: request a code, check the inbox and Spam,
+reset the password, and sign in with the new password. Provider acceptance
+does not guarantee inbox delivery. Automated tests mock email sending:
+`python -m unittest discover -s tests -p "test_password_reset.py"`.
 
 References:
 - https://developers.google.com/workspace/gmail/api/guides/sending

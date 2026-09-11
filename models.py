@@ -372,10 +372,13 @@ class User(Base):
     weekoff_day = Column(String(10), nullable=True)
     created_date = Column(DateTime, default=datetime.utcnow)
 
-    # Used for the email-verified "forgot password" flow. A reset link is
-    # only valid if the token matches AND it hasn't expired.
+    # Email OTP hash and persistent recovery limits (shared by all workers).
     reset_token = Column(String(100), nullable=True)
     reset_token_expires = Column(DateTime, nullable=True)
+    reset_requested_at = Column(DateTime, nullable=True)
+    reset_request_window = Column(DateTime, nullable=True)
+    reset_request_count = Column(Integer, default=0)
+    reset_attempts = Column(Integer, default=0)
 
     brands = relationship("UserBrand", back_populates="user", cascade="all, delete-orphan")
 

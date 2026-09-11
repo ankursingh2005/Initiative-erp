@@ -23,7 +23,6 @@ import base64
 import math
 import calendar
 import secrets
-import hashlib
 
 INDIA_TZ = timezone(timedelta(hours=5, minutes=30))
 
@@ -49,7 +48,6 @@ def verified_attendance_time(_device_time: datetime) -> datetime:
     """
     return datetime.now(INDIA_TZ).replace(tzinfo=None)
 import smtplib
-from email.mime.text import MIMEText
 from email.message import EmailMessage
 from po_email import send_gmail
 from dotenv import load_dotenv
@@ -205,6 +203,10 @@ def ensure_database_schema():
     ensure_column("users", "created_date", "TIMESTAMP")
     ensure_column("users", "reset_token", "VARCHAR(100)")
     ensure_column("users", "reset_token_expires", "TIMESTAMP")
+    ensure_column("users", "reset_requested_at", "TIMESTAMP")
+    ensure_column("users", "reset_request_window", "TIMESTAMP")
+    ensure_column("users", "reset_request_count", "INTEGER DEFAULT 0")
+    ensure_column("users", "reset_attempts", "INTEGER DEFAULT 0")
     # Correct the legacy role spelling without leaving existing accounts
     # under a role that can no longer be selected during signup.
     with engine.begin() as conn:
@@ -2136,59 +2138,14 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 
 @app.post("/auth/password-reset/request")
 def request_password_reset(payload: schemas.PasswordResetRequest, db: Session = Depends(get_db)):
-    identifier = payload.identifier.strip()
-    user = db.query(models.User).filter(
-        (models.User.username == identifier) | (func.lower(models.User.email) == identifier.lower())
-    ).first()
-    # Return the same message for unknown accounts to prevent account discovery.
-    if not user or not user.email or user.status != "Active":
-        return {"message": "If the account exists, a verification code has been sent to its registered email."}
-    smtp_password = os.getenv("SMTP_PASSWORD")
-    if not smtp_password:
-        raise HTTPException(status_code=503, detail="Password reset email is unavailable. Please contact your Admin.")
-    code = f"{secrets.randbelow(1_000_000):06d}"
-    user.reset_token = hashlib.sha256(code.encode("utf-8")).hexdigest()
-    user.reset_token_expires = datetime.utcnow() + timedelta(minutes=15)
-    db.commit()
-    message = MIMEText(
-        f"Your Initiative ERP password reset code is: {code}\n\n"
-        "This code expires in 15 minutes. If you did not request it, ignore this email."
-    )
-    message["Subject"] = "Initiative ERP password reset code"
-    message["From"] = os.getenv("SMTP_FROM", "initiative.lucknow@gmail.com")
-    message["To"] = user.email
-    try:
-        with smtplib.SMTP(os.getenv("SMTP_HOST", "smtp.gmail.com"), int(os.getenv("SMTP_PORT", "587")), timeout=15) as server:
-            server.starttls()
-            server.login(os.getenv("SMTP_USER", "initiative.lucknow@gmail.com"), smtp_password)
-            server.send_message(message)
-    except Exception:
-        user.reset_token = None
-        user.reset_token_expires = None
-        db.commit()
-        raise HTTPException(status_code=503, detail="Unable to send the reset email. Please try again or contact your Admin.")
-    return {"message": "If the account exists, a verification code has been sent to its registered email."}
+    from password_reset import request_reset
+    return request_reset(payload, db)
 
 
 @app.post("/auth/password-reset/confirm")
 def confirm_password_reset(payload: schemas.PasswordResetConfirm, db: Session = Depends(get_db)):
-    identifier = payload.identifier.strip()
-    if len(payload.new_password) < 8:
-        raise HTTPException(status_code=400, detail="Password must contain at least 8 characters")
-    user = db.query(models.User).filter(
-        (models.User.username == identifier) | (func.lower(models.User.email) == identifier.lower())
-    ).first()
-    code_hash = hashlib.sha256(payload.code.strip().encode("utf-8")).hexdigest()
-    if (
-        not user or not user.reset_token or not secrets.compare_digest(user.reset_token, code_hash)
-        or not user.reset_token_expires or user.reset_token_expires < datetime.utcnow()
-    ):
-        raise HTTPException(status_code=400, detail="The verification code is invalid or expired")
-    user.password_hash = auth.hash_password(payload.new_password)
-    user.reset_token = None
-    user.reset_token_expires = None
-    db.commit()
-    return {"message": "Password reset successfully. You can now sign in."}
+    from password_reset import confirm_reset
+    return confirm_reset(payload, db)
 
 
 @app.get("/me", response_model=schemas.UserOut)
@@ -3670,11 +3627,7 @@ def admin_reset_user_password(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.require_user_management_admin),
 ):
-    """Admin-only account recovery: directly set a new password for any
-    user. This replaces the old email-based forgot-password flow, since
-    outbound account-recovery email isn't configured in this deployment -
-    a user who's locked out should ask an Admin to reset their password
-    here instead."""
+    """Admin/HR recovery fallback for users unable to access their email."""
     target_user = db.query(models.User).filter(models.User.id == user_id).first()
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -6087,7 +6040,8 @@ def dp_merge_rows(rows: List["models.IntervalSaleUpload"]) -> tuple:
             })
 
     for m in merged:
-        m["category"] = dp_categorize(m["item"])
+        # SR voucher products belong to Accessories regardless of item name.
+        m["category"] = "Accessories" if m["store"] == "SR" else dp_categorize(m["item"])
         m["sale"] = m["sale"] * DP_GST_FACTOR
         m["cost"] = m["cost"] * DP_GST_FACTOR
         m["margin"] = m["sale"] - m["cost"]
@@ -6133,7 +6087,7 @@ def daily_profitability_meta(
     ).first()
     has_data = bool(date_bounds and date_bounds[0])
     vch_numbers = [row[0] for row in db.query(models.IntervalSaleUpload.vch_no).distinct().all()]
-    stores = sorted({dp_extract_store(v) for v in vch_numbers if v})
+    stores = sorted({dp_extract_store(v) for v in vch_numbers if v} - {"SR"})
 
     return {
         "has_data": has_data,
