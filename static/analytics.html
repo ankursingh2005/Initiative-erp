@@ -219,6 +219,31 @@
       main { padding: 16px 12px 60px; }
       .intro { padding: 20px; }
     }
+
+    body { background: linear-gradient(135deg,#f0f5ff 0%,#f6f9fc 60%,#eefaf6 100%); }
+    .intro h1 { letter-spacing:-1px; }
+    .card { border:1px solid #e0e8f2; box-shadow:0 6px 25px #15375d08; }
+    .kpi { border-top:3px solid #155eef; }
+    .quality-badges { display:flex; flex-wrap:wrap; gap:10px; }
+    .quality-badges span { padding:8px 14px; border-radius:25px; background:#e9f1ff; font-weight:700; }
+    .quality-badges span:nth-child(2) { background:#fff3d8; }
+    .quality-badges span:nth-child(3) { background:#fceaea; }
+    .item-pagination { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-top:16px; }
+    #itemTools select { max-width:100%; padding:10px; margin:8px; }
+    #statsGrid .value { font-size:20px; }
+    .chart-box { position:relative; height:300px; }
+    .charts-grid, .tables-grid { min-width:0; }
+    .charts-grid > *, .tables-grid > *, .card { min-width:0; }
+    .table-scroll { overflow:auto; max-width:100%; }
+    .card > table { display:block; overflow:auto; }
+    .chart-box canvas { max-width:100%; }
+    @media(max-width:620px) {
+      .chart-card-head { flex-wrap:wrap; }
+      .chart-type-toggle { flex-wrap:wrap; }
+      .filter-field { min-width:0; flex:1 1 140px; }
+      .filter-field input, .filter-field select { min-width:0; width:100%; }
+      .kpi .value { overflow-wrap:anywhere; }
+    }
   </style>
 </head>
 <body>
@@ -256,8 +281,8 @@
     <div class="intro">
       <div>
         <span class="eyebrow">✨ AI Analysis</span>
-        <h1>Profitability dashboard &amp; recommendations</h1>
-        <p>Upload a sales/profitability export - any Excel workbook (every sheet is read) or CSV - and get an instant breakdown of your most profitable items and divisions, plus data-driven suggestions to boost sales.</p>
+        <h1>Sales intelligence &amp; profitability</h1>
+        <p>Explore HA, HE, Mobile, Computer, Accessories and Payouts. Choose Without GST for base amounts or With GST to add 18% to every calculation; margin is profit divided by sales. Review unrelated and unclassified rows separately.</p>
       </div>
     </div>
 
@@ -272,7 +297,7 @@
 
     <div id="reviewCard" class="card hidden">
       <h2>Review &amp; clean before it goes to the dashboard</h2>
-      <p class="sub" id="reviewSubtext">Divisions and brands were auto-detected, and matching AC indoor/outdoor rows were combined. Check it over, fix anything that's wrong, then proceed.</p>
+      <p class="sub" id="reviewSubtext">Review amounts follow the Calculation selection. Without GST uses base amounts; With GST adds 18%. Check category assignments; Needs review and Excluded rows stay out of dashboard totals. Matching AC indoor/outdoor rows are combined.</p>
 
       <div class="review-summary-grid" id="reviewSummaryGrid"></div>
 
@@ -286,9 +311,7 @@
           <select id="bulkDivisionSelect">
             <option value="HA">Home Appliance</option>
             <option value="HE">Home Entertainment</option>
-            <option value="Computer">Computer / IT</option>
-            <option value="Mobile">Mobile</option>
-            <option value="Other">Other</option>
+            <option value="IT">Computer</option><option value="MH">Mobile</option><option value="ACC">Accessories</option><option value="PAYOUT">Payouts</option><option value="UNCATEGORIZED">Needs review</option><option value="EXCLUDED">Exclude / unrelated</option>
           </select>
           <button class="btn btn-primary" onclick="applyBulkReassign()" id="applyBulkBtn" disabled>Apply to selected</button>
         </div>
@@ -328,11 +351,11 @@
       <p id="emptyStateText">Upload a sales export above to generate the profitability dashboard and recommendations.</p>
     </div>
 
-    <div id="dashboardContent" class="hidden">
-      <div class="card">
+    <div id="filterControls" class="card">
         <h2>Filters</h2>
         <p class="sub">Choose a period, or pick a quick preset. Category and Store narrow the same period further - charts and recommendations update instantly.</p>
         <div class="filter-bar">
+          <div class="filter-field"><label for="amountBasis">Calculation</label><select id="amountBasis" onchange="changeGstMode()"><option value="exclusive">Without GST</option><option value="inclusive">With GST</option></select></div>
           <div class="filter-field">
             <label for="presetSelect">Quick range</label>
             <select id="presetSelect" onchange="applyPreset()">
@@ -358,6 +381,7 @@
             <label for="storeFilter">Store</label>
             <select id="storeFilter" onchange="refreshDashboard()"><option value="ALL">All Stores</option></select>
           </div>
+          <div class="filter-field"><label for="searchFilter">Item, brand or voucher</label><input id="searchFilter" placeholder="Search all rows..." oninput="queueRefresh()" /></div>
           <div class="filter-field">
             <label>&nbsp;</label>
             <button class="btn btn-ghost" id="viewItemsBtn" onclick="toggleItemsView()">&#128065; View Items</button>
@@ -369,10 +393,21 @@
         </div>
       </div>
 
+<div id="qualityCard" class="card"><h2>Data quality &amp; GST</h2><div id="qualitySummary">Upload data to begin.</div></div>
+      <div id="itemTools" class="card">
+        <label for="dataView">Rows to inspect or export</label>
+        <select id="dataView" onchange="itemsPage=1; if(itemsViewOpen) loadItemsView();"><option value="included">Included in dashboard</option><option value="review">Needs category review</option><option value="excluded">Excluded / unrelated</option><option value="all">All uploaded rows</option></select>
+        <button class="btn btn-primary" onclick="downloadAnalytics()">Download filtered CSV</button>
+        <p class="sub">Dashboard totals use included rows only. Review and excluded rows remain available here. CSV includes every matching row, not just the current page.</p>
+      </div>
       <div id="itemsViewCard" class="card hidden"></div>
+      <div id="dashboardContent" class="hidden">
 
 
       <div class="kpi-grid" id="kpiGrid"></div>
+      <div id="statsGrid" class="kpi-grid"></div>
+      <div class="charts-grid"><div class="card"><h2>Daily sales &amp; 7-day average</h2><p class="sub">Trailing calendar-day average; dates with no sales count as zero.</p><div class="chart-box"><canvas id="dailyAdvancedChart"></canvas></div></div><div class="card"><h2>Sales versus profit</h2><p class="sub" id="scatterNote"></p><div class="chart-box"><canvas id="scatterAdvancedChart"></canvas></div></div></div>
+      <div class="card"><h2>Store performance</h2><div class="chart-box"><canvas id="storeAdvancedChart"></canvas></div></div>
 
       <div class="charts-grid">
         <div class="card">
@@ -384,7 +419,7 @@
           <div class="chart-card-head">
             <div>
               <h2>Profit Share by Division</h2>
-              <p class="sub">Which divisions drive your profit - a division running at a loss is marked (Loss).</p>
+              <p class="sub">Bar shows signed profit. Donut, pie and polar show absolute profit/loss magnitude; losses are labeled.</p>
             </div>
             <div class="chart-type-toggle" id="divisionChartToggle">
               <button data-type="bar" class="active">Bar</button>
@@ -486,7 +521,7 @@
           <p class="sub">Highest unit volume (only items where Qty was provided in the upload).</p>
           <div class="table-scroll">
             <table>
-              <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Sales</th><th class="num">Profit</th></tr></thead>
+              <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Sales</th><th class="num">Profit</th><th>Status</th><th>Review reason</th></tr></thead>
               <tbody id="qtyTableBody"></tbody>
             </table>
           </div>
@@ -534,7 +569,7 @@
     </div>
   </main>
 
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <script src="static/vendor/chart.umd.min.js"></script>
 
   <script>
     function appUrl(path) {
@@ -597,10 +632,14 @@
       if (params.store && params.store !== 'ALL') query.set('store', params.store);
       if (params.start_date) query.set('start_date', params.start_date);
       if (params.end_date) query.set('end_date', params.end_date);
+      if (params.search) query.set('search', params.search);
+      query.set('gst', params.gst || 'false');
       const qs = query.toString();
       const res = await authFetch('/api/analytics/dashboard' + (qs ? '?' + qs : ''));
       if (!res) return null;
-      return await res.json();
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Could not load dashboard');
+      return data;
     }
 
     function renderUploadControls(meta) {
@@ -611,7 +650,7 @@
             📎 <span id="dropzoneLabel">Choose or drop an Excel/CSV file</span>
             <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" />
           </label>
-          <button class="btn btn-primary" id="analyzeBtn" disabled onclick="doUpload()">Analyze</button>
+          <label><input type="checkbox" id="sourceIncludesGst" /> File amounts already include 18% GST</label><button class="btn btn-primary" id="analyzeBtn" disabled onclick="doUpload()">Analyze</button>
           ${meta.has_data ? '<button class="btn btn-danger" onclick="openClearModal()">Clear Data</button>' : ''}
         `;
         const fileInput = document.getElementById('fileInput');
@@ -656,7 +695,7 @@
     // the dashboard tables (or /discard + a fresh upload throws it away).
     let reviewState = { token: null, rows: [] };
 
-    const DIVISION_LABELS = { HA: 'Home Appliance', HE: 'Home Entertainment', Computer: 'Computer / IT', Mobile: 'Mobile', Other: 'Other' };
+    const DIVISION_LABELS = { HA: 'HA', HE: 'HE', MH: 'Mobile', IT: 'Computer', ACC: 'Accessories', PAYOUT: 'Payouts', UNCATEGORIZED: 'Needs review', EXCLUDED: 'Excluded / unrelated' };
 
     async function doUpload() {
       const fileInput = document.getElementById('fileInput');
@@ -673,6 +712,7 @@
 
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('amount_basis', document.getElementById('sourceIncludesGst').checked ? 'inclusive' : 'exclusive');
 
       try {
         const res = await authFetch('/api/analytics/stage', { method: 'POST', body: formData });
@@ -713,8 +753,9 @@
 
     function renderReviewTable(rows) {
       const body = document.getElementById('reviewTableBody');
-      body.innerHTML = rows.map(r => {
-        const rowClass = r.merged ? 'row-merged' : (r.division === 'Other' ? 'row-uncategorized' : (r.note ? 'row-flagged' : ''));
+      body.innerHTML = rows.map(source => {
+        const r = withGst() ? {...source, ...source.with_gst} : source;
+        const rowClass = r.merged ? 'row-merged' : (r.division === 'UNCATEGORIZED' ? 'row-uncategorized' : (r.note ? 'row-flagged' : ''));
         const options = Object.keys(DIVISION_LABELS).map(code =>
           `<option value="${code}" ${r.division === code ? 'selected' : ''}>${DIVISION_LABELS[code]}</option>`
         ).join('');
@@ -818,7 +859,7 @@
       const originalLabel = btn ? btn.textContent : null;
       if (btn) { btn.disabled = true; btn.textContent = 'Preparing download...'; }
       try {
-        const res = await authFetch(`/api/analytics/stage/${reviewState.token}/download`);
+        const res = await authFetch(`/api/analytics/stage/${reviewState.token}/download?gst=${withGst()}`);
         if (!res || !res.ok) {
           const msg = document.getElementById('uploadMsg');
           msg.className = 'upload-msg error';
@@ -829,7 +870,7 @@
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'cleaned_analytics_data.csv';
+        a.download = withGst() ? 'cleaned_analytics_With_GST.csv' : 'cleaned_analytics_Without_GST.csv';
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -887,8 +928,8 @@
       const grid = document.getElementById('kpiGrid');
       grid.innerHTML = `
         <div class="kpi"><div class="label">Total Sales</div><div class="value">${inr(k.total_sales)}</div></div>
-        <div class="kpi"><div class="label">Total Profit</div><div class="value ${k.total_profit >= 0 ? 'good' : 'bad'}">${inr(k.total_profit)}</div></div>
-        <div class="kpi"><div class="label">Margin</div><div class="value ${k.margin_percent >= 8 ? 'good' : 'bad'}">${pct(k.margin_percent)}</div></div>
+        <div class="kpi"><div class="label">Profit (${gstLabel()})</div><div class="value ${k.total_profit >= 0 ? 'good' : 'bad'}">${inr(k.total_profit)}</div></div>
+        <div class="kpi"><div class="label">Margin on sales</div><div class="value ${k.margin_percent >= 8 ? 'good' : 'bad'}">${pct(k.margin_percent)}</div></div>
         <div class="kpi"><div class="label">Transactions</div><div class="value">${k.transactions.toLocaleString('en-IN')}</div></div>
         <div class="kpi"><div class="label">Items / Divisions</div><div class="value">${k.unique_items.toLocaleString('en-IN')} / ${k.divisions}</div></div>
         <div class="kpi"><div class="label">Date Range</div><div class="value" style="font-size:14px">${k.date_from || '?'} → ${k.date_to || '?'}</div></div>
@@ -930,7 +971,8 @@
 
       const tooltipLabel = (item) => {
         const d = divs[item.dataIndex];
-        const share = (d.profit_share_percent != null) ? `${d.profit_share_percent}% of total profit` : '';
+        const magnitude = divs.reduce((sum, row) => sum + Math.abs(row.profit), 0);
+        const share = isSlice ? `${magnitude ? (Math.abs(d.profit) / magnitude * 100).toFixed(1) : 0}% of absolute profit/loss` : `${d.profit_share_percent}% of net profit`;
         return `${inr(d.profit)}${share ? '  ·  ' + share : ''}`;
       };
 
@@ -1200,6 +1242,7 @@
       renderYearlyTable(data);
       renderMonthlyTable(data);
       renderRecommendations(data);
+      renderAdvanced(data);
     }
 
     function populateFilterOptions(meta) {
@@ -1216,10 +1259,18 @@
       if ((meta.stores || []).includes(currentStore)) storeSelect.value = currentStore;
     }
 
+    function withGst(){ return document.getElementById('amountBasis').value === 'inclusive'; }
+    function gstLabel(){ return withGst() ? 'With GST (18%)' : 'Without GST'; }
+    function changeGstMode(){
+      if(reviewState.rows && reviewState.rows.length) renderReviewTable(reviewState.rows);
+      refreshDashboard();
+    }
     function currentFilterParams() {
       return {
+        gst: withGst() ? 'true' : 'false',
         division: document.getElementById('divisionFilter').value,
         store: document.getElementById('storeFilter').value,
+        search: document.getElementById('searchFilter').value.trim(),
         start_date: document.getElementById('startDateFilter').value,
         end_date: document.getElementById('endDateFilter').value,
       };
@@ -1241,31 +1292,44 @@
       refreshDashboard();
     }
 
+    let dashboardRequest = 0;
+    let searchDelay;
+    function queueRefresh(){ clearTimeout(searchDelay); searchDelay=setTimeout(refreshDashboard,350); }
     async function refreshDashboard() {
+      const request = ++dashboardRequest;
+      itemsPage = 1;
       const params = currentFilterParams();
-      const data = await loadDashboard(params);
-      if (data && data.has_data) {
-        document.getElementById('emptyState').classList.add('hidden');
-        document.getElementById('dashboardContent').classList.remove('hidden');
-        renderAll(data);
-      } else {
+      try {
+        const data = await loadDashboard(params);
+        if (request !== dashboardRequest || !data) return;
+        renderQuality(data);
+        document.getElementById('emptyState').classList.toggle('hidden', !!data.has_data);
+        document.getElementById('dashboardContent').classList.toggle('hidden', !data.has_data);
+        if(data.has_data) renderAll(data);
+        else { destroyCharts(); document.getElementById('emptyStateText').textContent='No included sales match these filters. Reset filters or inspect Needs category review / All uploaded rows below.'; }
+        if(itemsViewOpen) await loadItemsView();
+      } catch(error){
+        if(request !== dashboardRequest) return;
         document.getElementById('dashboardContent').classList.add('hidden');
-        document.getElementById('emptyStateText').textContent = 'No sales rows match the selected filters.';
         document.getElementById('emptyState').classList.remove('hidden');
+        document.getElementById('emptyStateText').textContent=error.message;
       }
-      if (itemsViewOpen) await loadItemsView();
     }
 
     function resetFilters() {
       document.getElementById('presetSelect').value = 'custom';
       document.getElementById('divisionFilter').value = 'ALL';
       document.getElementById('storeFilter').value = 'ALL';
+      document.getElementById('searchFilter').value = '';
+      document.getElementById('dataView').value = 'included';
       document.getElementById('startDateFilter').value = '';
       document.getElementById('endDateFilter').value = '';
       refreshDashboard();
     }
 
     let itemsViewOpen = false;
+    let itemsPage = 1;
+    let itemRequest = 0;
 
     function itemsTableHtml(items) {
       if (!items.length) {
@@ -1278,14 +1342,14 @@
           <td>${esc(DIVISION_LABELS[it.division] || it.division || '')}</td>
           <td>${esc(it.store || '')}</td>
           <td>${esc(it.brand || '')}</td>
-          <td class="num">${it.qty ?? ''}</td>
+          <td class="num">${esc(it.qty ?? '')}</td>
           <td class="num">${inr(it.sales_amt)}</td>
           <td class="num">${inr(it.cost_amt)}</td>
-          <td class="num">${inr(it.profit_loss)}</td>
+          <td class="num">${inr(it.profit_loss)}</td><td>${esc(it.status)}</td><td>${esc(it.exclusion_reason)}</td>
         </tr>`).join('');
       return `
-        <h2>Items (${items.length})</h2>
-        <p class="sub">Every line item matching the current filters.</p>
+        <h2>Line items</h2>
+        <p class="sub">${gstLabel()}. Use Previous / Next to inspect every matching row.</p>
         <div class="table-scroll">
           <table>
             <thead>
@@ -1297,19 +1361,45 @@
         </div>`;
     }
 
+    function itemQuery(){
+      const params = currentFilterParams(), query = new URLSearchParams();
+      for(const [key,value] of Object.entries(params)) if(value && value !== 'ALL') query.set(key,value);
+      query.set('view',document.getElementById('dataView').value);
+      return query;
+    }
     async function loadItemsView() {
-      const card = document.getElementById('itemsViewCard');
-      card.innerHTML = `<div class="empty-state"><div class="icon">&#128202;</div>Loading items...</div>`;
-      const params = currentFilterParams();
-      const query = new URLSearchParams();
-      if (params.division && params.division !== 'ALL') query.set('division', params.division);
-      if (params.store && params.store !== 'ALL') query.set('store', params.store);
-      if (params.start_date) query.set('start_date', params.start_date);
-      if (params.end_date) query.set('end_date', params.end_date);
-      const res = await authFetch('/api/analytics/items' + (query.toString() ? '?' + query.toString() : ''));
-      if (!res) return;
-      const data = await res.json();
-      card.innerHTML = itemsTableHtml(data.items || []);
+      const card = document.getElementById('itemsViewCard'), request=++itemRequest;
+      card.textContent='Loading items...';
+      const query=itemQuery(); query.set('page',itemsPage); query.set('page_size',100);
+      try {
+        const res=await authFetch('/api/analytics/items?'+query);
+        if(!res || request!==itemRequest)return;
+        const data=await res.json();
+        if(!res.ok)throw new Error(data.detail || 'Could not load items');
+        card.innerHTML=itemsTableHtml(data.items || []) + '<div class="item-pagination"><button class="btn btn-ghost" onclick="itemsPage--;loadItemsView()" '+(itemsPage<=1?'disabled':'')+'>Previous</button> <span>Page '+itemsPage+' / '+Math.max(1,Math.ceil(data.total/100))+' &middot; '+data.total+' rows</span> <button class="btn btn-ghost" onclick="itemsPage++;loadItemsView()" '+(itemsPage*100>=data.total?'disabled':'')+'>Next</button></div>';
+      }catch(error){if(request===itemRequest)card.textContent=error.message;}
+    }
+    async function downloadAnalytics(){
+      try{
+        const res=await authFetch('/api/analytics/export?'+itemQuery());
+        if(!res)return;
+        if(!res.ok){const data=await res.json();throw new Error(data.detail || 'Download failed');}
+        const url=URL.createObjectURL(await res.blob()), a=document.createElement('a');
+        a.href=url;a.download=withGst()?'AI_Analysis_With_GST.csv':'AI_Analysis_Without_GST.csv';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+      }catch(error){alert(error.message);}
+    }
+    function renderQuality(data){
+      const q=data.quality||{}, g=data.gst||{};
+      document.getElementById('qualitySummary').innerHTML='<div class="quality-badges"><span>Included: '+(q.included||0)+'</span><span>Needs review: '+(q.review||0)+'</span><span>Excluded: '+(q.excluded||0)+'</span></div><p>Sales before GST: <b>'+inr(g.sales_before_gst)+'</b> + GST '+(g.rate||0)+'%: <b>'+inr(g.sales_gst)+'</b>. Cost before GST: <b>'+inr(g.cost_before_gst)+'</b> + GST '+(g.rate||0)+'%: <b>'+inr(g.cost_gst)+'</b>.</p><p class="sub">'+(g.enabled ? 'With GST: 18% is applied to sales and cost, including Payouts.' : 'Without GST: no GST is added to sales or cost.')+' Profit = displayed sales minus displayed cost. These are product margins, before operating expenses. Unknown historical stores appear as Unknown.</p>';
+    }
+    function renderAdvanced(data){
+      renderQuality(data);
+      const a=data.advanced||{},d=a.distribution||{},daily=a.daily_trend||[],stores=a.store_breakdown||[];
+      document.getElementById('statsGrid').innerHTML=[['Total cost ('+gstLabel()+')',inr(data.kpis.total_cost)],['Median line sale',inr(d.median_sale)],['Sales standard deviation',inr(d.sale_stddev)],['Loss-making rows',d.loss_rows||0],['Unusual sale amounts',d.outliers_evaluable?d.outlier_rows:'Not enough variation']].map(([label,value])=>'<div class="kpi"><div class="label">'+label+'</div><div class="value">'+value+'</div></div>').join('');
+      document.getElementById('scatterNote').textContent='First '+Math.min(a.scatter_total||0,1000)+' of '+(a.scatter_total||0)+' included rows in date order. Export includes all rows. Unusual amounts use median absolute deviation; they are not removed.';
+      charts.dailyAdvanced=new Chart(document.getElementById('dailyAdvancedChart'),{type:'line',data:{labels:daily.map(x=>x.date),datasets:[{label:'Sales ('+gstLabel()+')',data:daily.map(x=>x.sales),borderColor:'#155eef',pointRadius:1},{label:'7-day average',data:daily.map(x=>x.rolling_7_sales),borderColor:'#0f9d84',pointRadius:0}]},options:{responsive:true,maintainAspectRatio:false}});
+      charts.scatterAdvanced=new Chart(document.getElementById('scatterAdvancedChart'),{type:'scatter',data:{datasets:[{label:'Sales / profit',data:a.scatter||[],backgroundColor:'#7258d9aa'}]},options:{responsive:true,maintainAspectRatio:false,scales:{x:{title:{display:true,text:'Sales ('+gstLabel()+')'}},y:{title:{display:true,text:'Profit ('+gstLabel()+')'}}},plugins:{tooltip:{callbacks:{label:ctx=>(ctx.raw.item||'Item')+': '+inr(ctx.raw.x)+' sale / '+inr(ctx.raw.y)+' profit'}}}}});
+      charts.storeAdvanced=new Chart(document.getElementById('storeAdvancedChart'),{type:'bar',data:{labels:stores.map(x=>x.store),datasets:[{label:'Sales',data:stores.map(x=>x.sales),backgroundColor:'#155eef'},{label:'Profit',data:stores.map(x=>x.profit),backgroundColor:'#0f9d84'}]},options:{responsive:true,maintainAspectRatio:false}});
     }
 
     async function toggleItemsView() {
@@ -1347,16 +1437,10 @@
       }
 
       populateFilterOptions(meta);
-      const data = await loadDashboard();
-      if (data && data.has_data) {
-        document.getElementById('dashboardContent').classList.remove('hidden');
-        renderAll(data);
-      } else {
-        document.getElementById('emptyState').classList.remove('hidden');
-      }
+      await refreshDashboard();
     }
 
-    init();
+    init().catch(error=>{document.getElementById("loadingState").classList.add("hidden"); document.getElementById("emptyState").classList.remove("hidden"); document.getElementById("emptyStateText").textContent=error.message;});
   </script>
 </body>
 </html>

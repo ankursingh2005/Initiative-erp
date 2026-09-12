@@ -336,6 +336,8 @@ class AnalyticsSalesRow(Base):
     item = Column(String(255), nullable=True, index=True)
     division = Column(String(100), nullable=True, index=True)
     brand = Column(String(150), nullable=True, index=True)
+    store = Column(String(150), nullable=True)
+    vch_no = Column(String(150), nullable=True)
     qty = Column(Float, nullable=True)
     sales_amt = Column(Float, default=0)
     cost_amt = Column(Float, default=0)

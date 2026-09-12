@@ -24,6 +24,7 @@ import base64
 import math
 import calendar
 import secrets
+import analytics_engine as analytics_calc
 
 INDIA_TZ = timezone(timedelta(hours=5, minutes=30))
 
@@ -186,6 +187,8 @@ def ensure_database_schema():
     ensure_column("price_list_items", "serial_no", "VARCHAR(100)")
     ensure_column("price_list_items", "imei", "VARCHAR(100)")
     ensure_column("analytics_sales_rows", "brand", "VARCHAR(150)")
+    ensure_column("analytics_sales_rows", "store", "VARCHAR(150)")
+    ensure_column("analytics_sales_rows", "vch_no", "VARCHAR(150)")
     ensure_column("schemes", "offer_value", "FLOAT")
     ensure_column("schemes", "calculation_method", "VARCHAR(50)")
     ensure_column("schemes", "min_qty", "INTEGER")
@@ -6350,7 +6353,9 @@ ANALYTICS_HEADER_ALIASES = {
     "sales_amt": {"salesamt", "salesamount", "salevalue", "amount", "invoicevalue"},
     "cost_amt": {"costamt", "costamount", "cost"},
     "profit_loss": {"profitloss", "grossprofit"},
-    "division": {"division", "div", "segment"},
+    "division": {"division", "div", "segment", "category"},
+    "store": {"store", "branch", "outlet", "location"},
+    "brand": {"brand", "brandname"},
 }
 
 
@@ -6409,6 +6414,8 @@ def parse_analytics_file(filename: str, content: bytes) -> List[dict]:
             "division": division,
             "division_from_file": division_raw.upper() if division_raw else None,
             "vch_no": vch_no,
+            "store": str(row_dict.get("store") or "").strip() or None,
+            "brand": str(row_dict.get("brand") or "").strip() or None,
             "qty": qty,
             "sales_amt": sales_amt,
             "cost_amt": cost_amt,
@@ -6794,6 +6801,9 @@ DIVISION_NAMES = {
     "MH": "Mobile",
     "IT": "Computer/IT",
     "DC": "Digital Camera",
+    "ACC": "Accessories",
+    "PAYOUT": "Payouts",
+    "EXCLUDED": "Excluded / unrelated",
     "UNCATEGORIZED": "Uncategorized",
 }
 
@@ -6846,7 +6856,8 @@ def ac_merge_key(row: dict) -> tuple:
     since that code is the one thing that legitimately differs between an
     indoor and outdoor unit of the same sale."""
     if row.get("vch_no"):
-        return ("VCH", row["vch_no"].strip().upper(), row["sale_date"].isoformat())
+        return ("VCH", row["vch_no"].strip().upper(), row["sale_date"].isoformat(),
+                str(row.get("store") or "").strip().upper(), str(row.get("brand") or "").upper())
 
     tokens = row["item"].split()
     role_idx = None
@@ -6904,11 +6915,11 @@ def build_staged_rows(parsed_rows: List[dict]) -> List[dict]:
     staged = []
     for r in parsed_rows:
         row = dict(r)
-        row["division"] = detect_division_code(row["item"])
-        row["brand"] = detect_brand(row["item"])
+        row["division"] = analytics_calc.classify(row["item"], row.get("division"), detect_division_code)
+        row["brand"] = row.get("brand") or detect_brand(row["item"])
         row["ac_role"] = detect_ac_role(row["item"])
         row["merged"] = False
-        row["note"] = None
+        row["note"] = "Excluded from dashboard totals" if row["division"] == "EXCLUDED" else "Needs category review; excluded from totals until assigned" if row["division"] == "UNCATEGORIZED" else None
         staged.append(row)
     merged = merge_ac_pairs(staged)
     for i, row in enumerate(merged):
@@ -6925,9 +6936,8 @@ def serialize_staged_row(row: dict) -> dict:
         "division_name": DIVISION_NAMES.get(row["division"], row["division"]),
         "brand": row.get("brand"),
         "qty": row.get("qty"),
-        "sales_amt": round(row.get("sales_amt") or 0.0, 2),
-        "cost_amt": round(row.get("cost_amt") or 0.0, 2),
-        "profit_loss": round(row.get("profit_loss") or 0.0, 2),
+        **analytics_calc.display_amounts(row, gst=False),
+        "with_gst": analytics_calc.display_amounts(row, gst=True),
         "ac_role": row.get("ac_role"),
         "merged": bool(row.get("merged")),
         "note": row.get("note"),
@@ -6985,6 +6995,7 @@ def _staging_get_or_404(token: str) -> dict:
 @app.post("/api/analytics/stage")
 def stage_analytics_file(
     file: UploadFile = File(...),
+    amount_basis: str = Form("exclusive"),
     current_user: models.User = Depends(auth.require_roles("Admin")),
 ):
     filename = file.filename or "uploaded_file"
@@ -6999,6 +7010,10 @@ def stage_analytics_file(
             detail="No readable sales rows found. Ensure the file has columns for Date, Item, Sales Amt, Cost Amt and Profit/Loss (Division, Qty, and Vch No are optional).",
         )
 
+    try:
+        parsed_rows = analytics_calc.normalize_upload(parsed_rows, amount_basis)
+    except (ValueError, ArithmeticError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     staged_rows = build_staged_rows(parsed_rows)
 
     if len(ANALYTICS_STAGING) >= ANALYTICS_STAGING_LIMIT:
@@ -7028,12 +7043,20 @@ def reassign_staged_rows(
 ):
     entry = _staging_get_or_404(token)
     rows = entry["rows"]
-    new_division = (payload.division or "").strip().upper() or "UNCATEGORIZED"
+    new_division = analytics_calc.category_code(payload.division) or "UNCATEGORIZED"
+    if new_division not in {*analytics_calc.CATEGORIES, "UNCATEGORIZED", "EXCLUDED"}:
+        raise HTTPException(status_code=400, detail="Choose a supported category")
     row_ids = set(payload.row_ids)
     updated = 0
     for row in rows:
         if row["row_id"] in row_ids:
             row["division"] = new_division
+            if new_division == "EXCLUDED":
+                row["note"] = "Excluded from dashboard totals"
+            elif new_division == "UNCATEGORIZED":
+                row["note"] = "Needs category review; excluded from totals until assigned"
+            elif row.get("note") in {"Excluded from dashboard totals", "Needs category review; excluded from totals until assigned"}:
+                row["note"] = None
             updated += 1
 
     return {
@@ -7046,6 +7069,7 @@ def reassign_staged_rows(
 @app.get("/api/analytics/stage/{token}/download")
 def download_staged_file(
     token: str,
+    gst: bool = Query(False),
     current_user: models.User = Depends(auth.require_roles("Admin")),
 ):
     entry = _staging_get_or_404(token)
@@ -7053,19 +7077,21 @@ def download_staged_file(
 
     buffer = StringIO()
     writer = csv.writer(buffer)
-    writer.writerow(["Date", "Item", "Division", "Brand", "Qty", "Sales Amt", "Cost Amt", "Profit/Loss", "AC Role", "Note"])
+    writer.writerow(["Date", "Item", "Division", "Brand", "Qty", "Sales Amt", "Cost Amt", "Profit/Loss", "AC Role", "Note", "Calculation basis"])
     for row in rows:
+        amounts = analytics_calc.display_amounts(row, gst=gst)
         writer.writerow([
             row["sale_date"].strftime("%d-%m-%Y") if row.get("sale_date") else "",
             row["item"],
             DIVISION_NAMES.get(row["division"], row["division"]),
             row.get("brand") or "",
             row.get("qty") if row.get("qty") is not None else "",
-            round(row.get("sales_amt") or 0.0, 2),
-            round(row.get("cost_amt") or 0.0, 2),
-            round(row.get("profit_loss") or 0.0, 2),
+            amounts["sales_amt"],
+            amounts["cost_amt"],
+            amounts["profit_loss"],
             row.get("ac_role") or "",
             row.get("note") or "",
+            "With GST (18%)" if gst else "Without GST",
         ])
 
     base_name = entry["filename"].rsplit(".", 1)[0] if "." in entry["filename"] else entry["filename"]
@@ -9927,7 +9953,7 @@ def commit_staged_file(
     # only the most recently committed file.
     db.query(models.AnalyticsSalesRow).delete()
     db.query(models.AnalyticsUpload).delete()
-    db.commit()
+    db.flush()
 
     sheet_names = {r.get("source_sheet") for r in rows if r.get("source_sheet")}
     dates = [r["sale_date"] for r in rows if r.get("sale_date")]
@@ -9942,8 +9968,7 @@ def commit_staged_file(
         date_to=max(dates) if dates else None,
     )
     db.add(upload_record)
-    db.commit()
-    db.refresh(upload_record)
+    db.flush()
 
     insert_mappings = [
         {
@@ -9952,6 +9977,8 @@ def commit_staged_file(
             "item": r["item"],
             "division": r["division"],
             "brand": r.get("brand"),
+            "store": r.get("store"),
+            "vch_no": r.get("vch_no"),
             "qty": r.get("qty"),
             "sales_amt": r.get("sales_amt") or 0.0,
             "cost_amt": r.get("cost_amt") or 0.0,
@@ -9979,6 +10006,7 @@ def commit_staged_file(
 @app.post("/api/analytics/upload")
 def upload_analytics_file(
     file: UploadFile = File(...),
+    amount_basis: str = Form("exclusive"),
     current_user: models.User = Depends(auth.require_roles("Admin")),
     db: Session = Depends(get_db),
 ):
@@ -9994,11 +10022,18 @@ def upload_analytics_file(
             detail="No readable sales rows found. Ensure the file has columns for Date, Item, Sales Amt, Cost Amt and Profit/Loss (Division and Qty are optional).",
         )
 
+    try:
+        parsed_rows = build_staged_rows(analytics_calc.normalize_upload(parsed_rows, amount_basis))
+    except (ValueError, ArithmeticError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    allowed = {column.name for column in models.AnalyticsSalesRow.__table__.columns}
+    parsed_rows = [{k: v for k, v in r.items() if k in allowed} for r in parsed_rows]
+
     # Replace the previous dataset wholesale - this dashboard always reflects
     # only the most recently uploaded file.
     db.query(models.AnalyticsSalesRow).delete()
     db.query(models.AnalyticsUpload).delete()
-    db.commit()
+    db.flush()
 
     sheet_names = {r["source_sheet"] for r in parsed_rows if r["source_sheet"]}
     dates = [r["sale_date"] for r in parsed_rows]
@@ -10013,8 +10048,7 @@ def upload_analytics_file(
         date_to=max(dates) if dates else None,
     )
     db.add(upload_record)
-    db.commit()
-    db.refresh(upload_record)
+    db.flush()
 
     for r in parsed_rows:
         r["upload_id"] = upload_record.id
@@ -10031,60 +10065,98 @@ def upload_analytics_file(
     }
 
 
-@app.get("/api/analytics/meta")
-def analytics_meta(
-    current_user: models.User = Depends(auth.get_current_user),
-    db: Session = Depends(get_db),
-):
-    upload_record = db.query(models.AnalyticsUpload).order_by(models.AnalyticsUpload.id.desc()).first()
-    divisions = [
-        row[0] for row in
-        db.query(models.AnalyticsSalesRow.division).distinct().order_by(models.AnalyticsSalesRow.division).all()
-        if row[0]
-    ]
-    if not upload_record:
-        return {"has_data": False, "divisions": [], "last_upload": None, "can_upload": auth.has_admin_access(current_user)}
+def analytics_filtered_rows(db, start_date=None, end_date=None):
+    if start_date and end_date and start_date > end_date:
+        raise HTTPException(status_code=400, detail="Start Date must be on or before End Date")
+    query = db.query(models.AnalyticsSalesRow)
+    if start_date:
+        query = query.filter(models.AnalyticsSalesRow.sale_date >= start_date)
+    if end_date:
+        query = query.filter(models.AnalyticsSalesRow.sale_date <= end_date)
+    return query.order_by(models.AnalyticsSalesRow.sale_date, models.AnalyticsSalesRow.id).all()
 
+
+@app.get("/api/analytics/meta")
+def analytics_meta(current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    upload = db.query(models.AnalyticsUpload).order_by(models.AnalyticsUpload.id.desc()).first()
+    stores = sorted({r[0] or "Unknown" for r in db.query(models.AnalyticsSalesRow.store).distinct().all()})
     return {
-        "has_data": True,
-        "divisions": divisions,
-        "last_upload": {
-            "file_name": upload_record.source_file,
-            "uploaded_by": upload_record.uploaded_by_username,
-            "uploaded_at": upload_record.created_date,
-            "row_count": upload_record.row_count,
-            "sheet_count": upload_record.sheet_count,
-            "date_from": upload_record.date_from,
-            "date_to": upload_record.date_to,
-        },
+        "has_data": bool(upload), "divisions": list(analytics_calc.CATEGORIES),
+        "categories": list(analytics_calc.CATEGORIES), "stores": stores,
         "can_upload": auth.has_admin_access(current_user),
+        "last_upload": {"file_name": upload.source_file, "uploaded_by": upload.uploaded_by_username,
+                        "uploaded_at": upload.created_date, "row_count": upload.row_count,
+                        "sheet_count": upload.sheet_count, "date_from": upload.date_from,
+                        "date_to": upload.date_to} if upload else None,
     }
 
 
 @app.get("/api/analytics/dashboard")
 def analytics_dashboard(
-    division: Optional[str] = Query(None),
-    start_date: Optional[date] = Query(None),
-    end_date: Optional[date] = Query(None),
-    current_user: models.User = Depends(auth.get_current_user),
-    db: Session = Depends(get_db),
+    division: Optional[str] = Query(None), store: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    gst: bool = Query(True),
+    start_date: Optional[date] = Query(None), end_date: Optional[date] = Query(None),
+    current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db),
 ):
-    query = db.query(models.AnalyticsSalesRow)
-    if division and division.upper() != "ALL":
-        query = query.filter(models.AnalyticsSalesRow.division == division.upper())
-    if start_date:
-        query = query.filter(models.AnalyticsSalesRow.sale_date >= start_date)
-    if end_date:
-        query = query.filter(models.AnalyticsSalesRow.sale_date <= end_date)
-
-    rows = query.all()
+    source_rows = analytics_filtered_rows(db, start_date, end_date)
+    rows, quality = analytics_calc.project(source_rows, detect_division_code, division, store, search, gst=gst)
     result = build_analytics_dashboard(rows)
-    result["filters"] = {
-        "division": division or "ALL",
-        "start_date": start_date,
-        "end_date": end_date,
-    }
+    result["advanced"] = analytics_calc.advanced_stats(rows)
+    result["quality"] = quality
+    result["gst"] = {"rate": 18 if gst else 0, "enabled": gst, "basis": "inclusive" if gst else "exclusive", "sales_gst": round(sum(r.sales_gst for r in rows), 2),
+                     "cost_gst": round(sum(r.cost_gst for r in rows), 2),
+                     "sales_before_gst": round(sum(r.sales_before_gst for r in rows), 2),
+                     "cost_before_gst": round(sum(r.cost_before_gst for r in rows), 2)}
+    result["filters"] = {"division": division or "ALL", "store": store or "ALL", "search": search or "",
+                         "start_date": start_date, "end_date": end_date}
     return result
+
+
+@app.get("/api/analytics/items")
+def analytics_items(
+    division: Optional[str] = Query(None), store: Optional[str] = Query(None), search: Optional[str] = Query(None),
+    start_date: Optional[date] = Query(None), end_date: Optional[date] = Query(None),
+    view: str = Query("included", pattern="^(included|review|excluded|all)$"),
+    gst: bool = Query(True),
+    page: int = Query(1, ge=1), page_size: int = Query(100, ge=1, le=500),
+    current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db),
+):
+    rows, quality = analytics_calc.project(analytics_filtered_rows(db, start_date, end_date), detect_division_code,
+                                         division, store, search, view, gst=gst)
+    offset = (page - 1) * page_size
+    return {"items": [vars(r) for r in rows[offset:offset+page_size]], "total": len(rows), "page": page,
+            "page_size": page_size, "quality": quality, "amount_basis": "With GST (18%)" if gst else "Without GST"}
+
+
+@app.get("/api/analytics/export")
+def analytics_export(
+    division: Optional[str] = Query(None), store: Optional[str] = Query(None), search: Optional[str] = Query(None),
+    start_date: Optional[date] = Query(None), end_date: Optional[date] = Query(None),
+    view: str = Query("included", pattern="^(included|review|excluded|all)$"),
+    gst: bool = Query(True),
+    current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db),
+):
+    rows, _ = analytics_calc.project(analytics_filtered_rows(db, start_date, end_date), detect_division_code,
+                                    division, store, search, view, gst=gst)
+    def safe(value):
+        if isinstance(value, str) and value.lstrip().startswith(("=", "+", "-", "@")):
+            return "'" + value
+        return value
+    buffer = StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["Date", "Voucher", "Item", "Category", "Store", "Brand", "Qty", "Sales before GST",
+                     "Sales GST 18%" if gst else "Sales GST (not applied)", "Sales incl GST" if gst else "Sales without GST",
+                     "Cost before GST", "Cost GST 18%" if gst else "Cost GST (not applied)", "Cost incl GST" if gst else "Cost without GST",
+                     "Profit incl GST" if gst else "Profit without GST", "Status", "Review reason"])
+    for r in rows:
+        writer.writerow([safe(v) for v in [r.sale_date.isoformat() if r.sale_date else "", r.vch_no, r.item,
+            analytics_calc.CATEGORIES.get(r.division, r.division), r.store, r.brand, r.qty,
+            r.sales_before_gst, r.sales_gst, r.sales_amt, r.cost_before_gst, r.cost_gst, r.cost_amt,
+            r.profit_loss, r.status, r.exclusion_reason]])
+    filename = "AI_Analysis_With_GST.csv" if gst else "AI_Analysis_Without_GST.csv"
+    return Response(content=("\ufeff"+buffer.getvalue()).encode("utf-8"), media_type="text/csv",
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
 @app.delete("/api/analytics/clear")
