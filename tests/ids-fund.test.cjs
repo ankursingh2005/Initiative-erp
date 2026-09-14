@@ -1,0 +1,26 @@
+const fs = require('node:fs');
+const vm = require('node:vm');
+const assert = require('node:assert/strict');
+const html = fs.readFileSync('static/incentive.html', 'utf8');
+for (const match of html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)) new vm.Script(match[1]);
+const elements = {idsFundReport:{hidden:true}, idsFundRows:{innerHTML:''},idsOutletReport:{hidden:true},idsOutletRows:{innerHTML:''}};
+const context = {document:{getElementById:id=>elements[id]}, money:{format:n=>n.toFixed(2)}, escapeHtml:s=>s.replaceAll('<','&lt;')};
+vm.createContext(context);
+vm.runInContext(html.slice(html.indexOf('  function renderIdsFund('),html.indexOf('  function renderExactIncentive(')),context);
+context.renderIdsFund(null);
+assert.match(elements.idsFundRows.innerHTML,/Click Calculate/);
+context.renderIdsFund({version:1,rows:[]});
+assert.match(elements.idsFundRows.innerHTML,/Click Calculate/);
+context.renderIdsFund({version:3,rows:[{outlet:'<ALM>',category:'MOB',fund_rate:30,incentive_rate:.125,total_sales:100000,total_incentive:125,ids_fund:37.5}],summary:[{outlet:'<ALM>',total_sales:100000,total_incentive:125,ids_fund:37.5}],totals:{total_sales:100000,total_incentive:125,ids_fund:37.5}});
+assert.equal(elements.idsFundReport.hidden,false);
+assert.match(elements.idsFundRows.innerHTML,/37.50/);
+assert.match(elements.idsFundRows.innerHTML,/&lt;ALM>/);
+assert.match(elements.idsFundRows.innerHTML,/GRAND TOTAL/);
+assert.match(elements.idsFundRows.innerHTML,/0.125%/);
+assert.match(elements.idsFundRows.innerHTML,/Outlet total/);
+assert.match(html,/function renderIncentive\(data\)\{renderIdsFund\(data.ids_fund_report\)/);
+console.log('IDS Fund rendering, saved-report fallback and JavaScript syntax passed.');
+
+assert.equal(elements.idsOutletReport.hidden,false);
+assert.match(elements.idsOutletRows.innerHTML,/37.50/);
+assert.match(elements.idsOutletRows.innerHTML,/GRAND TOTAL/);

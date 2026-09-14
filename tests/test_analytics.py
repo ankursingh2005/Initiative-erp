@@ -36,6 +36,48 @@ def row(**overrides):
 
 
 class CalculationTests(unittest.TestCase):
+    def test_outlet_series_and_category_aliases(self):
+        self.assertEqual(calc.outlet_from_voucher('ALM/1/24-25'), 'ALM')
+        self.assertIsNone(calc.outlet_from_voucher('INV-1'))
+        self.assertEqual(calc.classify('Godrej Ref Eriopls'), 'HA')
+        self.assertEqual(calc.classify('Camera', 'DC'), 'DC')
+        self.assertEqual(calc.classify('Device', 'MOB'), 'MH')
+        self.assertEqual(calc.classify('Samsung A15 5G 6+128 Blue'), 'MH')
+        self.assertEqual(calc.classify('Samsung TV remote', detector=main.detect_division_code), 'ACC')
+        self.assertEqual(calc.classify('Dell IN3520 i3/8/512/W11'), 'IT')
+        self.assertEqual(calc.classify('Dell Back Pack'), 'ACC')
+
+    def test_decisions_bill_grain_returns_and_tax_invariance(self):
+        source = [row(), row(sales_amt=500, cost_amt=600),
+                  row(store='HZT'), row(vch_no=None, sales_amt=-100, cost_amt=-80)]
+        exclusive, _ = calc.project(source, gst=False)
+        inclusive, _ = calc.project(source, gst=True)
+        result = calc.decision_stats(exclusive)
+        self.assertEqual(result, calc.decision_stats(inclusive))
+        self.assertEqual(result['bill_count'], 2)
+        self.assertEqual(result['average_bill'], 1250)
+        self.assertEqual(result['returns'], 100)
+        self.assertEqual(result['selling_loss'], 100)
+        self.assertEqual(result['missing_bill_rows'], 1)
+        self.assertEqual(sum(r['sales'] for r in result['matrix']), result['sales'])
+        self.assertEqual(sum(r['profit'] for r in result['matrix']), result['profit'])
+
+    def test_decisions_complete_loss_count_and_empty_denominators(self):
+        rows, _ = calc.project([row(sales_amt=100, cost_amt=120, vch_no=str(i)) for i in range(30)], gst=False)
+        result = calc.decision_stats(rows)
+        self.assertEqual(result['loss_line_count'], 30)
+        self.assertEqual(len(result['loss_lines']), 25)
+        self.assertEqual(result['selling_loss'], 600)
+        self.assertIsNone(calc.decision_stats([])['margin'])
+        self.assertIsNone(calc.decision_stats([])['average_bill'])
+
+    def test_quality_actions_do_not_discard_duplicate_or_zero_cost_rows(self):
+        rows, _ = calc.project([row(cost_amt=0), row(cost_amt=0)], gst=False)
+        result = calc.decision_stats(rows)
+        self.assertEqual(result['duplicate_candidates'], 1)
+        self.assertEqual(result['zero_cost_rows'], 2)
+        self.assertEqual(result['sales'], 2000)
+
     def test_gst_recalculates_profit_without_mutating_source(self):
         source = row()
         first, _ = calc.project([source])
@@ -121,9 +163,19 @@ class AnalyticsApiTests(unittest.TestCase):
         self.assertEqual(data['kpis']['total_sales'],1180)
         self.assertEqual(data['kpis']['total_profit'],236)
         self.assertEqual(data['quality'],{'included':1,'excluded':1,'review':1})
+        self.assertEqual(data['coverage']['review_sales'],10)
         items=self.client.get('/api/analytics/items?store=ALM').json()
         self.assertEqual(items['total'],1)
         self.assertEqual(items['items'][0]['sales_amt'],data['kpis']['total_sales'])
+
+    def test_voucher_outlets_and_decision_drilldown(self):
+        self.upload('Date,Item,Division,Store,Vch No,Sales Amt,Cost Amt\n2026-09-01,AC,HA,,ALM/1/24-25,1000,800\n2026-09-01,Laptop,IT,Explicit,HZT/1/24-25,2000,1500\n')
+        self.assertEqual(self.client.get('/api/analytics/meta').json()['stores'], ['ALM','Explicit'])
+        data = self.client.get('/api/analytics/dashboard?store=ALM&division=HA').json()
+        self.assertEqual(data['decisions']['sales'],1000)
+        self.assertEqual(data['decisions']['bill_count'],1)
+        self.assertEqual(data['decisions']['matrix'][0]['store'],'ALM')
+        self.assertEqual(data['recommendations'],data['decisions']['actions'])
 
     def test_category_date_and_search_filters(self):
         self.upload()

@@ -6414,7 +6414,7 @@ def parse_analytics_file(filename: str, content: bytes) -> List[dict]:
             "division": division,
             "division_from_file": division_raw.upper() if division_raw else None,
             "vch_no": vch_no,
-            "store": str(row_dict.get("store") or "").strip() or None,
+            "store": str(row_dict.get("store") or "").strip() or analytics_calc.outlet_from_voucher(vch_no),
             "brand": str(row_dict.get("brand") or "").strip() or None,
             "qty": qty,
             "sales_amt": sales_amt,
@@ -6612,105 +6612,7 @@ def build_analytics_dashboard(rows: List[models.AnalyticsSalesRow]) -> dict:
         for fy, s in sorted(yearly_stats.items())
     ]
 
-    # ---------------- Recommendations (rule-based, computed from the
-    # aggregates above - every number quoted is real, nothing is invented) ----
-    recommendations = []
-
-    if division_breakdown:
-        leader = division_breakdown[0]
-        if leader["profit"] > 0:
-            recommendations.append({
-                "type": "opportunity",
-                "priority": "high",
-                "title": f"{leader['division']} is your leading profit driver",
-                "detail": f"It contributed ₹{leader['profit']:,.0f} in profit, {leader['profit_share_percent']:.1f}% of total profit across the uploaded data. Prioritize stock availability and scheme/promotional support here to protect this contribution.",
-            })
-
-    # YoY growth/decline per division, comparing the two most recent fiscal
-    # years that division has data for.
-    division_years = defaultdict(dict)
-    for (division, fy), profit in division_year_profit.items():
-        division_years[division][fy] = profit
-    for division, year_map in division_years.items():
-        years_sorted = sorted(year_map.keys())
-        if len(years_sorted) < 2:
-            continue
-        prev_fy, latest_fy = years_sorted[-2], years_sorted[-1]
-        prev_profit, latest_profit = year_map[prev_fy], year_map[latest_fy]
-        if prev_profit == 0:
-            continue
-        change_pct = ((latest_profit - prev_profit) / abs(prev_profit)) * 100
-        if change_pct <= -15:
-            recommendations.append({
-                "type": "decline",
-                "priority": "high",
-                "title": f"{division} profit declined {abs(change_pct):.0f}% year-on-year",
-                "detail": f"FY {prev_fy} → FY {latest_fy}: ₹{prev_profit:,.0f} → ₹{latest_profit:,.0f}. Consider a fresh scheme, a pricing/cost review, or a promotional push to reverse the trend.",
-            })
-        elif change_pct >= 15:
-            recommendations.append({
-                "type": "growth",
-                "priority": "medium",
-                "title": f"{division} profit grew {change_pct:.0f}% year-on-year",
-                "detail": f"FY {prev_fy} → FY {latest_fy}: ₹{prev_profit:,.0f} → ₹{latest_profit:,.0f}. Increase inventory allocation and marketing focus here to capture the momentum.",
-            })
-
-    if loss_items:
-        names = ", ".join(f"{i['item']} (₹{i['profit']:,.0f})" for i in loss_items[:3])
-        recommendations.append({
-            "type": "loss",
-            "priority": "high",
-            "title": f"{len(loss_items)} item(s) are being sold at a net loss",
-            "detail": f"Worst offenders: {names}. Review purchase cost, scheme support, or selling price for these lines.",
-        })
-
-    if margin_eligible:
-        high_revenue_cutoff = sorted([i["sales"] for i in margin_eligible], reverse=True)
-        cutoff_value = high_revenue_cutoff[max(0, len(high_revenue_cutoff) // 4 - 1)] if len(high_revenue_cutoff) >= 4 else high_revenue_cutoff[0]
-        candidates = [
-            i for i in margin_eligible
-            if i["sales"] >= cutoff_value and i["margin_percent"] < overall_margin and i["margin_percent"] >= 0
-        ]
-        candidates.sort(key=lambda x: x["sales"], reverse=True)
-        if candidates:
-            top = candidates[0]
-            recommendations.append({
-                "type": "opportunity",
-                "priority": "medium",
-                "title": f"{top['item']} sells well but at a thin margin",
-                "detail": f"₹{top['sales']:,.0f} in revenue at only {top['margin_percent']:.1f}% margin, below your overall {overall_margin:.1f}% average. Consider bundling with a scheme, or renegotiating cost, to lift profitability on this high-volume line.",
-            })
-
-    if month_number_profit:
-        month_names = ["", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
-        best_month_num = max(month_number_profit, key=month_number_profit.get)
-        worst_month_num = min(month_number_profit, key=month_number_profit.get)
-        if best_month_num != worst_month_num:
-            recommendations.append({
-                "type": "seasonal",
-                "priority": "low",
-                "title": f"{month_names[best_month_num]} is historically your strongest month",
-                "detail": f"Across the uploaded years, {month_names[best_month_num]} generated the most profit and {month_names[worst_month_num]} the least. Plan stock and staffing ahead of {month_names[best_month_num]}, and consider a targeted scheme in {month_names[worst_month_num]} to offset the seasonal dip.",
-            })
-
-    if total_sales > 0:
-        if overall_margin < 8:
-            recommendations.append({
-                "type": "decline",
-                "priority": "medium",
-                "title": f"Overall margin is {overall_margin:.1f}%",
-                "detail": "This is below a typical general-retail benchmark of ~10-12%. A broad cost or pricing review across top-selling lines may help.",
-            })
-        else:
-            recommendations.append({
-                "type": "growth",
-                "priority": "low",
-                "title": f"Overall margin of {overall_margin:.1f}% is healthy",
-                "detail": "Maintain current pricing and scheme discipline; use the division and item breakdowns above to reinforce what's already working.",
-            })
-
-    priority_rank = {"high": 0, "medium": 1, "low": 2}
-    recommendations.sort(key=lambda r: priority_rank.get(r["priority"], 3))
+    recommendations = []  # Decision actions are attached by the dashboard endpoint.
 
     return {
         "has_data": True,
@@ -6935,6 +6837,8 @@ def serialize_staged_row(row: dict) -> dict:
         "division": row["division"],
         "division_name": DIVISION_NAMES.get(row["division"], row["division"]),
         "brand": row.get("brand"),
+        "store": row.get("store"),
+        "vch_no": row.get("vch_no"),
         "qty": row.get("qty"),
         **analytics_calc.display_amounts(row, gst=False),
         "with_gst": analytics_calc.display_amounts(row, gst=True),
@@ -9435,6 +9339,7 @@ def parse_incentive_workbook(content: bytes, filename: Optional[str] = None) -> 
             outlet_col = next((i for i, h in enumerate(normalized) if h in INCENTIVE_OUTLET_ALIASES), None)
             sales_col = next((i for i, h in enumerate(normalized) if h in INCENTIVE_SALES_ALIASES), None)
             month_col = next((i for i, h in enumerate(normalized) if h in INCENTIVE_MONTH_ALIASES), None)
+            category_col = next((i for i, h in enumerate(normalized) if h == "category"), None)
             if outlet_col is None or sales_col is None:
                 continue
             for row in rows[header_idx + 1:]:
@@ -9443,7 +9348,8 @@ def parse_incentive_workbook(content: bytes, filename: Optional[str] = None) -> 
                 if sales is None or not outlet:
                     continue
                 month = _incentive_month(row[month_col]) if month_col is not None else ws.title
-                result.append({"month": month or ws.title, "outlet": outlet, "total_sales": sales})
+                result.append({"month": month or ws.title, "outlet": outlet, "total_sales": sales,
+                               "category": row[category_col] if category_col is not None else None})
             handled = True
             break
         if handled:
@@ -9571,7 +9477,7 @@ def _incentive_outlet_short_name(value: Optional[str]) -> str:
         "alambagh": "ALM", "alm": "ALM",
         "ashiyana": "ASH", "ash": "ASH",
         "gomtinagar": "GNG", "gng": "GNG",
-        "hazratganj": "HZT", "hzt": "HZT",
+        "hazratganj": "HZT", "hzt": "HZT", "htz": "HZT",
         "vikasnagar": "VKN", "vkn": "VKN",
     }.get(normalized, original)
 
@@ -9602,6 +9508,47 @@ EXACT_INCENTIVE_RATES = {
     ("HZT", "MOB + COM + DC + ACC"): 60,
     ("VKN", "ALL"): 55,
 }
+
+
+IDS_FUND_SHARES = {"MOB": 30, "COM": 20, "DC": 25, "HA": 20, "HE": 25, "ACC COM": 25, "ACC": 25}
+
+
+def ids_fund_amounts(total_sales, incentive_rate, fund_rate) -> dict:
+    sales = Decimal(str(total_sales)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    incentive = (sales * Decimal(str(incentive_rate)) / 100).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    fund = (incentive * Decimal(str(fund_rate)) / 100).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return {"total_sales": float(sales), "total_incentive": float(incentive), "ids_fund": float(fund)}
+
+
+def build_ids_fund_report(rows) -> dict:
+    # Read original categories: the older incentive matrix combines ACC COM into ACC.
+    grouped = defaultdict(lambda: Decimal(0))
+    for row in rows:
+        outlet = _incentive_outlet_short_name(row["outlet"])
+        category = _incentive_header(row.get("category")).upper() or "UNSPECIFIED"
+        grouped[(outlet, category)] += Decimal(str(row["total_sales"]))
+    detail = []
+    for (outlet, category), sales in sorted(grouped.items()):
+        rates = {"MOB": .125, "COM": .250, "HA": .250, "HE": .250, "DC": .250,
+                 "ACC": .500 if outlet == "HZT" else 1,
+                 "ACC COM": .250 if outlet == "HZT" else 1}
+        rate = rates.get(category) if outlet in {"ALM", "ASH", "GNG", "VKN", "HZT"} else None
+        fund_rate = IDS_FUND_SHARES.get(category)
+        amounts = ids_fund_amounts(sales, rate, fund_rate) if rate is not None and fund_rate is not None else {
+            "total_sales": float(sales.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)),
+            "total_incentive": None, "ids_fund": None}
+        detail.append({"outlet": outlet, "category": category, "incentive_rate": rate, "fund_rate": fund_rate, **amounts})
+
+    def totals(items):
+        result = {field: None if any(r[field] is None for r in items) else float(sum(
+            (Decimal(str(r[field])) for r in items), Decimal(0)))
+            for field in ("total_sales", "total_incentive", "ids_fund")}
+        return result
+
+    return {"version": 3, "fund_rates": IDS_FUND_SHARES, "rows": detail,
+            "summary": [{"outlet": outlet, **totals([r for r in detail if r["outlet"] == outlet])}
+                        for outlet in sorted({r["outlet"] for r in detail})],
+            "totals": totals(detail), "pending_rows": sum(r["incentive_rate"] is None for r in detail)}
 
 
 def exact_incentive_summary(grouped_summary: list) -> list:
@@ -9670,6 +9617,7 @@ def calculate_incentive_report(
         } for outlet, categories in sorted(by_outlet_category.items())],
         "grouped_summary": grouped_summary,
         "exact_summary": exact_incentive_summary(grouped_summary),
+        "ids_fund_report": build_ids_fund_report(rows),
         "totals": {"total_sales": grand_sales, "avg_profit": grand_profit, "total_incentive": grand_incentive},
         "profit_rate": profit_rate,
         "incentive_rate": incentive_rate,
@@ -9933,6 +9881,78 @@ def export_incentive_report(
     for letter, width in zip("ABCDE", (14, 32, 22, 18, 22)):
         exact_sheet.column_dimensions[letter].width = width
 
+    fund_report = build_ids_fund_report(calculated_detail)
+    fund_sheet = book.create_sheet("IDS Fund")
+    fund_sheet.append(["IDS FUND BY OUTLET AND CATEGORY"])
+    fund_sheet.merge_cells("A1:G1")
+    fund_sheet.append(["IDS Fund shares: MOB 30%; COM / HA 20%; DC / HE / ACC COM / ACC 25%."])
+    fund_sheet["B2"].number_format = "0%"
+    fund_sheet.append(["Outlet and grand totals sum rounded category IDS Fund amounts. Missing rates remain Pending."])
+    fund_sheet.merge_cells("A3:G3")
+    fund_sheet.append(["Outlet", "Category", "Total Sales", "Incentive Rate", "Total Incentive", "IDS Fund Share", "IDS Fund"])
+    for fund_row, record in enumerate(fund_report["rows"], 5):
+        for col, value in enumerate([record["outlet"], record["category"], record["total_sales"],
+                                     "Pending" if record["incentive_rate"] is None else record["incentive_rate"] / 100], 1):
+            fund_sheet.cell(fund_row, col, value)
+        fund_sheet.cell(fund_row, 4).number_format = "0.000%"
+        fund_sheet.cell(fund_row, 5, f'=IF(ISNUMBER(D{fund_row}),ROUND(C{fund_row}*D{fund_row},2),"Pending")')
+        fund_sheet.cell(fund_row, 6, "Pending" if record["fund_rate"] is None else record["fund_rate"] / 100)
+        fund_sheet.cell(fund_row, 6).number_format = "0%"
+        fund_sheet.cell(fund_row, 7, f'=IF(AND(ISNUMBER(E{fund_row}),ISNUMBER(F{fund_row})),ROUND(E{fund_row}*F{fund_row},2),"Pending")')
+    fund_total_row = 5 + len(fund_report["rows"])
+    fund_sheet.cell(fund_total_row, 1, "GRAND TOTAL")
+    fund_sheet.cell(fund_total_row, 3, f"=SUM(C5:C{fund_total_row-1})")
+    for col in (5, 7):
+        letter = get_column_letter(col)
+        fund_sheet.cell(fund_total_row, col, f'=IF(COUNT({letter}5:{letter}{fund_total_row-1})=ROWS({letter}5:{letter}{fund_total_row-1}),SUM({letter}5:{letter}{fund_total_row-1}),"Pending")')
+    for row in fund_sheet.iter_rows(min_row=4, max_row=fund_total_row):
+        for cell in row:
+            cell.border = Border(bottom=thin)
+            cell.alignment = Alignment(horizontal="left" if cell.column <= 2 else "right")
+            if cell.row > 4 and cell.column in (3, 5, 7):
+                cell.number_format = '#,##0.00'
+            if cell.row == 4:
+                cell.fill = PatternFill("solid", fgColor=navy)
+                cell.font = Font(color=white, bold=True)
+            elif cell.row == fund_total_row:
+                cell.fill = PatternFill("solid", fgColor=pale)
+                cell.font = Font(bold=True)
+    fund_sheet["A1"].font = Font(size=15, bold=True)
+    fund_sheet.freeze_panes = "C5"
+    fund_sheet.sheet_view.showGridLines = False
+    for letter, width in zip("ABCDEFG", (20, 22, 22, 20, 22, 20, 22)):
+        fund_sheet.column_dimensions[letter].width = width
+
+    outlet_fund = book.create_sheet("IDS Fund Outlet Summary")
+    outlet_fund.append(["TOTAL IDS FUND BY OUTLET"])
+    outlet_fund.merge_cells("A1:B1")
+    outlet_fund.append(["Outlet", "Total IDS Fund"])
+    for summary_row, record in enumerate(fund_report["summary"], 3):
+        outlet_fund.cell(summary_row, 1, record["outlet"])
+        refs = [f"'IDS Fund'!G{i}" for i, detail in enumerate(fund_report["rows"], 5) if detail["outlet"] == record["outlet"]]
+        arguments = ",".join(refs)
+        outlet_fund.cell(summary_row, 2, f'=IF(COUNT({arguments})={len(refs)},SUM({arguments}),"Pending")')
+    summary_total = 3 + len(fund_report["summary"])
+    outlet_fund.cell(summary_total, 1, "GRAND TOTAL")
+    outlet_fund.cell(summary_total, 2, f'=IF(COUNT(B3:B{summary_total-1})=ROWS(B3:B{summary_total-1}),SUM(B3:B{summary_total-1}),"Pending")')
+    outlet_fund.column_dimensions["A"].width = 28
+    outlet_fund.column_dimensions["B"].width = 24
+    outlet_fund.freeze_panes = "B3"
+    outlet_fund.sheet_view.showGridLines = False
+    outlet_fund["A1"].font = Font(size=15, bold=True)
+    for cells in outlet_fund.iter_rows(min_row=2, max_row=summary_total):
+        for cell in cells:
+            cell.alignment = Alignment(horizontal="left" if cell.column == 1 else "right")
+            cell.border = Border(bottom=thin)
+            if cell.column == 2 and cell.row > 2:
+                cell.number_format = '#,##0.00'
+            if cell.row == 2:
+                cell.fill = PatternFill("solid", fgColor=navy)
+                cell.font = Font(color=white, bold=True)
+            elif cell.row == summary_total:
+                cell.fill = PatternFill("solid", fgColor=pale)
+                cell.font = Font(bold=True)
+
     output = BytesIO()
     book.save(output)
     filename = f"Outlet_Incentive_Report_{india_today().isoformat()}.xlsx"
@@ -10103,7 +10123,12 @@ def analytics_dashboard(
     rows, quality = analytics_calc.project(source_rows, detect_division_code, division, store, search, gst=gst)
     result = build_analytics_dashboard(rows)
     result["advanced"] = analytics_calc.advanced_stats(rows)
+    result["decisions"] = analytics_calc.decision_stats(rows)
+    result["recommendations"] = result["decisions"]["actions"]
     result["quality"] = quality
+    review_rows, _ = analytics_calc.project(source_rows, detect_division_code, division, store, search, view="review", gst=False)
+    result["coverage"] = {"review_sales": round(sum(r.sales_amt for r in review_rows), 2),
+                          "review_cost": round(sum(r.cost_amt for r in review_rows), 2)}
     result["gst"] = {"rate": 18 if gst else 0, "enabled": gst, "basis": "inclusive" if gst else "exclusive", "sales_gst": round(sum(r.sales_gst for r in rows), 2),
                      "cost_gst": round(sum(r.cost_gst for r in rows), 2),
                      "sales_before_gst": round(sum(r.sales_before_gst for r in rows), 2),

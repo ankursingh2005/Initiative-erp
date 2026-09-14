@@ -1,76 +1,98 @@
-# AI Analysis dashboard
+# AI Analysis for business decisions
 
-Open **Home > AI Analysis** (`/analytics`). This module now offers HA, HE, Mobile,
-Computer, Accessories and Payouts, plus date, store and item/brand/voucher search.
+Open **Home > AI Analysis** (`/analytics`). Upload the complete Excel/CSV sales
+export, review category assignments, then proceed to the dashboard. Uploads
+replace the previous snapshot transactionally; they do not append history.
 
-## Upload and GST
+## What to review first
 
-1. Choose the Excel/CSV export.
-2. Set **Source amounts**:
-   - **Before GST - add 18%** is the default for pre-GST sales and costs.
-   - **Already includes 18% GST** normalizes the source before saving, so the
-     dashboard does not add the tax twice.
-3. Click **Analyze**. Review values are **before GST**.
-4. Assign uncertain rows to a category or mark them **Exclude / unrelated**.
-5. Click **Looks correct - proceed to dashboard**.
+1. **Data quality:** unresolved categories are outside dashboard totals. The
+   warning shows their sales value before GST. Re-upload and assign them during
+   review before treating the figures as whole-business results.
+2. **Business decision overview:** gross profit, margin on sales, markup on cost,
+   identified bills, average positive bill and returns/credits.
+3. **Outlet and category profitability:** all combinations, ranked by gross
+   profit. Click an outlet button to filter to that outlet and category.
+4. **Below-cost sales:** largest 25 positive-sales lines below cost, including
+   date, bill, outlet and item. The total loss and count cover every matching
+   line, not just the displayed 25. Negative sales are reported separately.
+5. **Actions supported by your data:** zero-cost sales, repeated-record candidates,
+   below-cost selling, missing outlets and the largest profit contribution.
+   These are review priorities, not guaranteed growth recommendations.
 
-Stored amounts remain before GST. Dashboard and item/export amounts include the
-fixed 18% uplift on both sales and costs (including Payouts in this analytical
-view). Profit is recalculated from sales minus cost. Margin uses sales as the
-denominator; this is not the cost-based PL percentage on Daily Profitability.
+**Explore trends, brands and product rankings** expands supporting reports.
+Date, category, store and item/brand/voucher search apply throughout. The filtered
+CSV contains every matching row; the item view provides pagination.
 
-Example: before-GST sales 1,000 and cost 800 become sales 1,180, cost 944, profit
-236 and margin on sales 20%. An inclusive input of 1,180 and 944 gives the same
-result when its source option is set correctly.
+## Category and outlet identification
 
-Existing saved uploads are assumed to contain pre-GST amounts. If an old upload
-already contained GST, re-upload the complete source with the inclusive option.
-An upload replaces the previous snapshot; it does not append history. Replacement
-is transactional so a failed insert preserves the previous snapshot.
+Categories: Home Appliances (HA), Home Entertainment (HE), Mobile (MH), Computer
+(IT), Digital Camera (DC), Accessories (ACC) and Payouts. Supported source
+categories take precedence; product-name rules classify missing categories.
+Common export abbreviations such as Ref, W/M, Samsung model/memory labels,
+computer specifications and accessory descriptions are recognized. Uncertain
+names stay in review. Review assignments can override automatic categories.
 
-## Included data and review
+An explicit Store/Branch/Outlet/Location column takes precedence. Otherwise a
+voucher such as ALM/1/24-25 supplies the code ALM. These are **inferred voucher
+series**, not verified physical outlet names: codes such as B2B or SR may denote
+channels or transaction types. Confirm their meaning; provide an explicit Outlet
+column to override the inference. Unrecognized formats show Unknown. Upload
+review displays outlet/series and voucher beside the product.
 
-- Summary rows and blank/unknown item descriptions are excluded from totals.
-- Unclassified products remain in **Needs category review**. They are retained,
-  rather than being silently assigned to Accessories.
-- Accessories and payout keywords are recognized; explicit supported source
-  categories and review assignments are respected.
-- Negative sales/returns and loss-making sales remain included.
-- **Rows to inspect or export** lets you select included, review, excluded or all
-  stored rows. This selector does not change dashboard KPI inclusion.
-- **View Items** displays 100 rows per page. Previous/Next reaches every result.
-- **Download filtered CSV** exports every matching row, with separate before-GST,
-  GST and inclusive amounts and a review reason where applicable.
+Previously saved rows do not change automatically. Re-upload the full file to
+apply improved detection. Blank/summary descriptions are excluded; unresolved
+items are retained for review. Rows without readable dates are skipped during
+parsing. Review counts are parsed, staged lines, not physical worksheet rows.
+Existing unique AC indoor/outdoor pairing reduces line counts while preserving
+sales and cost amounts.
 
-New uploads accept optional `Store`/`Branch`/`Outlet`/`Location`, `Brand`, and
-`Vch No`/`Invoice No` fields. Historical rows without a store display **Unknown**;
-their location is not guessed. Date parsing still skips rows without readable
-dates, so the review count is the number of parsed rows, not every source line.
+## Definitions and GST
 
-## Charts and statistics
+- Decision overview, outlet/category table, loss investigation, actions and
+  scenarios always use **before-GST** amounts.
+- Gross profit = sales minus cost, before rent, salaries and operating expenses.
+- Margin on sales = gross profit / sales. Markup on cost = gross profit / cost;
+  the supplied bill-wise workbook uses this latter basis for its Profit %.
+  Aggregate rates divide matching totals, not average individual percentages.
+- Bill identity = outlet + date + voucher. Missing vouchers are excluded from
+  bill metrics. Category bill counts overlap and must not be added together.
+- Average positive bill uses bills with positive net sales in the current
+  selection. Product lines are labeled separately from bills.
+- Returns/credits are identified by negative sales values. A positive credit
+  amount without an explicit sign cannot be identified as a return automatically.
+- Repeated-record flags compare outlet, date, voucher, item, sales, cost and
+  quantity. They remain included because repeated lines may be legitimate.
 
-- Daily sales and a trailing seven-calendar-day average (missing days count zero).
-- Sales/profit scatter plot: first 1,000 filtered rows in date order, with the
-  sample limit shown; tables/CSV remain complete.
-- Store sales/profit comparison, alongside existing category, brand, monthly,
-  yearly and item reports.
-- Median sale, population standard deviation, loss-row count and unusual-sale
-  count using median absolute deviation. Outliers are indicators, not exclusions.
-- Pie/donut/polar areas show absolute profit/loss magnitude and label losses;
-  the bar chart preserves signed profit.
+Select the correct **Source amounts** on upload. Exclusive amounts remain
+unchanged; the inclusive option normalizes by the existing fixed 18% assumption.
+The GST display toggle applies that same fixed 18% to sales and cost in supporting
+reports, items and exports. It does not change the before-GST decision section.
+This fixed-rate view is not a tax computation for products with differing rates.
 
-Calculations are deterministic Python (`Decimal`, `statistics` and aggregation).
-Interactive charts use locally bundled Chart.js 4.5.1, with its MIT license under
-`static/vendor`. No external AI service or scientific-library installation is
-required for this feature.
+## Margin improvement scenario
 
-## Validation and deployment
+Enter a margin increase from 0 to 20 percentage points. Additional illustrated
+gross profit = selected net sales before GST × increase / 100. Revenue remains
+unchanged. For INR 100,000 sales, one percentage point gives INR 1,000 additional
+gross profit. The control does not edit stored data or predict demand.
 
-Regression tests: `python -m unittest discover -s tests -p test_analytics.py`.
-The tests choose a temporary SQLite database before importing the application.
-They require the app dependencies plus `httpx` for FastAPI's test client.
+Bill-wise sales alone cannot establish stock ageing, lost sales, cash collection,
+customer retention or net operating profit. Those analyses need inventory,
+availability, receivables/customer identifiers or expense data respectively.
 
-The additive startup migration creates nullable `store` and `vch_no` columns in
-`analytics_sales_rows`. Restart/redeploy the updated app to apply it. This change
-was validated against a disposable database and synthetic browser data; it has
-not been deployed or reconciled against a production workbook.
+## Validation
+
+- `python -m unittest discover -s tests -p test_analytics.py`: isolated temporary
+  SQLite database, including upload/review/commit, filters, exports, rollback,
+  classification, bill grain, returns, tax invariance and complete loss totals.
+- `node tests/test_analytics_ui.cjs`: rendering, escaping, outlet/category
+  drilldown, scenario validation and inline JavaScript syntax.
+- The provided FY2024-25 workbook was parsed through the actual application
+  pipeline: 31,936 parsed lines became 28,742 staged lines after AC pairing.
+  Sales and cost totals were preserved. 26,564 staged lines were classified;
+  2,178 remained for category review. These counts do not mean every automatic
+  assignment has been manually verified.
+
+Changes are local and have not been deployed. Browser visual verification was
+unavailable in this session. Restart/redeploy the application to use the changes.

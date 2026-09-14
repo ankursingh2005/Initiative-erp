@@ -11,6 +11,15 @@
 .controls{align-items:start}.controls>.field{min-width:0}.controls>.primary{margin-top:20px;min-height:42px}.field input{height:42px}.upload-input{display:flex;gap:8px;align-items:center}.upload-input input{min-width:0;flex:1}.upload-input .btn{min-height:42px;flex-shrink:0}#savedFileName{display:block;overflow-wrap:anywhere;margin-top:4px}#savedFileName:empty{display:none}
 @media(max-width:800px){.controls>.primary{margin-top:0}}
 @media(max-width:480px){.controls{grid-template-columns:minmax(0,1fr)}}
+/* Keep IDS Fund headings and values on the same column edges. */
+#idsFundReport table{table-layout:fixed;min-width:1000px}
+#idsFundReport th,#idsFundReport td{padding:12px 18px;vertical-align:middle}
+#idsFundReport th:nth-child(-n+2),#idsFundReport td:nth-child(-n+2){text-align:left}
+#idsFundReport th:nth-child(n+3),#idsFundReport td:nth-child(n+3){text-align:right;font-variant-numeric:tabular-nums}
+#idsFundReport th+th{border-left:1px solid #ffffff22}
+#idsFundReport td+td{border-left:1px solid #edf0f3}
+#idsFundReport .category-legend{line-height:1.6}
+#idsFundReport .scroll{scrollbar-gutter:stable}
 </style>
 </head>
 <body>
@@ -50,6 +59,16 @@
     <div class="table-head"><div><h3>Remaining Amount After Incentive by Outlet &amp; Category Group</h3><div class="category-legend">Remaining amount = Total Incentive &minus; Exact Incentive. Amounts remain pending where the applied percentage is undecided.</div></div></div>
     <div class="scroll"><table><thead><tr><th>Outlet</th><th>Category Group</th><th style="text-align:right">Total Incentive</th><th style="text-align:right">Exact Incentive</th><th style="text-align:right">Remaining Amount</th></tr></thead><tbody id="remainingRows"></tbody></table></div>
   </section>
+  <section class="card table-card" id="idsFundReport" hidden>
+    <div class="table-head"><div><h3>IDS Fund Report</h3><div class="category-legend">Total Incentive = category sales × outlet/category rate. IDS Fund = that incentive × category share (MOB 30%; COM / HA 20%; DC / HE / ACC COM / ACC 25%). Included in Download Report.</div></div></div>
+    <p class="category-legend" style="padding:0 18px">All five outlets: MOB 0.125%; COM, HA, HE, DC 0.250%. ALM, ASH, GNG, VKN: ACC and ACC COM 1%. Hazratganj (HZT / HTZ): ACC 0.500%; ACC COM 0.250%.</p>
+    <div class="scroll"><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:18%"><col style="width:13%"><col style="width:17%"><col style="width:12%"><col style="width:15%"></colgroup><thead><tr><th scope="col">Outlet</th><th scope="col">Category</th><th scope="col">Total Sales</th><th scope="col">Incentive Rate</th><th scope="col">Total Incentive</th><th scope="col">Fund Share</th><th scope="col">IDS Fund</th></tr></thead><tbody id="idsFundRows"></tbody></table></div>
+    <p class="category-legend" style="padding:0 18px">Total incentive sums rounded category incentives. Outlet and grand IDS Fund totals sum the rounded category fund amounts. Missing outlet/category rates remain Pending.</p>
+  </section>
+  <section class="card table-card" id="idsOutletReport" hidden>
+    <div class="table-head"><div><h3>Total IDS Fund by Outlet</h3><div class="category-legend">Sum of category IDS Fund amounts for each outlet. Included as a separate sheet in Download Report.</div></div></div>
+    <div class="scroll"><table style="table-layout:fixed"><thead><tr><th scope="col">Outlet</th><th scope="col" style="text-align:right">Total IDS Fund</th></tr></thead><tbody id="idsOutletRows"></tbody></table></div>
+  </section>
 </main>
 <script>
   const token=localStorage.getItem('token'); if(!token) location.href='/login';
@@ -77,6 +96,10 @@
   }
   function resetReport(){
     savedReport=null;
+    document.getElementById('idsFundReport').hidden=true;
+    document.getElementById('idsOutletReport').hidden=true;
+    document.getElementById('idsOutletRows').innerHTML='';
+    document.getElementById('idsFundRows').innerHTML='';
     for(const id of ['totalSales','totalProfit','totalIncentive'])document.getElementById(id).textContent=money.format(0);
     document.getElementById('exactDownloadMenu').open=false;
     for(const id of ['kpis','categoryReport','groupedReport','exactReport','remainingReport'])document.getElementById(id).hidden=true;
@@ -119,8 +142,25 @@
   const money=new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:2});
   function formData(){const file=selectedFile;if(!file)throw new Error('Please select an Excel or PDF file.');const fd=new FormData();fd.append('file',file);fd.append('profit_rate',document.getElementById('profitRate').value);fd.append('incentive_rate',document.getElementById('incentiveRate').value);return fd}
   function setMessage(text,error=false){const el=document.getElementById('message');el.textContent=text;el.className='message'+(error?' error':'')}
-  function renderIncentive(data){document.getElementById('totalSales').textContent=money.format(data.totals.total_sales);document.getElementById('totalProfit').textContent=money.format(data.totals.avg_profit);document.getElementById('totalIncentive').textContent=money.format(data.totals.total_incentive);document.getElementById('kpis').hidden=false;document.getElementById('rows').innerHTML=data.summary.map(r=>`<tr><td>${escapeHtml(r.outlet)}</td><td class="num">${money.format(r.total_sales)}</td><td class="num">${money.format(r.avg_profit)}</td><td class="num">${money.format(r.total_incentive)}</td></tr>`).join('');document.getElementById('categoryRows').innerHTML=data.category_summary.map(r=>`<tr><td>${escapeHtml(r.outlet)}</td>${['HA','HE','MOB','COM','DC','ACC'].map(category=>categoryCell(r.categories[category])).join('')}${categoryCell(r.total)}</tr>`).join('');document.getElementById('groupedRows').innerHTML=data.grouped_summary.map(r=>`<tr><td>${escapeHtml(r.outlet)}</td><td>${escapeHtml(r.group)}</td><td class="num">${money.format(r.total_sales)}</td><td class="num">${money.format(r.avg_profit)}</td><td class="num">${money.format(r.total_incentive)}</td></tr>`).join('');document.getElementById('categoryReport').hidden=false;document.getElementById('groupedReport').hidden=false;renderExactIncentive(data.exact_summary);document.getElementById('download').disabled=false;}
+  function renderIncentive(data){renderIdsFund(data.ids_fund_report);document.getElementById('totalSales').textContent=money.format(data.totals.total_sales);document.getElementById('totalProfit').textContent=money.format(data.totals.avg_profit);document.getElementById('totalIncentive').textContent=money.format(data.totals.total_incentive);document.getElementById('kpis').hidden=false;document.getElementById('rows').innerHTML=data.summary.map(r=>`<tr><td>${escapeHtml(r.outlet)}</td><td class="num">${money.format(r.total_sales)}</td><td class="num">${money.format(r.avg_profit)}</td><td class="num">${money.format(r.total_incentive)}</td></tr>`).join('');document.getElementById('categoryRows').innerHTML=data.category_summary.map(r=>`<tr><td>${escapeHtml(r.outlet)}</td>${['HA','HE','MOB','COM','DC','ACC'].map(category=>categoryCell(r.categories[category])).join('')}${categoryCell(r.total)}</tr>`).join('');document.getElementById('groupedRows').innerHTML=data.grouped_summary.map(r=>`<tr><td>${escapeHtml(r.outlet)}</td><td>${escapeHtml(r.group)}</td><td class="num">${money.format(r.total_sales)}</td><td class="num">${money.format(r.avg_profit)}</td><td class="num">${money.format(r.total_incentive)}</td></tr>`).join('');document.getElementById('categoryReport').hidden=false;document.getElementById('groupedReport').hidden=false;renderExactIncentive(data.exact_summary);document.getElementById('download').disabled=false;}
   function categoryCell(values){return `<td class="category-value"><b>${money.format(values.avg_profit)}</b><small>${money.format(values.total_incentive)}</small></td>`}
+  function renderIdsFund(report){
+    const section=document.getElementById('idsFundReport'),body=document.getElementById('idsFundRows');
+    section.hidden=false;
+    document.getElementById('idsOutletReport').hidden=true;
+    document.getElementById('idsOutletRows').innerHTML='';
+    if(report?.version!==3){body.innerHTML='<tr><td colspan="7" class="empty">Click Calculate to apply the updated category rates to this saved report.</td></tr>';return;}
+    const amount=value=>value==null?'Pending':money.format(value);
+    const tableRows=[];
+    for(const summary of report.summary){
+      tableRows.push(...report.rows.filter(r=>r.outlet===summary.outlet));
+      tableRows.push({...summary,category:'Outlet total',isTotal:true});
+    }
+    tableRows.push({outlet:'GRAND TOTAL',category:'',...report.totals,isTotal:true});
+    body.innerHTML=tableRows.map(r=>`<tr${r.isTotal?' style="font-weight:700;background:#d9eaf7"':''}><td>${escapeHtml(r.outlet)}</td><td>${escapeHtml(r.category)}</td><td class="num">${amount(r.total_sales)}</td><td class="num">${r.isTotal?'':r.incentive_rate==null?'Pending':Number(r.incentive_rate).toFixed(3)+'%'}</td><td class="num">${amount(r.total_incentive)}</td><td class="num">${r.isTotal?'':r.fund_rate==null?'Pending':r.fund_rate+'%'}</td><td class="num">${amount(r.ids_fund)}</td></tr>`).join('');
+    document.getElementById('idsOutletRows').innerHTML=[...report.summary,{outlet:'GRAND TOTAL',...report.totals}].map((r,i)=>`<tr${i===report.summary.length?' style="font-weight:700;background:#d9eaf7"':''}><td>${escapeHtml(r.outlet)}</td><td class="num">${amount(r.ids_fund)}</td></tr>`).join('');
+    document.getElementById('idsOutletReport').hidden=false;
+  }
   function renderExactIncentive(rows){
     rows=rows.map(r=>r.outlet==='ASH'&&r.group==='ALL'?{...r,applied_rate:100,exact_incentive:r.total_incentive}:r);
     document.getElementById('exactRows').innerHTML=rows.map(r=>`<tr><td>${escapeHtml(r.outlet)}</td><td>${escapeHtml(r.group)}</td><td class="num">${money.format(r.total_incentive)}</td><td class="num">${r.applied_rate==null?'Pending':r.applied_rate+'%'}</td><td class="num">${r.exact_incentive==null?'Pending':money.format(r.exact_incentive)}</td></tr>`).join('');

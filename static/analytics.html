@@ -282,7 +282,7 @@
       <div>
         <span class="eyebrow">✨ AI Analysis</span>
         <h1>Sales intelligence &amp; profitability</h1>
-        <p>Explore HA, HE, Mobile, Computer, Accessories and Payouts. Choose Without GST for base amounts or With GST to add 18% to every calculation; margin is profit divided by sales. Review unrelated and unclassified rows separately.</p>
+        <p>Understand profit by outlet, category and product. Review data coverage, investigate below-cost sales and explore margin improvements. The business decision overview always uses amounts before GST.</p>
       </div>
     </div>
 
@@ -326,6 +326,7 @@
               <th class="item-cell">Item</th>
               <th>Division</th>
               <th>Brand</th>
+              <th>Outlet / voucher series</th>
               <th class="num">Sales</th>
               <th class="num">Cost</th>
               <th class="num">Profit</th>
@@ -405,7 +406,24 @@
 
 
       <div class="kpi-grid" id="kpiGrid"></div>
-      <div id="statsGrid" class="kpi-grid"></div>
+      <div class="card" id="decisionPanel">
+        <h2>Business decision overview</h2>
+        <p class="sub">All figures in this section are before GST and use every included row in your filters. Gross profit excludes rent, salaries and other operating expenses.</p>
+        <div class="kpi-grid" id="decisionKpis"></div>
+        <p id="decisionCoverage" class="sub"></p>
+        <h2>Outlet and category profitability</h2>
+        <p class="sub">Ranked by gross profit. Click a row to filter the dashboard. Where no Outlet column exists, codes are inferred from voucher series (for example ALM/1/24-25); confirm that each series represents an outlet. Bill counts overlap across categories.</p>
+        <div class="table-scroll"><table><thead><tr><th>Outlet / series</th><th>Category</th><th>Sales</th><th>Gross profit</th><th>Margin on sales</th><th>Bills</th></tr></thead><tbody id="decisionMatrix"></tbody></table></div>
+      </div>
+      <div class="card">
+        <h2>Margin improvement scenario</h2>
+        <p class="sub">Illustration at unchanged net revenue, before GST. Assumes the chosen margin increase can be achieved without reducing sales; this is not a forecast.</p>
+        <label for="marginLift">Margin increase (percentage points)</label>
+        <input id="marginLift" type="number" min="0" max="20" step="0.5" value="1" oninput="renderMarginScenario()">
+        <p id="marginScenario" aria-live="polite"></p>
+      </div>
+      <div class="card"><h2>Below-cost sales to investigate</h2><p class="sub" id="decisionLossNote"></p><div class="table-scroll"><table><thead><tr><th>Date</th><th>Outlet</th><th>Bill</th><th>Item</th><th>Sales before GST</th><th>Loss before GST</th></tr></thead><tbody id="decisionLosses"></tbody></table></div></div>
+      <details class="card"><summary style="cursor:pointer;font-weight:700">Explore trends, brands and product rankings</summary><p class="sub">Supporting analysis for the current filters.</p><div id="statsGrid" class="kpi-grid"></div>
       <div class="charts-grid"><div class="card"><h2>Daily sales &amp; 7-day average</h2><p class="sub">Trailing calendar-day average; dates with no sales count as zero.</p><div class="chart-box"><canvas id="dailyAdvancedChart"></canvas></div></div><div class="card"><h2>Sales versus profit</h2><p class="sub" id="scatterNote"></p><div class="chart-box"><canvas id="scatterAdvancedChart"></canvas></div></div></div>
       <div class="card"><h2>Store performance</h2><div class="chart-box"><canvas id="storeAdvancedChart"></canvas></div></div>
 
@@ -561,9 +579,10 @@
         </div>
       </div>
 
+      </details>
       <div class="card">
-        <h2>Recommendations to boost sales</h2>
-        <p class="sub">Computed directly from the uploaded numbers - every figure below is real.</p>
+        <h2>Actions supported by your data</h2>
+        <p class="sub">Review priorities based on all included rows, before GST. Validate costs, outlet assignments and category coverage before acting.</p>
         <div class="rec-grid" id="recGrid"></div>
       </div>
     </div>
@@ -695,7 +714,7 @@
     // the dashboard tables (or /discard + a fresh upload throws it away).
     let reviewState = { token: null, rows: [] };
 
-    const DIVISION_LABELS = { HA: 'HA', HE: 'HE', MH: 'Mobile', IT: 'Computer', ACC: 'Accessories', PAYOUT: 'Payouts', UNCATEGORIZED: 'Needs review', EXCLUDED: 'Excluded / unrelated' };
+    const DIVISION_LABELS = { HA: 'Home Appliances', HE: 'Home Entertainment', MH: 'Mobile', IT: 'Computer', DC: 'Digital Camera', ACC: 'Accessories', PAYOUT: 'Payouts', UNCATEGORIZED: 'Needs review', EXCLUDED: 'Excluded / unrelated' };
 
     async function doUpload() {
       const fileInput = document.getElementById('fileInput');
@@ -766,6 +785,7 @@
             <td class="item-cell">${esc(r.item)}</td>
             <td><select class="row-division" onchange="reassignSingleRow(${r.row_id}, this.value)">${options}</select></td>
             <td>${esc(r.brand || '')}</td>
+            <td>${esc(r.store || 'Unknown')}<br><small>${esc(r.vch_no || '')}</small></td>
             <td class="num">${inr(r.sales_amt)}</td>
             <td class="num">${inr(r.cost_amt)}</td>
             <td class="num">${inr(r.profit_loss)}</td>
@@ -929,8 +949,8 @@
       grid.innerHTML = `
         <div class="kpi"><div class="label">Total Sales</div><div class="value">${inr(k.total_sales)}</div></div>
         <div class="kpi"><div class="label">Profit (${gstLabel()})</div><div class="value ${k.total_profit >= 0 ? 'good' : 'bad'}">${inr(k.total_profit)}</div></div>
-        <div class="kpi"><div class="label">Margin on sales</div><div class="value ${k.margin_percent >= 8 ? 'good' : 'bad'}">${pct(k.margin_percent)}</div></div>
-        <div class="kpi"><div class="label">Transactions</div><div class="value">${k.transactions.toLocaleString('en-IN')}</div></div>
+        <div class="kpi"><div class="label">Margin on sales</div><div class="value ${k.margin_percent >= 0 ? 'good' : 'bad'}">${pct(k.margin_percent)}</div></div>
+        <div class="kpi"><div class="label">Included product lines</div><div class="value">${k.transactions.toLocaleString('en-IN')}</div></div>
         <div class="kpi"><div class="label">Items / Divisions</div><div class="value">${k.unique_items.toLocaleString('en-IN')} / ${k.divisions}</div></div>
         <div class="kpi"><div class="label">Date Range</div><div class="value" style="font-size:14px">${k.date_from || '?'} → ${k.date_to || '?'}</div></div>
       `;
@@ -998,7 +1018,7 @@
       const ctx = document.getElementById('divisionRadarChart');
       const divs = data.division_breakdown.slice(0, 8);
       charts.divisionRadar = new Chart(ctx, {
-        type: 'radar',
+        type: 'bar',
         data: {
           labels: divs.map(d => d.division),
           datasets: [{
@@ -1012,7 +1032,7 @@
         options: {
           responsive: true, maintainAspectRatio: false,
           plugins: { legend: { display: false } },
-          scales: { r: { ticks: { callback: v => v + '%' }, beginAtZero: true } },
+          scales: { y: { ticks: { callback: v => v + '%' }, beginAtZero: true } },
         },
       });
     }
@@ -1226,6 +1246,7 @@
       lastDashboardData = data;
       destroyCharts();
       renderKpis(data);
+      renderDecisions(data);
       renderYearlyChart(data);
       renderDivisionChart(data);
       renderDivisionRadarChart(data);
@@ -1388,9 +1409,34 @@
         a.href=url;a.download=withGst()?'AI_Analysis_With_GST.csv':'AI_Analysis_Without_GST.csv';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
       }catch(error){alert(error.message);}
     }
+    function renderMarginScenario(){
+      const d=lastDashboardData?.decisions;
+      if(!d) return;
+      const input=document.getElementById('marginLift'), lift=Number(input.value);
+      document.getElementById('marginScenario').textContent=input.value==='' || !Number.isFinite(lift) || lift<0 || lift>20
+        ? 'Enter a margin increase from 0 to 20 percentage points.'
+        : d.sales<=0 ? 'A scenario needs positive net sales.'
+        : 'Additional gross profit: '+inr(d.sales*lift/100)+'. Illustrated total gross profit: '+inr(d.profit+d.sales*lift/100)+'.';
+    }
+    function renderDecisions(data){
+      const d=data.decisions||{}, rate=v=>v==null?'Not available':pct(v);
+      document.getElementById('decisionKpis').innerHTML=[['Gross profit',inr(d.profit)],['Margin on sales',rate(d.margin)],['Markup on cost',rate(d.markup)],['Identified bills',d.bill_count||0],['Average positive bill',d.average_bill==null?'Not available':inr(d.average_bill)],['Returns / credits',inr(d.returns)]].map(([label,value])=>'<div class="kpi"><div class="label">'+label+'</div><div class="value">'+value+'</div></div>').join('');
+      document.getElementById('decisionCoverage').textContent=(d.missing_bill_rows||0)+' lines lack bill numbers and are excluded from bill metrics. Average bill uses '+(d.positive_bill_count||0)+' bills with positive net sales within the current filters. Margin = gross profit / sales; markup = gross profit / cost (the source Profit % basis).';
+      document.getElementById('decisionMatrix').innerHTML=(d.matrix||[]).map((r,i)=>'<tr><td><button class="btn btn-ghost" data-matrix-row="'+i+'">'+esc(r.store)+'</button></td><td>'+esc(r.category_name)+'</td><td class="num">'+inr(r.sales)+'</td><td class="num">'+inr(r.profit)+'</td><td class="num">'+rate(r.margin)+'</td><td class="num">'+r.bills+'</td></tr>').join('');
+      document.querySelectorAll('[data-matrix-row]').forEach(button=>button.addEventListener('click',()=>{
+        const r=d.matrix[Number(button.dataset.matrixRow)];
+        document.getElementById('storeFilter').value=r.store;
+        document.getElementById('divisionFilter').value=r.category;
+        refreshDashboard();
+      }));
+      document.getElementById('decisionLossNote').textContent='Showing the largest '+(d.loss_lines||[]).length+' of '+(d.loss_line_count||0)+' positive-sales lines below cost. Total loss on these sales: '+inr(d.selling_loss)+'. Returns are excluded from this list. Use the filtered CSV for complete detail.';
+      document.getElementById('decisionLosses').innerHTML=(d.loss_lines||[]).map(r=>'<tr><td>'+esc(r.date)+'</td><td>'+esc(r.store)+'</td><td>'+esc(r.voucher||'Missing')+'</td><td>'+esc(r.item)+'</td><td class="num">'+inr(r.sales)+'</td><td class="num">'+inr(r.loss)+'</td></tr>').join('') || '<tr><td colspan="6">No below-cost positive-sales lines in this selection.</td></tr>';
+      renderMarginScenario();
+    }
     function renderQuality(data){
       const q=data.quality||{}, g=data.gst||{};
       document.getElementById('qualitySummary').innerHTML='<div class="quality-badges"><span>Included: '+(q.included||0)+'</span><span>Needs review: '+(q.review||0)+'</span><span>Excluded: '+(q.excluded||0)+'</span></div><p>Sales before GST: <b>'+inr(g.sales_before_gst)+'</b> + GST '+(g.rate||0)+'%: <b>'+inr(g.sales_gst)+'</b>. Cost before GST: <b>'+inr(g.cost_before_gst)+'</b> + GST '+(g.rate||0)+'%: <b>'+inr(g.cost_gst)+'</b>.</p><p class="sub">'+(g.enabled ? 'With GST: 18% is applied to sales and cost, including Payouts.' : 'Without GST: no GST is added to sales or cost.')+' Profit = displayed sales minus displayed cost. These are product margins, before operating expenses. Unknown historical stores appear as Unknown.</p>';
+      if(q.review) document.getElementById('qualitySummary').insertAdjacentHTML('beforeend','<p style="color:var(--amber)"><b>Incomplete category coverage:</b> '+q.review+' review lines representing '+inr(data.coverage?.review_sales||0)+' sales before GST are outside these totals. Re-upload and assign categories in review before treating this as the whole business.</p>');
     }
     function renderAdvanced(data){
       renderQuality(data);

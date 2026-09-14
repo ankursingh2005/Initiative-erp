@@ -11,9 +11,9 @@ import math
 import re
 import statistics
 
-CATEGORIES = {"HA": "HA", "HE": "HE", "MH": "Mobile", "IT": "Computer",
-              "ACC": "Accessories", "PAYOUT": "Payouts"}
-ALIASES = {"MOBILE": "MH", "COMPUTER": "IT", "COMPUTER/IT": "IT",
+CATEGORIES = {"HA": "Home Appliances", "HE": "Home Entertainment", "MH": "Mobile", "IT": "Computer",
+              "DC": "Digital Camera", "ACC": "Accessories", "PAYOUT": "Payouts"}
+ALIASES = {"MOB": "MH", "COM": "IT", "MOBILE": "MH", "COMPUTER": "IT", "COMPUTER/IT": "IT",
            "HOME APPLIANCE": "HA", "HOME APPLIANCES": "HA", "HOME ENTERTAINMENT": "HE",
            "ACCESSORIES": "ACC", "ACCESSORY": "ACC", "OTHER": "UNCATEGORIZED",
            "PAYOUTS": "PAYOUT", "PAY OUT": "PAYOUT", "PAY OUTS": "PAYOUT"}
@@ -23,6 +23,12 @@ ACCESSORY = re.compile(r"\b(?:accessor(?:y|ies)|cable|charger|adapter|adaptor|ea
 def category_code(value):
     code = str(value or "").strip().upper()
     return ALIASES.get(code, code)
+
+
+def outlet_from_voucher(value):
+    """Expose a voucher series code, never guess a physical branch name."""
+    match = re.fullmatch(r"([A-Za-z][A-Za-z0-9]{1,11})/\d+/\d{2,4}-\d{2,4}", str(value or "").strip())
+    return match.group(1).upper() if match else None
 
 def classify(item, supplied=None, detector=None):
     text = str(item or "").strip()
@@ -37,6 +43,16 @@ def classify(item, supplied=None, detector=None):
         return "PAYOUT"
     if ACCESSORY.search(text):
         return "ACC"
+    if re.search(r"back\s*pack|\b(?:airpods|airdopes|antivirus|ssd|hdd|caddy)\b|smart\s*watch", text, re.I):
+        return "ACC"
+    if re.search(r"\bref\b|\bw/?m\b|\bmw\b|\baquaguard\b", text, re.I):
+        return "HA"
+    if re.search(r"\bsamsung\s+[AFMSZ]\d{1,3}\b", text, re.I) and re.search(r"\d+\s*\+\s*\d+", text):
+        return "MH"
+    if re.search(r"\bprojector\b", text, re.I):
+        return "HE"
+    if re.search(r"\b(?:dell|hp|lenovo|acer|asus)\b", text, re.I) and re.search(r"\bi[3579][-/]|\b(?:82|83)[A-Z0-9]{8}\b", text, re.I):
+        return "IT"
     if re.search(r"\b(?:macbook|imac|monitor|notebook)\b", text, re.I):
         return "IT"
     if re.search(r"\b(?:mobile|smartphone|handset|oneplus|poco|tecno|infinix|itel|honor)\b", text, re.I):
@@ -142,3 +158,76 @@ def advanced_stats(rows):
                              "loss_rows": sum(p < 0 for p in profits), "outlier_rows": outliers, "outliers_evaluable": bool(mad)},
             "scatter": [{"x": r.sales_amt, "y": r.profit_loss, "item": r.item, "division": r.division} for r in rows[:1000]],
             "scatter_total": len(rows)}
+
+
+def decision_stats(rows):
+    """Full-population decision support, always using amounts before GST.
+
+    Bill keys include outlet, date and voucher. Missing vouchers are not bills.
+    Returns remain in net totals but do not masquerade as selling-price losses.
+    """
+    groups = defaultdict(list)
+    bills = defaultdict(lambda: Decimal(0))
+    positive_sales = Decimal(0)
+    return_value = Decimal(0)
+    loss_value = Decimal(0)
+    missing_cost = missing_bill = 0
+    missing_outlet = 0
+    losses = []
+    seen = Counter()
+    for r in rows:
+        sales = money(getattr(r, "sales_before_gst", r.sales_amt))
+        cost = money(getattr(r, "cost_before_gst", r.cost_amt))
+        profit = sales - cost
+        store = r.store or "Unknown"
+        groups[(store, r.division)].append((r, sales, cost))
+        if not r.vch_no:
+            missing_bill += 1
+        else:
+            bills[(store, r.sale_date, r.vch_no)] += sales
+        missing_outlet += store == "Unknown"
+        positive_sales += max(sales, Decimal(0))
+        return_value += max(-sales, Decimal(0))
+        missing_cost += sales > 0 and cost == 0
+        seen[(store, r.sale_date, r.vch_no, r.item, sales, cost, r.qty)] += 1
+        if sales > 0 and profit < 0:
+            loss_value -= profit
+            losses.append({"store": store, "category": r.division, "item": r.item,
+                           "voucher": r.vch_no, "date": r.sale_date.isoformat(),
+                           "sales": float(sales), "loss": float(-profit)})
+    total_sales = sum((s for values in groups.values() for _, s, _ in values), Decimal(0))
+    total_cost = sum((c for values in groups.values() for _, _, c in values), Decimal(0))
+    matrix = []
+    for (store, category), values in groups.items():
+        sales = sum((s for _, s, _ in values), Decimal(0))
+        cost = sum((c for _, _, c in values), Decimal(0))
+        matrix.append({"store": store, "category": category, "category_name": CATEGORIES.get(category, category),
+                       "sales": float(sales), "cost": float(cost), "profit": float(sales-cost),
+                       "margin": round(float((sales-cost)/sales*100), 2) if sales > 0 else None,
+                       "rows": len(values), "bills": len({(r.sale_date, r.vch_no) for r, _, _ in values if r.vch_no})})
+    matrix.sort(key=lambda x: x["profit"], reverse=True)
+    positive_bills = [value for value in bills.values() if value > 0]
+    duplicate_candidates = sum(n-1 for n in seen.values() if n > 1)
+    actions = []
+    if missing_cost:
+        actions.append({"priority": "high", "title": "Verify zero-cost sales", "detail": f"{missing_cost:,} positive-sales lines have zero cost. Confirm purchase cost and payout treatment before relying on their profit."})
+    if losses:
+        actions.append({"priority": "high", "title": "Review below-cost selling", "detail": f"{len(losses):,} positive-sales lines lost INR {loss_value:,.2f} before GST. Check the largest lines below for pricing, cost and scheme support. Returns are separate."})
+    if duplicate_candidates:
+        actions.append({"priority": "medium", "title": "Check repeated records", "detail": f"{duplicate_candidates:,} extra lines repeat outlet, date, bill, item, amounts and quantity. They remain included: repeated lines can be legitimate."})
+    if missing_outlet:
+        actions.append({"priority": "medium", "title": "Complete outlet information", "detail": f"{missing_outlet:,} lines have no outlet or recognizable voucher series. Supply an Outlet column for reliable branch comparisons."})
+    if matrix and matrix[0]["profit"] > 0:
+        leader = matrix[0]
+        actions.append({"priority": "low", "title": "Protect the largest profit contribution", "detail": f"{leader['store']} / {leader['category_name']} contributes INR {leader['profit']:,.2f} before GST. Review availability and demand before allocating more stock."})
+    return {"basis": "Before GST; product gross profit before operating expenses",
+            "sales": float(total_sales), "cost": float(total_cost), "profit": float(total_sales-total_cost),
+            "margin": round(float((total_sales-total_cost)/total_sales*100), 2) if total_sales > 0 else None,
+            "markup": round(float((total_sales-total_cost)/total_cost*100), 2) if total_cost > 0 else None,
+            "bill_count": len(bills), "positive_bill_count": len(positive_bills),
+            "average_bill": float(money(sum(positive_bills)/len(positive_bills))) if positive_bills else None,
+            "missing_bill_rows": missing_bill, "positive_sales": float(positive_sales),
+            "returns": float(return_value), "selling_loss": float(loss_value),
+            "duplicate_candidates": duplicate_candidates, "zero_cost_rows": missing_cost,
+            "matrix": matrix, "loss_lines": sorted(losses, key=lambda x: x["loss"], reverse=True)[:25],
+            "loss_line_count": len(losses), "actions": actions}
