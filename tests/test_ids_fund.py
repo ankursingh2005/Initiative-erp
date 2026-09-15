@@ -10,6 +10,25 @@ tearDownModule = isolated.tearDownModule
 
 
 class IdsFundTests(unittest.TestCase):
+    def test_non_sales_screenshot_and_pending(self):
+        summary = [dict(outlet=code, ids_fund=fund) for code, fund in
+                   zip(['ALM', 'ASH', 'HZT', 'GNG', 'VKN'], [11479, 837, 7214, 2166, 1675])]
+        report = main.build_non_sales_report(summary)
+        self.assertEqual([r['values'] for r in report['rows']], [
+            [4018, None, 1377, 1722, 1722], [293, None, 84, 126, 84],
+            [2525, None, 866, 1082, 866], [758, None, 217, 325, 217],
+            [586, None, 168, 251, 168], [None, 3739.36, None, None, None]])
+        self.assertEqual(report['rows'][-1]['ids_fund'], 23371)
+        self.assertEqual(report['totals'], [8180, 3739.36, 2712, 3506, 3057])
+        self.assertEqual(main.build_non_sales_report(summary[:-1])['totals'], [None] * 5)
+        summary[0]['ids_fund'] = None
+        self.assertEqual(main.build_non_sales_report(summary)['totals'], [None] * 5)
+        for row in summary:
+            row['ids_fund'] = 0
+        self.assertEqual(main.build_non_sales_report(summary)['totals'], [0] * 5)
+        summary[0]['ids_fund'] = -10
+        self.assertEqual(main.build_non_sales_report(summary)['rows'][0]['values'][0], -4)
+
     def test_rates_rounding_zero_and_returns(self):
         self.assertEqual(main.ids_fund_amounts(100000, .125, 30),
                          dict(total_sales=100000, total_incentive=125, ids_fund=37.5))
@@ -77,6 +96,15 @@ class IdsFundTests(unittest.TestCase):
                 self.assertEqual(summary['A3'].value,'ALM')
                 self.assertIn("'IDS Fund'!G5",summary['B3'].value)
                 self.assertEqual(summary['A5'].value,'GRAND TOTAL')
+                staff = book['Non-sales Staff Incentive']
+                self.assertEqual(staff['B2'].value, "='IDS Fund Outlet Summary'!B3")
+                self.assertEqual(staff['B3'].value, 'Pending')
+                self.assertEqual(staff['C2'].value, .35)
+                self.assertEqual(staff['D7'].value, .16)
+                self.assertEqual(staff['C11'].value, '=IF(ISNUMBER(B2),ROUND(B2*C2,0),"Pending")')
+                self.assertEqual(staff['D16'].value, '=IF(ISNUMBER(B7),ROUND(B7*D7,2),"Pending")')
+                self.assertEqual(staff['D18'].value, '=D16')
+                self.assertIn('non_sales_report', report)
                 book.close()
         finally:
             main.app.dependency_overrides.clear()

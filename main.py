@@ -9520,6 +9520,36 @@ def ids_fund_amounts(total_sales, incentive_rate, fund_rate) -> dict:
     return {"total_sales": float(sales), "total_incentive": float(incentive), "ids_fund": float(fund)}
 
 
+NON_SALES_ALLOCATIONS = (
+    ("ALM", "Alambagh", (35, None, 12, 15, 15)),
+    ("ASH", "Ashiyana", (35, None, 10, 15, 10)),
+    ("HZT", "Hazratganj", (35, None, 12, 15, 12)),
+    ("GNG", "Gomti Nagar", (35, None, 10, 15, 10)),
+    ("VKN", "Vikas Nagar", (35, None, 10, 15, 10)),
+)
+
+
+def build_non_sales_report(summary):
+    funds = {_incentive_outlet_short_name(r["outlet"]): r["ids_fund"] for r in summary}
+    rows = []
+    for code, location, rates in NON_SALES_ALLOCATIONS:
+        fund = funds.get(code)
+        values = [None if rate is None or fund is None else float(
+            (Decimal(str(fund)) * rate / 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+            for rate in rates]
+        rows.append(dict(outlet=code, location=location, ids_fund=fund, rates=rates, values=values))
+    base = None if any(r["ids_fund"] is None for r in rows) else sum(
+        (Decimal(str(r["ids_fund"])) for r in rows), Decimal(0))
+    warehouse = None if base is None else float((base * Decimal("0.16")).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP))
+    totals = [None if any(r["values"][i] is None for r in rows) else float(sum(
+        (Decimal(str(r["values"][i])) for r in rows), Decimal(0))) for i in range(5)]
+    totals[1] = warehouse
+    rows.append(dict(outlet="MWH", location="MWH", ids_fund=None if base is None else float(base),
+                     rates=[None, 16, None, None, None], values=[None, warehouse, None, None, None]))
+    return dict(rows=rows, totals=totals)
+
+
 def build_ids_fund_report(rows) -> dict:
     # Read original categories: the older incentive matrix combines ACC COM into ACC.
     grouped = defaultdict(lambda: Decimal(0))
@@ -9545,10 +9575,12 @@ def build_ids_fund_report(rows) -> dict:
             for field in ("total_sales", "total_incentive", "ids_fund")}
         return result
 
-    return {"version": 3, "fund_rates": IDS_FUND_SHARES, "rows": detail,
+    report = {"version": 3, "fund_rates": IDS_FUND_SHARES, "rows": detail,
             "summary": [{"outlet": outlet, **totals([r for r in detail if r["outlet"] == outlet])}
                         for outlet in sorted({r["outlet"] for r in detail})],
             "totals": totals(detail), "pending_rows": sum(r["incentive_rate"] is None for r in detail)}
+    report["non_sales_report"] = build_non_sales_report(report["summary"])
+    return report
 
 
 def exact_incentive_summary(grouped_summary: list) -> list:
@@ -9632,73 +9664,111 @@ def export_exact_incentive_report(
     format: str = Query("xlsx"),
     current_user: models.User = Depends(auth.require_roles("Admin", "Owner", "Accounts", "MISExecutive", "HR")),
 ):
-    if format not in {"xlsx", "pdf"}:
-        raise HTTPException(status_code=400, detail="Format must be xlsx or pdf")
-    rows = calculate_incentive_report(file, profit_rate, incentive_rate, current_user)["exact_summary"]
-    headers = ["Outlet", "Category Group", "Total Incentive", "Applied Percentage", "Exact Incentive"]
+    return export_selected_incentives(file, profit_rate, incentive_rate, "sales", format, current_user)
+
+
+@app.post("/api/incentive/selected-export")
+def export_selected_incentives(
+    file: UploadFile = File(...),
+    profit_rate: float = Form(7.0),
+    incentive_rate: float = Form(2.5),
+    selection: str = Query("both"),
+    format: str = Query("xlsx"),
+    current_user: models.User = Depends(auth.require_roles("Admin", "Owner", "Accounts", "MISExecutive", "HR")),
+):
+    if selection not in {"sales", "non-sales", "both"} or format not in {"xlsx", "pdf"}:
+        raise HTTPException(status_code=400, detail="Choose sales, non-sales or both and Excel or PDF.")
+    report = calculate_incentive_report(file, profit_rate, incentive_rate, current_user)
+    tables = []
+    if selection in {"sales", "both"}:
+        rows = report["exact_summary"]
+        tables.append(("Sales Incentive", "Sales Incentive",
+                       ["Outlet", "Category Group", "Exact Incentive"],
+                       [[r["outlet"], r["group"], r["exact_incentive"]] for r in rows]))
+    if selection in {"non-sales", "both"}:
+        staff = report["ids_fund_report"]["non_sales_report"]
+        values = [[r["location"], "" if r["outlet"] == "MWH" else r["ids_fund"],
+                   *["-" if rate is None else value for rate, value in zip(r["rates"], r["values"])]]
+                  for r in staff["rows"]]
+        values.append(["Central Service", "", *staff["totals"]])
+        tables.append(("Non-sales Incentive", "Non-sales Incentive",
+                       ["Location", "IDS Fund", "Accounts", "Ware House", "Customer Care", "Support", "HO"], values))
     output = BytesIO()
     if format == "xlsx":
-        from openpyxl.styles import Alignment, Font, PatternFill
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+        grid_line = Side(style="thin", color="B8C4D3")
         book = Workbook()
-        sheet = book.active
-        sheet.title = "Exact Incentive"
-        sheet.append(["EXACT INCENTIVE BY OUTLET & CATEGORY GROUP"])
-        sheet.merge_cells("A1:E1")
-        sheet.append(["Amounts in INR. ASH percentage is 100%."])
-        sheet.merge_cells("A2:E2")
-        sheet.append(headers)
-        for row in rows:
-            sheet.append([row["outlet"], row["group"], row["total_incentive"],
-                          "Pending" if row["applied_rate"] is None else row["applied_rate"] / 100,
-                          "Pending" if row["exact_incentive"] is None else row["exact_incentive"]])
-        for cell in [sheet["A1"], *sheet[3]]:
-            cell.fill = PatternFill("solid", fgColor="17365D")
-            cell.font = Font(color="FFFFFF", bold=True)
-        for cells in sheet.iter_rows(min_row=4):
-            for cell in cells[2:]:
-                cell.number_format = "0%" if cell.column == 4 else '#,##0.00'
-                cell.alignment = Alignment(horizontal="right")
-        for letter, width in zip("ABCDE", (14, 32, 23, 23, 23)):
-            sheet.column_dimensions[letter].width = width
-        sheet.freeze_panes = "C4"
-        sheet.auto_filter.ref = f"A3:E{sheet.max_row}"
-        sheet.sheet_view.showGridLines = False
+        book.remove(book.active)
+        for name, title, headers, rows in tables:
+            sheet = book.create_sheet(name)
+            sheet.append([title])
+            sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(headers))
+            sheet.append(headers)
+            for row in rows:
+                sheet.append(["Pending" if value is None else value for value in row])
+            for cells in sheet.iter_rows():
+                for cell in cells:
+                    numeric_column = cell.column >= (2 if name == "Non-sales Incentive" else 3)
+                    cell.alignment = Alignment(horizontal="right" if cell.row > 1 and numeric_column else "left",
+                                               vertical="center", wrap_text=True)
+                    if cell.row <= 2:
+                        cell.font = Font(bold=True, color="FFFFFF")
+                        cell.fill = PatternFill("solid", fgColor="17365D")
+                    if isinstance(cell.value, (float, int)):
+                        cell.number_format = '#,##0.00'
+                    if cell.row >= 2:
+                        cell.border = Border(left=grid_line, right=grid_line, top=grid_line, bottom=grid_line)
+                        if cell.row > 2 and cell.row % 2 == 0:
+                            cell.fill = PatternFill("solid", fgColor="F2F6FC")
+            for cells in sheet.iter_cols():
+                sheet.column_dimensions[cells[1].column_letter].width = 25
+            sheet.row_dimensions[1].height = 30
+            sheet['A1'].font = Font(bold=True, color="FFFFFF", size=16)
+            for row_number in range(2, sheet.max_row + 1):
+                sheet.row_dimensions[row_number].height = 24
+            # Keep Central Service outside the filter so it is never sorted among outlets.
+            filter_end = sheet.max_row - (1 if name == "Non-sales Incentive" else 0)
+            sheet.auto_filter.ref = f"A2:{get_column_letter(len(headers))}{filter_end}"
+            if name == "Non-sales Incentive":
+                for cell in sheet[sheet.max_row]:
+                    cell.font = Font(bold=True, color="17365D")
+                    cell.fill = PatternFill("solid", fgColor="D9EAF7")
+            sheet.freeze_panes = "C3"
+            sheet.sheet_view.showGridLines = False
         book.save(output)
         media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     else:
         from reportlab.lib import colors
         from reportlab.lib.pagesizes import A4, landscape
-        from reportlab.lib.styles import getSampleStyleSheet
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
         from xml.sax.saxutils import escape
         styles = getSampleStyleSheet()
-        document = SimpleDocTemplate(output, pagesize=landscape(A4), leftMargin=30, rightMargin=30, topMargin=30, bottomMargin=30)
-        data = [headers]
-        for row in rows:
-            data.append([Paragraph(escape(str(row["outlet"])), styles["BodyText"]),
-                         Paragraph(escape(str(row["group"])), styles["BodyText"]),
-                         f'{row["total_incentive"]:,.2f}',
-                         "Pending" if row["applied_rate"] is None else f'{row["applied_rate"]}%',
-                         "Pending" if row["exact_incentive"] is None else f'{row["exact_incentive"]:,.2f}'])
-        # Fit all five columns within landscape A4's available width.
-        table = Table(data, colWidths=[60, 210, 155, 170, 125], repeatRows=1)
-        table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#17365D")),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-            ("FONTSIZE", (0, 0), (-1, -1), 10),
-            ("ALIGN", (2, 0), (-1, -1), "RIGHT"),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("TOPPADDING", (0, 0), (-1, -1), 10),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F4F7FB")]),
-            ("LINEBELOW", (0, 0), (-1, -1), .4, colors.HexColor("#DCE3EC")),
-        ]))
-        document.build([Paragraph("Exact Incentive by Outlet &amp; Category Group", styles["Heading1"]),
-                        Paragraph("Amounts in INR. Group total incentive multiplied by applied percentage. ASH uses 100%.", styles["BodyText"]),
-                        Spacer(1, 16), table])
+        document = SimpleDocTemplate(output, pagesize=landscape(A4), leftMargin=25, rightMargin=25)
+        story = []
+        for name, title, headers, rows in tables:
+            if story:
+                story.append(PageBreak())
+            story.extend([Paragraph(escape(title), styles["Heading1"]), Spacer(1, 12)])
+            def display(value):
+                return "Pending" if value is None else f"{value:,.2f}" if isinstance(value, (int, float)) else str(value)
+            right_style = ParagraphStyle("Amount", parent=styles["BodyText"], alignment=2)
+            numeric_start = 1 if name == "Non-sales Incentive" else 2
+            data = [[Paragraph(escape(display(value)), right_style if i >= numeric_start else styles["BodyText"])
+                     for i, value in enumerate(row)] for row in [headers, *rows]]
+            table = Table(data, colWidths=[document.width / len(headers)] * len(headers), repeatRows=1)
+            table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#D9EAF7")),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 8),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+                ("LINEBELOW", (0, 0), (-1, -1), .4, colors.lightgrey),
+            ]))
+            story.append(table)
+        document.build(story)
         media_type = "application/pdf"
-    filename = f"Exact_Incentive_Report_{india_today().isoformat()}.{format}"
+    filename = f"Incentive_{selection}_{india_today().isoformat()}.{format}"
     return Response(output.getvalue(), media_type=media_type, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
@@ -9952,6 +10022,76 @@ def export_incentive_report(
             elif cell.row == summary_total:
                 cell.fill = PatternFill("solid", fgColor=pale)
                 cell.font = Font(bold=True)
+
+    staff = book.create_sheet("Non-sales Staff Incentive")
+    headers = ["Location", "IDS Fund", "Accounts", "Ware House", "Customer Care", "Support", "HO"]
+    staff.append(headers)
+    source_rows = {r["outlet"]: i for i, r in enumerate(fund_report["summary"], 3)}
+    for index, (code, location, rates) in enumerate(NON_SALES_ALLOCATIONS, 2):
+        source = source_rows.get(code)
+        staff.append([location, f"='IDS Fund Outlet Summary'!B{source}" if source else "Pending",
+                      *[None if rate is None else rate / 100 for rate in rates]])
+    staff.append(["MWH", '=IF(COUNT(B2:B6)=5,SUM(B2:B6),"Pending")', None, .16])
+    staff.append([])
+    staff.append(["Non-sales staff Incentive Value"])
+    staff.merge_cells("A9:G9")
+    staff.append(headers)
+    for source in range(2, 8):
+        target = source + 9
+        staff.cell(target, 1, f'=A{source}')
+        if source != 7:
+            staff.cell(target, 2, f'=B{source}')
+        for col, letter in enumerate("CDEFG", 3):
+            if staff.cell(source, col).value is not None:
+                precision = 2 if source == 7 else 0
+                staff.cell(target, col, f'=IF(ISNUMBER(B{source}),ROUND(B{source}*{letter}{source},{precision}),"Pending")')
+    staff.cell(17, 1, "Outlet total")
+    staff.cell(18, 1, "Central Service")
+    for col, letter in enumerate("CDEFG", 3):
+        if letter != "D":
+            staff.cell(17, col, f'=IF(COUNT({letter}11:{letter}15)=5,SUM({letter}11:{letter}15),"Pending")')
+        staff.cell(18, col, f'={letter}{16 if letter == "D" else 17}')
+    staff.freeze_panes = "C2"
+    staff.sheet_view.showGridLines = False
+    for letter, width in zip("ABCDEFG", (24, 22, 20, 20, 22, 20, 20)):
+        staff.column_dimensions[letter].width = width
+    for cells in staff.iter_rows():
+        for cell in cells:
+            cell.alignment = Alignment(horizontal="left" if cell.column == 1 else "right")
+            cell.border = Border(bottom=thin)
+            if cell.column > 1:
+                cell.number_format = '0%' if 2 <= cell.row <= 7 and cell.column > 2 else '#,##0.00;[Red](#,##0.00);"-"'
+            if cell.row in (1, 10):
+                cell.fill = PatternFill("solid", fgColor=navy)
+                cell.font = Font(color=white, bold=True)
+            elif cell.row in (9, 17, 18):
+                cell.fill = PatternFill("solid", fgColor=pale)
+                cell.font = Font(bold=True, color="FF0000" if cell.row == 18 else navy)
+    staff.sheet_properties.pageSetUpPr.fitToPage = True
+    staff.page_setup.orientation = "landscape"
+    staff.page_setup.paperSize = staff.PAPERSIZE_A4
+    staff.page_setup.fitToWidth = 1
+    staff.page_setup.fitToHeight = 1
+    staff.print_options.horizontalCentered = True
+    staff.print_area = "A1:G18"
+
+    # Use the same column edge for headings, amounts, formulas and Pending values.
+    for report_sheet, first_row, last_row, text_columns in (
+        (sheet, 4, sheet.max_row, 2),
+        (category_sheet, 3, category_sheet.max_row, 2),
+        (group_sheet, 3, group_sheet.max_row, 2),
+        (exact_sheet, 3, exact_sheet.max_row, 2),
+        (fund_sheet, 4, fund_sheet.max_row, 2),
+        (outlet_fund, 2, outlet_fund.max_row, 1),
+        (staff, 1, 7, 1),
+        (staff, 10, 18, 1),
+    ):
+        for cells in report_sheet.iter_rows(min_row=first_row, max_row=last_row):
+            for cell in cells:
+                cell.alignment = Alignment(horizontal="left" if cell.column <= text_columns else "right",
+                                           vertical="center", wrap_text=True)
+                cell.border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        report_sheet.row_dimensions[first_row].height = 30
 
     output = BytesIO()
     book.save(output)

@@ -20,6 +20,16 @@
 #idsFundReport td+td{border-left:1px solid #edf0f3}
 #idsFundReport .category-legend{line-height:1.6}
 #idsFundReport .scroll{scrollbar-gutter:stable}
+#incentiveSelection{padding:10px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit;margin:6px}.kpi-link{font:inherit;text-align:left;color:inherit;cursor:pointer}.kpi-link:hover,.kpi-link[aria-expanded="true"]{border-color:var(--blue);background:#edf4ff}.kpi-link:focus-visible{outline:3px solid var(--blue);outline-offset:3px}
+.kpi small{display:block;margin-top:8px;color:var(--muted);font-size:12px;line-height:1.5}
+#nonSalesReport table{table-layout:fixed;min-width:1000px}
+#nonSalesReport th:first-child{width:18%}
+#nonSalesReport th:not(:first-child){text-align:right}
+#exactReport[data-view="summary"] th:nth-child(3),
+#exactReport[data-view="summary"] td:nth-child(3),
+#exactReport[data-view="summary"] th:nth-child(4),
+#exactReport[data-view="summary"] td:nth-child(4){display:none}
+#incentiveDownloads{justify-content:flex-start;gap:12px}
 </style>
 </head>
 <body>
@@ -38,8 +48,16 @@
   </section>
   <section class="kpis" id="kpis" hidden>
     <div class="kpi"><span>Total Sales</span><strong id="totalSales">₹0</strong></div><div class="kpi"><span>AVG Profit</span><strong id="totalProfit">₹0</strong></div><div class="kpi"><span>Total Incentive</span><strong id="totalIncentive">₹0</strong></div>
+    <button type="button" class="kpi kpi-link" id="salesCard" aria-controls="exactReport" aria-expanded="false" onclick="toggleIncentiveReport('sales')"><span>Sales Incentive</span><strong id="salesIncentive">Pending</strong><small>Total Exact Incentive ? Click to view report</small></button>
+    <button type="button" class="kpi kpi-link" id="nonSalesCard" aria-controls="nonSalesReport" aria-expanded="false" onclick="toggleIncentiveReport('non-sales')"><span>Non-sales Incentive</span><strong id="nonSalesIncentive">Pending</strong><small>Total IDS Fund ? Click to view report</small></button>
+    <div class="kpi"><span>Remaining Amount</span><strong id="remainingIncentive">Pending</strong><small>Group-wise Total Incentive − (Sales Incentive + Non-sales Incentive)</small></div>
   </section>
-  <section class="card table-card">
+  <div id="incentiveDownloads" class="table-head" hidden>
+    <div><select id="incentiveSelection" aria-label="Reports to view and download" onchange="showSelectedIncentiveReports()" onclick="showSelectedIncentiveReports()"><option value="both">BOTH</option><option value="sales">SALES</option><option value="non-sales">NON SALES</option></select></div>
+    <details class="exact-download" id="incentiveDownloadMenu"><summary class="btn download">Download &#9662;</summary><div class="exact-download-options"><button type="button" onclick="document.getElementById('incentiveDownloadMenu').open=false;downloadSelectedIncentives('xlsx',this)">Excel</button><button type="button" onclick="document.getElementById('incentiveDownloadMenu').open=false;downloadSelectedIncentives('pdf',this)">PDF</button></div></details>
+    <button type="button" class="btn primary" id="showAllReports" aria-expanded="false" onclick="toggleAllIncentiveReports()">Show</button>
+  </div>
+  <section class="card table-card" id="outletSummaryReport" hidden>
     <div class="table-head"><h3>Calculated Outlet Summary</h3><button class="btn download" id="download" disabled onclick="downloadReport()">Download Report ↓</button></div>
     <div class="scroll"><table><thead><tr><th>Outlet</th><th style="text-align:right">Total Sales</th><th style="text-align:right">AVG Profit</th><th style="text-align:right">Total Incentive</th></tr></thead><tbody id="rows"><tr><td colspan="4" class="empty">Upload a sales workbook to begin.</td></tr></tbody></table></div>
   </section>
@@ -52,7 +70,7 @@
     <div class="scroll"><table><thead><tr><th>Outlet</th><th>Category Group</th><th style="text-align:right">Total Sales</th><th style="text-align:right">AVG Profit</th><th style="text-align:right">Total Incentive</th></tr></thead><tbody id="groupedRows"></tbody></table></div>
   </section>
   <section class="card table-card" id="exactReport" hidden>
-    <div class="table-head"><div><h3>Exact Incentive by Outlet &amp; Category Group</h3></div><details class="exact-download" id="exactDownloadMenu"><summary class="btn download">Download &#9662;</summary><div class="exact-download-options"><button type="button" onclick="document.getElementById('exactDownloadMenu').open=false;downloadExactReport('xlsx',this)">Excel</button><button type="button" onclick="document.getElementById('exactDownloadMenu').open=false;downloadExactReport('pdf',this)">PDF</button></div></details></div>
+    <div class="table-head"><div><h3>SALES INCENTIVE</h3></div></div>
     <div class="scroll"><table><thead><tr><th>Outlet</th><th>Category Group</th><th style="text-align:right">Total Incentive</th><th style="text-align:right">Applied Percentage</th><th style="text-align:right">Exact Incentive</th></tr></thead><tbody id="exactRows"></tbody></table></div>
   </section>
   <section class="card table-card" id="remainingReport" hidden>
@@ -68,6 +86,13 @@
   <section class="card table-card" id="idsOutletReport" hidden>
     <div class="table-head"><div><h3>Total IDS Fund by Outlet</h3><div class="category-legend">Sum of category IDS Fund amounts for each outlet. Included as a separate sheet in Download Report.</div></div></div>
     <div class="scroll"><table style="table-layout:fixed"><thead><tr><th scope="col">Outlet</th><th scope="col" style="text-align:right">Total IDS Fund</th></tr></thead><tbody id="idsOutletRows"></tbody></table></div>
+  </section>
+  <section class="card table-card" id="nonSalesReport" hidden>
+    <div id="nonSalesRateHeading" hidden class="table-head"><div><h3>Non-sales Staff Incentive</h3><div class="category-legend">Calculated from outlet IDS Fund amounts. Included in Download Report.</div></div></div>
+    <div id="nonSalesRateTable" hidden class="scroll"><table><thead><tr><th>Location</th><th>IDS Fund</th><th>Accounts</th><th>Ware House</th><th>Customer Care</th><th>Support</th><th>HO</th></tr></thead><tbody id="nonSalesRates"></tbody></table></div>
+    <div class="table-head"><h3>NON SALES INCENTIVE</h3></div>
+    <div class="scroll"><table><thead><tr><th>Location</th><th>IDS Fund</th><th>Accounts</th><th>Ware House</th><th>Customer Care</th><th>Support</th><th>HO</th></tr></thead><tbody id="nonSalesValues"></tbody></table></div>
+    <p class="category-legend" style="padding:0 18px">Outlet allocations round to the nearest rupee. MWH = combined IDS Fund of the five outlets × 16%, rounded to two decimals. Central Service sums the rounded allocations. Missing outlet amounts remain Pending.</p>
   </section>
 </main>
 <script>
@@ -95,13 +120,15 @@
     return storageOperation('readwrite',store=>store.put(value,storageKey));
   }
   function resetReport(){
+    hideIncentiveReports();document.getElementById('incentiveDownloads').hidden=true;
     savedReport=null;
+    document.getElementById('nonSalesReport').hidden=true;
     document.getElementById('idsFundReport').hidden=true;
     document.getElementById('idsOutletReport').hidden=true;
     document.getElementById('idsOutletRows').innerHTML='';
     document.getElementById('idsFundRows').innerHTML='';
     for(const id of ['totalSales','totalProfit','totalIncentive'])document.getElementById(id).textContent=money.format(0);
-    document.getElementById('exactDownloadMenu').open=false;
+    document.getElementById('incentiveDownloadMenu').open=false;
     for(const id of ['kpis','categoryReport','groupedReport','exactReport','remainingReport'])document.getElementById(id).hidden=true;
     for(const id of ['categoryRows','groupedRows','exactRows','remainingRows'])document.getElementById(id).innerHTML='';
     document.getElementById('rows').innerHTML='<tr><td colspan="4" class="empty">Upload a sales workbook to begin.</td></tr>';
@@ -142,9 +169,74 @@
   const money=new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:2});
   function formData(){const file=selectedFile;if(!file)throw new Error('Please select an Excel or PDF file.');const fd=new FormData();fd.append('file',file);fd.append('profit_rate',document.getElementById('profitRate').value);fd.append('incentive_rate',document.getElementById('incentiveRate').value);return fd}
   function setMessage(text,error=false){const el=document.getElementById('message');el.textContent=text;el.className='message'+(error?' error':'')}
-  function renderIncentive(data){renderIdsFund(data.ids_fund_report);document.getElementById('totalSales').textContent=money.format(data.totals.total_sales);document.getElementById('totalProfit').textContent=money.format(data.totals.avg_profit);document.getElementById('totalIncentive').textContent=money.format(data.totals.total_incentive);document.getElementById('kpis').hidden=false;document.getElementById('rows').innerHTML=data.summary.map(r=>`<tr><td>${escapeHtml(r.outlet)}</td><td class="num">${money.format(r.total_sales)}</td><td class="num">${money.format(r.avg_profit)}</td><td class="num">${money.format(r.total_incentive)}</td></tr>`).join('');document.getElementById('categoryRows').innerHTML=data.category_summary.map(r=>`<tr><td>${escapeHtml(r.outlet)}</td>${['HA','HE','MOB','COM','DC','ACC'].map(category=>categoryCell(r.categories[category])).join('')}${categoryCell(r.total)}</tr>`).join('');document.getElementById('groupedRows').innerHTML=data.grouped_summary.map(r=>`<tr><td>${escapeHtml(r.outlet)}</td><td>${escapeHtml(r.group)}</td><td class="num">${money.format(r.total_sales)}</td><td class="num">${money.format(r.avg_profit)}</td><td class="num">${money.format(r.total_incentive)}</td></tr>`).join('');document.getElementById('categoryReport').hidden=false;document.getElementById('groupedReport').hidden=false;renderExactIncentive(data.exact_summary);document.getElementById('download').disabled=false;}
+  function renderIncentive(data){renderIdsFund(data.ids_fund_report);renderIncentiveBalances(data);document.getElementById('totalSales').textContent=money.format(data.totals.total_sales);document.getElementById('totalProfit').textContent=money.format(data.totals.avg_profit);document.getElementById('totalIncentive').textContent=money.format(data.totals.total_incentive);document.getElementById('kpis').hidden=false;document.getElementById('rows').innerHTML=data.summary.map(r=>`<tr><td>${escapeHtml(r.outlet)}</td><td class="num">${money.format(r.total_sales)}</td><td class="num">${money.format(r.avg_profit)}</td><td class="num">${money.format(r.total_incentive)}</td></tr>`).join('');document.getElementById('categoryRows').innerHTML=data.category_summary.map(r=>`<tr><td>${escapeHtml(r.outlet)}</td>${['HA','HE','MOB','COM','DC','ACC'].map(category=>categoryCell(r.categories[category])).join('')}${categoryCell(r.total)}</tr>`).join('');document.getElementById('groupedRows').innerHTML=data.grouped_summary.map(r=>`<tr><td>${escapeHtml(r.outlet)}</td><td>${escapeHtml(r.group)}</td><td class="num">${money.format(r.total_sales)}</td><td class="num">${money.format(r.avg_profit)}</td><td class="num">${money.format(r.total_incentive)}</td></tr>`).join('');document.getElementById('categoryReport').hidden=false;document.getElementById('groupedReport').hidden=false;renderExactIncentive(data.exact_summary);document.getElementById('download').disabled=false;hideIncentiveReports();document.getElementById('incentiveDownloads').hidden=false;}
+  function hideIncentiveReports(){
+    document.getElementById('exactReport').setAttribute('data-view','full');
+    for(const id of ['nonSalesRateHeading','nonSalesRateTable'])document.getElementById(id).hidden=true;
+    const allButton=document.getElementById('showAllReports');
+    allButton.textContent='Show';allButton.setAttribute('aria-expanded','false');
+    for(const id of ['outletSummaryReport','categoryReport','groupedReport','exactReport','remainingReport','idsFundReport','idsOutletReport','nonSalesReport'])document.getElementById(id).hidden=true;
+    for(const id of ['salesCard','nonSalesCard'])document.getElementById(id).setAttribute('aria-expanded','false');
+  }
+  function toggleIncentiveReport(kind){
+    const id=kind==='sales'?'exactReport':'nonSalesReport',open=document.getElementById(id).hidden||document.getElementById('showAllReports').getAttribute('aria-expanded')==='true';
+    hideIncentiveReports();
+    if(kind==='sales'&&open)document.getElementById('exactReport').setAttribute('data-view','summary');
+    document.getElementById(id).hidden=!open;
+    document.getElementById(kind==='sales'?'salesCard':'nonSalesCard').setAttribute('aria-expanded',String(open));
+    document.getElementById('incentiveSelection').value=kind;
+    if(open)document.getElementById(id).scrollIntoView({behavior:'smooth',block:'start'});
+  }
+  function toggleAllIncentiveReports(){
+    document.getElementById('exactReport').setAttribute('data-view','full');
+    const button=document.getElementById('showAllReports');
+    if(button.getAttribute('aria-expanded')==='true'){hideIncentiveReports();return;}
+    for(const id of ['outletSummaryReport','categoryReport','groupedReport','exactReport','remainingReport','idsFundReport','idsOutletReport','nonSalesReport'])document.getElementById(id).hidden=false;
+    for(const id of ['nonSalesRateHeading','nonSalesRateTable'])document.getElementById(id).hidden=false;
+    for(const id of ['salesCard','nonSalesCard'])document.getElementById(id).setAttribute('aria-expanded','true');
+    button.textContent='Hide';button.setAttribute('aria-expanded','true');
+  }
+  function showSelectedIncentiveReports(){
+    const selection=document.getElementById('incentiveSelection').value;
+    hideIncentiveReports();
+    const sales=selection==='both'||selection==='sales';
+    const nonSales=selection==='both'||selection==='non-sales';
+    document.getElementById('exactReport').hidden=!sales;
+    document.getElementById('exactReport').setAttribute('data-view','summary');
+    document.getElementById('nonSalesReport').hidden=!nonSales;
+    document.getElementById('salesCard').setAttribute('aria-expanded',String(sales));
+    document.getElementById('nonSalesCard').setAttribute('aria-expanded',String(nonSales));
+  }
+  async function downloadSelectedIncentives(format,button){
+    const selection=document.getElementById('incentiveSelection').value;
+    try{
+      button.disabled=true;setMessage('Creating selected incentive reports...');
+      const response=await fetch('/api/incentive/selected-export?selection='+encodeURIComponent(selection)+'&format='+format,{method:'POST',headers:{Authorization:'Bearer '+token},body:formData()});
+      if(!response.ok){const data=await response.json();throw new Error(data.detail||'Export failed.');}
+      const blob=await response.blob(),url=URL.createObjectURL(blob),a=document.createElement('a');
+      a.href=url;a.download='Incentive_'+selection+'.'+format;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+      setMessage('Selected incentive reports downloaded successfully.');
+    }catch(e){setMessage(e.message,true);}finally{button.disabled=false;}
+  }
+  function renderIncentiveBalances(data){
+    // Sum the displayed report amounts in paise to avoid floating-point drift.
+    const paise=value=>typeof value==='number'&&Number.isFinite(value)?Math.round(value*100):null;
+    const sum=(rows,value)=>{
+      if(!Array.isArray(rows)||!rows.length)return null;
+      const amounts=rows.map(row=>paise(value(row)));
+      return amounts.some(amount=>amount===null)?null:amounts.reduce((a,b)=>a+b,0);
+    };
+    const sales=sum(data.exact_summary,r=>r.outlet==='ASH'&&r.group==='ALL'?r.total_incentive:r.exact_incentive);
+    const nonSales=data.ids_fund_report?.version===3?paise(data.ids_fund_report.totals?.ids_fund):null;
+    const grouped=sum(data.grouped_summary,r=>r.total_incentive);
+    const remaining=[sales,nonSales,grouped].some(value=>value===null)?null:grouped-sales-nonSales;
+    for(const [id,value] of [['salesIncentive',sales],['nonSalesIncentive',nonSales],['remainingIncentive',remaining]]){
+      document.getElementById(id).textContent=value===null?'Pending':money.format(value/100);
+    }
+  }
   function categoryCell(values){return `<td class="category-value"><b>${money.format(values.avg_profit)}</b><small>${money.format(values.total_incentive)}</small></td>`}
   function renderIdsFund(report){
+    renderNonSales(report?.non_sales_report);
     const section=document.getElementById('idsFundReport'),body=document.getElementById('idsFundRows');
     section.hidden=false;
     document.getElementById('idsOutletReport').hidden=true;
@@ -160,6 +252,16 @@
     body.innerHTML=tableRows.map(r=>`<tr${r.isTotal?' style="font-weight:700;background:#d9eaf7"':''}><td>${escapeHtml(r.outlet)}</td><td>${escapeHtml(r.category)}</td><td class="num">${amount(r.total_sales)}</td><td class="num">${r.isTotal?'':r.incentive_rate==null?'Pending':Number(r.incentive_rate).toFixed(3)+'%'}</td><td class="num">${amount(r.total_incentive)}</td><td class="num">${r.isTotal?'':r.fund_rate==null?'Pending':r.fund_rate+'%'}</td><td class="num">${amount(r.ids_fund)}</td></tr>`).join('');
     document.getElementById('idsOutletRows').innerHTML=[...report.summary,{outlet:'GRAND TOTAL',...report.totals}].map((r,i)=>`<tr${i===report.summary.length?' style="font-weight:700;background:#d9eaf7"':''}><td>${escapeHtml(r.outlet)}</td><td class="num">${amount(r.ids_fund)}</td></tr>`).join('');
     document.getElementById('idsOutletReport').hidden=false;
+  }
+  function renderNonSales(report){
+    document.getElementById('nonSalesReport').hidden=false;
+    const rates=document.getElementById('nonSalesRates'),values=document.getElementById('nonSalesValues');
+    if(!report){rates.innerHTML='<tr><td colspan="7" class="empty">Click Calculate to generate the non-sales staff report.</td></tr>';values.innerHTML=rates.innerHTML;return;}
+    const amount=n=>n==null?'Pending':money.format(n);
+    rates.innerHTML=report.rows.map(r=>`<tr><td>${escapeHtml(r.location)}</td><td class="num">${amount(r.ids_fund)}</td>${r.rates.map(n=>`<td class="num">${n==null?'':n+'%'}</td>`).join('')}</tr>`).join('');
+    values.innerHTML=report.rows.map(r=>`<tr><td>${escapeHtml(r.location)}</td><td class="num">${r.outlet==='MWH'?'':amount(r.ids_fund)}</td>${r.values.map((n,i)=>`<td class="num">${r.rates[i]==null?'-':amount(n)}</td>`).join('')}</tr>`).join('')+
+      `<tr style="font-weight:700"><td>Outlet total</td><td></td>${report.totals.map((n,i)=>`<td class="num">${i===1?'-':amount(n)}</td>`).join('')}</tr>`+
+      `<tr style="font-weight:700;background:#d9eaf7;color:#c0392b"><td>Central Service</td><td></td>${report.totals.map(n=>`<td class="num">${amount(n)}</td>`).join('')}</tr>`;
   }
   function renderExactIncentive(rows){
     rows=rows.map(r=>r.outlet==='ASH'&&r.group==='ALL'?{...r,applied_rate:100,exact_incentive:r.total_incentive}:r);
@@ -184,8 +286,8 @@
     }catch(e){setMessage(e.message,true)}finally{button.disabled=false}
   }
   async function downloadReport(){try{setMessage('Creating formula-driven Excel report…');const response=await fetch('/api/incentive/export',{method:'POST',headers:{Authorization:`Bearer ${token}`},body:formData()});if(!response.ok){const data=await response.json();throw new Error(data.detail||'Export failed.')}const blob=await response.blob(),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=(response.headers.get('content-disposition')||'').match(/filename="?([^";]+)"?/)?.[1]||'Outlet_Incentive_Report.xlsx';a.click();URL.revokeObjectURL(url);setMessage('Excel report downloaded successfully.')}catch(e){setMessage(e.message,true)}}
-  document.addEventListener('click',event=>{const menu=document.getElementById('exactDownloadMenu');if(!menu.contains(event.target))menu.open=false});
-  document.addEventListener('keydown',event=>{const menu=document.getElementById('exactDownloadMenu');if(event.key==='Escape'&&menu.open){menu.open=false;menu.querySelector('summary').focus()}});
+  document.addEventListener('click',event=>{const menu=document.getElementById('incentiveDownloadMenu');if(!menu.contains(event.target))menu.open=false});
+  document.addEventListener('keydown',event=>{const menu=document.getElementById('incentiveDownloadMenu');if(event.key==='Escape'&&menu.open){menu.open=false;menu.querySelector('summary').focus()}});
   restoreUpload();
   function escapeHtml(value){const div=document.createElement('div');div.textContent=value;return div.innerHTML}
 </script>
