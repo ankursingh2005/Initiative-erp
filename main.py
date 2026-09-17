@@ -583,6 +583,8 @@ ensure_default_branches()
 ensure_default_master_data()
 
 app = FastAPI(title="IDSPL Scheme Management ERP")
+from identity_cards import router as identity_cards_router
+app.include_router(identity_cards_router)
 app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=5)
 
 
@@ -1737,6 +1739,12 @@ def app_home_page():
 @app.get("/attendance.html")
 def attendance_page():
     return serve_html("static/attendance.html")
+
+
+@app.get("/identity-card")
+@app.get("/identity-card.html")
+def identity_card_page():
+    return serve_html("static/identity_card.html")
 
 
 @app.get("/price-list")
@@ -3765,6 +3773,9 @@ def delete_user(
     ).delete(synchronize_session=False)
     db.query(models.UserBrand).filter(
         models.UserBrand.user_id == target_user.id
+    ).delete(synchronize_session=False)
+    db.query(models.IdentityCard).filter(
+        models.IdentityCard.user_id == target_user.id
     ).delete(synchronize_session=False)
 
     try:

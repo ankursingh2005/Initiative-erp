@@ -385,6 +385,23 @@ class User(Base):
     brands = relationship("UserBrand", back_populates="user", cascade="all, delete-orphan")
 
 
+class IdentityCardSequence(Base):
+    __tablename__ = "identity_card_sequences"
+    prefix = Column(String(35), primary_key=True)
+    last_number = Column(Integer, nullable=False, default=0)
+
+
+class IdentityCard(Base):
+    __tablename__ = "identity_cards"
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    employee_id = Column(String(40), unique=True, nullable=False)
+    employee_name = Column(String(150), nullable=False)
+    designation = Column(String(100), nullable=False)
+    mobile = Column(String(25), nullable=False, default="")
+    photo = Column(Text, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class UserBrand(Base):
     """A user can be linked to MULTIPLE brands (used for BrandManager / BrandPartner roles)."""
     __tablename__ = "user_brands"

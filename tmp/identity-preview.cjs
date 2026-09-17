@@ -1,0 +1,8 @@
+const http=require('http'),fs=require('fs'),path=require('path');
+const cards=[{user_id:1,employee_id:'IDS-HZT-26001',employee_name:'Aarav Sharma',designation:'Operations Manager',mobile:'+91 98765 43210',photo:null,role:'Employee',status:'Active',outlet:'Hazratganj',saved:true},{user_id:2,employee_id:'IDS-HO-26001',employee_name:'Meera Kapoor',designation:'HR Manager',mobile:'',photo:null,role:'HR',status:'Active',outlet:'Head Office',saved:false}];
+http.createServer((req,res)=>{
+ let url=new URL(req.url,'http://localhost').pathname.replace(/^\/erp\//,'/');
+ if(url.startsWith('/api/identity-cards')){res.setHeader('Content-Type','application/json');if(req.method==='PUT'){let data='';req.on('data',c=>data+=c);req.on('end',()=>{const id=Number(url.split('/').pop()),card=cards.find(c=>c.user_id===id);Object.assign(card,JSON.parse(data),{saved:true});res.end(JSON.stringify(card));});return;}res.end(JSON.stringify({can_edit:true,cards}));return;}
+ if(url==='/identity-card'){let html=fs.readFileSync('static/identity_card.html','utf8');html=html.replace('<head>','<head><script>localStorage.setItem("token","preview");localStorage.setItem("role","Admin");</script>');res.setHeader('Content-Type','text/html');res.end(html);return;}
+ const file=path.resolve('.'+decodeURIComponent(url));if(!file.startsWith(path.resolve('static')+path.sep)||!fs.existsSync(file)){res.writeHead(404);res.end();return;}res.setHeader('Content-Type',file.endsWith('.css')?'text/css':file.endsWith('.js')?'text/javascript':file.endsWith('.png')?'image/png':'text/html');res.end(fs.readFileSync(file));
+}).listen(8769,'127.0.0.1',()=>console.log('Identity preview on 8769'));
