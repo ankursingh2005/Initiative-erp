@@ -68,7 +68,10 @@ For Gmail HTTPS delivery, set `PASSWORD_RESET_EMAIL_PROVIDER=gmail` on the
 host and supply the four `GMAIL_*` values described above. Existing configured
 Gmail PO credentials can be reused; each OTP counts toward that mailbox's
 shared sending allowance. For local development, copy those settings into
-the ignored `.env` file; `.env.gmail` is not automatically loaded by the app.
+the ignored `.env` file, or use `.env.gmail` produced by the setup script.
+The app loads `.env.gmail` without overriding existing environment settings.
+When no email provider is explicitly selected, complete Gmail credentials
+automatically select Gmail HTTPS for password recovery.
 Never put credentials in source code.
 
 Alternatively, set `PASSWORD_RESET_EMAIL_PROVIDER=smtp` with `SMTP_HOST`,

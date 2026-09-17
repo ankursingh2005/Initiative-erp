@@ -57,6 +57,7 @@ from openpyxl import load_workbook, Workbook
 
 load_dotenv()  # reads a local .env file (if present) into os.environ before
                 # anything below calls os.getenv() - e.g. SMTP_*, SECRET_KEY.
+load_dotenv(os.path.join(os.path.dirname(__file__), '.env.gmail'), override=False)
 
 import models
 import schemas

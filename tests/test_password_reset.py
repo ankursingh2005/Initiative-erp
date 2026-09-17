@@ -122,6 +122,29 @@ class PasswordResetTests(unittest.TestCase):
         self.assertEqual(error.exception.status_code, 503)
         self.sender.assert_not_called()
 
+    def test_gmail_credentials_select_https_without_po_provider(self):
+        with patch.dict('os.environ', {'PO_EMAIL_PROVIDER': '', 'PASSWORD_RESET_EMAIL_PROVIDER': ''}):
+            self.assertEqual(recovery.email_provider(), 'gmail')
+            self.request()
+        self.sender.assert_called_once()
+
+    def test_explicit_smtp_override_is_respected(self):
+        with patch.dict('os.environ', {'PASSWORD_RESET_EMAIL_PROVIDER': 'smtp', 'SMTP_PASSWORD': 'test'}):
+            self.assertEqual(recovery.email_provider(), 'smtp')
+
+    def test_failed_delivery_retry_does_not_claim_code_sent(self):
+        self.sender.return_value = 'Not sent: Gmail authorization failed.'
+        for _ in range(2):
+            with self.assertRaises(HTTPException) as error:
+                self.request()
+            self.assertEqual(error.exception.status_code, 503)
+        self.sender.assert_called_once()
+        self.user.reset_requested_at = datetime.utcnow() - timedelta(seconds=61)
+        self.db.commit()
+        self.sender.return_value = 'Accepted by Gmail for sending.'
+        self.request()
+        self.confirm()
+
     def test_password_length_validation(self):
         self.request()
         self.assert_rejected(lambda: self.confirm(password=''))

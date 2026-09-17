@@ -1,5 +1,6 @@
 """Email account recovery; delivery is invoked only by a reset request."""
 import hashlib
+import logging
 import os
 import secrets
 import smtplib
@@ -16,11 +17,17 @@ from po_email import send_gmail
 
 REQUEST_MESSAGE = {"message": "If this email belongs to an active account, a code has been sent. Check Spam too. Wait 60 seconds before retrying; maximum 5 requests per hour."}
 INVALID_CODE = "The verification code is invalid, expired, or has reached its attempt limit. Request a new code."
+logger = logging.getLogger(__name__)
+DELIVERY_ERROR = "Unable to send the reset email. Please try again later or contact your Admin."
 
 
 def email_provider():
     # Reuse an explicitly selected PO sender unless recovery overrides it.
-    provider = os.getenv("PASSWORD_RESET_EMAIL_PROVIDER", os.getenv("PO_EMAIL_PROVIDER", "smtp")).strip().lower()
+    gmail_ready = all(os.getenv(key, "").strip() for key in (
+        "GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "GMAIL_REFRESH_TOKEN", "GMAIL_SENDER"))
+    provider = (os.getenv("PASSWORD_RESET_EMAIL_PROVIDER", "").strip()
+                or os.getenv("PO_EMAIL_PROVIDER", "").strip()
+                or ("gmail" if gmail_ready else "smtp")).lower()
     required = ("GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "GMAIL_REFRESH_TOKEN", "GMAIL_SENDER") if provider == "gmail" else ("SMTP_PASSWORD",)
     if provider not in {"gmail", "smtp"} or not all(os.getenv(key, "").strip() for key in required):
         raise HTTPException(503, "Password reset email is unavailable. Please contact your Admin.")
@@ -34,9 +41,13 @@ def request_reset(payload, db):
         return REQUEST_MESSAGE
     now = datetime.utcnow()
     if user.reset_requested_at and now - user.reset_requested_at < timedelta(seconds=60):
+        if not user.reset_token:
+            raise HTTPException(503, DELIVERY_ERROR)
         return REQUEST_MESSAGE
     fresh_window = not user.reset_request_window or now - user.reset_request_window >= timedelta(hours=1)
     if not fresh_window and (user.reset_request_count or 0) >= 5:
+        if not user.reset_token:
+            raise HTTPException(503, DELIVERY_ERROR)
         return REQUEST_MESSAGE
     code = f"{secrets.randbelow(1_000_000):06d}"
     token = hashlib.sha256(code.encode()).hexdigest()
@@ -59,7 +70,10 @@ def request_reset(payload, db):
     message["To"] = recipient
     try:
         if provider == "gmail":
-            if send_gmail(message) != "Accepted by Gmail for sending.":
+            result = send_gmail(message)
+            if result != "Accepted by Gmail for sending.":
+                # Transport returns sanitized diagnostics, never credentials or OTPs.
+                logger.warning("Password reset Gmail delivery failed: %s", result)
                 raise RuntimeError("Email provider did not confirm acceptance")
         else:
             message["From"] = os.getenv("SMTP_FROM", "initiative.lucknow@gmail.com")
@@ -67,10 +81,11 @@ def request_reset(payload, db):
                 server.starttls()
                 server.login(os.getenv("SMTP_USER", "initiative.lucknow@gmail.com"), os.environ["SMTP_PASSWORD"])
                 server.send_message(message)
-    except Exception:
+    except Exception as exc:
+        logger.warning("Password reset delivery failed (provider=%s, error=%s)", provider, type(exc).__name__)
         db.query(models.User).filter(models.User.id == user_id, models.User.reset_token == token).update({models.User.reset_token: None, models.User.reset_token_expires: None}, synchronize_session=False)
         db.commit()
-        raise HTTPException(503, "Unable to send the reset email. Please try again later or contact your Admin.")
+        raise HTTPException(503, DELIVERY_ERROR)
     return REQUEST_MESSAGE
 
 

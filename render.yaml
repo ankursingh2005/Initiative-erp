@@ -11,12 +11,11 @@ services:
         fromDatabase:
           name: idspl-postgres
           property: connectionString
-      # Gmail App Password for initiative.lucknow@gmail.com. Host, user,
-      # port, and from-address already default to that Gmail account in the
-      # code, so this is the only email setting you must fill in yourself.
-      # Render will prompt for the value in the dashboard (never committed
-      # to the repo). See README.md "Email sending" section for how to
-      # generate it.
+      # For OTP delivery via Gmail HTTPS, copy the four GMAIL_* values from
+      # the ignored .env.gmail into the host Environment settings and set
+      # PASSWORD_RESET_EMAIL_PROVIDER=gmail. See GMAIL_PO_SETUP.md.
+      # Local .env.gmail is not uploaded by Git deployment.
+      # SMTP_PASSWORD is only used when selecting SMTP delivery.
       - key: SMTP_PASSWORD
         sync: false
       # WhatsApp Cloud API credentials and daily attendance delivery.
