@@ -1,0 +1,1 @@
+"""EMS — Employee Management System."""

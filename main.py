@@ -60,6 +60,7 @@ load_dotenv()  # reads a local .env file (if present) into os.environ before
 load_dotenv(os.path.join(os.path.dirname(__file__), '.env.gmail'), override=False)
 
 import models
+import ems_models
 import schemas
 import scheme_engine
 import auth
@@ -586,6 +587,10 @@ ensure_default_master_data()
 app = FastAPI(title="IDSPL Scheme Management ERP")
 from identity_cards import router as identity_cards_router
 app.include_router(identity_cards_router)
+from ems import router as ems_router, pages as ems_pages
+app.include_router(ems_router)
+app.include_router(ems_pages)
+app.mount('/ems-assets', StaticFiles(directory=os.path.join(os.path.dirname(__file__), 'EMS', 'static')), name='ems-assets')
 app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=5)
 
 
@@ -2809,6 +2814,13 @@ def set_my_attendance_status(
         if not existing:
             db.add(models.AttendanceLeave(user_id=current_user.id, leave_date=leave_date, created_by=current_user.id))
     elif existing:
+        if db.query(ems_models.EMSLeaveRequest).filter(
+            ems_models.EMSLeaveRequest.user_id == current_user.id,
+            ems_models.EMSLeaveRequest.status == 'approved',
+            ems_models.EMSLeaveRequest.start_date <= leave_date,
+            ems_models.EMSLeaveRequest.end_date >= leave_date,
+        ).first():
+            raise HTTPException(409, 'This leave was approved through EMS. Contact HR before changing your attendance status.')
         db.delete(existing)
     db.commit()
     return {"date": leave_date, "status": "Leave" if payload.on_leave else "Working"}
@@ -3706,8 +3718,8 @@ def delete_user(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.require_user_management_admin),
 ):
-    """Admin/HR: permanently delete an allowed user account, regardless of what
-    they've submitted/uploaded in the past. Purchase orders require an
+    """Admin/HR: delete an allowed account unless it has protected EMS history.
+    Accounts with EMS history must be deactivated. Purchase orders require an
     owning user (that column is NOT NULL), so any the deleted user
     submitted or approved are reassigned to the admin doing the deletion,
     with a note recording who originally submitted them - the order itself
@@ -3724,6 +3736,9 @@ def delete_user(
         raise HTTPException(status_code=403, detail="HR cannot delete an Admin account.")
 
     deleted_username = target_user.username
+    if any(db.query(model).filter(model.user_id == user_id).first() is not None
+           for model in (ems_models.EMSLeaveRequest, ems_models.EMSEarning, ems_models.EMSPayroll)):
+        raise HTTPException(409, 'This employee has EMS history. Deactivate the account to preserve leave and payroll records.')
 
     # Purchase orders must always have a submitter, so reassign any this
     # user submitted to the admin performing the deletion, and record who

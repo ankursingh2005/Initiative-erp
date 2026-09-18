@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#163e35">
+  <meta name="description" content="EMS employee self-service and HR management: attendance, leave, identity cards, payroll and rewards.">
+  <title>EMS | Employee Management System</title>
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <section id="auth" class="auth-layout" hidden>
+    <aside class="auth-story"><a class="brand" href="/"><span class="brand-mark">E</span><span>EMS<small>EMPLOYEE MANAGEMENT SYSTEM</small></span></a><div><span class="eyebrow">YOUR WORK. YOUR WORKPLACE.</span><h1>Everything you need.<br>One place to belong.</h1><p>From your first day to your next milestone. Your attendance, leave, pay and rewards, connected.</p><div class="story-features"><span>01 &nbsp; People & identity</span><span>02 &nbsp; Time & attendance</span><span>03 &nbsp; Pay & recognition</span></div></div><small>Built around people.</small></aside>
+    <div class="auth-panel"><div class="auth-box"><span class="eyebrow">WELCOME TO EMS</span><h2 id="authTitle">Good to see you.</h2><p id="authSubtitle">Sign in to your employee workspace.</p><div class="tabs"><button id="loginTab" class="active" type="button">Sign in</button><button id="registerTab" type="button">Register</button></div><form id="authForm"><label id="registerName" hidden>Full name<input name="name" autocomplete="name" minlength="2" maxlength="120"></label><label>Email address<input name="email" type="email" autocomplete="username" required maxlength="200" placeholder="you@company.com"></label><label>Password<input name="password" type="password" minlength="10" maxlength="128" autocomplete="current-password" required><small>At least 10 characters.</small></label><button class="primary wide" id="authSubmit">Sign in →</button></form><p id="authMessage" class="notice" role="status"></p><p class="auth-note">New registrations are reviewed by HR before account access is activated.</p></div></div>
+  </section>
+  <div id="workspace" class="workspace" hidden>
+    <aside class="sidebar"><a class="brand" href="/"><span class="brand-mark">E</span><span>EMS<small>PEOPLE & WORKPLACE</small></span></a><div class="nav-label">WORKSPACE</div><nav id="navigation" aria-label="Main navigation"></nav><div class="sidebar-bottom"><span class="status-dot"></span>Employee Management System<small>One workspace. Every workday.</small></div></aside>
+    <div class="main-wrap"><header class="topbar"><span id="breadcrumb">Workspace / Overview</span><div><span id="accountName"></span><button id="logout" class="quiet">Sign out</button></div></header><main><div class="page-heading"><div><span class="eyebrow" id="pageEyebrow">YOUR WORKPLACE AT A GLANCE</span><h1 id="pageTitle">Overview</h1></div><span id="today" class="date-pill"></span></div><div id="message" class="notice" role="status" aria-live="polite"></div><section id="content" aria-live="polite"><p class="empty">Loading your workspace…</p></section></main><footer>EMS <span>Employee Management System</span></footer></div>
+  </div>
+  <dialog id="dialog"><div class="dialog-heading"><h2 id="dialogTitle"></h2><button id="closeDialog" class="quiet" aria-label="Close dialog">✕</button></div><form id="dialogForm"></form><p id="dialogMessage" class="notice" role="status"></p></dialog>
+  <div id="printArea"></div>
+  <noscript>Enable JavaScript to use the employee workspace.</noscript>
+</body>
+</html>
