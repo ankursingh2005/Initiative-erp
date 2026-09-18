@@ -5847,18 +5847,21 @@ def dp_categorize(item_name: Optional[str]) -> str:
     if "INVERTER EB 1100" in n:
         return "HA"
 
-    # This OTG is an oven, so it must precede the OTG accessory rule.
-    if re.search(r"\bBAJAJ\s+OTG\s+60\s+RCSS\b", n):
-        return "HA"
-
-    # Faber built-in kitchen appliances. These model lines previously fell
-    # through to the Accessories fallback because the profitability
-    # classifier had no HOB/HOOD product-type rule.
-    faber_ha_models = (
-        "FABER HOB COOKTOP SUPERIA HT904 BR AI N",
-        "FABER HOOD EVEREST 3D IN HCSCFLLG60",
+    # Recognize appliance types before OTG (USB accessory) and LED (TV)
+    # checks. An OTG oven has a litre capacity or explicit oven/fryer type;
+    # USB OTG adapters and appliance spares remain accessories.
+    appliance_type = re.search(
+        r"\b(?:AIR[\s-]*FRYER|FRYER|OVEN|HOBS?|COOK[\s-]*TOP|BURNERS?|"
+        r"OFR|OIL[\s-]*FILLED\s+(?:RADIATOR|HEATER)|"
+        r"WATER\s+(?:D\b|DISPENS[EO]R)|"
+        r"(?:FABER|ELICA|GLEN|KAFF|HINDWARE|SUNFLAME)\s+HOOD|"
+        r"(?:COOKER|KITCHEN)\s+HOOD|"
+        r"OTG\s+\d+\s*(?:L(?:ITRES?|ITERS?)?|RCSS))\b", n)
+    appliance_accessory = (
+        any(k in n for k in DP_ACCESSORY_KEYWORDS if k != "OTG")
+        or re.search(r"\b(?:USB|SPARES?|REPLACEMENT|COVERS?|FILTERS?|TRAYS?|BASKETS?|KNOBS?)\b", n)
     )
-    if any(model in n for model in faber_ha_models):
+    if appliance_type and not appliance_accessory:
         return "HA"
 
     # --- Mobile phones, first, before anything else can steal them ---
