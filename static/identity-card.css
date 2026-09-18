@@ -5,6 +5,15 @@
 @page{size:A4;margin:12mm}
 @media print{body{background:white}body>*{display:none!important}body>#printArea{display:block!important}#printArea .print-pair{display:flex;gap:8mm;margin:0 0 8mm;break-inside:avoid;page-break-inside:avoid}#printArea .id-card{width:54mm;height:85.6mm;zoom:.756;flex:none;box-shadow:none;border-radius:2.5mm;border:.2px solid #bbb;print-color-adjust:exact;-webkit-print-color-adjust:exact}#printArea .id-card{width:270px;height:428px}#printArea .side-label{display:none}.print-pair:nth-child(2n){break-after:page}.print-pair:last-child{break-after:auto}}
 /* Keep the brand clear and give the printed employee details more room. */
+.preview{flex-direction:column;align-items:center;perspective:1200px;gap:18px}
+.card-turner{display:grid;cursor:pointer;touch-action:manipulation;border-radius:14px}
+.card-turner:focus-visible{outline:3px solid var(--teal);outline-offset:7px}
+.card-turner .card-side{grid-area:1 / 1;backface-visibility:hidden}
+.card-turner .card-side:last-child{visibility:hidden}
+.card-turner.show-back .card-side:first-child{visibility:hidden}
+.card-turner.show-back .card-side:last-child{visibility:visible}
+.card-turn-hint{font-size:12px;color:var(--teal);text-align:center}
+@media print{#printArea .print-pair{break-after:page;page-break-after:always}#printArea .print-pair:last-child{break-after:auto;page-break-after:auto}}
 .card-data{font-size:13px;gap:13px 7px}.card-data dt{font-size:10px}.card-data dd.name{font-size:15px}
 .id-card footer{font-size:7px;letter-spacing:.7px}.id-card footer:before{display:none}
 
@@ -45,7 +54,8 @@
 .id-front .card-data dt{font-size:11px;font-weight:750;color:#244b48;padding-top:3px}
 .id-front .card-data dd{font-weight:750;color:#102d3c}
 .id-front .card-data dd:first-of-type{font-size:.9em;padding:4px 5px;letter-spacing:0;background:#dcece3;border-left:3px solid #b89958}
-.id-front .card-data dd.name{font-size:17px;line-height:1.15;letter-spacing:-.3px}
+.id-front .card-data dd.name{font-size:17px;line-height:1.15;letter-spacing:normal;white-space:nowrap;overflow-wrap:normal;min-width:0}
+.id-front .card-data dd.designation{white-space:nowrap;overflow-wrap:normal;min-width:0}
 .id-front:after{height:23px}
 
 /* Back card: a company plaque framed by gold and layered teal geometry. */
@@ -66,3 +76,78 @@
 .id-back .back-email:before{content:'EMAIL';display:block;color:#886c34;font-size:8px;font-weight:750;letter-spacing:1.5px;margin-bottom:3px}
 .id-back .back-id{bottom:17px;left:22px;right:22px;font-size:12px;font-weight:700;letter-spacing:.7px}
 .id-back .back-id span{font-size:7px;font-weight:500;color:#d9ccaa;margin-bottom:5px;letter-spacing:1.7px}
+
+/* Identity studio dashboard. Card artwork and print dimensions stay independent. */
+@media screen{body{background:#eef2f1}}
+.topbar{height:76px;background:#ffffffee;border-bottom:1px solid #dce5e2}
+.back-link{border:1px solid #dce5e2;border-radius:30px;padding:9px 16px}
+main{max-width:1640px;padding-top:28px}
+.page-heading{position:relative;isolation:isolate;overflow:hidden;background:#143c43;color:#fff;border-radius:22px;padding:34px 40px;margin-bottom:20px;box-shadow:0 15px 35px #153d4315}
+.page-heading:before{content:'';position:absolute;z-index:-1;width:430px;height:430px;border:1px solid #d9bf7e45;border-radius:50%;right:45px;top:-270px;box-shadow:0 0 0 55px #ffffff04,0 0 0 110px #ffffff03}
+.page-heading:after{content:'';position:absolute;z-index:-1;inset:0;background:linear-gradient(115deg,transparent 42%,#34897b40)}
+.page-heading .eyebrow{color:#dec792;font-size:10px;letter-spacing:2.2px}
+.page-heading h1{font-size:40px;letter-spacing:-1.5px;margin:12px 0 8px;font-weight:650}
+.page-heading h1 span{color:#e0bf7d}
+.page-heading p{color:#cee0dc;font-size:14px}
+.hero-caption{font-size:9px;letter-spacing:1.6px;color:#f3e1b8;margin-top:26px}
+.hero-caption span{color:#a1c3be;margin-left:22px}
+.hero-actions{display:flex;align-items:center;gap:28px;flex-shrink:0}
+.hero-seal{display:grid;place-items:center;width:78px;height:100px;border:1px solid #e0c58c80;border-radius:12px;transform:rotate(12deg);font-size:32px;font-weight:750;color:#e5cf9e;box-shadow:8px 8px 0 #ffffff09}
+.hero-actions .primary{background:#ebd5a6;color:#193d42;border:1px solid #f5e3bf;box-shadow:0 5px 16px #09252925}
+.hero-actions .primary:hover{background:#f4e3c1}
+.hero-actions .primary span{margin-left:16px;font-size:19px}
+.identity-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:26px}
+.identity-stat{display:flex;align-items:center;gap:16px;padding:20px 22px;border:1px solid #dce6e2;border-radius:14px;background:#fff;box-shadow:0 3px 12px #193f4503}
+.stat-icon{width:40px;height:44px;display:grid;place-items:center;border-radius:10px;background:#edf5f1;color:#4b8273;font-size:11px;font-weight:700}
+.identity-stat>div>span{font-size:9px;letter-spacing:1.2px;color:#677c77;font-weight:650;display:block}
+.identity-stat strong{font-size:28px;line-height:1.2;font-weight:650;display:block;margin-top:5px;color:#193f45}
+.identity-stat small{margin-left:auto;max-width:100px;color:#7a8a85;font-size:11px}
+.workspace{grid-template-columns:270px minmax(0,1fr);border-radius:19px;border-color:#dce6e2;box-shadow:0 8px 35px #153c4307;align-items:stretch}
+.directory{background:#fafcfb;padding:26px 18px}
+.directory-heading h2{font-size:18px;font-weight:750}
+.directory-heading h2 span{background:#dcece4;color:#276252}
+.live-dot{font-size:9px}
+.search-label{font-size:10px;color:#647a73;margin-top:16px}
+.directory input,.directory select{background:#fff;border-color:#dce6e1;border-radius:9px}
+.people{margin-top:23px}
+.person{padding:14px 10px;border-radius:12px;margin:6px 0;gap:12px;transition:background .15s,border-color .15s}
+.person.selected{background:#e6f1eb;border-color:#bfd9ca;box-shadow:inset 3px 0 #3d8068}
+.person-avatar{border-radius:11px;width:40px;height:44px;background:#e0ebe5;color:#306c59}
+.person b{font-weight:700;font-size:12px}
+.person small{font-size:10px;line-height:1.45}
+.directory-note{color:#85968e;line-height:1.7}
+.studio{padding:27px;display:grid;grid-template-columns:minmax(300px,1fr) minmax(280px,1fr);column-gap:26px;align-items:start}
+.studio-heading{grid-column:1 / -1}
+.studio-heading .eyebrow{font-size:9px;letter-spacing:2px}
+.studio-heading h2{font-size:25px;font-weight:650;margin-top:5px}
+.pill{background:#e8f3ec;border:1px solid #d0e5d9;color:#2e7056;font-size:10px;padding:6px 11px}
+.message{grid-column:1 / -1;margin:10px 0;min-height:18px}
+.preview{grid-column:1;grid-row:3;margin-top:0;padding:27px 12px 21px;background:radial-gradient(ellipse at 50% 38%,#fff 0%,#edf3ed 55%,#e3ece6 100%);border-color:#dce6dd;border-radius:15px;gap:22px}
+.card-turner{filter:drop-shadow(0 15px 13px #284c3b18)}
+.card-turn-hint{color:#487160;font-size:11px}
+.preview-footer{grid-column:1;grid-row:4;align-self:start;margin-top:14px;gap:8px;flex-wrap:wrap}
+.preview-footer>span{font-size:10px;color:#7c8d84}
+.preview-footer .secondary{background:#183f43;color:#fff;border-color:#183f43;font-size:11px;border-radius:9px;padding:10px 14px}
+#editor{grid-column:2;grid-row:3 / 5;margin:0;padding:21px;border:1px solid #e0e7e2;border-radius:15px;background:#fff}
+.editor-heading{align-items:flex-start;gap:8px}
+.editor-heading h2{font-size:17px;font-weight:700}
+.editor-heading p{font-size:11px;line-height:1.6;color:#7a8b82;margin-top:6px}
+.fields{grid-template-columns:1fr;gap:14px;margin-top:19px}
+.fields label{font-size:10px;color:#476256;letter-spacing:.15px}
+.fields input{margin-top:5px;border-radius:8px;padding:10px 12px;min-height:41px;font-size:12px;border-color:#dbe5de;background:#fcfdfc}
+.fields input:focus{border-color:#65a185;background:#fff}
+.fields input[readonly]{background:#eff4f0;color:#668073;border-style:dashed}
+#employeeIdHelp{display:block;font-size:9px;color:#819186;line-height:1.5;margin-top:5px;font-weight:400}
+.photo-row{padding:13px;background:#f4f7f4;border:1px dashed #cbdacf;border-radius:10px;flex-direction:column;gap:0;align-items:flex-start;margin-top:18px}
+.photo-row input{font-size:10px;min-height:30px;max-width:100%}
+.photo-row small{font-size:9px;line-height:1.6}
+.photo-row .text-button{min-height:30px;font-size:10px;padding:3px 0}
+.form-footer{flex-direction:column;align-items:stretch;margin-top:17px;gap:12px}
+.form-footer p{font-size:9px;max-width:none;color:#8a978e}
+.form-footer>div{display:flex;gap:8px}
+.form-footer button{font-size:10px;flex:1;padding:10px 8px;border-radius:8px}
+.form-footer .primary{background:#236c58}
+.read-only{grid-column:2;grid-row:3;border:1px solid #dce6e1;border-radius:14px;background:#f5f8f5;padding:25px;margin:0;line-height:1.8}
+@media(max-width:1250px){.hero-seal{display:none}.workspace{grid-template-columns:240px minmax(0,1fr)}.studio{display:block}.preview{margin-top:0}#editor{margin-top:26px}.fields{grid-template-columns:1fr 1fr}.identity-stat small{display:none}.read-only{margin-top:20px}}
+@media(max-width:940px){.workspace{grid-template-columns:1fr}.directory{padding:22px}.directory-heading{margin-bottom:14px}.people{margin-top:16px}.person{min-width:210px;width:210px}.directory-note{margin-top:8px}.page-heading{padding:28px}.page-heading h1{font-size:34px}.hero-caption span{display:block;margin:7px 0 0}.identity-stat{padding:16px;gap:12px}.identity-stat>div>span{font-size:8px}.studio{padding:24px}}
+@media(max-width:650px){main{padding-top:20px}.topbar{height:72px}.back-link{padding:6px 12px;min-height:38px}.page-heading{padding:26px 22px;border-radius:17px;gap:22px}.page-heading h1{font-size:32px;max-width:260px}.hero-caption{font-size:8px;margin-top:19px}.hero-caption span{font-size:8px}.hero-actions{width:100%}.hero-actions .primary{width:100%;display:flex;align-items:center;justify-content:space-between}.identity-stats{gap:7px;margin-bottom:18px}.identity-stat{display:block;padding:13px 10px;border-radius:11px}.stat-icon,.identity-stat small{display:none}.identity-stat>div>span{font-size:7px;letter-spacing:.4px;min-height:21px}.identity-stat strong{font-size:25px}.studio{padding:20px 12px}.studio-heading h2{font-size:21px}.studio-heading .pill{max-width:95px;text-align:center}.preview{padding:24px 8px 20px}.fields{grid-template-columns:1fr}#editor{padding:18px}.preview-footer>span{font-size:9px}.directory{padding:19px 16px}.form-footer>div{flex-wrap:wrap}.read-only{padding:20px}}

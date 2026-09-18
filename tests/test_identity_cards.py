@@ -166,7 +166,24 @@ class IdentityCardTests(unittest.TestCase):
         self.users[3].store_id = None
         self.db.commit()
         self.client.get('/api/identity-cards')
-        self.assertEqual(self.db.get(models.IdentityCard, self.users[3].id).employee_id, 'IDS-UNASSIGNED-26001')
+        self.assertEqual(self.db.get(models.IdentityCard, self.users[3].id).employee_id, 'IDS-26001')
+
+    def test_unassigned_legacy_ids_migrate_and_remain_unique_and_stable(self):
+        for user in self.users[3::2]:
+            user.store_id = None
+        self.db.add(models.IdentityCard(user_id=self.users[3].id,
+                    employee_id='IDS-UNASSIGNED-25001', employee_name='Saved Name',
+                    designation='Saved Title', mobile='1234567890'))
+        self.db.commit()
+        self.client.get('/api/identity-cards')
+        card = self.db.get(models.IdentityCard, self.users[3].id)
+        self.assertEqual(card.employee_id, 'IDS-26001')
+        self.assertEqual(card.employee_name, 'Saved Name')
+        self.assertEqual(card.mobile, '1234567890')
+        self.assertEqual(self.db.get(models.IdentityCard, self.users[5].id).employee_id, 'IDS-26002')
+        with patch('identity_cards.issue_year', return_value='27'):
+            self.client.get('/api/identity-cards')
+        self.assertEqual(card.employee_id, 'IDS-26001')
 
     def test_invalid_data_and_photo_rejected(self):
         for change in [dict(employee_name='   '), dict(mobile='abc'), dict(employee_id='<bad>'), dict(photo='data:image/svg+xml;base64,xxx'), dict(photo='data:image/png;base64,YmFk'), dict(role='Admin')]:

@@ -28,7 +28,7 @@ OUTLET_ABBREVIATIONS = {
 
 def outlet_abbreviation(store):
     if store is None:
-        return "UNASSIGNED"
+        return ""
     known = OUTLET_ABBREVIATIONS.get(store.name.strip().lower())
     if known:
         return known
@@ -43,7 +43,7 @@ def next_employee_id(db, abbreviation):
     """Atomically reserve a serial. Counters survive employee deletion."""
     from sqlalchemy.dialects.sqlite import insert as sqlite_insert
     from sqlalchemy.dialects.postgresql import insert as postgres_insert
-    prefix = f"IDS-{abbreviation}-{issue_year()}"
+    prefix = f"IDS-{abbreviation + '-' if abbreviation else ''}{issue_year()}"
     insert = postgres_insert if db.bind.dialect.name == "postgresql" else sqlite_insert
     db.execute(insert(models.IdentityCardSequence).values(prefix=prefix, last_number=0)
                .on_conflict_do_nothing(index_elements=["prefix"]))
@@ -74,7 +74,8 @@ def ensure_employee_ids(db):
             for user, card, store in rows:
                 abbreviation = outlet_abbreviation(store)
                 # A year rollover does not renumber a card. Outlet transfers do.
-                if card and re.fullmatch(rf"IDS-{re.escape(abbreviation)}-\d{{2}}\d{{3,}}", card.employee_id):
+                prefix = f"IDS-{abbreviation + '-' if abbreviation else ''}"
+                if card and re.fullmatch(rf"{re.escape(prefix)}\d{{2}}\d{{3,}}", card.employee_id):
                     continue
                 number = next_employee_id(db, abbreviation)
                 if card is None:

@@ -12,21 +12,66 @@
   function message(text, error=false) { $('message').textContent=text; $('message').classList.toggle('error', error); }
   function cardHtml(card) {
     const photo = validPhoto(card.photo) ? `<img src="${card.photo}" alt="${esc(card.employee_name)} portrait">` : '<span class="photo-placeholder"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2"><circle cx="24" cy="15" r="8"/><path d="M8 44v-5a16 16 0 0 1 32 0v5"/></svg>Add photo</span>';
-    return `<div class="card-side"><div class="side-label"><span>01 / FRONT</span><span>EMPLOYEE IDENTITY</span></div><article class="id-card id-front" aria-label="Front of identity card"><div class="card-top"><div class="brand-lockup"><strong>Initiative</strong><small>EMPLOYEE IDENTITY CARD</small></div><div class="logo-badge"><img src="${base}/static/Initiative%20logo.png" alt="Initiative Electronics Megastore logo"></div></div><div class="gold-rule"></div><div class="portrait">${photo}</div><div class="card-tag">One team. One Initiative.</div><dl class="card-data"><dt>Emp ID :-</dt><dd>${esc(card.employee_id)}</dd><dt>Emp Name</dt><dd class="name">${esc(card.employee_name)}</dd><dt>Designation</dt><dd>${esc(card.designation)}</dd><dt>Mob No.</dt><dd>${esc(card.mobile || 'Not added')}</dd></dl><footer>INITIATIVE DATA SYSTEM PRIVATE LIMITED</footer></article></div><div class="card-side"><div class="side-label"><span>02 / BACK</span><span>COMPANY DETAILS</span></div><article class="id-card id-back" aria-label="Back of identity card"><div class="back-art"></div><div class="back-brand"><strong>Initiative</strong><span>CONNECTED BY PURPOSE</span></div><div class="back-company"><span class="tiny">OUR IDENTITY</span><h3>Initiative Data System Private Limited</h3><h4>Head Office</h4><p>Ashok Marg, Hazratganj<br>Lucknow - 226001</p><p class="back-email">initiative.lucknow@gmail.com</p></div><div class="back-id"><span>EMPLOYEE IDENTIFICATION</span>${esc(card.employee_id)}</div></article></div>`;
+    return `<div class="card-side"><div class="side-label"><span>01 / FRONT</span><span>EMPLOYEE IDENTITY</span></div><article class="id-card id-front" aria-label="Front of identity card"><div class="card-top"><div class="brand-lockup"><strong>Initiative</strong><small>EMPLOYEE IDENTITY CARD</small></div><div class="logo-badge"><img src="${base}/static/Initiative%20logo.png" alt="Initiative Electronics Megastore logo"></div></div><div class="gold-rule"></div><div class="portrait">${photo}</div><div class="card-tag">One team. One Initiative.</div><dl class="card-data"><dt>Emp ID :-</dt><dd>${esc(card.employee_id)}</dd><dt>Emp Name</dt><dd class="name">${esc(card.employee_name)}</dd><dt>Designation</dt><dd class="designation">${esc(card.designation)}</dd><dt>Mob No.</dt><dd>${esc(card.mobile || 'Not added')}</dd></dl><footer>INITIATIVE DATA SYSTEM PRIVATE LIMITED</footer></article></div><div class="card-side"><div class="side-label"><span>02 / BACK</span><span>COMPANY DETAILS</span></div><article class="id-card id-back" aria-label="Back of identity card"><div class="back-art"></div><div class="back-brand"><strong>Initiative</strong><span>CONNECTED BY PURPOSE</span></div><div class="back-company"><span class="tiny">OUR IDENTITY</span><h3>Initiative Data System Private Limited</h3><h4>Head Office</h4><p>Ashok Marg, Hazratganj<br>Lucknow, U.P - 226001</p><p class="back-email">initiative.lucknow@gmail.com</p></div><div class="back-id"><span>EMPLOYEE IDENTIFICATION</span>${esc(card.employee_id)}</div></article></div>`;
   }
   function fitCards(root) {
     root.querySelectorAll('.id-front').forEach(card => {
       const data=card.querySelector('.card-data'), footer=card.querySelector('footer');
+      const name=data.querySelector('.name');
+      const singleLineFields=data.querySelectorAll('.name, .designation');
+      data.style.fontSize=''; data.style.rowGap='';
+      singleLineFields.forEach(field=>field.style.fontSize='');
+      const fitSingleLineFields=()=>{
+        singleLineFields.forEach(field=>{
+          let fontSize=parseFloat(getComputedStyle(field).fontSize);
+          while(field.scrollWidth>field.clientWidth && fontSize>1){
+            fontSize=Math.max(1,fontSize-.25); field.style.fontSize=fontSize+'px';
+          }
+        });
+      };
+      fitSingleLineFields();
       let size=parseFloat(getComputedStyle(data).fontSize);
       while (data.getBoundingClientRect().bottom > footer.getBoundingClientRect().top-12 && size>7) {
         size-=.5; data.style.fontSize=size+'px'; data.style.rowGap=Math.max(4,size-2)+'px';
-        data.querySelector('.name').style.fontSize=(size+1)+'px';
+        name.style.fontSize=Math.min(parseFloat(getComputedStyle(name).fontSize),size+1)+'px';
       }
+      fitSingleLineFields();
     });
   }
-  function renderPreview() { if(!draft)return; $('preview').innerHTML=cardHtml(draft); fitCards($('preview')); }
+  function renderPreview() {
+    if(!draft)return;
+    $('preview').innerHTML='<div class="card-turner" role="button" tabindex="0" aria-label="Show back of identity card" aria-describedby="cardTurnHint">'+cardHtml(draft)+'</div><span id="cardTurnHint" class="card-turn-hint">Click or tap the card to see the back</span>';
+    const turner=$('preview').querySelector('.card-turner');
+    turner.lastElementChild.setAttribute('aria-hidden','true');
+    fitCards($('preview'));
+  }
+  async function turnCard() {
+    const turner=$('preview').querySelector('.card-turner');
+    if(!turner || turner.dataset.turning)return;
+    turner.dataset.turning='true';
+    const reduceMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const rotate=async(from,to,duration)=>{
+      const animation=turner.animate({transform:[`rotateY(${from}deg)`,`rotateY(${to}deg)`]}, {duration, easing:'ease-in-out',fill:'forwards'});
+      await animation.finished;
+      return animation;
+    };
+    const first=reduceMotion?null:await rotate(0,90,220);
+    if(!turner.isConnected){first?.cancel();return;}
+    const back=turner.classList.toggle('show-back');
+    turner.firstElementChild.setAttribute('aria-hidden',String(back));
+    turner.lastElementChild.setAttribute('aria-hidden',String(!back));
+    turner.setAttribute('aria-label',`Show ${back?'front':'back'} of identity card`);
+    $('cardTurnHint').textContent=`Click or tap the card to see the ${back?'front':'back'}`;
+    const second=reduceMotion?null:await rotate(-90,0,220);
+    first?.cancel(); second?.cancel();
+    delete turner.dataset.turning;
+  }
+  $('preview').addEventListener('click',e=>{if(e.target.closest('.card-turner'))turnCard();});
+  $('preview').addEventListener('keydown',e=>{
+    if(e.target.matches('.card-turner') && (e.key==='Enter'||e.key===' ')){e.preventDefault();turnCard();}
+  });
   function visibleCards(){const query=$('search').value.trim().toLowerCase(),status=$('statusFilter').value;return cards.filter(c=>(!status||c.status===status)&&[c.employee_name,c.employee_id,c.designation,c.outlet].join(' ').toLowerCase().includes(query));}
-  function renderPeople(){const visible=visibleCards();$('count').textContent=visible.length;$('printAll').disabled=!visible.length||busy;$('people').innerHTML=visible.map(c=>`<button type="button" class="person ${selected===c.user_id?'selected':''}" data-user="${c.user_id}" aria-pressed="${selected===c.user_id}"><span class="person-avatar">${validPhoto(c.photo)?`<img src="${c.photo}" alt="">`:esc(initials(c.employee_name))}</span><span class="person-copy"><b>${esc(c.employee_name)}</b><small>${esc(c.employee_id)} · ${esc(c.status)}</small><small>${esc(c.designation)}</small></span></button>`).join('')||'<p class="empty">No matching users.</p>';}
+  function renderPeople(){$('totalCards').textContent=cards.length;$('activeCards').textContent=cards.filter(c=>c.status==='Active').length;$('photoCards').textContent=cards.filter(c=>validPhoto(c.photo)).length;const visible=visibleCards();$('count').textContent=visible.length;$('printAll').disabled=!visible.length||busy;$('people').innerHTML=visible.map(c=>`<button type="button" class="person ${selected===c.user_id?'selected':''}" data-user="${c.user_id}" aria-pressed="${selected===c.user_id}"><span class="person-avatar">${validPhoto(c.photo)?`<img src="${c.photo}" alt="">`:esc(initials(c.employee_name))}</span><span class="person-copy"><b>${esc(c.employee_name)}</b><small>${esc(c.employee_id)} · ${esc(c.status)}</small><small>${esc(c.designation)}</small></span></button>`).join('')||'<p class="empty">No matching users.</p>';}
   function selectCard(id){if(busy)return;if(dirty&&!confirm('Discard unsaved card changes?'))return;const card=cards.find(c=>c.user_id===id);if(!card)return;photoVersion++;selected=id;draft={...card};dirty=false;$('unsaved').hidden=true;$('selectedName').textContent=card.employee_name;$('recordStatus').textContent=card.status==='Active'?(card.saved?'Saved card':'Ready to personalise'):'Inactive account';$('editor').hidden=!canEdit;$('readOnly').hidden=canEdit;$('printOne').disabled=false;$('photo').value='';for(const key of ['employee_id','employee_name','designation','mobile'])$('editor').elements[key].value=card[key];message('');renderPeople();renderPreview();}
   function setDirty(){dirty=true;$('unsaved').hidden=false;message('Preview updated. Save your changes before printing.');renderPreview();}
   $('people').addEventListener('click',e=>{const button=e.target.closest('[data-user]');if(button)selectCard(Number(button.dataset.user));});
