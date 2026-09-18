@@ -9,13 +9,13 @@ const assert=require('node:assert/strict'),fs=require('node:fs');
  await call('Emulation.setDeviceMetricsOverride',{width:1440,height:1150,deviceScaleFactor:1,mobile:false});
  await call('Page.reload',{ignoreCache:true});
  await wait('document.querySelectorAll(".person").length===2');
- // Give the mock directory distinct active and photo groups.
+ // Give the mock directory distinct pending and added photo groups.
  await evaluate(`fetch('/api/identity-cards/2',{method:'PUT',body:JSON.stringify({status:'Inactive',photo:document.createElement('canvas').toDataURL('image/png')})})`);
  await call('Page.reload',{ignoreCache:true});
  await wait('document.querySelectorAll(".person").length===2');
- assert.equal(await evaluate('document.getElementById("activeCards").textContent'),'1');
+ assert.equal(await evaluate('document.getElementById("pendingCards").textContent'),'1');
  assert.equal(await evaluate('document.getElementById("photoCards").textContent'),'1');
- await evaluate(`document.getElementById('search').value='no match';document.querySelector('[data-card-filter="active"]').click()`);
+ await evaluate(`document.getElementById('search').value='no match';document.querySelector('[data-card-filter="pending"]').click()`);
  assert.equal(await evaluate('document.querySelectorAll(".person").length'),1);
  assert.equal(await evaluate('document.querySelector(".person").dataset.user'),'1');
  await evaluate(`document.querySelector('[data-card-filter="photos"]').click()`);

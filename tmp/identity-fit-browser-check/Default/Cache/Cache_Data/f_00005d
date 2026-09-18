@@ -112,14 +112,10 @@ main{max-width:1640px;padding-top:28px}
 .hero-actions .primary span{margin-left:16px;font-size:19px}
 .identity-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:26px}
 .identity-stat{display:flex;align-items:center;gap:16px;padding:20px 22px;border:1px solid #dce6e2;border-radius:14px;background:#fff;box-shadow:0 3px 12px #193f4503}
-.identity-stat{position:relative;text-align:left;color:inherit;transition:background .15s,border-color .15s,box-shadow .15s}
+.identity-stat{text-align:left;color:inherit;transition:background .15s,border-color .15s,box-shadow .15s}
 .identity-stat:hover{background:#f5faf7;border-color:#91b9a5}
 .identity-stat[aria-pressed="true"]{background:#edf6f0;border-color:#448269;box-shadow:inset 0 -3px #448269}
 .directory-filter-summary{font-size:10px;color:#42735d;line-height:1.6;margin-top:15px}
-.identity-stat .account-completed-icon{color:#21734e;background:#e1f2e7;font-size:21px}
-.identity-stat .account-pending-icon{color:#b04c40;background:#fbece7;font-size:21px}
-.identity-stat .account-completed-icon,.identity-stat .account-pending-icon{order:2;margin-left:auto;flex-shrink:0}
-@media(max-width:650px){.identity-stat .account-completed-icon,.identity-stat .account-pending-icon{position:absolute;right:10px;bottom:13px;display:inline-grid;width:24px;height:24px;font-size:15px;margin:0}}
 .stat-icon{width:40px;height:44px;display:grid;place-items:center;border-radius:10px;background:#edf5f1;color:#4b8273;font-size:11px;font-weight:700}
 .identity-stat .stat-values>span{font-size:9px;letter-spacing:1.2px;color:#677c77;font-weight:650;display:block}
 .identity-stat strong{font-size:28px;line-height:1.2;font-weight:650;display:block;margin-top:5px;color:#193f45}
