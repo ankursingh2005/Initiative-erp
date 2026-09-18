@@ -5,6 +5,7 @@
   const token = localStorage.getItem('token');
   if (!token) { location.replace(base + '/login'); return; }
   let cards = [], canEdit = false, selected = null, draft = null, dirty = false, busy = false, photoVersion = 0;
+  let photosOnly = false;
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const initials = name => name.split(/\s+/).filter(Boolean).slice(0,2).map(s=>s[0]).join('').toUpperCase();
   const validPhoto = photo => typeof photo === 'string' && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(photo);
@@ -70,8 +71,43 @@
   $('preview').addEventListener('keydown',e=>{
     if(e.target.matches('.card-turner') && (e.key==='Enter'||e.key===' ')){e.preventDefault();turnCard();}
   });
-  function visibleCards(){const query=$('search').value.trim().toLowerCase(),status=$('statusFilter').value;return cards.filter(c=>(!status||c.status===status)&&[c.employee_name,c.employee_id,c.designation,c.outlet].join(' ').toLowerCase().includes(query));}
-  function renderPeople(){$('totalCards').textContent=cards.length;$('activeCards').textContent=cards.filter(c=>c.status==='Active').length;$('photoCards').textContent=cards.filter(c=>validPhoto(c.photo)).length;const visible=visibleCards();$('count').textContent=visible.length;$('printAll').disabled=!visible.length||busy;$('people').innerHTML=visible.map(c=>`<button type="button" class="person ${selected===c.user_id?'selected':''}" data-user="${c.user_id}" aria-pressed="${selected===c.user_id}"><span class="person-avatar">${validPhoto(c.photo)?`<img src="${c.photo}" alt="">`:esc(initials(c.employee_name))}</span><span class="person-copy"><b>${esc(c.employee_name)}</b><small>${esc(c.employee_id)} · ${esc(c.status)}</small><small>${esc(c.designation)}</small></span></button>`).join('')||'<p class="empty">No matching users.</p>';}
+  function visibleCards(){const query=$('search').value.trim().toLowerCase(),status=$('statusFilter').value;return cards.filter(c=>(!status||c.status===status)&&(!photosOnly||validPhoto(c.photo))&&[c.employee_name,c.employee_id,c.designation,c.outlet].join(' ').toLowerCase().includes(query));}
+  function updateDirectoryFilter(){
+    const status=$('statusFilter').value;
+    document.querySelectorAll('[data-card-filter]').forEach(button=>{
+      const filter=button.dataset.cardFilter;
+      button.setAttribute('aria-pressed',String(filter==='photos'?photosOnly:!photosOnly&&(filter==='active'?status==='Active':!status)));
+    });
+    const group=photosOnly?(status?status.toLowerCase()+' members with photos':'members with photos'):(status?status.toLowerCase()+' members':'all team members');
+    $('directoryFilterSummary').textContent=`Showing ${visibleCards().length} ${group}${$('search').value.trim()?' matching your search':''}`;
+  }
+  document.querySelectorAll('[data-card-filter]').forEach(button=>button.addEventListener('click',()=>{
+    if(busy)return;
+    const filter=button.dataset.cardFilter;
+    const matches=cards.filter(card=>filter==='photos'?validPhoto(card.photo):filter==='active'?card.status==='Active':true);
+    const keepSelected=matches.some(card=>card.user_id===selected);
+    if(!keepSelected && dirty && !confirm('Discard unsaved card changes?'))return;
+    photosOnly=filter==='photos';
+    $('search').value='';
+    $('statusFilter').value=filter==='active'?'Active':'';
+    $('people').scrollTop=0; $('people').scrollLeft=0;
+    if(!keepSelected){
+      dirty=false;
+      if(matches.length){selectCard(matches[0].user_id);}
+      else{
+        photoVersion++; selected=null; draft=null;
+        $('unsaved').hidden=true;
+        $('editor').hidden=true; $('readOnly').hidden=true;
+        $('printOne').disabled=true;
+        $('selectedName').textContent='No matching users';
+        $('recordStatus').textContent='No cards';
+        $('preview').innerHTML='<p class="empty">No users match this view. Select Team Members to see everyone.</p>';
+        message(''); renderPeople();
+      }
+    }else{renderPeople();}
+    document.querySelector('.directory').scrollIntoView({block:'nearest',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
+  }));
+  function renderPeople(){updateDirectoryFilter();$('totalCards').textContent=cards.length;$('activeCards').textContent=cards.filter(c=>c.status==='Active').length;$('photoCards').textContent=cards.filter(c=>validPhoto(c.photo)).length;const visible=visibleCards();$('count').textContent=visible.length;$('printAll').disabled=!visible.length||busy;$('people').innerHTML=visible.map(c=>`<button type="button" class="person ${selected===c.user_id?'selected':''}" data-user="${c.user_id}" aria-pressed="${selected===c.user_id}"><span class="person-avatar">${validPhoto(c.photo)?`<img src="${c.photo}" alt="">`:esc(initials(c.employee_name))}</span><span class="person-copy"><b>${esc(c.employee_name)}</b><small>${esc(c.employee_id)} · ${esc(c.status)}</small><small>${esc(c.designation)}</small></span></button>`).join('')||'<p class="empty">No matching users.</p>';}
   function selectCard(id){if(busy)return;if(dirty&&!confirm('Discard unsaved card changes?'))return;const card=cards.find(c=>c.user_id===id);if(!card)return;photoVersion++;selected=id;draft={...card};dirty=false;$('unsaved').hidden=true;$('selectedName').textContent=card.employee_name;$('recordStatus').textContent=card.status==='Active'?(card.saved?'Saved card':'Ready to personalise'):'Inactive account';$('editor').hidden=!canEdit;$('readOnly').hidden=canEdit;$('printOne').disabled=false;$('photo').value='';for(const key of ['employee_id','employee_name','designation','mobile'])$('editor').elements[key].value=card[key];message('');renderPeople();renderPreview();}
   function setDirty(){dirty=true;$('unsaved').hidden=false;message('Preview updated. Save your changes before printing.');renderPreview();}
   $('people').addEventListener('click',e=>{const button=e.target.closest('[data-user]');if(button)selectCard(Number(button.dataset.user));});
