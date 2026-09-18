@@ -398,6 +398,7 @@ class IdentityCard(Base):
     employee_name = Column(String(150), nullable=False)
     designation = Column(String(100), nullable=False)
     mobile = Column(String(25), nullable=False, default="")
+    joining_date = Column(Date, nullable=True)
     photo = Column(Text, nullable=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

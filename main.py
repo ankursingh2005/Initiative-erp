@@ -121,6 +121,7 @@ def ensure_username_not_unique():
 
 def ensure_database_schema():
     ensure_username_not_unique()
+    ensure_column("identity_cards", "joining_date", "DATE")
     ensure_column("stores", "code", "VARCHAR(20)")
     ensure_column("stores", "city", "VARCHAR(100)")
     ensure_column("stores", "status", "VARCHAR(20)")

@@ -3,7 +3,7 @@ import base64
 import re
 import warnings
 from io import BytesIO
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from PIL import Image, ImageOps, UnidentifiedImageError
@@ -100,6 +100,7 @@ class CardUpdate(BaseModel):
     employee_name: str = Field(min_length=1, max_length=150)
     designation: str = Field(min_length=1, max_length=100)
     mobile: str = Field(default="", max_length=25)
+    joining_date: date | None = None
     photo: str | None = Field(default=None, max_length=4_000_000)
 
     @field_validator("employee_id", "employee_name", "designation", "mobile")
@@ -158,6 +159,7 @@ def serialize(user, card, store):
         "employee_name": card.employee_name if card else (user.full_name or user.username),
         "designation": card.designation if card else re.sub(r"(?<=[a-z])(?=[A-Z])", " ", user.role),
         "mobile": card.mobile if card else "",
+        "joining_date": card.joining_date.isoformat() if card and card.joining_date else None,
         "photo": card.photo if card else None,
         "role": user.role,
         "status": user.status,
@@ -200,6 +202,8 @@ def save_card(user_id: int, payload: CardUpdate, response: Response,
     for name in ("employee_name", "designation", "mobile"):
         setattr(card, name, getattr(payload, name))
     card.photo = photo
+    if "joining_date" in payload.model_fields_set:
+        card.joining_date = payload.joining_date
     try:
         db.commit()
     except IntegrityError:
