@@ -42,6 +42,24 @@ async function openCamera(t,action='checkout'){
   const opening=t.context.beginAction(action);await Promise.resolve();t.resolve();await opening;
 }
 
+test('an outlet transfer is refreshed before the punch location is checked',async()=>{
+  const t=setup();let refreshed=false;
+  t.context.refreshAttendanceOutlet=async()=>{refreshed=true;};
+  t.context.meters=()=>refreshed?0:5000;
+  await openCamera(t);
+  assert.equal(refreshed,true);
+  assert.equal(t.$('capture').disabled,false);
+});
+
+test('failed assignment refresh prevents attendance capture',async()=>{
+  const t=setup();
+  t.context.refreshAttendanceOutlet=async()=>{throw Error('Assignment unavailable');};
+  await openCamera(t);
+  await t.$('capture').onclick();
+  assert.equal(t.$('capture').disabled,true);
+  assert.equal(t.posts(),0);
+});
+
 test('recent accurate page location enables capture without waiting for another GPS fix',async()=>{
   const t=setup();let requests=0;
   t.context.position={timestamp:Date.now()-10000,coords:{latitude:0,longitude:0,accuracy:5}};

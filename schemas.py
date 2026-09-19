@@ -418,6 +418,10 @@ class UserAssignmentUpdate(BaseModel):
     brand_ids: Optional[List[int]] = None
 
 
+class AttendanceOutletUpdate(BaseModel):
+    store_id: int = Field(gt=0)
+
+
 class PriceListItemCreate(BaseModel):
     """Admin/Accounts/MISExecutive: add one item by hand."""
     brand_id: int

@@ -154,6 +154,44 @@ def attendance(db: Session = Depends(get_db), user=Depends(member)):
             for row, name, username in query.order_by(models.AttendanceRecord.attendance_date.desc()).limit(500).all()]
 
 
+@router.get('/attendance-summary')
+def attendance_summary(day: date | None = None, month: str | None = None,
+                       db: Session = Depends(get_db), user=Depends(manager)):
+    selected = day or datetime.now(IST).date()
+    start = end = selected
+    if month:
+        try:
+            start = datetime.strptime(month, '%Y-%m').date().replace(day=1)
+        except ValueError:
+            raise HTTPException(400, 'Month must be YYYY-MM')
+        end = (start.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+    staff = employee_rows(db).filter(models.User.status == 'Active').order_by(models.User.full_name).all()
+    ids = [employee.id for employee, _, _ in staff]
+    records = db.query(models.AttendanceRecord).options(
+        defer(models.AttendanceRecord.checkin_selfie), defer(models.AttendanceRecord.second_punch_selfie),
+        defer(models.AttendanceRecord.checkout_selfie)).filter(
+        models.AttendanceRecord.user_id.in_(ids), models.AttendanceRecord.attendance_date.between(start, end)).all()
+    punches = {(record.user_id, record.attendance_date): record for record in records}
+    leave_days = {(item.user_id, item.leave_date) for item in db.query(models.AttendanceLeave).filter(
+        models.AttendanceLeave.user_id.in_(ids), models.AttendanceLeave.leave_date.between(start, end)).all()}
+    rows = []
+    for offset in range((end - start).days + 1):
+        current = start + timedelta(days=offset)
+        for employee, card, store in staff:
+            record = punches.get((employee.id, current))
+            status = ('Present' if record and record.checkin_at else 'Leave' if (employee.id, current) in leave_days
+                      else 'Week Off' if employee.weekoff_day == current.strftime('%A') else 'Absent')
+            if current > datetime.now(IST).date():
+                status = 'Upcoming'
+            rows.append({'user_id': employee.id, 'name': employee.full_name or employee.username,
+                         'employee_id': card.employee_id if card else '', 'day': current.isoformat(),
+                         'outlet': store.name if store else 'Unassigned', 'department': employee.category_code or 'Unassigned',
+                         'weekoff_day': employee.weekoff_day or '', 'status': status,
+                         'check_in': record.checkin_at.replace(tzinfo=IST).isoformat() if record and record.checkin_at else None,
+                         'check_out': record.checkout_at.replace(tzinfo=IST).isoformat() if record and record.checkout_at else None})
+    return {'day': selected.isoformat(), 'rows': rows}
+
+
 @router.get('/leave')
 def leaves(db: Session = Depends(get_db), user=Depends(member)):
     return scoped_rows(db, M.EMSLeaveRequest, user)

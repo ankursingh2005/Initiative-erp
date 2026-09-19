@@ -2606,6 +2606,7 @@ def save_attendance(
     db.query(models.User).filter(models.User.id == current_user.id).update(
         {models.User.id: current_user.id}, synchronize_session=False
     )
+    db.refresh(current_user)
     radius = 6371000
     radians = math.pi / 180
     def distance_to(candidate):
@@ -3683,6 +3684,29 @@ def admin_reset_user_password(
     db.commit()
 
     return {"message": "Reset Password Successfully", "username": target_user.username}
+
+
+@app.patch("/api/users/{user_id}/attendance-outlet", response_model=schemas.UserAdminOut)
+def update_attendance_outlet(
+    user_id: int,
+    payload: schemas.AttendanceOutletUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_user_management_admin),
+):
+    """Admin/HR reassign the user's outlet used by attendance geofencing."""
+    target_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    store = db.query(models.Store).filter(models.Store.id == payload.store_id).first()
+    if not store or store.status != "Active":
+        raise HTTPException(status_code=400, detail="Choose an active outlet")
+    if (store.latitude is None or store.longitude is None
+            or not -90 <= store.latitude <= 90 or not -180 <= store.longitude <= 180):
+        raise HTTPException(status_code=400, detail="The selected outlet needs valid GPS coordinates before assignment")
+    target_user.store_id = store.id
+    db.commit()
+    db.refresh(target_user)
+    return serialize_user_with_brands(target_user, db)
 
 
 @app.patch("/api/users/{user_id}/assignments", response_model=schemas.UserAdminOut)

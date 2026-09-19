@@ -87,6 +87,25 @@ class EMSIntegrationTests(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertEqual([row['user_id'] for row in response.json()], [self.users[3].id])
 
+    def test_attendance_dashboard_uses_only_active_ems_users(self):
+        self.users[4].status = 'Inactive'
+        self.users[1].weekoff_day = 'Friday'
+        self.db.add(models.AttendanceRecord(user_id=self.users[0].id,
+                    attendance_date=date(2026, 9, 18), checkin_at=datetime(2026, 9, 18, 9)))
+        self.db.add(models.AttendanceLeave(user_id=self.users[2].id,
+                    leave_date=date(2026, 9, 18), created_by=self.users[0].id))
+        self.db.commit()
+        response = self.client.get('/api/ems/attendance-summary?day=2026-09-18')
+        self.assertEqual(response.status_code, 200, response.text)
+        rows = response.json()['rows']
+        self.assertEqual(len(rows), 4)
+        self.assertEqual({row['status'] for row in rows}, {'Present', 'Absent', 'Week Off', 'Leave'})
+        self.assertNotIn(self.users[-1].id, [row['user_id'] for row in rows])
+        monthly = self.client.get('/api/ems/attendance-summary?month=2026-09').json()['rows']
+        self.assertEqual(len(monthly), 4 * 30)
+        self.actor = self.users[3]
+        self.assertEqual(self.client.get('/api/ems/attendance-summary').status_code, 403)
+
     def test_leave_approval_updates_erp_attendance_leave(self):
         self.actor = self.users[3]
         payload = {'start_date': '2026-10-01', 'end_date': '2026-10-03', 'kind': 'Casual', 'reason': 'Family visit'}

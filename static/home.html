@@ -355,6 +355,8 @@
     .um-table tbody tr:hover { background: color-mix(in srgb, var(--um) 5%, #fff); }
     .um-table tbody tr:last-child td { border-bottom: none; }
     .um-table .empty { text-align: center; color: var(--muted); padding: 20px 0; }
+    .um-outlet-select { width:100%; min-width:155px; max-width:240px; min-height:44px; padding:9px 10px; border:1px solid var(--border, #d8dfe8); border-radius:8px; background:#fff; font:inherit; }
+    .um-outlet-select:disabled { opacity:.6; }
     .um-actions { display: flex; gap: 8px; white-space: nowrap; }
     .um-reset-btn { padding: 7px 12px; font-size: 12px; background: var(--brand); color: #fff; }
     .um-reset-btn:hover { background: var(--brand-dark); }
@@ -531,13 +533,13 @@
             <table class="um-table">
               <thead>
                 <tr>
-                  <th>Username</th><th>Email</th><th>Role</th><th>Outlet/Category/Brand</th><th>Week Off</th><th>Status</th><th>Registered</th><th>Actions</th>
+                  <th>Username</th><th>Email</th><th>Role</th><th>Outlet/Category/Brand</th><th>Assign outlet</th><th>Week Off</th><th>Status</th><th>Registered</th><th>Actions</th>
                 </tr>
               </thead>
               <tbody id="userManagementTableBody"></tbody>
             </table>
           </div>
-          <div id="userManagementMsg" class="um-msg"></div>
+          <div id="userManagementMsg" class="um-msg" role="status"></div>
         </div>
       </div>
 
@@ -682,16 +684,20 @@
     }
 
     let userManagementUsers = [];
+    let userManagementOutlets = [];
+    const outletUpdates = new Set();
     let userManagementRoleFilter = 'ALL';
     let userManagementSearchQuery = '';
 
     async function loadUserManagement() {
       try {
-        const [usersRes, countRes] = await Promise.all([umFetch('/api/users'), umFetch('/api/users/count')]);
+        const [usersRes, countRes, outletsRes] = await Promise.all([umFetch('/api/users'), umFetch('/api/users/count'), umFetch('/stores')]);
         if (!usersRes || !countRes || !usersRes.ok || !countRes.ok) return;
         const users = await usersRes.json();
         const countData = await countRes.json();
         userManagementUsers = users;
+        userManagementOutlets = outletsRes?.ok ? await outletsRes.json() : [];
+        if (!outletsRes?.ok) document.getElementById('userManagementMsg').textContent = 'Unable to load outlets. Reload User Management to try again.';
         renderUserCountSummary(countData);
         renderUserManagementTable();
       } catch (e) {
@@ -748,6 +754,48 @@
       return outletLabel || '-';
     }
 
+
+    function escapeOutletText(value) {
+      return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+    function userOutletDropdown(user) {
+      const available = userManagementOutlets.filter(store => store.status === 'Active' && store.latitude != null && store.longitude != null);
+      const current = String(user.store_id ?? '');
+      let options = '<option value="" disabled '+(!current?'selected':'')+'>Select outlet</option>';
+      if (current && !available.some(store => String(store.id) === current)) options += '<option value="'+escapeOutletText(current)+'" selected disabled>'+escapeOutletText(user.outlet_name || 'Current outlet')+'</option>';
+      options += available.map(store => '<option value="'+store.id+'" '+(String(store.id)===current?'selected':'')+'>'+escapeOutletText(store.name)+'</option>').join('');
+      return '<select class="um-outlet-select" aria-label="Assign outlet for '+escapeOutletText(user.username)+'" onchange="changeUserOutlet('+user.id+', this)" '+(!['Admin','HR'].includes(role)||!available.length||outletUpdates.has(user.id)?'disabled':'')+'>'+options+'</select>';
+    }
+    async function changeUserOutlet(userId, select) {
+      const user = userManagementUsers.find(item => item.id === userId);
+      if (!user || outletUpdates.has(userId)) return;
+      const previous = String(user.store_id ?? ''), next = Number(select.value);
+      if (!next || String(next) === previous) return;
+      const msg = document.getElementById('userManagementMsg');
+      msg.classList.remove('success');
+      msg.textContent = 'Updating outlet...';
+      outletUpdates.add(userId); select.disabled = true;
+      try {
+        const response = await umFetch('/api/users/'+userId+'/attendance-outlet', {
+          method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({store_id:next})
+        });
+        if (!response) { select.value = previous; return; }
+        const data = await response.json().catch(()=>({}));
+        if (!response.ok) throw new Error(typeof data.detail==='string'?data.detail:'Unable to assign outlet');
+        Object.assign(user, data);
+        msg.classList.add('success');
+        const outlet = userManagementOutlets.find(store=>store.id===next);
+        msg.textContent = user.username+' assigned to '+(outlet?.name || data.outlet_name)+'. Attendance will use the new outlet location.';
+      } catch (error) {
+        select.value = previous;
+        msg.classList.remove('success');
+        msg.textContent = error.message || 'Unable to assign outlet. Please try again.';
+      } finally {
+        outletUpdates.delete(userId);
+        renderUserManagementTable();
+      }
+    }
+
     function renderUserManagementTable() {
       const tbody = document.getElementById('userManagementTableBody');
       let users = userManagementRoleFilter === 'ALL'
@@ -765,6 +813,7 @@
           <td>${u.email}</td>
           <td>${u.role}</td>
           <td>${userAssignmentLabel(u)}</td>
+          <td>${userOutletDropdown(u)}</td>
           <td>${u.weekoff_day || 'Not selected'}</td>
           <td>${u.status}</td>
           <td>${formatDateShort(u.created_date)}</td>
@@ -773,7 +822,7 @@
             <button type="button" class="um-delete-btn" onclick="openDeleteUserModal(${u.id}, '${String(u.username).replace(/'/g, "\\'")}')" ${(u.username === username || (role === 'HR' && u.role === 'Admin')) ? `disabled title="${u.username === username ? 'You cannot delete your own account' : 'HR cannot delete an Admin account'}"` : ''}>Delete</button>
           </td>
         </tr>
-      `).join('') || `<tr><td colspan="8" class="empty">${userManagementSearchQuery ? 'No users match this username or email' : `No ${userManagementRoleFilter === 'ALL' ? '' : userManagementRoleFilter + ' '}accounts found`}</td></tr>`;
+      `).join('') || `<tr><td colspan="9" class="empty">${userManagementSearchQuery ? 'No users match this username or email' : `No ${userManagementRoleFilter === 'ALL' ? '' : userManagementRoleFilter + ' '}accounts found`}</td></tr>`;
     }
 
     let resetPasswordTargetId = null;

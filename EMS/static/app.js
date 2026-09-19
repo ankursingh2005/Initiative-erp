@@ -43,6 +43,8 @@
     $('today').textContent=date(today());
     await load('overview');
   }
+  let attendanceDay=today(), attendanceSummary=null, attendanceStatus='', attendanceExpanded=false;
+  let attendanceFilters={outlet:'',department:'',weekoff_day:''};
   async function load(next=view){
     if(ERP&&next==='identity'){location.assign(erpUrl('/identity-card'));return;}
     const version=++requestVersion;view=next;message('');
@@ -52,7 +54,9 @@
     try{
       const result=await Promise.all([api('/me'),api('/attendance'),api('/leave'),api('/earnings'),api('/payroll'),manager()?api('/employees'):Promise.resolve([]),view==='audit'?api('/audit'):Promise.resolve([])]);
       if(version!==requestVersion)return;
-      [user,attendance,leaves,earnings,payroll,employees,audit]=result;csrf=user.csrf||'';render();
+      [user,attendance,leaves,earnings,payroll,employees,audit]=result;csrf=user.csrf||'';
+      if(ERP&&manager()&&view==='attendance'){const summary=await api('/attendance-summary?day='+attendanceDay);if(version!==requestVersion)return;attendanceSummary=summary;}
+      render();
     }catch(error){if(version!==requestVersion)return;$('content').innerHTML='<p class="empty">Unable to load this page. Please try again.</p>';message(error.message,true);}
   }
   function render(){
@@ -61,6 +65,7 @@
     if(view==='employees'){$('employeeSearch').oninput=filterEmployees;$('employeeStatus').onchange=filterEmployees;}
     if(view==='identity')fitIdentity($('content'));
     if(view==='profile')bindProfile();
+    if(view==='attendance'&&ERP&&manager())bindAttendanceDashboard();
   }
   let overviewSelection='';
   const overviewStat=(label,value,note,key)=>`<button type="button" class="stat stat-button" data-action="overview-list" data-id="${key}" aria-expanded="${overviewSelection===key}" aria-controls="overviewDetails"><span class="stat-label">${label}<span aria-hidden="true">?</span></span><strong>${esc(value)}</strong><small>${note}</small></button>`;
@@ -89,7 +94,28 @@
   function employeeRows(list){return list.map(e=>`<tr><td><div class="person-cell"><span class="avatar">${esc(initials(e.name))}</span><div>${esc(e.name)}<small>${esc(e.email)}</small></div></div></td><td>${esc(e.employee_id)}</td><td>${esc(e.department||'—')}<small>${esc(e.outlet)}</small></td><td>${esc(e.role)}</td><td>${badge(e.status)}</td><td>${button('Manage','employee',e.id)}</td></tr>`);}
   function employeesPage(){return `<section class="panel"><div class="panel-head"><div><h2>Employee directory</h2><p>Approve registrations and assign roles, departments and outlets.</p></div><span class="badge">${employees.length} users</span></div><div class="toolbar"><input id="employeeSearch" type="search" placeholder="Search name, email or employee ID" aria-label="Search employees"><select id="employeeStatus" aria-label="Filter employee status"><option value="">All statuses</option><option>pending</option><option>active</option><option>inactive</option></select></div><div id="employeeTable">${table(['Employee','ID','Department','Role','Status',''],employeeRows(employees))}</div></section>`;}
   function filterEmployees(){const q=$('employeeSearch').value.toLowerCase(),s=$('employeeStatus').value;$('employeeTable').innerHTML=table(['Employee','ID','Department','Role','Status',''],employeeRows(employees.filter(e=>(!s||e.status===s)&&[e.name,e.email,e.employee_id,e.department,e.outlet].join(' ').toLowerCase().includes(q))),'No employees match your search.');}
-  function attendancePage(){return `<section class="panel"><div class="panel-head"><div><h2>${manager()?'Team attendance':'My attendance'}</h2><p>Times are recorded in India Standard Time. Latest 500 records.</p></div><div class="actions">${button('Check in','check-in','','primary')}${button('Check out','check-out','','secondary')}</div></div>${table(['Employee','Date','Check in','Check out','Hours'],attendance.map(a=>`<tr><td>${esc(a.name)}</td><td>${date(a.day)}</td><td>${time(a.check_in)}</td><td>${time(a.check_out)}</td><td>${a.check_out?((new Date(a.check_out)-new Date(a.check_in))/3600000).toFixed(2):'In progress'}</td></tr>`))}</section>`;}
+  function attendancePage(){if(ERP&&manager())return attendanceDashboard();return `<section class="panel"><div class="panel-head"><div><h2>${manager()?'Team attendance':'My attendance'}</h2><p>Times are recorded in India Standard Time. Latest 500 records.</p></div><div class="actions">${button('Check in','check-in','','primary')}${button('Check out','check-out','','secondary')}</div></div>${table(['Employee','Date','Check in','Check out','Hours'],attendance.map(a=>`<tr><td>${esc(a.name)}</td><td>${date(a.day)}</td><td>${time(a.check_in)}</td><td>${time(a.check_out)}</td><td>${a.check_out?((new Date(a.check_out)-new Date(a.check_in))/3600000).toFixed(2):'In progress'}</td></tr>`))}</section>`;}
+
+  function filteredAttendance(rows=attendanceSummary?.rows||[]){
+    return rows.filter(row=>Object.entries(attendanceFilters).every(([key,value])=>!value||row[key]===value));
+  }
+  function attendanceDashboard(){
+    const rows=filteredAttendance(), visible=rows.filter(r=>!attendanceStatus||r.status===attendanceStatus);
+    const options=(key,label)=>'<label>'+label+'<select data-attendance-filter="'+key+'"><option value="">All '+label.toLowerCase()+'</option>'+[...new Set((attendanceSummary?.rows||[]).map(r=>r[key]).filter(Boolean))].sort().map(value=>'<option '+(attendanceFilters[key]===value?'selected':'')+' value="'+esc(value)+'">'+esc(value)+'</option>').join('')+'</select></label>';
+    const cards=[['Total users','',rows.length,'total'],['Present','Present',rows.filter(r=>r.status==='Present').length,'present'],['Absent','Absent',rows.filter(r=>r.status==='Absent').length,'absent'],['Week off','Week Off',rows.filter(r=>r.status==='Week Off').length,'weekoff'],['Leave','Leave',rows.filter(r=>r.status==='Leave').length,'leave']];
+    return '<section class="ems-attendance"><div class="attendance-banner"><div class="panel-head"><h2>EMS Attendance Dashboard</h2><span class="badge">Active EMS users</span></div><div class="attendance-filters"><label>Attendance date<input id="attendanceDay" type="date" max="'+today()+'" value="'+attendanceDay+'"></label>'+options('outlet','Outlets')+options('department','Departments')+options('weekoff_day','Week off')+'<button class="secondary" data-action="attendance-refresh">Refresh</button><button class="secondary" data-action="attendance-download">Download day CSV</button><button class="secondary" data-action="attendance-share">Share WhatsApp</button><label>Export month<input id="attendanceMonth" type="month" max="'+today().slice(0,7)+'" value="'+attendanceDay.slice(0,7)+'"></label><button class="secondary" data-action="attendance-month">Download month CSV</button></div></div><div class="attendance-body"><p class="subtext">'+date(attendanceDay)+' ? Active employees only ? Brand promoters excluded ? Times in IST</p><div class="attendance-metrics">'+cards.map(([label,status,count,kind])=>'<button type="button" class="attendance-metric '+kind+'" data-action="attendance-status" data-id="'+status+'" aria-pressed="'+(attendanceStatus===status)+'"><span>'+label+'</span><strong>'+count+'</strong></button>').join('')+'</div><button type="button" class="attendance-toggle" data-action="attendance-toggle" aria-expanded="'+attendanceExpanded+'" aria-controls="attendanceUsers">'+(attendanceExpanded?'Hide':'Show')+' '+(attendanceStatus||'all')+' employees ('+visible.length+') <span aria-hidden="true">'+(attendanceExpanded?'?':'?')+'</span></button><div id="attendanceUsers" '+(attendanceExpanded?'':'hidden')+'>'+table(['Employee','Status','Check in','Check out','Outlet','Department','Week off'],visible.map(r=>'<tr><td>'+esc(r.name)+'<small>'+esc(r.employee_id)+'</small></td><td><span class="attendance-status '+r.status.toLowerCase().replace(' ','-')+'">'+esc(r.status)+'</span></td><td>'+time(r.check_in)+'</td><td>'+time(r.check_out)+'</td><td>'+esc(r.outlet)+'</td><td>'+esc(r.department)+'</td><td>'+esc(r.weekoff_day||'?')+'</td></tr>'),'No employees match these filters.')+'</div></div></section>';
+  }
+  function bindAttendanceDashboard(){
+    $('attendanceDay').onchange=e=>{if(!e.target.value||!e.target.checkValidity())return;attendanceDay=e.target.value;load('attendance');};
+    document.querySelectorAll('[data-attendance-filter]').forEach(el=>el.onchange=()=>{attendanceFilters[el.dataset.attendanceFilter]=el.value;render();});
+  }
+  function downloadAttendanceCsv(rows,name){
+    const cell=value=>{let text=String(value??'');if(/^[=+@\-\t\r]/.test(text))text="'"+text;return '"'+text.replaceAll('"','""')+'"';};
+    const values=[['Date','Employee','Employee ID','Status','Check in (IST)','Check out (IST)','Outlet','Department','Week off'],...rows.map(r=>[r.day,r.name,r.employee_id,r.status,time(r.check_in),time(r.check_out),r.outlet,r.department,r.weekoff_day])];
+    const blob=new Blob(['\uFEFF'+values.map(row=>row.map(cell).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'});
+    const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=name;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }
+
   function leavePage(){return `<section class="panel"><div class="panel-head"><div><h2>${manager()?'Leave approvals':'My leave requests'}</h2><p>Submit dates and a reason. HR reviews each request.</p></div>${button('＋ Request leave','new-leave','','primary')}</div>${table(['Employee','Dates','Type','Reason','Status',''],leaves.map(l=>`<tr><td>${esc(l.name)}</td><td>${date(l.start_date)}<small>to ${date(l.end_date)}</small></td><td>${esc(l.kind)}</td><td title="${esc(l.reason)}">${esc(l.reason.slice(0,55))}</td><td>${badge(l.status)}</td><td>${manager()&&l.status==='pending'&&l.user_id!==user.id?button('Approve','approve-leave',l.id)+' '+button('Reject','reject-leave',l.id):''}</td></tr>`))}</section>`;}
   function identityMarkup(){return `<div class="identity-layout"><article class="id-card"><div class="id-head">EMS<small>EMPLOYEE IDENTITY CARD</small></div>${user.photo?`<img class="id-photo" src="${esc(user.photo)}" alt="Employee portrait">`:`<div class="id-photo">${esc(initials(user.name))}</div>`}<div class="id-body"><b class="id-name">${esc(user.name)}</b><span class="id-title">${esc(user.designation||'Employee')}</span><div class="id-line">EMPLOYEE ID<b>${esc(user.employee_id)}</b></div><div class="id-line">DEPARTMENT<b>${esc(user.department||'Not assigned')}</b></div><div class="id-line">OUTLET<b>${esc(user.outlet||'Not assigned')}</b></div></div><div class="id-footer">EMPLOYEE MANAGEMENT SYSTEM</div></article><article class="id-card id-back"><h2>EMS</h2><p class="subtext">EMPLOYEE MANAGEMENT SYSTEM</p><div class="id-line">EMPLOYEE ID<b>${esc(user.employee_id)}</b></div><div class="id-line">JOINING DATE<b>${date(user.joining_date)}</b></div><div class="id-line">CONTACT NUMBER<b>${esc(user.phone||'Not added')}</b></div><div class="id-line">ACCOUNT STATUS<b>${esc(user.status)}</b></div><div class="id-footer">PROPERTY OF THE ISSUING ORGANISATION</div></article></div>`;}
   function fitIdentity(root){root.querySelectorAll('.id-name,.id-title').forEach(el=>{let size=parseFloat(getComputedStyle(el).fontSize);while(el.scrollWidth>el.clientWidth&&size>2){size-=.25;el.style.fontSize=size+'px';}});}
@@ -125,6 +151,12 @@
     try{
       if(action==='overview-list'&&manager()){overviewSelection=id;render();$('overviewDetails').focus();$('overviewDetails').scrollIntoView({behavior:'smooth',block:'start'});return;}
       if(action==='overview-close'){const previous=overviewSelection;overviewSelection='';render();document.querySelector('[data-action="overview-list"][data-id="'+previous+'"]').focus();return;}
+      if(action==='attendance-refresh'){await load('attendance');return;}
+      if(action==='attendance-status'){attendanceStatus=id;attendanceExpanded=true;render();document.querySelector('[data-action="attendance-status"][data-id="'+id+'"]').focus();return;}
+      if(action==='attendance-toggle'){attendanceExpanded=!attendanceExpanded;render();document.querySelector('[data-action="attendance-toggle"]').focus();return;}
+      if(action==='attendance-share'){const rows=filteredAttendance();const report=['EMS attendance ? '+date(attendanceDay),'Active EMS users: '+rows.length,...['Present','Absent','Week Off','Leave'].map(status=>status+': '+rows.filter(r=>r.status===status).length),...Object.entries(attendanceFilters).filter(([,value])=>value).map(([key,value])=>key.replaceAll('_',' ')+': '+value)].join('\n');window.open('https://wa.me/?text='+encodeURIComponent(report),'_blank','noopener,noreferrer');return;}
+      if(action==='attendance-download'){downloadAttendanceCsv(filteredAttendance().filter(r=>!attendanceStatus||r.status===attendanceStatus),'ems-attendance-'+attendanceDay+'.csv');return;}
+      if(action==='attendance-month'){const month=$('attendanceMonth').value;if(!month||!$('attendanceMonth').checkValidity())return;b.disabled=true;const result=await api('/attendance-summary?month='+month);downloadAttendanceCsv(filteredAttendance(result.rows),'ems-attendance-'+month+'.csv');return;}
       if(action==='navigate'){await load(id);return;}
       if(action==='employee'){
         if(ERP){if(user.can_manage_users){location.assign(erpUrl('/home#user-management'));}else{message('User accounts are managed by Admin and HR. Use Identity Cards for card corrections.');}return;}

@@ -52,6 +52,9 @@
         ready();
       })();
       const locationReady = (async () => {
+        // Pick up Admin/HR outlet transfers even when this page stayed open.
+        if (typeof refreshAttendanceOutlet === 'function') await refreshAttendanceOutlet();
+        if (id !== session) return;
         // Reuse a recent page/tracking fix instead of forcing another GPS acquisition.
         // Leave at least 30 seconds of the validity window for taking the selfie.
         const cached = validGps(position) && Date.now() - position.timestamp <= 30000 ? position : null;
