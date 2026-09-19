@@ -76,6 +76,17 @@ class EMSIntegrationTests(unittest.TestCase):
         self.actor = self.users[4]
         self.assertEqual(self.client.get('/api/ems/attendance').json(), [])
 
+    def test_management_attendance_excludes_brand_promoters(self):
+        for employee in (self.users[3], self.users[-1]):
+            self.db.add(models.AttendanceRecord(user_id=employee.id,
+                        attendance_date=date(2026, 9, 19), checkin_at=datetime(2026, 9, 19, 9)))
+        self.db.commit()
+        for actor in self.users[:3]:
+            self.actor = actor
+            response = self.client.get('/api/ems/attendance')
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual([row['user_id'] for row in response.json()], [self.users[3].id])
+
     def test_leave_approval_updates_erp_attendance_leave(self):
         self.actor = self.users[3]
         payload = {'start_date': '2026-10-01', 'end_date': '2026-10-03', 'kind': 'Casual', 'reason': 'Family visit'}

@@ -143,6 +143,7 @@ def employees(db: Session = Depends(get_db), user=Depends(manager)):
 def attendance(db: Session = Depends(get_db), user=Depends(member)):
     query = (db.query(models.AttendanceRecord, models.User.full_name, models.User.username)
              .join(models.User, models.User.id == models.AttendanceRecord.user_id)
+             .filter(models.User.role != 'BrandPartner')
              .options(defer(models.AttendanceRecord.checkin_selfie), defer(models.AttendanceRecord.second_punch_selfie), defer(models.AttendanceRecord.checkout_selfie)))
     if not auth.has_admin_access(user):
         query = query.filter(models.AttendanceRecord.user_id == user.id)
