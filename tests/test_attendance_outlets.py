@@ -31,6 +31,7 @@ class AttendanceOutletTests(unittest.TestCase):
         self.db.commit()
         app = FastAPI()
         app.patch('/users/{user_id}/outlet', response_model=schemas.UserAdminOut)(main.update_attendance_outlet)
+        app.patch('/users/{user_id}/role', response_model=schemas.UserAdminOut)(main.update_user_role)
         app.dependency_overrides[main.get_db] = lambda: self.db
         app.dependency_overrides[auth.get_current_user] = lambda: self.actor
         self.client = TestClient(app)
@@ -64,3 +65,19 @@ class AttendanceOutletTests(unittest.TestCase):
         self.db.commit()
         self.assertEqual(self.update(self.stores[1]).status_code, 400)
         self.assertEqual(self.employee.store_id, self.stores[0].id)
+
+    def test_admin_and_hr_can_change_roles(self):
+        for actor_role, assigned_role in [('Admin', 'ACTechnicianA'), ('HR', 'ACTechnicianB')]:
+            self.actor.role = actor_role
+            response = self.client.patch(f'/users/{self.employee.id}/role', json={'role': assigned_role})
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(response.json()['role'], assigned_role)
+            self.assertEqual(self.employee.store_id, self.stores[0].id)
+
+    def test_role_changes_reject_invalid_values_and_unauthorized_actors(self):
+        path = f'/users/{self.employee.id}/role'
+        self.assertEqual(self.client.patch(path, json={'role': 'Invalid'}).status_code, 400)
+        for actor_role in ('Employee', 'Owner', 'BrandPartner'):
+            self.actor.role = actor_role
+            self.assertEqual(self.client.patch(path, json={'role': 'Admin'}).status_code, 403)
+        self.assertEqual(self.employee.role, 'BrandPartner')

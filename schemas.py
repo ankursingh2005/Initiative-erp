@@ -422,6 +422,10 @@ class AttendanceOutletUpdate(BaseModel):
     store_id: int = Field(gt=0)
 
 
+class UserRoleUpdate(BaseModel):
+    role: str = Field(min_length=1, max_length=50)
+
+
 class PriceListItemCreate(BaseModel):
     """Admin/Accounts/MISExecutive: add one item by hand."""
     brand_id: int

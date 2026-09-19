@@ -686,16 +686,21 @@
     let userManagementUsers = [];
     let userManagementOutlets = [];
     const outletUpdates = new Set();
+    const roleUpdates = new Set();
+    let userManagementRoles = [], userManagementActorId = null;
     let userManagementRoleFilter = 'ALL';
     let userManagementSearchQuery = '';
 
     async function loadUserManagement() {
       try {
-        const [usersRes, countRes, outletsRes] = await Promise.all([umFetch('/api/users'), umFetch('/api/users/count'), umFetch('/stores')]);
+        const [usersRes, countRes, outletsRes, rolesRes, actorRes] = await Promise.all([umFetch('/api/users'), umFetch('/api/users/count'), umFetch('/stores'), umFetch('/api/users/roles'), umFetch('/api/me')]);
         if (!usersRes || !countRes || !usersRes.ok || !countRes.ok) return;
         const users = await usersRes.json();
         const countData = await countRes.json();
         userManagementUsers = users;
+        userManagementRoles = rolesRes?.ok ? await rolesRes.json() : [];
+        userManagementActorId = actorRes?.ok ? (await actorRes.json()).id : null;
+        if (!rolesRes?.ok) document.getElementById('userManagementMsg').textContent = 'Unable to load roles. Reload User Management to try again.';
         userManagementOutlets = outletsRes?.ok ? await outletsRes.json() : [];
         if (!outletsRes?.ok) document.getElementById('userManagementMsg').textContent = 'Unable to load outlets. Reload User Management to try again.';
         renderUserCountSummary(countData);
@@ -782,7 +787,7 @@
         if (!response) { select.value = previous; return; }
         const data = await response.json().catch(()=>({}));
         if (!response.ok) throw new Error(typeof data.detail==='string'?data.detail:'Unable to assign outlet');
-        Object.assign(user, data);
+        user.store_id = data.store_id; user.outlet_name = data.outlet_name; user.outlet_code = data.outlet_code;
         msg.classList.add('success');
         const outlet = userManagementOutlets.find(store=>store.id===next);
         msg.textContent = user.username+' assigned to '+(outlet?.name || data.outlet_name)+'. Attendance will use the new outlet location.';
@@ -792,6 +797,45 @@
         msg.textContent = error.message || 'Unable to assign outlet. Please try again.';
       } finally {
         outletUpdates.delete(userId);
+        renderUserManagementTable();
+      }
+    }
+
+
+    function userRoleDropdown(user) {
+      const roles = userManagementRoles.includes(user.role) ? userManagementRoles : [user.role, ...userManagementRoles];
+      const options = roles.map(value => '<option value="'+escapeOutletText(value)+'" '+(value===user.role?'selected':'')+'>'+escapeOutletText(value.replace(/([a-z])([A-Z])/g,'$1 $2').replace(/^ACTechnician/,'AC Technician'))+'</option>').join('');
+      return '<select class="um-outlet-select" aria-label="Change role for '+escapeOutletText(user.username)+'" onchange="changeUserRole('+user.id+', this)" '+(!['Admin','HR'].includes(role)||!userManagementRoles.length||roleUpdates.has(user.id)?'disabled':'')+'>'+options+'</select>';
+    }
+    async function changeUserRole(userId, select) {
+      const user = userManagementUsers.find(item => item.id === userId);
+      if (!user || roleUpdates.has(userId) || select.value === user.role) return;
+      const previous = user.role, next = select.value;
+      const msg = document.getElementById('userManagementMsg');
+      msg.classList.remove('success'); msg.textContent = 'Updating role...';
+      roleUpdates.add(userId); select.disabled = true;
+      try {
+        const response = await umFetch('/api/users/'+userId+'/role', {
+          method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({role:next})
+        });
+        if (!response) { select.value = previous; return; }
+        const data = await response.json().catch(()=>({}));
+        if (!response.ok) throw new Error(typeof data.detail==='string'?data.detail:'Unable to change role');
+        user.role = data.role;
+        msg.classList.add('success'); msg.textContent = user.username+' is now assigned the '+data.role+' role.';
+        if (userId === userManagementActorId) {
+          localStorage.setItem('role', data.role);
+          location.reload();
+          return;
+        }
+        const by_role = {};
+        userManagementUsers.forEach(item => { by_role[item.role] = (by_role[item.role] || 0) + 1; });
+        renderUserCountSummary({total:userManagementUsers.length, by_role});
+      } catch (error) {
+        select.value = previous;
+        msg.classList.remove('success'); msg.textContent = error.message || 'Unable to change role. Please try again.';
+      } finally {
+        roleUpdates.delete(userId);
         renderUserManagementTable();
       }
     }
@@ -811,7 +855,7 @@
         <tr>
           <td>${u.username}</td>
           <td>${u.email}</td>
-          <td>${u.role}</td>
+          <td>${userRoleDropdown(u)}</td>
           <td>${userAssignmentLabel(u)}</td>
           <td>${userOutletDropdown(u)}</td>
           <td>${u.weekoff_day || 'Not selected'}</td>

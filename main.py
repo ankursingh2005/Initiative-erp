@@ -3690,6 +3690,29 @@ def admin_reset_user_password(
     return {"message": "Reset Password Successfully", "username": target_user.username}
 
 
+@app.get("/api/users/roles")
+def user_management_roles(current_user: models.User = Depends(auth.require_user_management_admin)):
+    return VALID_ROLES
+
+
+@app.patch("/api/users/{user_id}/role", response_model=schemas.UserAdminOut)
+def update_user_role(
+    user_id: int,
+    payload: schemas.UserRoleUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_user_management_admin),
+):
+    if payload.role not in VALID_ROLES:
+        raise HTTPException(status_code=400, detail="Select a valid user role")
+    target_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    target_user.role = payload.role
+    db.commit()
+    db.refresh(target_user)
+    return serialize_user_with_brands(target_user, db)
+
+
 @app.patch("/api/users/{user_id}/attendance-outlet", response_model=schemas.UserAdminOut)
 def update_attendance_outlet(
     user_id: int,
