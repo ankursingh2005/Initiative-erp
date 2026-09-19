@@ -2864,12 +2864,16 @@ def attendance_admin_summary(
         ac_retail_names = {"chandra dutt sood", "jagriti"}
 
         def category_for(user):
+            if user.role == "ACTechnicianA":
+                return "ac_projects"
+            if user.role == "ACTechnicianB":
+                return "ac_retails"
             email = (user.email or "").strip().lower()
             name = (user.full_name or "").strip().lower()
             username = (user.username or "").strip().lower()
             if email in ac_retail_emails or name in ac_retail_names:
                 return "ac_retails"
-            if user.role in {"ServiceManager", "ACTechnicianA"} or "zubair" in name or "zubair" in username:
+            if user.role == "ServiceManager" or "zubair" in name or "zubair" in username:
                 return "ac_projects"
             if user.role == "BrandPartner":
                 return "brand_pro"
