@@ -32,6 +32,7 @@ class AttendanceOutletTests(unittest.TestCase):
         app = FastAPI()
         app.patch('/users/{user_id}/outlet', response_model=schemas.UserAdminOut)(main.update_attendance_outlet)
         app.patch('/users/{user_id}/role', response_model=schemas.UserAdminOut)(main.update_user_role)
+        app.patch('/users/{user_id}/details', response_model=schemas.UserAdminOut)(main.update_user_details)
         app.dependency_overrides[main.get_db] = lambda: self.db
         app.dependency_overrides[auth.get_current_user] = lambda: self.actor
         self.client = TestClient(app)
@@ -81,3 +82,35 @@ class AttendanceOutletTests(unittest.TestCase):
             self.actor.role = actor_role
             self.assertEqual(self.client.patch(path, json={'role': 'Admin'}).status_code, 403)
         self.assertEqual(self.employee.role, 'BrandPartner')
+
+    def test_admin_and_hr_edit_details_and_clear_weekoff(self):
+        path = f'/users/{self.employee.id}/details'
+        for actor_role, weekoff in [('Admin', 'Monday'), ('HR', None)]:
+            self.actor.role = actor_role
+            result = self.client.patch(path, json={'username': ' Updated name ', 'email': ' New@Example.test ', 'weekoff_day': weekoff})
+            self.assertEqual(result.status_code, 200, result.text)
+            self.assertEqual(result.json()['username'], 'Updated name')
+            self.assertEqual(result.json()['email'], 'new@example.test')
+            self.assertEqual(result.json()['weekoff_day'], weekoff)
+            self.assertEqual(result.json()['role'], 'BrandPartner')
+
+    def test_user_details_reject_invalid_duplicate_and_unauthorized_changes(self):
+        path = f'/users/{self.employee.id}/details'
+        valid = {'username': 'New name', 'email': 'new@example.test', 'weekoff_day': ''}
+        for changed, status in [({'username': '  '}, 400), ({'email': 'invalid'}, 400),
+                                ({'email': 'A@EXAMPLE.TEST'}, 409), ({'weekoff_day': 'Holiday'}, 400),
+                                ({'role': 'Admin'}, 422)]:
+            response = self.client.patch(path, json={**valid, **changed})
+            self.assertEqual(response.status_code, status, response.text)
+        self.assertEqual(self.employee.username, 'employee')
+        for role in ['Owner', 'MISExecutive', 'Employee']:
+            self.actor.role = role
+            self.assertEqual(self.client.patch(path, json=valid).status_code, 403)
+
+    def test_email_change_invalidates_old_recovery_code(self):
+        self.employee.reset_token = 'old-code'
+        self.db.commit()
+        response = self.client.patch(f'/users/{self.employee.id}/details', json={
+            'username': 'employee', 'email': 'corrected@example.test', 'weekoff_day': 'Sunday'})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertIsNone(self.employee.reset_token)

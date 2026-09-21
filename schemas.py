@@ -426,6 +426,15 @@ class UserRoleUpdate(BaseModel):
     role: str = Field(min_length=1, max_length=50)
 
 
+class UserDetailsUpdate(BaseModel):
+    username: str = Field(min_length=1, max_length=50)
+    email: str = Field(min_length=3, max_length=150)
+    weekoff_day: Optional[str] = None
+
+    class Config:
+        extra = "forbid"
+
+
 class PriceListItemCreate(BaseModel):
     """Admin/Accounts/MISExecutive: add one item by hand."""
     brand_id: int

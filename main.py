@@ -3717,6 +3717,43 @@ def update_user_role(
     return serialize_user_with_brands(target_user, db)
 
 
+@app.patch("/api/users/{user_id}/details", response_model=schemas.UserAdminOut)
+def update_user_details(
+    user_id: int,
+    payload: schemas.UserDetailsUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_user_management_admin),
+):
+    target = db.get(models.User, user_id)
+    if not target:
+        raise HTTPException(404, "User not found")
+    username = payload.username.strip()
+    email = payload.email.strip().lower()
+    weekoff = (payload.weekoff_day or "").strip().title()
+    if not username:
+        raise HTTPException(400, "Enter a username")
+    if not re.fullmatch(r"[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+", email):
+        raise HTTPException(400, "Enter a valid email address")
+    if weekoff and weekoff not in WEEKDAYS:
+        raise HTTPException(400, "Week Off must be Monday through Sunday, or left unset")
+    if db.query(models.User).filter(func.lower(models.User.email) == email, models.User.id != user_id).first():
+        raise HTTPException(409, "This email address is already used by another user")
+    target.username = username
+    if target.email != email:
+        target.email = email
+        # A recovery code sent to the old address must not work after a correction.
+        target.reset_token = None
+        target.reset_token_expires = None
+    target.weekoff_day = weekoff or None
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "Unable to save: this email address is already in use")
+    db.refresh(target)
+    return serialize_user_with_brands(target, db)
+
+
 @app.patch("/api/users/{user_id}/attendance-outlet", response_model=schemas.UserAdminOut)
 def update_attendance_outlet(
     user_id: int,

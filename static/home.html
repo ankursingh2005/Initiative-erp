@@ -546,6 +546,18 @@
 
   </div>
 
+  <dialog id="editUserDialog" aria-labelledby="editUserTitle" style="border:0;border-radius:14px;padding:24px;width:min(420px,90vw);max-height:85vh;overflow:auto">
+    <form onsubmit="saveUserDetails(event)">
+      <h3 id="editUserTitle">Edit user</h3>
+      <div class="field"><label for="editUserName">Username</label><input id="editUserName" maxlength="50" required /></div>
+      <div class="field"><label for="editUserEmail">Email</label><input id="editUserEmail" type="email" maxlength="150" required /></div>
+      <div class="field"><label for="editUserWeekoff">Week Off</label><select id="editUserWeekoff"><option value="">Week Off</option><option>Monday</option><option>Tuesday</option><option>Wednesday</option><option>Thursday</option><option>Friday</option><option>Saturday</option><option>Sunday</option></select></div>
+      <p>Select Week Off to leave the day unset.</p>
+      <div id="editUserError" class="um-msg" role="status"></div>
+      <div class="modal-actions"><button type="button" class="btn-light" onclick="document.getElementById('editUserDialog').close()">Cancel</button><button id="editUserSave" type="submit" class="btn-primary-modal">Save changes</button></div>
+    </form>
+  </dialog>
+
   <div id="umPasswordModal" style="position:fixed; inset:0; z-index:60; display:none; align-items:center; justify-content:center; background:rgba(16,24,40,.55); backdrop-filter:blur(3px);" onclick="if (event.target === this) closeUmPasswordModal()">
     <div class="modal-card" style="max-width:380px;">
       <h3>Confirm your password</h3>
@@ -841,6 +853,45 @@
       }
     }
 
+    let editUserTargetId = null;
+    function openEditUser(userId) {
+      if (!['Admin','HR'].includes(role)) return;
+      const user = userManagementUsers.find(item => item.id === userId);
+      if (!user) return;
+      editUserTargetId = userId;
+      document.getElementById('editUserName').value = user.username;
+      document.getElementById('editUserEmail').value = user.email;
+      document.getElementById('editUserWeekoff').value = user.weekoff_day || '';
+      document.getElementById('editUserError').textContent = '';
+      document.getElementById('editUserDialog').showModal();
+    }
+
+    async function saveUserDetails(event) {
+      event.preventDefault();
+      const userId = editUserTargetId;
+      const button = document.getElementById('editUserSave');
+      if (button.disabled) return;
+      button.disabled = true;
+      document.getElementById('editUserError').textContent = '';
+      try {
+        const response = await umFetch('/api/users/'+userId+'/details', {
+          method:'PATCH', headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({username:document.getElementById('editUserName').value.trim(), email:document.getElementById('editUserEmail').value.trim(), weekoff_day:document.getElementById('editUserWeekoff').value || null})
+        });
+        if (!response) return;
+        const data = await response.json().catch(()=>({}));
+        if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Unable to save user details');
+        const user = userManagementUsers.find(item => item.id === userId);
+        if (user) Object.assign(user, data);
+        if (userId === userManagementActorId) localStorage.setItem('username', data.username);
+        document.getElementById('editUserDialog').close();
+        renderUserManagementTable();
+        const message = document.getElementById('userManagementMsg');
+        message.classList.add('success'); message.textContent = 'User details saved.';
+      } catch (error) { document.getElementById('editUserError').textContent = error.message; }
+      finally { button.disabled = false; }
+    }
+
     function renderUserManagementTable() {
       const tbody = document.getElementById('userManagementTableBody');
       let users = userManagementRoleFilter === 'ALL'
@@ -854,8 +905,8 @@
       }
       tbody.innerHTML = users.map(u => `
         <tr>
-          <td>${u.username}</td>
-          <td>${u.email}</td>
+          <td>${escapeOutletText(u.username)}</td>
+          <td>${escapeOutletText(u.email)}</td>
           <td>${userRoleDropdown(u)}</td>
           <td>${userAssignmentLabel(u)}</td>
           <td>${userOutletDropdown(u)}</td>
@@ -863,8 +914,9 @@
           <td>${u.status}</td>
           <td>${formatDateShort(u.created_date)}</td>
           <td class="um-actions">
-            <button type="button" class="um-reset-btn" onclick="openResetPasswordModal(${u.id}, '${String(u.username).replace(/'/g, "\\'")}')">Reset Password</button>
-            <button type="button" class="um-delete-btn" onclick="openDeleteUserModal(${u.id}, '${String(u.username).replace(/'/g, "\\'")}')" ${(u.username === username || (role === 'HR' && u.role === 'Admin')) ? `disabled title="${u.username === username ? 'You cannot delete your own account' : 'HR cannot delete an Admin account'}"` : ''}>Delete</button>
+            <button type="button" class="um-reset-btn" onclick="openEditUser(${u.id})">Edit</button>
+            <button type="button" class="um-reset-btn" onclick="openResetPasswordModal(${u.id})">Reset Password</button>
+            <button type="button" class="um-delete-btn" onclick="openDeleteUserModal(${u.id})" ${(u.id === userManagementActorId || (role === 'HR' && u.role === 'Admin')) ? 'disabled' : ''}>Delete</button>
           </td>
         </tr>
       `).join('') || `<tr><td colspan="9" class="empty">${userManagementSearchQuery ? 'No users match this username or email' : `No ${userManagementRoleFilter === 'ALL' ? '' : userManagementRoleFilter + ' '}accounts found`}</td></tr>`;
@@ -872,6 +924,7 @@
 
     let resetPasswordTargetId = null;
     function openResetPasswordModal(userId, usernameLabel) {
+      usernameLabel = usernameLabel ?? userManagementUsers.find(user => user.id === userId)?.username ?? '';
       resetPasswordTargetId = userId;
       document.getElementById('resetPasswordUsername').textContent = usernameLabel;
       document.getElementById('resetPasswordNew').value = '';
@@ -939,6 +992,7 @@
 
     let deleteUserTargetId = null;
     function openDeleteUserModal(userId, usernameLabel) {
+      usernameLabel = usernameLabel ?? userManagementUsers.find(user => user.id === userId)?.username ?? '';
       deleteUserTargetId = userId;
       document.getElementById('deleteUserUsername').textContent = usernameLabel;
       document.getElementById('deleteUserConfirmInput').value = '';
