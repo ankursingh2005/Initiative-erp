@@ -484,6 +484,8 @@ class PurchaseOrder(Base):
     exported_to_busy_at = Column(DateTime, nullable=True)
     email_sent_at = Column(DateTime, nullable=True)
     email_sent_to = Column(Text, nullable=True)
+    verified_at = Column(DateTime, nullable=True)
+    verified_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     submitted_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     # Admin approval gate: a Category Manager's request must be Approved by
     # an Admin before MIS is allowed to send it to the supplier / finalize it
@@ -496,6 +498,34 @@ class PurchaseOrder(Base):
     items = relationship("PurchaseOrderItem", back_populates="purchase_order", cascade="all, delete-orphan")
     submitted_by = relationship("User", foreign_keys=[submitted_by_user_id])
     approved_by = relationship("User", foreign_keys=[approved_by_user_id])
+    verified_by = relationship("User", foreign_keys=[verified_by_user_id])
+    receipts = relationship("PurchaseOrderReceipt", back_populates="purchase_order", cascade="all, delete-orphan", order_by="PurchaseOrderReceipt.id")
+
+
+class PurchaseOrderReceipt(Base):
+    __tablename__ = "purchase_order_receipts"
+    id = Column(Integer, primary_key=True)
+    purchase_order_id = Column(Integer, ForeignKey("purchase_orders.id"), nullable=False, index=True)
+    location_name = Column(String(200), nullable=False)
+    store_id = Column(Integer, ForeignKey("stores.id"), nullable=True)
+    document_number = Column(String(100), nullable=False)
+    received_date = Column(Date, nullable=False)
+    notes = Column(String(500), nullable=True)
+    received_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    voided_at = Column(DateTime, nullable=True)
+    voided_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    purchase_order = relationship("PurchaseOrder", back_populates="receipts")
+    received_by = relationship("User", foreign_keys=[received_by_user_id])
+    lines = relationship("PurchaseOrderReceiptLine", cascade="all, delete-orphan")
+
+
+class PurchaseOrderReceiptLine(Base):
+    __tablename__ = "purchase_order_receipt_lines"
+    id = Column(Integer, primary_key=True)
+    receipt_id = Column(Integer, ForeignKey("purchase_order_receipts.id"), nullable=False)
+    purchase_order_item_id = Column(Integer, ForeignKey("purchase_order_items.id"), nullable=False)
+    quantity = Column(Integer, nullable=False)
 
 
 class PurchaseOrderItem(Base):

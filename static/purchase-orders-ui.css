@@ -79,3 +79,10 @@ dialog::backdrop { background:#10253b99; backdrop-filter:blur(3px); }
 }
 
 #submitRequestBtn.request-sent:disabled { opacity:1; background:#157653; color:#fff; }
+/* The send stage completes half the loop; verification completes the rest. */
+.po-loop-ring { width:48px; height:48px; flex:0 0 48px; border-radius:50%; display:grid; place-items:center; background:conic-gradient(#16845b var(--po-progress), #e4e7ec 0); }
+.po-loop-ring span { width:36px; height:36px; display:grid; place-items:center; border-radius:50%; background:#fff; color:#166347; font-size:11px; font-weight:700; }
+#receivingDialog::backdrop { background:rgba(16,24,40,.55); }
+#receivingDialog th, #receivingDialog td { padding:10px; text-align:left; border-bottom:1px solid #e4e7ec; }
+#receivingDialog label { display:block; margin:12px 0; }
+#receivingDialog input, #receivingDialog select, #receivingDialog textarea { width:100%; box-sizing:border-box; }

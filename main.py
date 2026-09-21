@@ -64,6 +64,7 @@ import ems_models
 import schemas
 import scheme_engine
 import auth
+import po_receiving
 from database import engine, get_db, Base, SessionLocal
 
 # Creates all tables in the database if they don't already exist
@@ -184,6 +185,8 @@ def ensure_database_schema():
     ensure_column("purchase_orders", "exported_to_busy_at", "TIMESTAMP")
     ensure_column("purchase_orders", "email_sent_at", "TIMESTAMP")
     ensure_column("purchase_orders", "email_sent_to", "TEXT")
+    ensure_column("purchase_orders", "verified_at", "TIMESTAMP")
+    ensure_column("purchase_orders", "verified_by_user_id", "INTEGER")
     ensure_column("purchase_orders", "approved_by_user_id", "INTEGER")
     ensure_column("purchase_orders", "approved_date", "TIMESTAMP")
     ensure_column("price_list_items", "model_no", "VARCHAR(100)")
@@ -585,6 +588,7 @@ ensure_default_branches()
 ensure_default_master_data()
 
 app = FastAPI(title="IDSPL Scheme Management ERP")
+app.include_router(po_receiving.router)
 from identity_cards import router as identity_cards_router
 app.include_router(identity_cards_router)
 from ems import router as ems_router, pages as ems_pages
@@ -3787,6 +3791,11 @@ def delete_user(
         raise HTTPException(status_code=403, detail="HR cannot delete an Admin account.")
 
     deleted_username = target_user.username
+    if (db.query(models.PurchaseOrderReceipt).filter(or_(
+            models.PurchaseOrderReceipt.received_by_user_id == user_id,
+            models.PurchaseOrderReceipt.voided_by_user_id == user_id)).first()
+            or db.query(models.PurchaseOrder).filter(models.PurchaseOrder.verified_by_user_id == user_id).first()):
+        raise HTTPException(409, "This employee has PO receipt or verification history. Deactivate the account to preserve the audit trail.")
     if any(db.query(model).filter(model.user_id == user_id).first() is not None
            for model in (ems_models.EMSLeaveRequest, ems_models.EMSEarning, ems_models.EMSPayroll)):
         raise HTTPException(409, 'This employee has EMS history. Deactivate the account to preserve leave and payroll records.')
@@ -3886,6 +3895,7 @@ def assert_status_transition_allowed(current_user: models.User, purchase_order: 
 
 def serialize_purchase_order(purchase_order: models.PurchaseOrder, notification_status: Optional[str] = None):
     return {
+        "receiving": po_receiving.receipt_summary(purchase_order),
         "id": purchase_order.id,
         "request_no": purchase_order.request_no,
         "request_date": purchase_order.request_date,
@@ -3963,7 +3973,9 @@ def send_purchase_order_whatsapp_notification(purchase_order: models.PurchaseOrd
 
 
 def can_access_purchase_order(current_user: models.User, purchase_order: models.PurchaseOrder) -> bool:
-    return auth.has_admin_access(current_user) or current_user.role == "MISExecutive" or purchase_order.submitted_by_user_id == current_user.id
+    return (auth.has_admin_access(current_user) or current_user.role == "MISExecutive"
+            or purchase_order.submitted_by_user_id == current_user.id
+            or (po_receiving.can_receive(current_user) and purchase_order.email_sent_at is not None))
 
 
 # ============================================================
@@ -4285,7 +4297,10 @@ def list_purchase_orders(
 ):
     query = db.query(models.PurchaseOrder)
     if not auth.has_admin_access(current_user) and current_user.role != "MISExecutive":
-        query = query.filter(models.PurchaseOrder.submitted_by_user_id == current_user.id)
+        visibility = models.PurchaseOrder.submitted_by_user_id == current_user.id
+        if po_receiving.can_receive(current_user):
+            visibility = or_(visibility, models.PurchaseOrder.email_sent_at.isnot(None))
+        query = query.filter(visibility)
     purchase_orders = query.order_by(models.PurchaseOrder.created_date.desc()).all()
     return [serialize_purchase_order(item) for item in purchase_orders]
 
@@ -4321,6 +4336,9 @@ def update_purchase_order_status(
 
     if status_value != purchase_order.status:
         assert_status_transition_allowed(current_user, purchase_order, status_value)
+
+    if purchase_order.email_sent_at:
+        raise HTTPException(status_code=409, detail="Sent POs are locked for receipt matching. Create a new PO for changes.")
 
     # Status-only actions must preserve the existing Busy reference.
     supplied_fields = getattr(payload, "model_fields_set", None)
@@ -4417,6 +4435,8 @@ def delete_purchase_order(
     purchase_order = db.query(models.PurchaseOrder).filter(models.PurchaseOrder.id == purchase_order_id).first()
     if not purchase_order:
         raise HTTPException(status_code=404, detail="Purchase order request not found")
+    if purchase_order.email_sent_at or purchase_order.receipts:
+        raise HTTPException(status_code=409, detail="Sent POs and their receipt audit history cannot be deleted")
     db.delete(purchase_order)
     db.commit()
     return {"message": "Purchase order request deleted"}

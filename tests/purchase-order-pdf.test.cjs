@@ -25,7 +25,7 @@ test('PDF uses multiple A4 pages for long orders without shrinking content', () 
   assert.equal(pages,3); assert.equal(images.length,3);
   for (const image of images) { assert.equal(image[4],190); assert.ok(image[5]<=277); }
 });
-test('search and ready/sent filters preserve user scope', () => {
+test('search and ready/sent filters preserve the server-authorized receipt queue', () => {
   const controls = Object.fromEntries(['statusFilter','poDateField','poDateFrom','poDateTo','poSearch'].map(id => [id,{value:''}]));
   const context = {document:{getElementById:id=>controls[id]},isProcessor:false,username:'manager',orders:[
     {id:1,submitted_by_username:'manager',status:'Approved',brand_name:'Realme',request_no:'REQ-1',items:[{product_name:'Phone'}]},
@@ -33,11 +33,14 @@ test('search and ready/sent filters preserve user scope', () => {
     {id:3,submitted_by_username:'other',status:'Approved',request_no:'REQ-3',items:[]}
   ]};
   vm.createContext(context); vm.runInContext(helper('getScopedFilteredOrders','function clearPoDateFilter'),context);
-  controls.statusFilter.value='ready'; assert.deepEqual(Array.from(context.getScopedFilteredOrders(),o=>o.id),[1]);
+  controls.statusFilter.value='ready'; assert.deepEqual(Array.from(context.getScopedFilteredOrders(),o=>o.id),[1,3]);
   controls.statusFilter.value='sent'; assert.deepEqual(Array.from(context.getScopedFilteredOrders(),o=>o.id),[2]);
   controls.statusFilter.value=''; controls.poSearch.value=' PHONE '; assert.deepEqual(Array.from(context.getScopedFilteredOrders(),o=>o.id),[1]);
   controls.poSearch.value='acme'; assert.deepEqual(Array.from(context.getScopedFilteredOrders(),o=>o.id),[2]);
-  controls.poSearch.value='REQ-3'; assert.equal(context.getScopedFilteredOrders().length,0);
+  controls.poSearch.value='REQ-3'; assert.equal(context.getScopedFilteredOrders().length,1);
+  controls.poSearch.value=''; controls.statusFilter.value='Completed';
+  context.orders[1].receiving={stage:'Completed'};
+  assert.deepEqual(Array.from(context.getScopedFilteredOrders(),o=>o.id),[2]);
 });
 test('section toggle updates visibility and accessible state', () => {
   const body={style:{display:'block'}}; const attrs={}; let opened;
@@ -55,13 +58,12 @@ test('Busy number validation rejects duplicates but permits same-order edits and
   assert.equal(context.busyNumberConflict('2','182'),undefined);
   assert.equal(context.busyNumberConflict('2','  '),null);
 });
-test('sent orders offer edit and resend only for processors', () => {
+test('sent orders preserve the sent item list for receipt matching', () => {
   const context={isProcessor:true}; vm.createContext(context);
   vm.runInContext(helper('orderProcessingActions','function renderOrders'),context);
   const sent={id:7,email_sent_at:'2026-09-08'};
-  assert.match(context.orderProcessingActions(sent),/Success/);
-  assert.match(context.orderProcessingActions(sent),/Edit &amp; resend/);
-  assert.match(context.orderProcessingActions(sent),/openProcess\(7\)/);
+  assert.match(context.orderProcessingActions(sent),/first half complete/);
+  assert.doesNotMatch(context.orderProcessingActions(sent),/openProcess/);
   assert.match(context.orderProcessingActions({id:8}),/Prepare order/);
   context.isProcessor=false; assert.equal(context.orderProcessingActions(sent),'');
 });

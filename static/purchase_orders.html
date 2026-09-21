@@ -182,19 +182,19 @@
   </div>
   <main>
     <div class="po-hero">
-      <div><p class="eyebrow">INITIATIVE / PURCHASING</p><h1>Purchase orders</h1><p class="subtitle">Request stock. Get approval. Send your order.</p></div>
+      <div><p class="eyebrow">INITIATIVE / PURCHASING</p><h1>Purchase orders</h1><p class="subtitle">Send the PO. Receive at a warehouse or outlet. Match and verify to complete.</p></div>
       <button class="btn hidden" id="newRequestShortcut" type="button" onclick="showRequestForm()">+ New purchase request</button>
     </div>
-    <div class="workflow-guide" aria-label="Purchase order steps"><span><b>1</b> Add products</span><span class="step-arrow" aria-hidden="true">&rarr;</span><span><b>2</b> Get admin approval</span><span class="step-arrow" aria-hidden="true">&rarr;</span><span><b>3</b> Email the PDF to your supplier</span></div>
+    <div class="workflow-guide" aria-label="Purchase order steps"><span><b>1</b> Add products</span><span class="step-arrow" aria-hidden="true">&rarr;</span><span><b>2</b> Get admin approval</span><span class="step-arrow" aria-hidden="true">&rarr;</span><span><b>3</b> Send PO (first half)</span><span class="step-arrow">&rarr;</span><span><b>4</b> Receive &amp; match</span><span class="step-arrow">&rarr;</span><span><b>5</b> Verify &amp; complete</span></div>
     <div class="po-overview" aria-label="Order summary">
       <button class="overview-tile" type="button" onclick="setQuickFilter('')"><span>All requests</span><strong id="countAll">&ndash;</strong><small>View every request &rarr;</small></button>
       <button class="overview-tile tone-amber" type="button" onclick="setQuickFilter('Requested')"><span>Awaiting approval</span><strong id="countWaiting">&ndash;</strong><small>Waiting for admin review &rarr;</small></button>
       <button class="overview-tile tone-blue" type="button" onclick="setQuickFilter('ready')"><span>Ready to send</span><strong id="countReady">&ndash;</strong><small>Approved, not yet emailed &rarr;</small></button>
-      <button class="overview-tile tone-green" type="button" onclick="setQuickFilter('sent')"><span>Successfully sent</span><strong id="countSent">&ndash;</strong><small>View emailed orders &rarr;</small></button>
+      <button class="overview-tile tone-green" type="button" onclick="setQuickFilter('sent')"><span>PO sent — first half</span><strong id="countSent">&ndash;</strong><small>View emailed orders &rarr;</small></button>
     </div>
     <div class="filter-panel">
       <div class="search-field"><label for="poSearch">Find an order</label><input id="poSearch" type="search" placeholder="Search PO number, supplier, brand or product..." oninput="renderOrders()" /></div>
-      <div class="filters"><select aria-label="Order status" id="statusFilter" onchange="renderOrders()"><option value="">All statuses</option><option>Requested</option><option>Approved</option><option>Rejected</option><option>Ordered</option><option>Cancelled</option><option value="ready">Ready to send</option><option value="sent">Successfully sent</option></select><select aria-label="Date to filter by" id="poDateField" onchange="renderOrders()"><option value="request_date">Filter by Request Date</option><option value="ordered_date">Filter by Ordered Date</option></select><label class="filter-date-label">From<input id="poDateFrom" type="date" onchange="renderOrders()" /></label><label class="filter-date-label">To<input id="poDateTo" type="date" onchange="renderOrders()" /></label><button type="button" class="btn-outline" onclick="clearPoDateFilter()">Reset filters</button></div></div>
+      <div class="filters"><select aria-label="Order status" id="statusFilter" onchange="renderOrders()"><option value="">All statuses</option><option>Requested</option><option>Approved</option><option>Rejected</option><option>Ordered</option><option>Cancelled</option><option value="Completed">Completed</option><option value="Receipt mismatch">Receipt mismatch</option><option value="Awaiting verification">Awaiting verification</option><option value="ready">Ready to send</option><option value="sent">Successfully sent</option></select><select aria-label="Date to filter by" id="poDateField" onchange="renderOrders()"><option value="request_date">Filter by Request Date</option><option value="ordered_date">Filter by Ordered Date</option></select><label class="filter-date-label">From<input id="poDateFrom" type="date" onchange="renderOrders()" /></label><label class="filter-date-label">To<input id="poDateTo" type="date" onchange="renderOrders()" /></label><button type="button" class="btn-outline" onclick="clearPoDateFilter()">Reset filters</button></div></div>
 
     <section class="card hidden" id="requisitionCard">
       <h2 class="collapsible-title" onclick="toggleSectionBody('requisitionBody', this)">New Purchase Request<span class="section-toggle-chevron">&#9662;</span></h2>
@@ -372,6 +372,25 @@
     </div>
   </dialog>
 
+  <dialog id="receivingDialog" style="width:min(900px,92vw);max-height:85vh;overflow:auto;border:0;border-radius:14px;padding:24px" aria-labelledby="receivingTitle">
+    <button type="button" class="btn-outline" style="float:right" onclick="document.getElementById('receivingDialog').close()">Close</button>
+    <h2 id="receivingTitle">Receive and verify PO</h2>
+    <p>Sent PO → warehouse / outlet receipt → match items and quantities → verify → complete.</p>
+    <div id="receivingMatch" style="overflow:auto"></div>
+    <p id="receivingMessage" role="status" aria-live="polite"></p>
+    <form id="receiptEntry" onsubmit="saveReceipt(event)">
+      <h3>Enter a delivery receipt</h3><p>Enter quantities for this delivery only. Earlier receipts are already included above.</p>
+      <label>Receiving location<select id="receiptLocation" required></select></label>
+      <label>Invoice / delivery challan number<input id="receiptDocument" maxlength="100" required /></label>
+      <label>Received date<input id="receiptDate" type="date" required /></label>
+      <div id="receiptQuantities"></div>
+      <label>Receipt notes<textarea id="receiptNotes" maxlength="500"></textarea></label>
+      <button id="saveReceipt" type="submit" class="btn">Save receipt and match</button>
+    </form>
+    <h3>Receipt history</h3><div id="receiptHistory"></div>
+    <button id="verifyReceipt" type="button" class="btn-good" onclick="verifyReceipt()">Verify and complete PO loop</button>
+  </dialog>
+  <script src="static/po-receiving.js"></script>
   <script>
     function appUrl(path) { const p = location.pathname; const base = p === '/erp' || p.startsWith('/erp/') ? '/erp' : ''; return `${base}${path}`; }
     function toggleSectionBody(bodyId, headerEl) {
@@ -562,7 +581,7 @@
     });
 
     function updateOrderSummary() {
-      const scoped = isProcessor ? orders : orders.filter(o => o.submitted_by_username === username);
+      const scoped = orders;
       document.getElementById('countAll').textContent = scoped.length;
       document.getElementById('countWaiting').textContent = scoped.filter(o => o.status === 'Requested').length;
       document.getElementById('countReady').textContent = scoped.filter(o => ['Approved', 'Ordered'].includes(o.status) && !o.email_sent_at).length;
@@ -605,9 +624,9 @@
       const dateField = document.getElementById('poDateField').value || 'request_date';
       const dateFrom = document.getElementById('poDateFrom').value;
       const dateTo = document.getElementById('poDateTo').value;
-      const scoped = isProcessor ? orders : orders.filter(order => order.submitted_by_username === username);
+      const scoped = orders;
       return scoped
-        .filter(order => !filter || (filter === 'sent' ? !!order.email_sent_at : filter === 'ready' ? ['Approved', 'Ordered'].includes(order.status) && !order.email_sent_at : order.status === filter))
+        .filter(order => !filter || (filter === 'sent' ? !!order.email_sent_at : filter === 'ready' ? ['Approved', 'Ordered'].includes(order.status) && !order.email_sent_at : (order.status === filter || order.receiving?.stage === filter)))
         .filter(order => {
           const search = document.getElementById('poSearch').value.trim().toLowerCase();
           return !search || [order.request_no, order.busy_po_number, order.supplier_name, order.brand_name, ...(order.items || []).map(item => item.product_name)].join(' ').toLowerCase().includes(search);
@@ -634,7 +653,7 @@
 
     function orderProcessingActions(order) {
       if (!isProcessor) return '';
-      if (order.email_sent_at) return '<span class="status ordered">Success</span><button class="btn-outline" type="button" onclick="openProcess(' + order.id + ')">Edit &amp; resend</button>';
+      if (order.email_sent_at) return '<span class="status ordered">PO sent · first half complete</span>';
       return '<button class="btn-light" type="button" onclick="openProcess(' + order.id + ')">Prepare order</button>';
     }
 
@@ -652,8 +671,8 @@
           ? `<button class="btn-good" onclick="quickApprove(${order.id})">Approve</button><button class="btn-danger" onclick="quickReject(${order.id})">Reject</button>`
           : '';
         const viewAction = `<button class="btn-outline" onclick="viewOrderPdf(${order.id})">View PDF</button>`;
-        const processorActions = orderProcessingActions(order);
-        const deleteAction = isProcessor ? `<button class="btn-danger" onclick="deleteOrder(${order.id})">Delete</button>` : '';
+        const processorActions = orderProcessingActions(order) + receivingActions(order);
+        const deleteAction = isProcessor && !order.email_sent_at ? `<button class="btn-danger" onclick="deleteOrder(${order.id})">Delete</button>` : '';
         let busyBadge = '';
         if (isProcessor && order.status === 'Ordered') {
           busyBadge = order.exported_to_busy
@@ -675,8 +694,8 @@
           document.getElementById('listHelp').textContent = 'Review each request, check supplier details, and send the purchase order as a PDF.';
           document.getElementById('exportActions').classList.remove('hidden');
         } else {
-          document.getElementById('listTitle').textContent = 'My Purchase Requests';
-          document.getElementById('listHelp').textContent = 'Requests you have submitted and their current status.';
+          document.getElementById('listTitle').textContent = 'Purchase requests and receipts';
+          document.getElementById('listHelp').textContent = 'Track your requests and receive sent POs at your assigned outlet or warehouse.';
         }
         renderOrders();
       } catch (e) { document.getElementById('orders').innerHTML = `<div class="po-row po-meta">${escapeHtml(e.message)}</div>`; }
@@ -1476,7 +1495,7 @@
     });
     document.querySelectorAll('.message').forEach(el => { el.setAttribute('role', 'status'); el.setAttribute('aria-live', 'polite'); });
     if (isCategoryManager || isProcessor) document.getElementById('newRequestShortcut').classList.remove('hidden');
-    addItemRow('itemsBody'); loadMasters(); loadOrders();
+    addItemRow('itemsBody'); loadMasters(); loadReceivingOptions(); loadOrders();
   </script>
 </body>
 </

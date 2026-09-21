@@ -628,6 +628,7 @@ class PurchaseOrderItemOut(PurchaseOrderItemCreate):
 
 
 class PurchaseOrderOut(BaseModel):
+    receiving: dict = Field(default_factory=dict)
     id: int
     request_no: str
     request_date: date

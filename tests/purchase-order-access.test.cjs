@@ -19,9 +19,11 @@ test('Category Managers can open all PO route variants', () => {
   }
 });
 test('other restricted roles and unrelated pages remain restricted', () => {
-  assert.equal(redirectFor('BrandManager','/purchase-orders'),'/home');
+  assert.equal(redirectFor('BrandManager','/purchase-orders'),undefined);
   assert.equal(redirectFor('CategoryManager','/analytics'),'/home');
-  assert.equal(redirectFor('SupportingStaff','/erp/purchase-orders'),'/erp/home');
+  assert.equal(redirectFor('SupportingStaff','/erp/purchase-orders'),undefined);
+  assert.equal(redirectFor('LogisticManager','/purchase-orders'),undefined);
+  assert.equal(redirectFor('BrandPartner','/purchase-orders'),'/home');
   assert.equal(redirectFor('Admin','/purchase-orders'),undefined);
   assert.equal(redirectFor('CategoryManager','/dashboard'),undefined);
 });
