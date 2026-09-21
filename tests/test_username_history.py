@@ -10,6 +10,9 @@ import test_analytics as isolated
 import auth
 import models
 import schemas
+from attendance_exports import router as exports_router
+from openpyxl import load_workbook
+from io import BytesIO
 
 main = isolated.main
 tearDownModule = isolated.tearDownModule
@@ -37,8 +40,10 @@ class UsernameHistoryTests(unittest.TestCase):
                     user_id = employee.id
                     original = {col.name: getattr(record, col.name) for col in record.__table__.columns}
                     app = FastAPI()
+                    app.include_router(exports_router)
                     app.patch('/users/{user_id}/details', response_model=schemas.UserAdminOut)(main.update_user_details)
                     app.get('/attendance')(main.list_attendance)
+                    app.get('/history/{user_id}')(main.attendance_user_history)
                     app.dependency_overrides[main.get_db] = lambda: db
                     app.dependency_overrides[auth.get_current_user] = lambda: actor
                     with TestClient(app) as client:
@@ -50,7 +55,25 @@ class UsernameHistoryTests(unittest.TestCase):
                         self.assertEqual(original, {col.name: getattr(record, col.name) for col in record.__table__.columns})
                         self.assertEqual(db.query(models.User).count(), 2)
                         self.assertEqual(employee.password_hash, 'unchanged')
+                        history_response = client.get(f'/history/{user_id}')
+                        self.assertEqual(history_response.status_code, 200)
+                        self.assertEqual(history_response.json()['username'], 'New name')
+                        self.assertEqual([item['id'] for item in history_response.json()['history']], [record.id])
+                        self.assertEqual(client.get(f'/history/{actor.id}').json()['history'], [])
+                        for path in (f'/api/attendance/admin-user-export?user_id={user_id}',
+                                     '/api/attendance/admin-export?date=2026-09-01',
+                                     '/api/attendance/monthly-export?month=2026-09'):
+                            download = client.get(path)
+                            self.assertEqual(download.status_code, 200, download.text if download.status_code != 200 else '')
+                            workbook = load_workbook(BytesIO(download.content))
+                            rows = list(workbook.active.values)
+                            self.assertTrue(any(row[1] == 'New name' for row in rows[1:]))
+                        pdf = client.get(f'/api/attendance/admin-user-export?user_id={user_id}&format=pdf')
+                        self.assertEqual(pdf.status_code, 200)
+                        self.assertTrue(pdf.content.startswith(b'%PDF'))
                         app.dependency_overrides[auth.get_current_user] = lambda: employee
+                        self.assertEqual(client.get('/api/attendance/admin-export?date=2026-09-01').status_code, 403)
+                        self.assertEqual(client.get(f'/history/{actor.id}').status_code, 403)
                         history = client.get('/attendance').json()
                         self.assertEqual(len(history), 1)
                         self.assertEqual(history[0]['username'], 'New name')

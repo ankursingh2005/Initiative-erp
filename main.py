@@ -2457,6 +2457,27 @@ def list_attendance(
     ]
 
 
+@app.get("/api/attendance/users/{user_id}/history")
+def attendance_user_history(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    if current_user.id != user_id and current_user.role not in {"Admin", "HR", "Owner"}:
+        raise HTTPException(status_code=403, detail="You cannot view this user's attendance")
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    records = db.query(models.AttendanceRecord).filter(
+        models.AttendanceRecord.user_id == user_id,
+    ).order_by(models.AttendanceRecord.attendance_date.desc(), models.AttendanceRecord.id.desc()).all()
+    return {"user_id": user.id, "username": user.username, "history": [
+        {"id": record.id, "attendance_date": record.attendance_date,
+         "checkin_at": record.checkin_at, "checkout_at": record.checkout_at}
+        for record in records
+    ]}
+
+
 @app.get("/api/attendance/{record_id}/selfies")
 def get_attendance_selfies(
     record_id: int,
@@ -2474,7 +2495,7 @@ def get_attendance_selfies(
     ).first()
     if not record:
         raise HTTPException(status_code=404, detail="Attendance record not found")
-    if current_user.role != "Admin" and record.user_id != current_user.id:
+    if current_user.role not in {"Admin", "HR", "Owner"} and record.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="You are not allowed to view these attendance images")
 
     user = db.query(models.User).filter(models.User.id == record.user_id).first()
@@ -8359,6 +8380,10 @@ def clear_analytics_data(
     db.query(models.AnalyticsUpload).delete()
     db.commit()
     return {"message": "AI Analysis data cleared", "deleted": deleted_count}
+
+
+from attendance_exports import router as attendance_exports_router
+app.include_router(attendance_exports_router)
 
 
 if __name__ == "__main__":
