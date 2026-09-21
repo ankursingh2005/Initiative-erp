@@ -4,6 +4,7 @@ Initiative ERP is a web application for employee attendance, outlet incentives, 
 
 - **Website:** https://erp.initiative.co.in
 - **Hosting:** Render
+- **Domain:** godaddy
 
 The website URL and hosting platform above are supplied by the project owner. The technical instructions below describe this repository; they do not confirm the settings or deployed revision of the live Render service.
 
@@ -103,10 +104,8 @@ Start the app:
 
 Open:
 
-- Official Website : https://erp.initiative.co.in
 - Login: http://localhost:8000/login
 - Signup: http://localhost:8000/signup
-- Incentives: http://localhost:8000/incentive.html
 - API explorer: http://localhost:8000/docs
 
 A new test database has no existing employee accounts. Create test accounts using your local invite codes and supply the assignments required by each role. Do not use production account credentials or a production database for routine tests.
@@ -171,7 +170,7 @@ Set production values in Render's environment settings. Keep local values in the
 
 ### Email sending
 
-Purchase-order email supports SMTP or Gmail API over HTTPS. For Render Free and a personal Gmail trial sender, follow [Gmail PO setup](GMAIL_PO_SETUP.md) and set `PO_EMAIL_PROVIDER=gmail`. Password-reset requests still use their separate SMTP configuration. The code includes Gmail defaults; these do not prove the live mailbox is configured. User management also provides a separate password-reset action for authorized staff.
+SMTP is used by purchase-order email sending and password-reset requests. Configure the mailbox, credentials and sender appropriate to the deployment. The code includes Gmail defaults; these do not prove the live mailbox is configured. User management also provides a separate password-reset action for authorized staff.
 
 ### WhatsApp attendance scheduling
 

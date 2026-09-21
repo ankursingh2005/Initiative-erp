@@ -1,9 +1,8 @@
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Query, Request
 from fastapi.staticfiles import StaticFiles
-from starlette.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, JSONResponse, Response, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session, defer, selectinload
+from sqlalchemy.orm import Session
 from sqlalchemy import inspect, text, func, or_
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
@@ -18,13 +17,10 @@ import re
 import difflib
 import importlib
 from urllib.error import HTTPError, URLError
-from urllib.request import Request as URLRequest, urlopen
+from urllib.request import Request, urlopen
 from uuid import uuid4
 import base64
 import math
-import calendar
-import secrets
-import analytics_engine as analytics_calc
 
 INDIA_TZ = timezone(timedelta(hours=5, minutes=30))
 
@@ -38,33 +34,18 @@ def india_datetime(value: datetime) -> datetime:
 
 def india_today() -> date:
     return datetime.now(INDIA_TZ).date()
-
-
-def verified_attendance_time(_device_time: datetime) -> datetime:
-    """Return authoritative server IST without trusting the device clock.
-
-    Comparing the two clocks caused valid attendance to be rejected when a
-    browser or hosting instance had clock drift. Ignoring the submitted value
-    is both more reliable and more secure: changing a phone's date or time can
-    no longer backdate or forward-date the saved attendance record.
-    """
-    return datetime.now(INDIA_TZ).replace(tzinfo=None)
 import smtplib
-from email.message import EmailMessage
-from po_email import send_gmail
+from email.mime.text import MIMEText
 from dotenv import load_dotenv
-from openpyxl import load_workbook, Workbook
+from openpyxl import load_workbook
 
 load_dotenv()  # reads a local .env file (if present) into os.environ before
                 # anything below calls os.getenv() - e.g. SMTP_*, SECRET_KEY.
-load_dotenv(os.path.join(os.path.dirname(__file__), '.env.gmail'), override=False)
 
 import models
-import ems_models
 import schemas
 import scheme_engine
 import auth
-import po_receiving
 from database import engine, get_db, Base, SessionLocal
 
 # Creates all tables in the database if they don't already exist
@@ -123,7 +104,6 @@ def ensure_username_not_unique():
 
 def ensure_database_schema():
     ensure_username_not_unique()
-    ensure_column("identity_cards", "joining_date", "DATE")
     ensure_column("stores", "code", "VARCHAR(20)")
     ensure_column("stores", "city", "VARCHAR(100)")
     ensure_column("stores", "status", "VARCHAR(20)")
@@ -183,18 +163,12 @@ def ensure_database_schema():
     ensure_column("purchase_orders", "supplier_gstin", "VARCHAR(30)")
     ensure_column("purchase_orders", "exported_to_busy", "BOOLEAN DEFAULT FALSE")
     ensure_column("purchase_orders", "exported_to_busy_at", "TIMESTAMP")
-    ensure_column("purchase_orders", "email_sent_at", "TIMESTAMP")
-    ensure_column("purchase_orders", "email_sent_to", "TEXT")
-    ensure_column("purchase_orders", "verified_at", "TIMESTAMP")
-    ensure_column("purchase_orders", "verified_by_user_id", "INTEGER")
     ensure_column("purchase_orders", "approved_by_user_id", "INTEGER")
     ensure_column("purchase_orders", "approved_date", "TIMESTAMP")
     ensure_column("price_list_items", "model_no", "VARCHAR(100)")
     ensure_column("price_list_items", "serial_no", "VARCHAR(100)")
     ensure_column("price_list_items", "imei", "VARCHAR(100)")
     ensure_column("analytics_sales_rows", "brand", "VARCHAR(150)")
-    ensure_column("analytics_sales_rows", "store", "VARCHAR(150)")
-    ensure_column("analytics_sales_rows", "vch_no", "VARCHAR(150)")
     ensure_column("schemes", "offer_value", "FLOAT")
     ensure_column("schemes", "calculation_method", "VARCHAR(50)")
     ensure_column("schemes", "min_qty", "INTEGER")
@@ -209,18 +183,9 @@ def ensure_database_schema():
     ensure_column("users", "store_id", "INTEGER")
     ensure_column("users", "category_code", "VARCHAR(20)")
     ensure_column("users", "status", "VARCHAR(20)")
-    ensure_column("users", "weekoff_day", "VARCHAR(10)")
     ensure_column("users", "created_date", "TIMESTAMP")
     ensure_column("users", "reset_token", "VARCHAR(100)")
     ensure_column("users", "reset_token_expires", "TIMESTAMP")
-    ensure_column("users", "reset_requested_at", "TIMESTAMP")
-    ensure_column("users", "reset_request_window", "TIMESTAMP")
-    ensure_column("users", "reset_request_count", "INTEGER DEFAULT 0")
-    ensure_column("users", "reset_attempts", "INTEGER DEFAULT 0")
-    # Correct the legacy role spelling without leaving existing accounts
-    # under a role that can no longer be selected during signup.
-    with engine.begin() as conn:
-        conn.execute(text("UPDATE users SET role = 'Loader' WHERE role = 'Loder'"))
 
     ensure_column("claim_headers", "claim_no", "VARCHAR(50)")
     ensure_column("claim_headers", "brand_id", "INTEGER")
@@ -247,11 +212,9 @@ def ensure_default_branches():
         default_branches = [
             {"name": "Alambagh", "code": "BR001", "city": "Lucknow", "status": "Active", "latitude": 26.8023316384953, "longitude": 80.89578659627016, "geofence_radius_m": 100},
             {"name": "Gomtinagar", "code": "BR002", "city": "Lucknow", "status": "Active", "latitude": 26.850130023596396, "longitude": 81.00713531584118, "geofence_radius_m": 100},
-            {"name": "Ashiyana", "code": "BR003", "city": "Lucknow", "status": "Active", "latitude": 26.795911774284612, "longitude": 80.92089772123978, "geofence_radius_m": 100},
+            {"name": "Ashiyana", "code": "BR003", "city": "Lucknow", "status": "Active", "latitude": 26.79601399706687, "longitude": 80.9208545762198, "geofence_radius_m": 100},
             {"name": "Hazratganj", "code": "BR004", "city": "Lucknow", "status": "Active", "latitude": 26.84924030483742, "longitude": 80.94773860240677, "geofence_radius_m": 100},
             {"name": "Vikas Nagar", "code": "BR005", "city": "Lucknow", "status": "Active", "latitude": 26.90188397262733, "longitude": 80.95513690261241, "geofence_radius_m": 100},
-            {"name": "Warehouse", "code": "MWH", "city": "Lucknow", "status": "Active", "latitude": 26.779149508725354, "longitude": 80.88470873166187, "geofence_radius_m": 100},
-            {"name": "Head Office", "code": "HO", "city": "Lucknow", "status": "Active", "latitude": 26.84904218332385, "longitude": 80.94789353821966, "geofence_radius_m": 100},
         ]
         if db.query(models.Store).count() == 0:
             for branch in default_branches:
@@ -259,41 +222,10 @@ def ensure_default_branches():
         else:
             for branch in default_branches:
                 store = db.query(models.Store).filter(models.Store.code == branch["code"]).first()
-                if not store:
-                    db.add(models.Store(**branch))
-                elif branch["code"] == "BR003":
-                    # Keep the deployed Ashiyana geofence synchronized with
-                    # its verified location instead of retaining stale GPS.
+                if store and (not store.latitude or not store.longitude):
                     store.latitude = branch["latitude"]
                     store.longitude = branch["longitude"]
                     store.geofence_radius_m = store.geofence_radius_m or 100
-                elif branch["latitude"] is not None and (not store.latitude or not store.longitude):
-                    store.latitude = branch["latitude"]
-                    store.longitude = branch["longitude"]
-                    store.geofence_radius_m = store.geofence_radius_m or 100
-
-        # One-time/idempotent outlet reassignment requested for the deployed
-        # Hazratganj accounts. Running this at startup ensures existing users
-        # are moved after deployment as soon as Head Office has been seeded.
-        head_office = db.query(models.Store).filter(models.Store.code == "HO").first()
-        if head_office:
-            head_office_emails = {
-                "singhankur7521@gmail.com",
-                "ashvriyamishra6671@gmail.com",
-                "ashwanis0025@gmail.com",
-                "jatinkumarsaini771@gmail.com",
-                "initiative.lucknow@gmail.com",
-                "raju.singh26101@gmail.com",
-                "srivastava.op@gmail.com",
-                "pooja.tripathiji@gmail.com",
-                "shreyashah19479@gmail.com",
-                "shubhampanday959@gmail.com",
-                "rajputswarnima8@gmail.com",
-                "tabish.syed24@gmail.com",
-            }
-            db.query(models.User).filter(
-                func.lower(models.User.email).in_(head_office_emails)
-            ).update({models.User.store_id: head_office.id}, synchronize_session=False)
         db.commit()
 
 
@@ -491,6 +423,7 @@ def ensure_default_master_data():
             "MH": [
                 "Apple", "Google", "iQOO", "Motorola", "Nothing", "OnePlus", "Oppo",
                 "Realme", "Readmi", "Samsung", "Vivo", "Philips", "Lenovo Tablet",
+                "Samsung Tablet", "Xiaomi Tablet",
             ],
             "IT": [
                 "Apple iMac", "Apple iPad", "Apple MacBook", "Dell", "HP", "Lenovo",
@@ -588,28 +521,6 @@ ensure_default_branches()
 ensure_default_master_data()
 
 app = FastAPI(title="IDSPL Scheme Management ERP")
-app.include_router(po_receiving.router)
-from identity_cards import router as identity_cards_router
-app.include_router(identity_cards_router)
-from ems import router as ems_router, pages as ems_pages
-app.include_router(ems_router)
-app.include_router(ems_pages)
-app.mount('/ems-assets', StaticFiles(directory=os.path.join(os.path.dirname(__file__), 'EMS', 'static')), name='ems-assets')
-app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=5)
-
-
-@app.middleware("http")
-async def bandwidth_cache_headers(request: Request, call_next):
-    response = await call_next(request)
-    path = request.url.path
-    if request.method in {"GET", "HEAD"} and response.status_code in {200, 206, 304}:
-        if path.startswith("/static/") and not request.headers.get("Authorization"):
-            # Images can be reused for a day; code/data revalidate via ETags.
-            media = path.lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".ico", ".svg", ".mp4"))
-            response.headers["Cache-Control"] = "public, max-age=86400" if media else "no-cache"
-        elif "text/html" in response.headers.get("content-type", ""):
-            response.headers["Cache-Control"] = "no-cache"
-    return response
 
 
 @app.middleware("http")
@@ -657,7 +568,7 @@ async def handle_unexpected_error(request: Request, exc: Exception):
 # "static" folder sitting next to this file.
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-VALID_ROLES = ["Admin", "Owner", "HR", "CategoryManager", "BrandManager", "BrandPartner", "SupportingStaff", "ServiceManager", "ServiceHead", "SalesExecutive", "AsstSalesManager", "LogisticManager", "Supervisor", "Assistant", "Loader", "ACTechnicianA", "ACTechnicianB", "Accounts", "MISExecutive", "ITEngineer", "CustomerCare", "Employee", "Cashier", "Other"]
+VALID_ROLES = ["Admin", "CategoryManager", "BrandManager", "BrandPartner", "SupportingStaff", "Accounts", "MISExecutive"]
 
 
 def normalize_category_code(raw_value: Optional[str]) -> Optional[str]:
@@ -676,28 +587,6 @@ def normalize_category_code(raw_value: Optional[str]) -> Optional[str]:
     if value in mapping:
         return mapping[value]
     raise HTTPException(status_code=400, detail="category_code must be one of: HA, HE, IT, MOBILE, OTHER")
-
-
-CATEGORY_MANAGER_CODES = {"HA", "HE", "IT", "MH"}
-
-
-def normalize_category_codes(raw_values) -> list:
-    values = raw_values if isinstance(raw_values, (list, tuple, set)) else str(raw_values or "").split(",")
-    normalized = []
-    for raw in values:
-        value = str(raw or "").strip().upper()
-        if not value:
-            continue
-        if value == "ALL":
-            return sorted(CATEGORY_MANAGER_CODES)
-        code = normalize_category_code(value)
-        if code and code not in normalized:
-            normalized.append(code)
-    return normalized
-
-
-def category_codes_for_user(user: models.User) -> set:
-    return set(normalize_category_codes(getattr(user, "category_code", None)))
 
 
 def normalize_reward_type(raw_value: str) -> str:
@@ -1139,7 +1028,7 @@ def extract_scheme_from_document(db: Session, filename: str, content_type: str, 
         ],
     }).encode("utf-8")
 
-    request = URLRequest(
+    request = Request(
         "https://api.anthropic.com/v1/messages",
         data=payload,
         headers={
@@ -1191,20 +1080,20 @@ def serve_html(path: str):
 
 
 def _get_price_list_access_scope(current_user: models.User, db: Session):
-    if current_user.role in {"Admin", "Owner", "HR", "Accounts", "MISExecutive"}:
+    if current_user.role in {"Admin", "Accounts", "MISExecutive"}:
         return None
     if current_user.role in {"BrandManager", "BrandPartner"}:
         brand_ids = [user_brand.brand_id for user_brand in (getattr(current_user, "brands", []) or [])]
         return {"brand_ids": brand_ids}
     if current_user.role == "CategoryManager":
-        category_codes = category_codes_for_user(current_user)
-        if not category_codes:
+        category_code = (current_user.category_code or "").strip().upper()
+        if not category_code:
             return {"brand_ids": []}
         brand_rows = (
             db.query(models.Brand.id)
             .join(models.SubCategory, models.Brand.subcategory_id == models.SubCategory.id)
             .join(models.Category, models.SubCategory.category_id == models.Category.id)
-            .filter(func.upper(models.Category.code).in_(category_codes))
+            .filter(func.upper(models.Category.code) == category_code)
             .all()
         )
         return {"brand_ids": [brand_id for (brand_id,) in brand_rows]}
@@ -1249,7 +1138,7 @@ def _filter_price_list_query(query, search: Optional[str]):
 
 
 def _serialize_price_list_item(item: models.PriceListItem, current_user: models.User) -> dict:
-    full_access = current_user.role in {"Admin", "Owner", "HR", "Accounts", "MISExecutive"}
+    full_access = current_user.role in {"Admin", "Accounts", "MISExecutive"}
     brand = getattr(item, "brand", None)
     return {
         "id": item.id,
@@ -1469,7 +1358,7 @@ def _call_anthropic_vision(content_block: dict, instructions: str) -> str:
         ],
     }).encode("utf-8")
 
-    request = URLRequest(
+    request = Request(
         "https://api.anthropic.com/v1/messages",
         data=payload,
         headers={
@@ -1585,7 +1474,7 @@ def _call_openai_compatible_vision(api_key: str, base_url: str, model: str, imag
         ],
     }).encode("utf-8")
 
-    request = URLRequest(
+    request = Request(
         base_url,
         data=payload,
         headers={
@@ -1751,12 +1640,6 @@ def attendance_page():
     return serve_html("static/attendance.html")
 
 
-@app.get("/identity-card")
-@app.get("/identity-card.html")
-def identity_card_page():
-    return serve_html("static/identity_card.html")
-
-
 @app.get("/price-list")
 @app.get("/price-list.html")
 def price_list_page():
@@ -1791,11 +1674,6 @@ def ageing_stock_page():
 @app.get("/scheme-calculator.html")
 def scheme_calculator_page():
     return serve_html("static/scheme_calculator.html")
-
-
-@app.get("/incentive.html")
-def incentive_page():
-    return serve_html("static/incentive.html")
 
 
 @app.get("/api/price-list/brands")
@@ -2052,56 +1930,89 @@ def offline_page():
 # AUTH: SIGNUP / LOGIN / CURRENT USER
 # ============================================================
 
-@app.post("/auth/signup", response_model=schemas.Token)
+@app.post("/auth/signup", response_model=schemas.UserOut)
 def signup(user: schemas.UserSignup, db: Session = Depends(get_db)):
     # --------------------------------------------------------------
     # Invite-code gate: the signup page is public (anyone can reach it
-    # once this app is on the Play/App Store). Admin uses a separate secure
-    # code; every other role uses the universal code.
+    # once this app is on the Play/App Store), so each role -- and each
+    # Category Manager's category, and each Brand Manager/Partner's
+    # brand -- requires its own separate code. This means a code that
+    # leaks only exposes that one role/category/brand, not the whole
+    # system, and you can rotate a single one without affecting others.
     #
     # Override any of these in your environment (Render dashboard ->
     # Environment, or a local .env file) without changing code:
-    #   SIGNUP_CODE_ADMIN, SIGNUP_CODE_UNIVERSAL
+    #   SIGNUP_CODE_ADMIN, SIGNUP_CODE_ACCOUNTS, SIGNUP_CODE_MIS,
+    #   SIGNUP_CODE_CAT_HA, SIGNUP_CODE_CAT_HE, SIGNUP_CODE_CAT_IT,
+    #   SIGNUP_CODE_CAT_MOBILE, SIGNUP_CODE_UNIVERSAL
+    # Brand codes are not env vars -- they're always "INITIATIVE@<BRAND NAME>"
+    # (uppercased, spaces removed), generated automatically per brand.   
     # --------------------------------------------------------------
-    ADMIN_INVITE_CODE = os.getenv("SIGNUP_CODE_ADMIN", "Initiative@#%_-Admin")
+    ROLE_INVITE_CODES = {
+        "Admin": os.getenv("SIGNUP_CODE_ADMIN", "Initiative@#%_-Admin"),
+        "Accounts": os.getenv("SIGNUP_CODE_ACCOUNTS", "Initiative/AC"),
+        "MISExecutive": os.getenv("SIGNUP_CODE_MIS", "Initiative%MS"),
+    }
+    CATEGORY_INVITE_CODES = {
+        "HA": os.getenv("SIGNUP_CODE_CAT_HA", "Initiative@HA"),
+        "HE": os.getenv("SIGNUP_CODE_CAT_HE", "Initiative#HE"),
+        "IT": os.getenv("SIGNUP_CODE_CAT_IT", "Initiative-IT"),
+        "MH": os.getenv("SIGNUP_CODE_CAT_MOBILE", "Initiative_MO"),
+    }
     UNIVERSAL_INVITE_CODE = os.getenv("SIGNUP_CODE_UNIVERSAL", "Initiative@Universal")
 
+    def brand_invite_code(brand_name: str) -> str:
+        normalized = re.sub(r"\s+", "", brand_name or "").upper()
+        return f"INITIATIVE@{normalized}"
+
     submitted_code = (user.invite_code or "").strip()
-    expected_invite_code = ADMIN_INVITE_CODE if user.role == "Admin" else UNIVERSAL_INVITE_CODE
-    if submitted_code != expected_invite_code:
-        detail = "Invalid Admin invite code" if user.role == "Admin" else "Invalid universal invite code"
-        raise HTTPException(status_code=403, detail=detail)
 
-    if user.role == "CategoryManager":
-        selected_categories = normalize_category_codes(user.category_codes or user.category_code)
-        if not selected_categories:
-            raise HTTPException(status_code=400, detail="Select at least one category")
+    if user.role in ROLE_INVITE_CODES:
+        expected = ROLE_INVITE_CODES[user.role]
+        if submitted_code != expected:
+            raise HTTPException(status_code=403, detail="Invalid invite code for this role")
 
-    custom_brand_name = (user.brand_name_other or "").strip()
-    if user.role in ("BrandManager", "BrandPartner"):
-        if not user.brand_ids and not custom_brand_name:
+    elif user.role == "CategoryManager":
+        category_code = normalize_category_code(user.category_code)
+        expected = CATEGORY_INVITE_CODES.get(category_code)
+        if expected is None:
+            # No code configured for this category yet -- fall back to
+            # the universal code rather than locking everyone out.
+            expected = UNIVERSAL_INVITE_CODE
+        if submitted_code != expected:
+            raise HTTPException(status_code=403, detail="Invalid invite code for this category")
+
+    elif user.role in ("BrandManager", "BrandPartner"):
+        if not user.brand_ids:
             raise HTTPException(status_code=400, detail="Select at least one brand")
-        if custom_brand_name and not 2 <= len(custom_brand_name) <= 100:
-            raise HTTPException(status_code=400, detail="Brand name must contain 2 to 100 characters")
+        brands = db.query(models.Brand).filter(models.Brand.id.in_(user.brand_ids)).all()
+        matched = any(
+            submitted_code.strip().upper() == brand_invite_code(b.name)
+            for b in brands
+        )
+        if not matched:
+            raise HTTPException(
+                status_code=403,
+                detail="Invalid invite code for the selected brand(s). "
+                       "Code format: INITIATIVE@<BRAND NAME IN CAPITALS>",
+            )
 
-    normalized_email = (user.email or "").strip().lower()
-    if not normalized_email:
-        raise HTTPException(status_code=400, detail="Email is required")
+    else:
+        if submitted_code != UNIVERSAL_INVITE_CODE:
+            raise HTTPException(status_code=403, detail="Invalid invite code")
 
     existing = (
         db.query(models.User)
-        .filter(func.lower(models.User.email) == normalized_email)
+        .filter(models.User.email == user.email)
         .first()
     )
     if existing:
-        raise HTTPException(status_code=409, detail="Only one account can be created with this email address")
+        raise HTTPException(status_code=400, detail="Email already registered")
 
     if user.role not in VALID_ROLES:
         raise HTTPException(status_code=400, detail=f"Role must be one of {VALID_ROLES}")
 
-    if user.role in {"ServiceManager", "ACTechnicianA", "ACTechnicianB"}:
-        user.store_id = None
-    elif user.store_id is not None:
+    if user.store_id is not None:
         selected_store = db.query(models.Store).filter(models.Store.id == user.store_id).first()
         if selected_store is None or selected_store.status != "Active":
             raise HTTPException(status_code=400, detail="Select an active outlet")
@@ -2109,47 +2020,24 @@ def signup(user: schemas.UserSignup, db: Session = Depends(get_db)):
     category_roles = {"CategoryManager"}
     db_user = models.User(
         username=user.username,
-        email=normalized_email,
+        email=user.email,
         password_hash=auth.hash_password(user.password),
         full_name=user.full_name,
         role=user.role,
         store_id=user.store_id,
-        category_code=",".join(normalize_category_codes(user.category_codes or user.category_code)) if user.role in category_roles else None,
+        category_code=normalize_category_code(user.category_code) if user.role in category_roles else None,
         status="Active",
     )
     db.add(db_user)
-    try:
-        db.commit()
-    except IntegrityError:
-        # The database uniqueness constraint also protects against two
-        # simultaneous signup requests using the same email address.
-        db.rollback()
-        raise HTTPException(status_code=409, detail="Only one account can be created with this email address")
+    db.commit()
     db.refresh(db_user)
 
     if user.role in ("BrandManager", "BrandPartner", "CategoryManager"):
-        assigned_brand_ids = list(user.brand_ids)
-        if user.role in ("BrandManager", "BrandPartner") and custom_brand_name:
-            custom_brand = db.query(models.Brand).filter(func.lower(models.Brand.name) == custom_brand_name.lower()).first()
-            if custom_brand is None:
-                custom_brand = models.Brand(name=custom_brand_name, subcategory_id=None, is_seeded_default=False)
-                db.add(custom_brand)
-                db.flush()
-            if custom_brand.id not in assigned_brand_ids:
-                assigned_brand_ids.append(custom_brand.id)
-        for brand_id in assigned_brand_ids:
+        for brand_id in user.brand_ids:
             db.add(models.UserBrand(user_id=db_user.id, brand_id=brand_id))
         db.commit()
 
-    # Sign the newly created account in immediately. This avoids forcing the
-    # user through a second form and a second password-hash operation.
-    token = auth.create_access_token({"user_id": db_user.id, "role": db_user.role})
-    return {
-        "access_token": token,
-        "token_type": "bearer",
-        "role": db_user.role,
-        "username": db_user.username,
-    }
+    return db_user
 
 
 @app.post("/auth/login", response_model=schemas.Token)
@@ -2157,11 +2045,11 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     identifier = (form_data.username or "").strip()
     user = (
         db.query(models.User)
-        .filter((models.User.username == identifier) | (func.lower(models.User.email) == identifier.lower()))
+        .filter((models.User.username == identifier) | (models.User.email == identifier))
         .first()
     )
     if not user or not auth.verify_password(form_data.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Username or password incorrect")
+        raise HTTPException(status_code=401, detail="Incorrect username/email or password")
     if user.status != "Active":
         raise HTTPException(status_code=403, detail="This account is not active")
 
@@ -2174,38 +2062,8 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     }
 
 
-@app.post("/auth/password-reset/request")
-def request_password_reset(payload: schemas.PasswordResetRequest, db: Session = Depends(get_db)):
-    from password_reset import request_reset
-    return request_reset(payload, db)
-
-
-@app.post("/auth/password-reset/confirm")
-def confirm_password_reset(payload: schemas.PasswordResetConfirm, db: Session = Depends(get_db)):
-    from password_reset import confirm_reset
-    return confirm_reset(payload, db)
-
-
 @app.get("/me", response_model=schemas.UserOut)
 def get_me(current_user: models.User = Depends(auth.get_current_user)):
-    return current_user
-
-
-WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
-
-
-@app.put("/api/me/weekoff", response_model=schemas.UserOut)
-def update_my_weekoff(
-    payload: schemas.WeekoffUpdate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user),
-):
-    selected_day = (payload.weekoff_day or "").strip().title()
-    if selected_day and selected_day not in WEEKDAYS:
-        raise HTTPException(status_code=400, detail="Week Off must be Monday through Sunday")
-    current_user.weekoff_day = selected_day or None
-    db.commit()
-    db.refresh(current_user)
     return current_user
 
 
@@ -2228,18 +2086,17 @@ def verify_own_password(
 # ============================================================
 
 def get_sales_for_user(db: Session, current_user: models.User):
-    if current_user.role in ("Admin", "Owner", "HR", "Accounts", "MISExecutive"):
+    if current_user.role in ("Admin", "Accounts", "MISExecutive"):
         return db.query(models.Sale).all()
     if current_user.role == "StoreManager":
         return db.query(models.Sale).filter(models.Sale.store_id == current_user.store_id).all()
     if current_user.role == "CategoryManager":
-        category_codes = category_codes_for_user(current_user)
-        if not category_codes:
+        if not current_user.category_code:
             return []
         return (
             db.query(models.Sale)
             .join(models.Category, models.Sale.category_id == models.Category.id)
-            .filter(models.Category.code.in_(category_codes))
+            .filter(models.Category.code == current_user.category_code)
             .all()
         )
     if current_user.role in ("BrandManager", "BrandPartner"):
@@ -2249,7 +2106,7 @@ def get_sales_for_user(db: Session, current_user: models.User):
 
 
 def get_claims_for_user(db: Session, current_user: models.User):
-    if current_user.role in ("Admin", "Owner", "HR", "Accounts", "MISExecutive"):
+    if current_user.role in ("Admin", "Accounts", "MISExecutive"):
         return db.query(models.ClaimHeader).all()
 
     if current_user.role in ("BrandManager", "BrandPartner"):
@@ -2270,14 +2127,13 @@ def get_claims_for_user(db: Session, current_user: models.User):
         )
 
     if current_user.role == "CategoryManager":
-        category_codes = category_codes_for_user(current_user)
-        if not category_codes:
+        if not current_user.category_code:
             return []
         return (
             db.query(models.ClaimHeader)
             .join(models.Sale, models.ClaimHeader.sale_id == models.Sale.id)
             .join(models.Category, models.Sale.category_id == models.Category.id)
-            .filter(models.Category.code.in_(category_codes))
+            .filter(models.Category.code == current_user.category_code)
             .all()
         )
 
@@ -2285,18 +2141,17 @@ def get_claims_for_user(db: Session, current_user: models.User):
 
 
 def can_user_access_sale(db: Session, current_user: models.User, sale: models.Sale) -> bool:
-    if current_user.role in ("Admin", "Owner", "HR", "Accounts", "MISExecutive"):
+    if current_user.role in ("Admin", "Accounts", "MISExecutive"):
         return True
 
     if current_user.role == "StoreManager":
         return current_user.store_id is not None and sale.store_id == current_user.store_id
 
     if current_user.role == "CategoryManager":
-        category_codes = category_codes_for_user(current_user)
-        if not category_codes:
+        if not current_user.category_code:
             return False
         sale_category = db.query(models.Category).filter(models.Category.id == sale.category_id).first()
-        return bool(sale_category and sale_category.code in category_codes)
+        return bool(sale_category and sale_category.code == current_user.category_code)
 
     if current_user.role in ("BrandManager", "BrandPartner"):
         brand_ids = [ub.brand_id for ub in current_user.brands]
@@ -2379,11 +2234,7 @@ def list_brands(
     category_id: Optional[int] = None,
     db: Session = Depends(get_db),
 ):
-    # Tablet-suffixed duplicates remain available to historical records, but
-    # brand selectors expose only their canonical Samsung/Xiaomi brands.
-    query = db.query(models.Brand).filter(
-        ~func.lower(models.Brand.name).in_(["samsung tablet", "xiaomi tablet"])
-    )
+    query = db.query(models.Brand)
     if subcategory_id is not None:
         query = query.filter(models.Brand.subcategory_id == subcategory_id)
     elif category_id is not None:
@@ -2505,19 +2356,7 @@ def list_stores(db: Session = Depends(get_db)):
 #  what's assigned to their account.)
 # ============================================================
 
-def serialize_user_with_brands(user: models.User, db: Optional[Session] = None) -> dict:
-    brand_ids = [ub.brand_id for ub in user.brands]
-    brand_names = []
-    outlet = None
-    if db is not None:
-        if brand_ids:
-            brand_names = [
-                brand.name for brand in db.query(models.Brand)
-                .filter(models.Brand.id.in_(brand_ids))
-                .order_by(models.Brand.name).all()
-            ]
-        if user.store_id is not None:
-            outlet = db.query(models.Store).filter(models.Store.id == user.store_id).first()
+def serialize_user_with_brands(user: models.User) -> dict:
     return {
         "id": user.id,
         "username": user.username,
@@ -2526,12 +2365,8 @@ def serialize_user_with_brands(user: models.User, db: Optional[Session] = None) 
         "role": user.role,
         "store_id": user.store_id,
         "category_code": user.category_code,
-        "brand_ids": brand_ids,
-        "brand_names": brand_names,
-        "outlet_name": outlet.name if outlet else None,
-        "outlet_code": outlet.code if outlet else None,
+        "brand_ids": [ub.brand_id for ub in user.brands],
         "status": user.status,
-        "weekoff_day": user.weekoff_day,
         "created_date": user.created_date,
     }
 
@@ -2545,55 +2380,7 @@ def get_my_profile(current_user: models.User = Depends(auth.get_current_user)):
         "store_id": current_user.store_id,
         "category_code": current_user.category_code,
         "brand_ids": [ub.brand_id for ub in current_user.brands],
-        "weekoff_day": current_user.weekoff_day,
     }
-
-
-def compress_attendance_selfie(data_url: str) -> str:
-    """Normalize attendance selfies to a small JPEG before database storage."""
-    if not data_url:
-        raise HTTPException(status_code=400, detail="Capture a fresh selfie before marking attendance")
-    if len(data_url) > 12 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="Selfie image is too large")
-    try:
-        from PIL import Image, ImageOps
-        header, encoded = data_url.split(",", 1)
-        if not header.lower().startswith("data:image/"):
-            raise ValueError("Selfie must be an image data URL")
-        raw = base64.b64decode(encoded, validate=True)
-        if len(raw) > 8 * 1024 * 1024:
-            raise ValueError("Selfie image is too large")
-        with Image.open(BytesIO(raw)) as source:
-            if source.width * source.height > 20_000_000:
-                raise ValueError("Selfie image dimensions are too large")
-            image = ImageOps.exif_transpose(source).convert("RGB")
-            resampling = getattr(Image, "Resampling", Image)
-            image.thumbnail((360, 480), resampling.LANCZOS)
-            compressed = BytesIO()
-            image.save(compressed, format="JPEG", quality=45, optimize=True, progressive=True)
-        return "data:image/jpeg;base64," + base64.b64encode(compressed.getvalue()).decode("ascii")
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Unable to process attendance selfie: {exc}")
-
-
-ATTENDANCE_ANYWHERE_ROLES = {"ServiceManager", "ACTechnicianA", "ACTechnicianB", "HR"}
-
-
-def attendance_reference_store(db, user, distance_to):
-    """Field staff use the nearest active outlet as a reporting reference only."""
-    if user.role in ATTENDANCE_ANYWHERE_ROLES:
-        stores = db.query(models.Store).filter(
-            models.Store.status == "Active",
-            models.Store.latitude.isnot(None),
-            models.Store.longitude.isnot(None),
-        ).all()
-        return min(stores, key=distance_to) if stores else None
-    if user.store_id is None:
-        raise HTTPException(status_code=400, detail="No outlet is assigned to this account")
-    store = db.query(models.Store).filter(models.Store.id == user.store_id).first()
-    if not store or store.latitude is None or store.longitude is None:
-        raise HTTPException(status_code=400, detail="Assigned outlet has no GPS coordinates")
-    return store
 
 
 @app.post("/api/attendance", response_model=schemas.AttendanceOut)
@@ -2604,34 +2391,21 @@ def save_attendance(
 ):
     if attendance.action not in {"checkin", "checkout"}:
         raise HTTPException(status_code=400, detail="Action must be checkin or checkout")
-    selfie = compress_attendance_selfie(attendance.selfie)
-    # Serialize punches for this account, including the first punch when no
-    # attendance row exists yet. A no-op UPDATE locks on PostgreSQL and SQLite.
-    db.query(models.User).filter(models.User.id == current_user.id).update(
-        {models.User.id: current_user.id}, synchronize_session=False
-    )
-    db.refresh(current_user)
+    if current_user.store_id is None:
+        raise HTTPException(status_code=400, detail="No outlet is assigned to this account")
+    store = db.query(models.Store).filter(models.Store.id == current_user.store_id).first()
+    if not store or store.latitude is None or store.longitude is None:
+        raise HTTPException(status_code=400, detail="Assigned outlet has no GPS coordinates")
     radius = 6371000
     radians = math.pi / 180
-    def distance_to(candidate):
-        lat_delta = (attendance.latitude - candidate.latitude) * radians
-        lon_delta = (attendance.longitude - candidate.longitude) * radians
-        value = math.sin(lat_delta / 2) ** 2 + math.cos(candidate.latitude * radians) * math.cos(attendance.latitude * radians) * math.sin(lon_delta / 2) ** 2
-        return 2 * radius * math.atan2(math.sqrt(value), math.sqrt(1 - value))
-    store = attendance_reference_store(db, current_user, distance_to)
-    actual_distance = distance_to(store) if store else None
-    allowed_radius = min(store.geofence_radius_m or 100, 100) if store else 100
-    if current_user.role not in ATTENDANCE_ANYWHERE_ROLES and actual_distance > allowed_radius:
+    lat_delta = (attendance.latitude - store.latitude) * radians
+    lon_delta = (attendance.longitude - store.longitude) * radians
+    value = math.sin(lat_delta / 2) ** 2 + math.cos(store.latitude * radians) * math.cos(attendance.latitude * radians) * math.sin(lon_delta / 2) ** 2
+    actual_distance = 2 * radius * math.atan2(math.sqrt(value), math.sqrt(1 - value))
+    allowed_radius = store.geofence_radius_m or 100
+    if actual_distance > allowed_radius:
         raise HTTPException(status_code=403, detail=f"Attendance blocked: you are {round(actual_distance)} m from {store.name}; maximum allowed distance is {round(allowed_radius)} m")
-    # Never trust the phone clock as the saved punch time. The database always
-    # receives authoritative server IST.
-    captured_at = verified_attendance_time(attendance.captured_at)
-    approved_leave = db.query(models.AttendanceLeave).filter(
-        models.AttendanceLeave.user_id == current_user.id,
-        models.AttendanceLeave.leave_date == captured_at.date(),
-    ).first()
-    if approved_leave:
-        raise HTTPException(status_code=409, detail="Your status is Leave today. Change it to Working before marking attendance")
+    captured_at = india_datetime(attendance.captured_at)
     record = db.query(models.AttendanceRecord).filter(
         models.AttendanceRecord.user_id == current_user.id,
         models.AttendanceRecord.attendance_date == captured_at.date(),
@@ -2641,7 +2415,7 @@ def save_attendance(
             raise HTTPException(status_code=409, detail="Punch in is required before punch out")
         record = models.AttendanceRecord(
             user_id=current_user.id,
-            store_id=store.id if store else None,
+            store_id=current_user.store_id,
             attendance_date=captured_at.date(),
         )
         db.add(record)
@@ -2651,12 +2425,10 @@ def save_attendance(
     if getattr(record, f"{prefix}_at") is not None:
         raise HTTPException(status_code=409, detail=f"{attendance.action.title()} already recorded")
     setattr(record, f"{prefix}_at", captured_at)
-    setattr(record, f"{prefix}_selfie", selfie)
+    setattr(record, f"{prefix}_selfie", attendance.selfie)
     setattr(record, f"{prefix}_latitude", attendance.latitude)
     setattr(record, f"{prefix}_longitude", attendance.longitude)
-    # Store the distance calculated from the submitted coordinates and the
-    # outlet coordinates, never the phone's claimed distance value.
-    setattr(record, f"{prefix}_distance_m", actual_distance)
+    setattr(record, f"{prefix}_distance_m", attendance.distance_m)
     setattr(record, f"{prefix}_accuracy_m", attendance.accuracy_m)
     db.commit()
     db.refresh(record)
@@ -2665,23 +2437,18 @@ def save_attendance(
 
 @app.get("/api/attendance", response_model=List[schemas.AttendanceOut])
 def list_attendance(
-    scope: str = Query("all"),
-    include_selfies: bool = Query(True),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
     query = db.query(models.AttendanceRecord)
-    if scope == "self" or not auth.has_admin_access(current_user):
+    if current_user.role != "Admin":
         query = query.filter(models.AttendanceRecord.user_id == current_user.id)
-    selfie_columns = {"checkin_selfie", "second_punch_selfie", "checkout_selfie"}
-    if not include_selfies:
-        query = query.options(*(defer(getattr(models.AttendanceRecord, name)) for name in selfie_columns))
     records = query.order_by(models.AttendanceRecord.attendance_date.desc()).all()
     users = {user.id: user.username for user in db.query(models.User).all()}
     stores = {store.id: store.name for store in db.query(models.Store).all()}
     return [
         {
-            **{column.name: (None if not include_selfies and column.name in selfie_columns else getattr(record, column.name)) for column in models.AttendanceRecord.__table__.columns},
+            **{column.name: getattr(record, column.name) for column in models.AttendanceRecord.__table__.columns},
             "username": users.get(record.user_id),
             "outlet_name": stores.get(record.store_id),
         }
@@ -2706,7 +2473,7 @@ def get_attendance_selfies(
     ).first()
     if not record:
         raise HTTPException(status_code=404, detail="Attendance record not found")
-    if not auth.has_admin_access(current_user) and record.user_id != current_user.id:
+    if current_user.role != "Admin" and record.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="You are not allowed to view these attendance images")
 
     user = db.query(models.User).filter(models.User.id == record.user_id).first()
@@ -2732,38 +2499,23 @@ def save_attendance_location(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    if current_user.store_id is None:
+        raise HTTPException(status_code=400, detail="No outlet is assigned to this account")
+    store = db.query(models.Store).filter(models.Store.id == current_user.store_id).first()
+    if not store or store.latitude is None or store.longitude is None:
+        raise HTTPException(status_code=400, detail="Assigned outlet has no GPS coordinates")
     radius = 6371000
     radians = math.pi / 180
-    def distance_to(candidate):
-        lat_delta = (point.latitude - candidate.latitude) * radians
-        lon_delta = (point.longitude - candidate.longitude) * radians
-        value = math.sin(lat_delta / 2) ** 2 + math.cos(candidate.latitude * radians) * math.cos(point.latitude * radians) * math.sin(lon_delta / 2) ** 2
-        return 2 * radius * math.atan2(math.sqrt(value), math.sqrt(1 - value))
-    store = attendance_reference_store(db, current_user, distance_to)
-    actual_distance = distance_to(store) if store else None
-    # Office/outlet employees cannot create a misleading location trail from
-    # outside the same geofence that was required for their punch-in.  Ignore
-    # poor background fixes too; indoor network positioning can drift by
-    # hundreds of metres even when the employee has not moved.
-    if point.accuracy_m is not None and point.accuracy_m > 200:
-        raise HTTPException(status_code=422, detail="GPS reading is not accurate enough")
-    if current_user.role not in ATTENDANCE_ANYWHERE_ROLES and actual_distance > min(store.geofence_radius_m or 100, 100):
-        raise HTTPException(status_code=403, detail="Location point is outside the assigned outlet geofence")
-    # Location trails also use server IST so changing the phone clock cannot
-    # move GPS points to another day or reorder the route history.
-    captured_at = datetime.now(INDIA_TZ).replace(tzinfo=None)
-    active_record = db.query(models.AttendanceRecord).filter(
-        models.AttendanceRecord.user_id == current_user.id,
-        models.AttendanceRecord.attendance_date == captured_at.date(),
-        models.AttendanceRecord.checkin_at.isnot(None),
-        models.AttendanceRecord.checkout_at.is_(None),
-    ).first()
-    if not active_record:
-        raise HTTPException(status_code=409, detail="Location tracking is available only during working hours")
+    lat_delta = (point.latitude - store.latitude) * radians
+    lon_delta = (point.longitude - store.longitude) * radians
+    value = math.sin(lat_delta / 2) ** 2 + math.cos(store.latitude * radians) * math.cos(point.latitude * radians) * math.sin(lon_delta / 2) ** 2
+    actual_distance = 2 * radius * math.atan2(math.sqrt(value), math.sqrt(1 - value))
+    if actual_distance > (store.geofence_radius_m or 100):
+        raise HTTPException(status_code=403, detail=f"Location tracking blocked outside {store.name} geofence")
     previous = db.query(models.AttendanceLocationPoint).filter(
             models.AttendanceLocationPoint.user_id == current_user.id,
-            models.AttendanceLocationPoint.captured_at >= datetime.combine(captured_at.date(), datetime.min.time()),
-            models.AttendanceLocationPoint.captured_at < captured_at,
+            models.AttendanceLocationPoint.captured_at >= datetime.combine(india_datetime(point.captured_at).date(), datetime.min.time()),
+            models.AttendanceLocationPoint.captured_at < india_datetime(point.captured_at),
         ).order_by(models.AttendanceLocationPoint.captured_at.desc()).first()
     route_distance = 0
     if previous:
@@ -2774,9 +2526,9 @@ def save_attendance_location(
         value = math.sin(lat_delta / 2) ** 2 + math.cos(previous.latitude * radians) * math.cos(point.latitude * radians) * math.sin(lon_delta / 2) ** 2
         route_distance = 2 * radius * math.atan2(math.sqrt(value), math.sqrt(1 - value))
     location = models.AttendanceLocationPoint(
-        user_id=current_user.id, store_id=store.id if store else None, captured_at=captured_at,
+        user_id=current_user.id, store_id=store.id, captured_at=india_datetime(point.captured_at),
         latitude=point.latitude, longitude=point.longitude,
-        accuracy_m=point.accuracy_m, distance_from_store_m=actual_distance,
+        accuracy_m=point.accuracy_m, distance_from_store_m=point.distance_from_store_m,
         route_distance_m=route_distance,
     )
     db.add(location)
@@ -2784,60 +2536,11 @@ def save_attendance_location(
     return {"id": location.id, "route_distance_m": route_distance}
 
 
-@app.get("/api/me/attendance-status")
-def get_my_attendance_status(
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user),
-):
-    leave_date = india_today()
-    leave = db.query(models.AttendanceLeave).filter(
-        models.AttendanceLeave.user_id == current_user.id,
-        models.AttendanceLeave.leave_date == leave_date,
-    ).first()
-    return {"date": leave_date, "status": "Leave" if leave else "Working"}
-
-
-@app.put("/api/me/attendance-status")
-def set_my_attendance_status(
-    payload: schemas.MyAttendanceStatusUpdate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user),
-):
-    leave_date = india_today()
-    existing = db.query(models.AttendanceLeave).filter(
-        models.AttendanceLeave.user_id == current_user.id,
-        models.AttendanceLeave.leave_date == leave_date,
-    ).first()
-    if payload.on_leave:
-        attendance = db.query(models.AttendanceRecord).filter(
-            models.AttendanceRecord.user_id == current_user.id,
-            models.AttendanceRecord.attendance_date == leave_date,
-            models.AttendanceRecord.checkin_at.isnot(None),
-        ).first()
-        if attendance:
-            raise HTTPException(status_code=409, detail="Attendance is already marked for today")
-        if not existing:
-            db.add(models.AttendanceLeave(user_id=current_user.id, leave_date=leave_date, created_by=current_user.id))
-    elif existing:
-        if db.query(ems_models.EMSLeaveRequest).filter(
-            ems_models.EMSLeaveRequest.user_id == current_user.id,
-            ems_models.EMSLeaveRequest.status == 'approved',
-            ems_models.EMSLeaveRequest.start_date <= leave_date,
-            ems_models.EMSLeaveRequest.end_date >= leave_date,
-        ).first():
-            raise HTTPException(409, 'This leave was approved through EMS. Contact HR before changing your attendance status.')
-        db.delete(existing)
-    db.commit()
-    return {"date": leave_date, "status": "Leave" if payload.on_leave else "Working"}
-
-
 @app.get("/api/attendance/admin-summary")
 def attendance_admin_summary(
     store_id: Optional[int] = Query(None),
     from_date: Optional[date] = Query(None),
     to_date: Optional[date] = Query(None),
-    weekoff_day: Optional[str] = Query(None),
-    emp_category: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.require_roles("Admin")),
 ):
@@ -2852,48 +2555,9 @@ def attendance_admin_summary(
     user_query = db.query(models.User).filter(models.User.status == "Active")
     if store_id is not None:
         user_query = user_query.filter(models.User.store_id == store_id)
-    if weekoff_day:
-        normalized_weekoff = weekoff_day.strip().title()
-        if normalized_weekoff not in WEEKDAYS:
-            raise HTTPException(status_code=400, detail="Week Off must be Monday through Sunday")
-        user_query = user_query.filter(models.User.weekoff_day == normalized_weekoff)
-    users = user_query.options(selectinload(models.User.brands)).all()
-    if emp_category:
-        normalized_category = emp_category.strip().lower()
-        valid_categories = {"ids_emp", "brand_pro", "ac_retails", "ac_projects"}
-        if normalized_category not in valid_categories:
-            raise HTTPException(status_code=400, detail="Invalid employee category")
-
-        ac_retail_emails = {"cdsood@gmail.com", "jagritiawasthi123@gmail.com"}
-        ac_retail_names = {"chandra dutt sood", "jagriti"}
-
-        def category_for(user):
-            if user.role == "ACTechnicianA":
-                return "ac_projects"
-            if user.role == "ACTechnicianB":
-                return "ac_retails"
-            email = (user.email or "").strip().lower()
-            name = (user.full_name or "").strip().lower()
-            username = (user.username or "").strip().lower()
-            if email in ac_retail_emails or name in ac_retail_names:
-                return "ac_retails"
-            if user.role == "ServiceManager" or "zubair" in name or "zubair" in username:
-                return "ac_projects"
-            if user.role == "BrandPartner":
-                return "brand_pro"
-            return "ids_emp"
-
-        users = [user for user in users if category_for(user) == normalized_category]
+    users = user_query.all()
     stores_by_id = {
         store.id: store for store in db.query(models.Store).all()
-    }
-    leave_user_ids = {
-        item.user_id for item in db.query(models.AttendanceLeave).filter(
-            models.AttendanceLeave.leave_date == start_date
-        ).all()
-    } if single_day else set()
-    brands_by_id = {
-        brand.id: brand.name for brand in db.query(models.Brand).all()
     }
     outlet_abbreviations = {
         "hazratganj": "HZT",
@@ -2903,16 +2567,9 @@ def attendance_admin_summary(
         "gomti nagar": "GNG",
         "vikas nagar": "VKN",
         "vikasnagar": "VKN",
-        "head office": "HO",
-        "head-office": "HO",
-        "warehouse": "MWH",
     }
 
-    record_query = db.query(models.AttendanceRecord).options(
-        defer(models.AttendanceRecord.checkin_selfie),
-        defer(models.AttendanceRecord.second_punch_selfie),
-        defer(models.AttendanceRecord.checkout_selfie),
-    ).filter(
+    record_query = db.query(models.AttendanceRecord).filter(
         models.AttendanceRecord.attendance_date >= start_date,
         models.AttendanceRecord.attendance_date <= end_date,
         models.AttendanceRecord.user_id.in_([user.id for user in users] or [-1]),
@@ -2920,37 +2577,14 @@ def attendance_admin_summary(
     records_by_user = {}
     for record in record_query.all():
         records_by_user.setdefault(record.user_id, []).append(record)
-    all_records_by_user = defaultdict(list)
-    all_record_query = db.query(models.AttendanceRecord).options(
-        defer(models.AttendanceRecord.checkin_selfie),
-        defer(models.AttendanceRecord.second_punch_selfie),
-        defer(models.AttendanceRecord.checkout_selfie),
-    ).filter(
-        models.AttendanceRecord.user_id.in_([user.id for user in users] or [-1]),
-        models.AttendanceRecord.checkin_at.isnot(None),
-    ).order_by(models.AttendanceRecord.attendance_date.desc())
-    for record in all_record_query.all():
-        all_records_by_user[record.user_id].append(record)
 
     range_start_dt = datetime.combine(start_date, datetime.min.time())
     range_end_dt = datetime.combine(end_date + timedelta(days=1), datetime.min.time())
 
-    points_by_user = defaultdict(list)
-    for point in db.query(models.AttendanceLocationPoint).filter(
-        models.AttendanceLocationPoint.user_id.in_([user.id for user in users] or [-1]),
-        models.AttendanceLocationPoint.captured_at >= range_start_dt,
-        models.AttendanceLocationPoint.captured_at < range_end_dt,
-    ).all():
-        points_by_user[point.user_id].append(point)
-
     rows = []
+    present_total = 0
+    absent_total = 0
     for user in users:
-        promoter_brand_names = [
-            brands_by_id[user_brand.brand_id]
-            for user_brand in user.brands
-            if user_brand.brand_id in brands_by_id
-        ] if user.role == "BrandPartner" else []
-        promoter_brand = ", ".join(promoter_brand_names)
         outlet = stores_by_id.get(user.store_id)
         outlet_name = outlet.name if outlet else None
         outlet_abbreviation = outlet_abbreviations.get(
@@ -2959,709 +2593,71 @@ def attendance_admin_summary(
         )
         user_records = sorted(records_by_user.get(user.id, []), key=lambda r: r.attendance_date)
         present_days = sum(1 for r in user_records if r.checkin_at)
-        points = points_by_user.get(user.id, [])
-        work_windows = [
-            (
-                record.checkin_at,
-                record.checkout_at
-                or (datetime.now(INDIA_TZ).replace(tzinfo=None) if record.attendance_date == today
-                    else datetime.combine(record.attendance_date + timedelta(days=1), datetime.min.time())),
-            )
-            for record in user_records if record.checkin_at
-        ]
-        points = [
-            point for point in points
-            if any(start <= point.captured_at <= end for start, end in work_windows)
-        ]
-        if outlet:
-            allowed_radius = min(outlet.geofence_radius_m or 100, 100)
-            points = [
-                point for point in points
-                if (user.role in ATTENDANCE_ANYWHERE_ROLES or point.distance_from_store_m is None or point.distance_from_store_m <= allowed_radius)
-                and (point.accuracy_m is None or point.accuracy_m <= 200)
-            ]
-        latest_point = max(points, key=lambda point: point.captured_at) if points else None
-        day_record = user_records[0] if single_day and user_records else None
-        tracking_open = bool(day_record and day_record.checkin_at and not day_record.checkout_at)
-        location_active = bool(
-            tracking_open
-            and start_date == today
-            and latest_point
-            and latest_point.captured_at >= datetime.now(INDIA_TZ).replace(tzinfo=None) - timedelta(minutes=3)
-        )
-        current_distance = (
-            latest_point.distance_from_store_m if latest_point
-            else day_record.checkin_distance_m if day_record and day_record.checkin_at
-            else None
-        )
-        location_tracking_status = (
-            "Active" if location_active
-            else "Inactive" if tracking_open
-            else "Completed" if day_record and day_record.checkout_at
-            else "Not started"
-        )
+        absent_days = days_in_range - present_days
+        present_total += present_days
+        absent_total += absent_days
+
+        points = db.query(models.AttendanceLocationPoint).filter(
+            models.AttendanceLocationPoint.user_id == user.id,
+            models.AttendanceLocationPoint.captured_at >= range_start_dt,
+            models.AttendanceLocationPoint.captured_at < range_end_dt,
+        ).all()
         max_point = max(points, key=lambda point: point.distance_from_store_m or 0) if points else None
-        punch_distances = [
-            (distance, timestamp)
-            for record in user_records
-            for distance, timestamp in (
-                (record.checkin_distance_m, record.checkin_at),
-                (record.checkout_distance_m, record.checkout_at),
-            )
-            if distance is not None
-        ]
-        max_punch = max(punch_distances, key=lambda item: item[0]) if punch_distances else (0, None)
-        max_point_distance = max_point.distance_from_store_m if max_point and max_point.distance_from_store_m else 0
-        if max_punch[0] >= max_point_distance:
-            maximum_distance, maximum_distance_at = max_punch
-        else:
-            maximum_distance, maximum_distance_at = max_point_distance, max_point.captured_at
-        # Send only lightweight record metadata with the dashboard. Selfies are
-        # still fetched on demand for the date selected by the administrator.
-        history = [
-            {
-                "id": record.id,
-                "attendance_date": record.attendance_date.isoformat(),
-                "checkin_at": record.checkin_at,
-                "checkout_at": record.checkout_at,
-                "outlet_name": stores_by_id.get(record.store_id).name
-                if stores_by_id.get(record.store_id) else None,
-            }
-            for record in all_records_by_user[user.id]
-        ]
 
         if single_day:
             record = user_records[0] if user_records else None
-            is_weekoff = user.weekoff_day == start_date.strftime("%A")
-            # When Admin explicitly filters by an assigned Week Off day, the
-            # table is an assignment view: show Week Off rather than the
-            # selected calendar date's attendance result. Without that filter,
-            # normal daily attendance remains Present/Week Off/Absent.
-            row_status = (
-                "Week Off" if weekoff_day
-                else "Present" if record and record.checkin_at
-                else "Leave" if user.id in leave_user_ids
-                else "Week Off" if is_weekoff
-                else "Absent"
-            )
             rows.append({
-                "user_id": user.id, "username": user.username, "display_name": user.full_name or user.username, "email": user.email, "role": user.role,
-                "promoter_brand": promoter_brand, "outlet_id": user.store_id,
+                "user_id": user.id, "username": user.username, "outlet_id": user.store_id,
                 "outlet_name": outlet_name, "outlet_abbreviation": outlet_abbreviation,
-                "status": row_status, "weekoff_day": user.weekoff_day,
+                "status": "Present" if record and record.checkin_at else "Absent",
                 "present_days": present_days, "days_in_range": days_in_range,
-                "history": history,
                 "checkin_at": record.checkin_at if record else None,
                 "checkout_at": record.checkout_at if record else None,
-                "route_distance_m": round(sum(point.route_distance_m or 0 for point in points)),
-                "max_distance_from_store_m": round(maximum_distance),
-                "max_distance_at": maximum_distance_at,
-                "last_latitude": latest_point.latitude if latest_point else None,
-                "last_longitude": latest_point.longitude if latest_point else None,
+                "route_distance_m": round(sum(point.route_distance_m or 0 for point in points), 1),
+                "max_distance_from_store_m": round(max_point.distance_from_store_m, 1) if max_point and max_point.distance_from_store_m else 0,
+                "max_distance_at": max_point.captured_at if max_point else None,
+                "last_latitude": points[-1].latitude if points else None,
+                "last_longitude": points[-1].longitude if points else None,
                 "location_points": len(points),
-                "current_distance_from_store_m": round(current_distance) if current_distance is not None else None,
-                "location_tracking_status": location_tracking_status,
-                "last_location_at": latest_point.captured_at if latest_point else None,
             })
         else:
             rows.append({
-                "user_id": user.id, "username": user.username, "display_name": user.full_name or user.username, "email": user.email, "role": user.role,
-                "promoter_brand": promoter_brand, "outlet_id": user.store_id,
+                "user_id": user.id, "username": user.username, "outlet_id": user.store_id,
                 "outlet_name": outlet_name, "outlet_abbreviation": outlet_abbreviation,
-                "status": f"{present_days}/{days_in_range} Present", "weekoff_day": user.weekoff_day,
+                "status": f"{present_days}/{days_in_range} Present",
                 "present_days": present_days, "days_in_range": days_in_range,
-                "history": history,
                 "checkin_at": None,
                 "checkout_at": None,
-                "route_distance_m": round(sum(point.route_distance_m or 0 for point in points)),
-                "max_distance_from_store_m": round(maximum_distance),
-                "max_distance_at": maximum_distance_at,
-                "last_latitude": latest_point.latitude if latest_point else None,
-                "last_longitude": latest_point.longitude if latest_point else None,
+                "route_distance_m": round(sum(point.route_distance_m or 0 for point in points), 1),
+                "max_distance_from_store_m": round(max_point.distance_from_store_m, 1) if max_point and max_point.distance_from_store_m else 0,
+                "max_distance_at": max_point.captured_at if max_point else None,
+                "last_latitude": points[-1].latitude if points else None,
+                "last_longitude": points[-1].longitude if points else None,
                 "location_points": len(points),
-                "current_distance_from_store_m": round(current_distance) if current_distance is not None else None,
-                "location_tracking_status": location_tracking_status,
-                "last_location_at": latest_point.captured_at if latest_point else None,
             })
-
-    if single_day:
-        # Keep the daily dashboard in punch order: the first employee to mark
-        # attendance is first, the second is next, and so on. Employees who
-        # have not checked in remain below them in a predictable name order.
-        rows.sort(key=lambda row: (
-            row["checkin_at"] is None,
-            row["checkin_at"] or datetime.max,
-            row["username"].casefold(),
-        ))
 
     return {
         "from_date": start_date, "to_date": end_date, "single_day": single_day, "days_in_range": days_in_range,
-        # This metric is a headcount, not the number of possible attendance
-        # entries. It must remain 11 for 11 active users whether the selected
-        # range is one day, one week, or one month.
-        "total": len(users),
-        # Present/Absent are also employee counts. Across a date range, an
-        # employee is Present when they attended on at least one selected day;
-        # otherwise they are Absent. These two values therefore always add up
-        # to the active-user headcount instead of multiplying users by days.
-        "present": sum(row["status"] == "Present" for row in rows) if single_day else sum(row["present_days"] > 0 for row in rows),
-        "absent": sum(row["status"] == "Absent" for row in rows) if single_day else sum(row["present_days"] == 0 for row in rows),
-        "weekoff": sum(row["status"] == "Week Off" for row in rows) if single_day else 0,
-        "leave": sum(row["status"] == "Leave" for row in rows) if single_day else 0,
+        "total": len(users) * days_in_range if not single_day else len(users),
+        "present": present_total if not single_day else sum(row["status"] == "Present" for row in rows),
+        "absent": absent_total if not single_day else sum(row["status"] == "Absent" for row in rows),
         "rows": rows,
     }
-
-
-def build_daily_attendance_whatsapp_report(db: Session, report_date: date) -> str:
-    """Build an outlet-wise headcount summary for one attendance date."""
-    users = db.query(models.User).filter(models.User.status == "Active").all()
-    records = db.query(models.AttendanceRecord).options(
-        defer(models.AttendanceRecord.checkin_selfie),
-        defer(models.AttendanceRecord.second_punch_selfie),
-        defer(models.AttendanceRecord.checkout_selfie),
-    ).filter(
-        models.AttendanceRecord.attendance_date == report_date,
-        models.AttendanceRecord.user_id.in_([user.id for user in users] or [-1]),
-    ).all()
-    records_by_user = {record.user_id: record for record in records}
-    stores = {store.id: store for store in db.query(models.Store).all()}
-    outlet_totals = defaultdict(lambda: {"total": 0, "present": 0, "absent": 0, "weekoff": 0})
-
-    for user in users:
-        record = records_by_user.get(user.id)
-        store_id = record.store_id if record and record.store_id else user.store_id
-        store = stores.get(store_id)
-        outlet = (store.code or store.name).strip() if store else "Unassigned"
-        status = (
-            "present" if record and record.checkin_at
-            else "weekoff" if user.weekoff_day == report_date.strftime("%A")
-            else "absent"
-        )
-        outlet_totals[outlet]["total"] += 1
-        outlet_totals[outlet][status] += 1
-
-    overall = {
-        field: sum(values[field] for values in outlet_totals.values())
-        for field in ("total", "present", "absent", "weekoff")
-    }
-    lines = [
-        "*Daily Attendance Report*",
-        report_date.strftime("%d %B %Y"),
-        "",
-        f"*Overall* - Total Employees: {overall['total']} | Present: {overall['present']} | Absent: {overall['absent']} | Week Off: {overall['weekoff']}",
-        "",
-        "*Outlet-wise Summary*",
-    ]
-    for outlet in sorted(outlet_totals, key=str.casefold):
-        values = outlet_totals[outlet]
-        lines.append(
-            f"{outlet}: Total {values['total']} | Present {values['present']} | "
-            f"Absent {values['absent']} | Week Off {values['weekoff']}"
-        )
-    return "\n".join(lines)
-
-
-def send_attendance_whatsapp_report(db: Session, report_date: date) -> dict:
-    access_token = os.getenv("WHATSAPP_ACCESS_TOKEN")
-    phone_number_id = os.getenv("WHATSAPP_PHONE_NUMBER_ID")
-    recipients = [
-        value.strip() for value in os.getenv(
-            "WHATSAPP_ATTENDANCE_RECIPIENTS", "917521956646"
-        ).split(",") if value.strip()
-    ]
-    if not access_token or not phone_number_id:
-        raise HTTPException(status_code=503, detail="WhatsApp Cloud API is not configured on Render.")
-    if not recipients:
-        raise HTTPException(status_code=503, detail="No attendance WhatsApp recipient is configured.")
-
-    message = build_daily_attendance_whatsapp_report(db, report_date)
-    api_version = os.getenv("WHATSAPP_API_VERSION", "v23.0")
-    endpoint = f"https://graph.facebook.com/{api_version}/{phone_number_id}/messages"
-    template_name = os.getenv("WHATSAPP_ATTENDANCE_TEMPLATE", "").strip()
-    template_language = os.getenv("WHATSAPP_ATTENDANCE_TEMPLATE_LANGUAGE", "en_US").strip()
-    failures = 0
-
-    for recipient in recipients:
-        if template_name:
-            body = {
-                "messaging_product": "whatsapp", "to": recipient, "type": "template",
-                "template": {
-                    "name": template_name,
-                    "language": {"code": template_language},
-                    "components": [{
-                        "type": "body",
-                        "parameters": [{"type": "text", "text": message.replace("\n", " | ")}],
-                    }],
-                },
-            }
-        else:
-            body = {
-                "messaging_product": "whatsapp", "to": recipient, "type": "text",
-                "text": {"body": message},
-            }
-        api_request = URLRequest(
-            endpoint, data=json.dumps(body).encode("utf-8"),
-            headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
-            method="POST",
-        )
-        try:
-            with urlopen(api_request, timeout=15):
-                pass
-        except (HTTPError, URLError, TimeoutError):
-            failures += 1
-
-    if failures:
-        raise HTTPException(status_code=502, detail=f"WhatsApp failed for {failures} recipient(s).")
-    return {
-        "message": f"Attendance report sent to {len(recipients)} WhatsApp recipient(s).",
-        "report_date": report_date.isoformat(), "recipients": len(recipients),
-    }
-
-
-@app.post("/api/attendance/whatsapp-send")
-def admin_send_attendance_whatsapp(
-    attendance_date: Optional[date] = Query(None, alias="date"),
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.require_roles("Admin")),
-):
-    return send_attendance_whatsapp_report(db, attendance_date or india_today())
-
-
-@app.post("/api/attendance/whatsapp-daily")
-def scheduled_send_attendance_whatsapp(request: Request, db: Session = Depends(get_db)):
-    expected_secret = os.getenv("ATTENDANCE_WHATSAPP_CRON_SECRET", "")
-    supplied_secret = request.headers.get("X-Cron-Secret", "")
-    if not expected_secret or not secrets.compare_digest(expected_secret, supplied_secret):
-        raise HTTPException(status_code=401, detail="Invalid scheduler secret")
-    return send_attendance_whatsapp_report(db, india_today())
-
-
-@app.get("/api/attendance/admin-export")
-def export_admin_attendance(
-    export_format: str = Query("xlsx", alias="format"),
-    attendance_date: date = Query(..., alias="date"),
-    store_id: Optional[int] = Query(None),
-    status: Optional[str] = Query(None),
-    weekoff_day: Optional[str] = Query(None),
-    emp_category: Optional[str] = Query(None),
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.require_roles("Admin")),
-):
-    """Download the selected day's admin attendance table as Excel or PDF."""
-    if export_format not in {"xlsx", "pdf"}:
-        raise HTTPException(status_code=400, detail="Format must be xlsx or pdf")
-    if status not in {None, "all", "Present", "Absent", "Week Off", "Leave"}:
-        raise HTTPException(status_code=400, detail="Invalid attendance status")
-    summary = attendance_admin_summary(
-        store_id=store_id, from_date=attendance_date, to_date=attendance_date,
-        weekoff_day=weekoff_day, emp_category=emp_category,
-        db=db, current_user=current_user,
-    )
-    rows = []
-    for row in summary["rows"]:
-        if status not in {None, "all"} and row["status"] != status:
-            continue
-        rows.append([
-            len(rows) + 1, row["display_name"], row["status"],
-            row["checkin_at"].strftime("%I:%M %p") if row["checkin_at"] else "-",
-            row["checkout_at"].strftime("%I:%M %p") if row["checkout_at"] else "-",
-            row["outlet_name"], f'{row["max_distance_from_store_m"]} m',
-        ])
-    headers = ["S_NO", "Employee", "Status", "Check-in", "Check-out", "Outlet", "Distance"]
-    filename_base = f"attendance-{attendance_date.isoformat()}"
-    if export_format == "xlsx":
-        workbook = Workbook()
-        sheet = workbook.active
-        sheet.title = "Attendance"
-        sheet.append(["Attendance Date", attendance_date.strftime("%d-%m-%Y")])
-        sheet.append([])
-        sheet.append(headers)
-        for row in rows:
-            sheet.append(row)
-        for cell in sheet[3]:
-            cell.font = cell.font.copy(bold=True)
-        for column, width in zip("ABCDEFG", [8, 26, 14, 15, 15, 22, 16]):
-            sheet.column_dimensions[column].width = width
-        output = BytesIO()
-        workbook.save(output)
-        output.seek(0)
-        return StreamingResponse(output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f'attachment; filename="{filename_base}.xlsx"'})
-
-    from reportlab.lib import colors
-    from reportlab.lib.pagesizes import A4, landscape
-    from reportlab.lib.styles import getSampleStyleSheet
-    from reportlab.lib.units import mm
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-    output = BytesIO()
-    document = SimpleDocTemplate(output, pagesize=landscape(A4), rightMargin=12 * mm, leftMargin=12 * mm, topMargin=12 * mm, bottomMargin=12 * mm)
-    styles = getSampleStyleSheet()
-    date_style = styles["Normal"].clone("AttendanceReportDate")
-    date_style.alignment = 1
-    date_style.spaceBefore = 4
-    elements = [
-        Paragraph("Attendance Report", styles["Title"]),
-        Paragraph(attendance_date.strftime("%d %B %Y"), date_style),
-        Spacer(1, 6 * mm),
-    ]
-    table = Table([headers] + rows, repeatRows=1, colWidths=[16 * mm, 48 * mm, 28 * mm, 30 * mm, 30 * mm, 42 * mm, 30 * mm])
-    table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#155eef")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#d0d5dd")),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 7),
-        ("TOPPADDING", (0, 0), (-1, -1), 7),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
-    ]))
-    elements.append(table)
-    document.build(elements)
-    output.seek(0)
-    return StreamingResponse(output, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{filename_base}.pdf"'})
-
-
-def _attendance_month_range(month: str):
-    if not re.fullmatch(r"\d{4}-\d{2}", month or ""):
-        raise HTTPException(status_code=400, detail="Month must use YYYY-MM format")
-    try:
-        year, month_number = map(int, month.split("-"))
-        start = date(year, month_number, 1)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid month")
-    return start, date(year, month_number, calendar.monthrange(year, month_number)[1])
-
-
-def _build_monthly_attendance_workbook(db: Session, users: list, month: str):
-    from openpyxl.formatting.rule import CellIsRule
-    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-    from openpyxl.utils import get_column_letter
-
-    month_start, month_end = _attendance_month_range(month)
-    user_ids = [user.id for user in users]
-    records = db.query(models.AttendanceRecord).filter(
-        models.AttendanceRecord.user_id.in_(user_ids or [-1]),
-        models.AttendanceRecord.attendance_date >= month_start,
-        models.AttendanceRecord.attendance_date <= month_end,
-    ).order_by(models.AttendanceRecord.attendance_date).all()
-    records_per_user = defaultdict(int)
-    for record in records:
-        records_per_user[record.user_id] += 1
-    unique_users = {}
-    for user in users:
-        display_key = (user.username or user.full_name or str(user.id)).strip().casefold()
-        current = unique_users.get(display_key)
-        user_rank = (records_per_user[user.id], user.store_id is not None, user.id)
-        current_rank = (records_per_user[current.id], current.store_id is not None, current.id) if current else None
-        if current is None or user_rank > current_rank:
-            unique_users[display_key] = user
-    users = sorted(unique_users.values(), key=lambda user: ((user.store_id or 0), (user.full_name or user.username or "").lower(), user.id))
-    records_by_key = {(record.user_id, record.attendance_date): record for record in records}
-    stores = {store.id: store for store in db.query(models.Store).all()}
-    days = month_end.day
-    today = india_today()
-
-    book = Workbook()
-    summary = book.active
-    summary.title = "Monthly Summary"
-    last_col = 2 + days + 4
-    last_letter = get_column_letter(last_col)
-    summary.merge_cells(start_row=1, start_column=1, end_row=1, end_column=last_col)
-    summary["A1"] = "MONTHLY ATTENDANCE SUMMARY"
-    summary.merge_cells(start_row=2, start_column=1, end_row=2, end_column=last_col)
-    summary["A2"] = month_start.strftime("%B %Y")
-    headers = ["Outlet", "Employee"] + list(range(1, days + 1)) + ["Present", "Absent", "Week Off", "Total"]
-    summary.append([])
-    summary.append(headers)
-
-    navy, blue, white = "17365D", "4472C4", "FFFFFF"
-    pale_blue, pale_green, pale_red, pale_orange, pale_gray = "D9EAF7", "D9EAD3", "F4CCCC", "F4B183", "E7E6E6"
-    attendance_status_fills = {
-        "P": PatternFill("solid", fgColor=pale_green),
-        "A": PatternFill("solid", fgColor=pale_red),
-        "WO": PatternFill("solid", fgColor=pale_orange),
-        "-": PatternFill("solid", fgColor=pale_gray),
-    }
-    summary["A1"].fill = PatternFill("solid", fgColor=navy)
-    summary["A1"].font = Font(color=white, bold=True, size=16)
-    summary["A1"].alignment = Alignment(horizontal="center", vertical="center")
-    summary["A2"].fill = PatternFill("solid", fgColor=pale_blue)
-    summary["A2"].font = Font(color=navy, bold=True, size=12)
-    summary["A2"].alignment = Alignment(horizontal="center", vertical="center")
-    for cell in summary[4]:
-        cell.fill = PatternFill("solid", fgColor=blue)
-        cell.font = Font(color=white, bold=True)
-        cell.alignment = Alignment(horizontal="center", vertical="center")
-
-    first_day_col, last_day_col = 3, 2 + days
-    detail_rows = []
-    for row_no, user in enumerate(users, 5):
-        store = stores.get(user.store_id)
-        display_name = user.full_name or user.username
-        if store is None:
-            recorded_stores = [stores.get(record.store_id) for record in records if record.user_id == user.id and stores.get(record.store_id)]
-            store = recorded_stores[-1] if recorded_stores else None
-        summary.cell(row_no, 1, store.name if store else "Unassigned")
-        summary.cell(row_no, 2, display_name)
-        for day_number in range(1, days + 1):
-            current_date = date(month_start.year, month_start.month, day_number)
-            record = records_by_key.get((user.id, current_date))
-            before_joining = bool(user.created_date and current_date < user.created_date.date())
-            if current_date > today or before_joining:
-                status = "-"
-            elif record and record.checkin_at:
-                status = "P"
-            elif user.weekoff_day == current_date.strftime("%A"):
-                status = "WO"
-            else:
-                status = "A"
-            cell = summary.cell(row_no, first_day_col + day_number - 1, status)
-            cell.alignment = Alignment(horizontal="center")
-            cell.fill = attendance_status_fills[status]
-            if record:
-                record_store = stores.get(record.store_id) or store
-                detail_rows.append([
-                    user.id, record_store.name if record_store else "Unassigned", display_name, current_date,
-                    current_date.strftime("%A"), status,
-                    record.checkin_at, record.checkout_at,
-                    round(record.checkin_distance_m or 0), round(record.checkout_distance_m or 0),
-                    "Yes" if record.checkin_selfie else "No", "Yes" if record.checkout_selfie else "No",
-                ])
-        day_start, day_end = get_column_letter(first_day_col), get_column_letter(last_day_col)
-        summary.cell(row_no, last_day_col + 1, f'=COUNTIF({day_start}{row_no}:{day_end}{row_no},"P")')
-        summary.cell(row_no, last_day_col + 2, f'=COUNTIF({day_start}{row_no}:{day_end}{row_no},"A")')
-        summary.cell(row_no, last_day_col + 3, f'=COUNTIF({day_start}{row_no}:{day_end}{row_no},"WO")')
-        present_cell = f"{get_column_letter(last_day_col + 1)}{row_no}"
-        summary.cell(row_no, last_day_col + 4, f'={present_cell}&"/{days}"')
-        summary.cell(row_no, last_day_col + 4).alignment = Alignment(horizontal="center")
-
-    data_end = max(5, 4 + len(users))
-    day_range = f"{get_column_letter(first_day_col)}5:{get_column_letter(last_day_col)}{data_end}"
-    for value, color in (("P", pale_green), ("A", pale_red), ("WO", pale_orange), ("-", pale_gray)):
-        summary.conditional_formatting.add(day_range, CellIsRule(operator="equal", formula=[f'"{value}"'], fill=PatternFill("solid", fgColor=color)))
-    thin = Side(style="thin", color="D0D5DD")
-    for row in summary.iter_rows(min_row=4, max_row=data_end, min_col=1, max_col=last_col):
-        for cell in row:
-            cell.border = Border(bottom=thin)
-    summary.column_dimensions["A"].width = 20
-    summary.column_dimensions["B"].width = 25
-    for col in range(first_day_col, last_day_col + 1):
-        summary.column_dimensions[get_column_letter(col)].width = 6
-    for col in range(last_day_col + 1, last_col + 1):
-        summary.column_dimensions[get_column_letter(col)].width = 12
-    summary.freeze_panes = "A5"
-    summary.row_dimensions[1].height = 34
-    summary.row_dimensions[2].height = 25
-    summary.row_dimensions[3].height = 10
-    summary.row_dimensions[4].height = 30
-    summary.sheet_view.showGridLines = False
-    summary.sheet_view.zoomScale = 85
-    summary.auto_filter.ref = f"A4:{last_letter}{data_end}"
-    summary.page_setup.orientation = "landscape"
-    summary.page_setup.fitToWidth = 1
-    summary.sheet_properties.pageSetUpPr.fitToPage = True
-    summary.print_title_rows = "1:4"
-
-    detail = book.create_sheet("Attendance Detail")
-    detail_headers = ["User ID", "Outlet", "Employee", "Date", "Day", "Status", "Punch In", "Punch Out", "Punch In Distance (m)", "Punch Out Distance (m)", "Punch In Photo", "Punch Out Photo"]
-    detail.append(detail_headers)
-    for row in detail_rows:
-        detail.append(row)
-    for cell in detail[1]:
-        cell.fill = PatternFill("solid", fgColor=navy)
-        cell.font = Font(color=white, bold=True)
-        cell.alignment = Alignment(horizontal="center")
-    for row_no in range(2, len(detail_rows) + 2):
-        detail.cell(row_no, 4).number_format = "dd-mmm-yyyy"
-        detail.cell(row_no, 6).fill = attendance_status_fills.get(detail.cell(row_no, 6).value, attendance_status_fills["-"])
-        detail.cell(row_no, 6).alignment = Alignment(horizontal="center")
-        detail.cell(row_no, 7).number_format = "hh:mm AM/PM"
-        detail.cell(row_no, 8).number_format = "hh:mm AM/PM"
-        detail.cell(row_no, 9).number_format = '0.0'
-        detail.cell(row_no, 10).number_format = '0.0'
-    widths = [10, 20, 25, 14, 14, 11, 18, 18, 22, 23, 17, 18]
-    for index, width in enumerate(widths, 1):
-        detail.column_dimensions[get_column_letter(index)].width = width
-    detail.column_dimensions["A"].hidden = True
-    detail.freeze_panes = "B2"
-    detail.auto_filter.ref = f"A1:L{max(1, len(detail_rows) + 1)}"
-    detail.sheet_view.showGridLines = False
-    return book
-
-
-@app.get("/api/attendance/monthly-export")
-def export_monthly_attendance(
-    month: str = Query(...),
-    scope: str = Query("self"),
-    store_id: Optional[int] = Query(None),
-    emp_category: Optional[str] = Query(None),
-    status: Optional[str] = Query(None),
-    weekoff_day: Optional[str] = Query(None),
-    attendance_date: Optional[date] = Query(None, alias="date"),
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user),
-):
-    """Export a monthly attendance matrix for oneself or, for admins, all active employees."""
-    if scope not in {"self", "all"}:
-        raise HTTPException(status_code=400, detail="Scope must be self or all")
-    _attendance_month_range(month)
-    if scope == "all":
-        if current_user.role not in {"Admin", "Owner", "HR"}:
-            raise HTTPException(status_code=403, detail="Only attendance administrators can export all employees")
-        query = db.query(models.User).filter(models.User.status == "Active")
-        if store_id is not None:
-            query = query.filter(models.User.store_id == store_id)
-        users = query.all()
-        if status not in {None, "all", "Present", "Absent", "Week Off", "Leave"}:
-            raise HTTPException(status_code=400, detail="Invalid attendance status")
-        if emp_category or weekoff_day or status not in {None, "all"}:
-            filter_date = attendance_date or india_today()
-            summary = attendance_admin_summary(
-                store_id=store_id, from_date=filter_date, to_date=filter_date,
-                weekoff_day=weekoff_day, emp_category=emp_category,
-                db=db, current_user=current_user,
-            )
-            selected_ids = {row["user_id"] for row in summary["rows"]
-                            if status in {None, "all"} or row["status"] == status}
-            users = [user for user in users if user.id in selected_ids]
-        filename = f"all-outlets-attendance-{month}.xlsx" if store_id is None else f"outlet-attendance-{month}.xlsx"
-    else:
-        users = [current_user]
-        safe_name = re.sub(r"[^A-Za-z0-9_-]+", "-", current_user.username).strip("-") or "employee"
-        filename = f"{safe_name}-attendance-{month}.xlsx"
-    workbook = _build_monthly_attendance_workbook(db, users, month)
-    output = BytesIO()
-    workbook.save(output)
-    output.seek(0)
-    return StreamingResponse(output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f'attachment; filename="{filename}"'})
-
-
-@app.get("/api/attendance/admin-user-export")
-def export_admin_user_attendance(
-    username: str = Query(...),
-    export_format: str = Query("xlsx", alias="format"),
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.require_roles("Admin")),
-):
-    """Download one employee's complete attendance history as Excel or PDF."""
-    if export_format not in {"xlsx", "pdf"}:
-        raise HTTPException(status_code=400, detail="Format must be xlsx or pdf")
-    user = db.query(models.User).filter(models.User.username == username).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="Employee not found")
-    records = db.query(models.AttendanceRecord).filter(
-        models.AttendanceRecord.user_id == user.id
-    ).order_by(models.AttendanceRecord.attendance_date.desc()).all()
-    stores = {store.id: store.name for store in db.query(models.Store).all()}
-    workbook = Workbook()
-    sheet = workbook.active
-    sheet.title = "Full Attendance"
-    sheet.append(["Employee", user.username])
-    sheet.append(["Generated at", datetime.now(INDIA_TZ).strftime("%d-%m-%Y %I:%M %p")])
-    sheet.append([])
-    headers = [
-        "Date", "Day", "Status", "Punch In", "Punch Out", "Working Hours",
-        "Outlet", "Punch In Distance", "Punch Out Distance", "Max Distance",
-        "Punch In Photo", "Punch Out Photo",
-    ]
-    sheet.append(headers)
-    export_rows = []
-    for record in records:
-        start_dt = datetime.combine(record.attendance_date, datetime.min.time())
-        end_dt = start_dt + timedelta(days=1)
-        tracked = db.query(models.AttendanceLocationPoint.distance_from_store_m).filter(
-            models.AttendanceLocationPoint.user_id == user.id,
-            models.AttendanceLocationPoint.captured_at >= start_dt,
-            models.AttendanceLocationPoint.captured_at < end_dt,
-        ).all()
-        distances = [value for (value,) in tracked if value is not None]
-        distances.extend(value for value in (record.checkin_distance_m, record.checkout_distance_m) if value is not None)
-        if record.checkin_at and record.checkout_at:
-            minutes = max(0, int((record.checkout_at - record.checkin_at).total_seconds() // 60))
-            working_hours = f"{minutes // 60:02d}:{minutes % 60:02d}"
-        elif record.checkin_at:
-            working_hours = "In progress"
-        else:
-            working_hours = "-"
-        row_values = [
-            record.attendance_date.strftime("%d-%m-%Y"),
-            record.attendance_date.strftime("%A"),
-            "Present" if record.checkin_at else "Absent",
-            record.checkin_at.strftime("%I:%M %p") if record.checkin_at else "-",
-            record.checkout_at.strftime("%I:%M %p") if record.checkout_at else "-",
-            working_hours,
-            stores.get(record.store_id, "Unassigned"),
-            f"{round(record.checkin_distance_m or 0)} m",
-            f"{round(record.checkout_distance_m or 0)} m",
-            f"{round(max(distances, default=0))} m",
-            "Yes" if record.checkin_selfie else "No",
-            "Yes" if record.checkout_selfie else "No",
-        ]
-        export_rows.append(row_values)
-        sheet.append(row_values)
-    safe_username = re.sub(r"[^A-Za-z0-9_-]+", "-", user.username).strip("-") or "employee"
-    if export_format == "pdf":
-        from reportlab.lib import colors
-        from reportlab.lib.pagesizes import A3, landscape
-        from reportlab.lib.styles import getSampleStyleSheet
-        from reportlab.lib.units import mm
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-        output = BytesIO()
-        document = SimpleDocTemplate(output, pagesize=landscape(A3), rightMargin=10 * mm, leftMargin=10 * mm, topMargin=10 * mm, bottomMargin=10 * mm)
-        styles = getSampleStyleSheet()
-        subtitle = styles["Normal"].clone("EmployeeAttendanceSubtitle")
-        subtitle.alignment = 1
-        elements = [
-            Paragraph(f"Attendance Report - {user.username}", styles["Title"]),
-            Paragraph("Complete attendance history", subtitle),
-            Spacer(1, 5 * mm),
-        ]
-        table = Table([headers] + export_rows, repeatRows=1, colWidths=[25 * mm, 27 * mm, 20 * mm, 25 * mm, 25 * mm, 28 * mm, 36 * mm, 31 * mm, 32 * mm, 28 * mm, 27 * mm, 28 * mm])
-        table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#155eef")),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-            ("FONTSIZE", (0, 0), (-1, -1), 8),
-            ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#d0d5dd")),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 4),
-            ("TOPPADDING", (0, 0), (-1, -1), 5),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-        ]))
-        elements.append(table)
-        document.build(elements)
-        output.seek(0)
-        return StreamingResponse(output, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{safe_username}-full-attendance.pdf"'})
-    for cell in sheet[4]:
-        cell.font = cell.font.copy(bold=True)
-    widths = [14, 14, 12, 15, 15, 17, 22, 20, 21, 17, 18, 19]
-    for index, width in enumerate(widths, start=1):
-        sheet.column_dimensions[chr(64 + index)].width = width
-    sheet.freeze_panes = "A5"
-    output = BytesIO()
-    workbook.save(output)
-    output.seek(0)
-    return StreamingResponse(
-        output,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{safe_username}-full-attendance.xlsx"'},
-    )
 
 
 @app.get("/api/users", response_model=List[schemas.UserAdminOut])
 def list_users_for_admin(
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.require_user_management_admin),
+    current_user: models.User = Depends(auth.require_roles("Admin")),
 ):
     users = db.query(models.User).order_by(models.User.username).all()
-    return [serialize_user_with_brands(u, db) for u in users]
+    return [serialize_user_with_brands(u) for u in users]
 
 
 @app.get("/api/users/count", response_model=schemas.UserCountOut)
 def count_registered_users(
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.require_user_management_admin),
+    current_user: models.User = Depends(auth.require_roles("Admin")),
 ):
     """Total number of accounts registered on this system, plus a
     breakdown by role, shown on the Admin dashboard."""
@@ -3675,9 +2671,13 @@ def admin_reset_user_password(
     user_id: int,
     payload: schemas.AdminPasswordReset,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.require_user_management_admin),
+    current_user: models.User = Depends(auth.require_roles("Admin")),
 ):
-    """Admin/HR recovery fallback for users unable to access their email."""
+    """Admin-only account recovery: directly set a new password for any
+    user. This replaces the old email-based forgot-password flow, since
+    outbound account-recovery email isn't configured in this deployment -
+    a user who's locked out should ask an Admin to reset their password
+    here instead."""
     target_user = db.query(models.User).filter(models.User.id == user_id).first()
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -3691,90 +2691,7 @@ def admin_reset_user_password(
     target_user.reset_token_expires = None
     db.commit()
 
-    return {"message": "Reset Password Successfully", "username": target_user.username}
-
-
-@app.get("/api/users/roles")
-def user_management_roles(current_user: models.User = Depends(auth.require_user_management_admin)):
-    return VALID_ROLES
-
-
-@app.patch("/api/users/{user_id}/role", response_model=schemas.UserAdminOut)
-def update_user_role(
-    user_id: int,
-    payload: schemas.UserRoleUpdate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.require_user_management_admin),
-):
-    if payload.role not in VALID_ROLES:
-        raise HTTPException(status_code=400, detail="Select a valid user role")
-    target_user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not target_user:
-        raise HTTPException(status_code=404, detail="User not found")
-    target_user.role = payload.role
-    db.commit()
-    db.refresh(target_user)
-    return serialize_user_with_brands(target_user, db)
-
-
-@app.patch("/api/users/{user_id}/details", response_model=schemas.UserAdminOut)
-def update_user_details(
-    user_id: int,
-    payload: schemas.UserDetailsUpdate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.require_user_management_admin),
-):
-    target = db.get(models.User, user_id)
-    if not target:
-        raise HTTPException(404, "User not found")
-    username = payload.username.strip()
-    email = payload.email.strip().lower()
-    weekoff = (payload.weekoff_day or "").strip().title()
-    if not username:
-        raise HTTPException(400, "Enter a username")
-    if not re.fullmatch(r"[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+", email):
-        raise HTTPException(400, "Enter a valid email address")
-    if weekoff and weekoff not in WEEKDAYS:
-        raise HTTPException(400, "Week Off must be Monday through Sunday, or left unset")
-    if db.query(models.User).filter(func.lower(models.User.email) == email, models.User.id != user_id).first():
-        raise HTTPException(409, "This email address is already used by another user")
-    target.username = username
-    if target.email != email:
-        target.email = email
-        # A recovery code sent to the old address must not work after a correction.
-        target.reset_token = None
-        target.reset_token_expires = None
-    target.weekoff_day = weekoff or None
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(409, "Unable to save: this email address is already in use")
-    db.refresh(target)
-    return serialize_user_with_brands(target, db)
-
-
-@app.patch("/api/users/{user_id}/attendance-outlet", response_model=schemas.UserAdminOut)
-def update_attendance_outlet(
-    user_id: int,
-    payload: schemas.AttendanceOutletUpdate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.require_user_management_admin),
-):
-    """Admin/HR reassign the user's outlet used by attendance geofencing."""
-    target_user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not target_user:
-        raise HTTPException(status_code=404, detail="User not found")
-    store = db.query(models.Store).filter(models.Store.id == payload.store_id).first()
-    if not store or store.status != "Active":
-        raise HTTPException(status_code=400, detail="Choose an active outlet")
-    if (store.latitude is None or store.longitude is None
-            or not -90 <= store.latitude <= 90 or not -180 <= store.longitude <= 180):
-        raise HTTPException(status_code=400, detail="The selected outlet needs valid GPS coordinates before assignment")
-    target_user.store_id = store.id
-    db.commit()
-    db.refresh(target_user)
-    return serialize_user_with_brands(target_user, db)
+    return {"message": f"Password reset for {target_user.username}"}
 
 
 @app.patch("/api/users/{user_id}/assignments", response_model=schemas.UserAdminOut)
@@ -3782,7 +2699,7 @@ def update_user_assignments(
     user_id: int,
     payload: schemas.UserAssignmentUpdate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.require_user_management_admin),
+    current_user: models.User = Depends(auth.require_roles("Admin")),
 ):
     """Assign which store, category (division), and brands a user — typically
     a CategoryManager — can see on the Purchase Orders page."""
@@ -3793,7 +2710,7 @@ def update_user_assignments(
     if payload.store_id is not None:
         target_user.store_id = payload.store_id
     if payload.category_code is not None:
-        target_user.category_code = ",".join(normalize_category_codes(payload.category_code)) or None
+        target_user.category_code = normalize_category_code(payload.category_code)
     if payload.brand_ids is not None:
         db.query(models.UserBrand).filter(models.UserBrand.user_id == target_user.id).delete()
         for brand_id in payload.brand_ids:
@@ -3801,17 +2718,17 @@ def update_user_assignments(
 
     db.commit()
     db.refresh(target_user)
-    return serialize_user_with_brands(target_user, db)
+    return serialize_user_with_brands(target_user)
 
 
 @app.delete("/api/users/{user_id}")
 def delete_user(
     user_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.require_user_management_admin),
+    current_user: models.User = Depends(auth.require_roles("Admin")),
 ):
-    """Admin/HR: delete an allowed account unless it has protected EMS history.
-    Accounts with EMS history must be deactivated. Purchase orders require an
+    """Admin-only: permanently delete a user account, regardless of what
+    they've submitted/uploaded in the past. Purchase orders require an
     owning user (that column is NOT NULL), so any the deleted user
     submitted or approved are reassigned to the admin doing the deletion,
     with a note recording who originally submitted them - the order itself
@@ -3824,18 +2741,8 @@ def delete_user(
 
     if target_user.id == current_user.id:
         raise HTTPException(status_code=400, detail="You cannot delete your own account.")
-    if current_user.role == "HR" and target_user.role == "Admin":
-        raise HTTPException(status_code=403, detail="HR cannot delete an Admin account.")
 
     deleted_username = target_user.username
-    if (db.query(models.PurchaseOrderReceipt).filter(or_(
-            models.PurchaseOrderReceipt.received_by_user_id == user_id,
-            models.PurchaseOrderReceipt.voided_by_user_id == user_id)).first()
-            or db.query(models.PurchaseOrder).filter(models.PurchaseOrder.verified_by_user_id == user_id).first()):
-        raise HTTPException(409, "This employee has PO receipt or verification history. Deactivate the account to preserve the audit trail.")
-    if any(db.query(model).filter(model.user_id == user_id).first() is not None
-           for model in (ems_models.EMSLeaveRequest, ems_models.EMSEarning, ems_models.EMSPayroll)):
-        raise HTTPException(409, 'This employee has EMS history. Deactivate the account to preserve leave and payroll records.')
 
     # Purchase orders must always have a submitter, so reassign any this
     # user submitted to the admin performing the deletion, and record who
@@ -3873,33 +2780,15 @@ def delete_user(
         {"uploaded_by": None}
     )
 
-    # Attendance belongs to the employee account itself.  These tables use
-    # required foreign keys, so they cannot be detached like upload/audit
-    # records.  Remove the location trail first, followed by daily attendance,
-    # before deleting the login.  This makes Admin deletion work whether or
-    # not the employee has punched in previously.
-    db.query(models.AttendanceLocationPoint).filter(
-        models.AttendanceLocationPoint.user_id == target_user.id
-    ).delete(synchronize_session=False)
-    db.query(models.AttendanceRecord).filter(
-        models.AttendanceRecord.user_id == target_user.id
-    ).delete(synchronize_session=False)
-    db.query(models.UserBrand).filter(
-        models.UserBrand.user_id == target_user.id
-    ).delete(synchronize_session=False)
-    db.query(models.IdentityCard).filter(
-        models.IdentityCard.user_id == target_user.id
-    ).delete(synchronize_session=False)
-
     try:
         db.delete(target_user)
         db.commit()
-    except IntegrityError as exc:
+    except IntegrityError:
         db.rollback()
         raise HTTPException(
             status_code=400,
-            detail=f"Unable to delete {deleted_username}. A protected system record still references this account.",
-        ) from exc
+            detail=f"Unable to delete {deleted_username}: this account still has linked records.",
+        )
 
     return {"message": f"Account '{deleted_username}' deleted"}
 
@@ -3918,7 +2807,7 @@ ADMIN_ONLY_STATUSES = {"Approved", "Rejected", "Requested"}
 
 
 def assert_status_transition_allowed(current_user: models.User, purchase_order: models.PurchaseOrder, new_status: str):
-    if new_status in ADMIN_ONLY_STATUSES and not auth.has_admin_access(current_user):
+    if new_status in ADMIN_ONLY_STATUSES and current_user.role != "Admin":
         raise HTTPException(
             status_code=403,
             detail="Only Admin can approve, reject, or reopen a purchase order.",
@@ -3932,7 +2821,6 @@ def assert_status_transition_allowed(current_user: models.User, purchase_order: 
 
 def serialize_purchase_order(purchase_order: models.PurchaseOrder, notification_status: Optional[str] = None):
     return {
-        "receiving": po_receiving.receipt_summary(purchase_order),
         "id": purchase_order.id,
         "request_no": purchase_order.request_no,
         "request_date": purchase_order.request_date,
@@ -3951,8 +2839,6 @@ def serialize_purchase_order(purchase_order: models.PurchaseOrder, notification_
         "processing_notes": purchase_order.processing_notes,
         "exported_to_busy": purchase_order.exported_to_busy,
         "exported_to_busy_at": purchase_order.exported_to_busy_at,
-        "email_sent_at": purchase_order.email_sent_at,
-        "email_sent_to": purchase_order.email_sent_to,
         "submitted_by_user_id": purchase_order.submitted_by_user_id,
         "submitted_by_username": purchase_order.submitted_by.username if purchase_order.submitted_by else None,
         "approved_by_username": (getattr(purchase_order, "approved_by", None).username if getattr(purchase_order, "approved_by", None) else None),
@@ -3989,7 +2875,7 @@ def send_purchase_order_whatsapp_notification(purchase_order: models.PurchaseOrd
             "type": "text",
             "text": {"body": message},
         }).encode("utf-8")
-        request = URLRequest(
+        request = Request(
             endpoint,
             data=payload,
             headers={
@@ -4010,9 +2896,7 @@ def send_purchase_order_whatsapp_notification(purchase_order: models.PurchaseOrd
 
 
 def can_access_purchase_order(current_user: models.User, purchase_order: models.PurchaseOrder) -> bool:
-    return (auth.has_admin_access(current_user) or current_user.role == "MISExecutive"
-            or purchase_order.submitted_by_user_id == current_user.id
-            or (po_receiving.can_receive(current_user) and purchase_order.email_sent_at is not None))
+    return current_user.role in {"Admin", "MISExecutive"} or purchase_order.submitted_by_user_id == current_user.id
 
 
 # ============================================================
@@ -4207,41 +3091,48 @@ def delete_supplier_email(
     return {"deleted": True}
 
 
-def send_purchase_order_email(purchase_order: models.PurchaseOrder, recipients: List[str], pdf_bytes: bytes, email_message: str = "") -> str:
-    """Send via configured Gmail HTTPS API or the existing SMTP transport."""
-    provider = os.getenv("PO_EMAIL_PROVIDER", "smtp").strip().lower()
-    if provider not in {"smtp", "gmail"}:
-        return "Not sent: PO_EMAIL_PROVIDER must be gmail or smtp."
-    if not recipients:
-        return "Not sent: no supplier email recipients."
+def send_purchase_order_email(purchase_order: models.PurchaseOrder, recipients: List[str]) -> str:
+    """Email the finalized PO to every address on file for the brand (plus
+    the request's own supplier_email if set) in a single send. Host, user,
+    port, and from-address all default to the company Gmail mailbox
+    (initiative.lucknow@gmail.com), so on Render the only secret you need
+    to set is SMTP_PASSWORD (a Gmail App Password) - see README for setup."""
     smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
     smtp_user = os.getenv("SMTP_USER", "initiative.lucknow@gmail.com")
     smtp_password = os.getenv("SMTP_PASSWORD")
     smtp_from = os.getenv("SMTP_FROM", "initiative.lucknow@gmail.com")
-    if provider == "smtp" and not (smtp_host and smtp_user and smtp_password):
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+    if not (smtp_host and smtp_user and smtp_password and recipients):
         print("[PO email] Not sent: SMTP_PASSWORD not set (or no recipients).")
         return "Not sent: SMTP is not configured (set SMTP_PASSWORD on the host)."
 
-    message = EmailMessage()
-    message.set_content(email_message or "")
-    filename = re.sub(r"[^a-zA-Z0-9_-]", "_", purchase_order.busy_po_number or purchase_order.request_no) + ".pdf"
-    message.add_attachment(pdf_bytes, maintype="application", subtype="pdf", filename=filename)
+    lines = [
+        f"Purchase Order: {purchase_order.request_no}",
+        f"Date: {purchase_order.request_date}",
+        f"Brand: {purchase_order.brand_name or '-'}",
+        f"Division: {purchase_order.division or '-'}",
+        f"Delivery address: {purchase_order.delivery_address or '-'}",
+        "",
+        "Items:",
+    ]
+    for item in purchase_order.items:
+        variant = f" ({item.variant})" if item.variant else ""
+        lines.append(f"  - {item.product_name}{variant} x {item.quantity} {item.unit or 'Nos'}")
+    if purchase_order.remarks:
+        lines.append("")
+        lines.append(f"Remarks: {purchase_order.remarks}")
+    body = "\n".join(lines)
+
+    message = MIMEText(body)
     message["Subject"] = f"Purchase Order {purchase_order.request_no} - {purchase_order.brand_name or ''}"
     message["From"] = smtp_from
     message["To"] = ", ".join(recipients)
 
-    if provider == "gmail":
-        result = send_gmail(message)
-        return f"Emailed to {len(recipients)} recipient(s). {result}" if result == "Accepted by Gmail for sending." else result
-
     try:
-        smtp_port = int(os.getenv("SMTP_PORT", "587"))
         with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as server:
             server.starttls()
             server.login(smtp_user, smtp_password)
-            refused = server.sendmail(smtp_from, recipients, message.as_string())
-            if refused:
-                return "Not sent: some recipients were rejected. Check Sent mail before retrying."
+            server.sendmail(smtp_from, recipients, message.as_string())
     except Exception as exc:  # noqa: BLE001 - surface any SMTP failure to the caller
         print(f"[PO email] SMTP send failed ({type(exc).__name__}): {exc}")
         return f"Not sent: email delivery failed ({type(exc).__name__}: {exc})."
@@ -4252,7 +3143,6 @@ def send_purchase_order_email(purchase_order: models.PurchaseOrder, recipients: 
 @app.post("/api/purchase-orders/{purchase_order_id}/send-email", response_model=schemas.SendPurchaseOrderEmailResult)
 def send_purchase_order_email_endpoint(
     purchase_order_id: int,
-    payload: schemas.SendPurchaseOrderEmailRequest,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.require_roles("Admin", "MISExecutive")),
 ):
@@ -4265,25 +3155,25 @@ def send_purchase_order_email_endpoint(
             detail="This purchase order must be Approved by Admin before it can be sent to the supplier.",
         )
 
-    # Only explicitly entered recipients are authorized for this send.
-    recipients = sorted({email.strip().lower() for email in payload.recipients if email.strip()})
-    if not recipients:
-        raise HTTPException(status_code=400, detail="Enter at least one recipient email address before sending.")
-    if any(not re.fullmatch(r"[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+", email) for email in recipients):
-        raise HTTPException(status_code=400, detail="Enter a valid email address in each recipient field.")
+    recipients = set()
+    if purchase_order.brand_name:
+        brand_rows = db.query(models.BrandSupplierEmail).filter(models.BrandSupplierEmail.brand_name == purchase_order.brand_name).all()
+        recipients.update(row.email for row in brand_rows)
+    if purchase_order.supplier_name:
+        supplier_rows = (
+            db.query(models.SupplierEmail)
+            .filter(func.lower(models.SupplierEmail.supplier_name) == purchase_order.supplier_name.strip().lower())
+            .all()
+        )
+        recipients.update(row.email for row in supplier_rows)
+    if purchase_order.supplier_email:
+        recipients.add(purchase_order.supplier_email.strip().lower())
+    recipients = sorted(r for r in recipients if r)
 
-    try:
-        pdf_bytes = base64.b64decode(payload.pdf_base64, validate=True)
-    except (ValueError, base64.binascii.Error):
-        raise HTTPException(status_code=400, detail="Invalid PDF attachment encoding")
-    if not pdf_bytes.startswith(b"%PDF-") or b"%%EOF" not in pdf_bytes[-1024:]:
-        raise HTTPException(status_code=400, detail="A valid purchase order PDF attachment is required")
-    notification_status = send_purchase_order_email(purchase_order, recipients, pdf_bytes, payload.email_message)
-    if notification_status.startswith("Not sent:"):
-        raise HTTPException(status_code=503, detail=notification_status)
-    purchase_order.email_sent_at = datetime.now(timezone.utc)
-    purchase_order.email_sent_to = ", ".join(recipients)
-    db.commit()
+    if not recipients:
+        raise HTTPException(status_code=400, detail="No supplier emails on file for this brand or supplier yet. Add at least one first.")
+
+    notification_status = send_purchase_order_email(purchase_order, recipients)
     return {"sent_to": recipients, "notification_status": notification_status}
 
 
@@ -4333,11 +3223,8 @@ def list_purchase_orders(
     current_user: models.User = Depends(auth.get_current_user),
 ):
     query = db.query(models.PurchaseOrder)
-    if not auth.has_admin_access(current_user) and current_user.role != "MISExecutive":
-        visibility = models.PurchaseOrder.submitted_by_user_id == current_user.id
-        if po_receiving.can_receive(current_user):
-            visibility = or_(visibility, models.PurchaseOrder.email_sent_at.isnot(None))
-        query = query.filter(visibility)
+    if current_user.role not in {"Admin", "MISExecutive"}:
+        query = query.filter(models.PurchaseOrder.submitted_by_user_id == current_user.id)
     purchase_orders = query.order_by(models.PurchaseOrder.created_date.desc()).all()
     return [serialize_purchase_order(item) for item in purchase_orders]
 
@@ -4374,28 +3261,6 @@ def update_purchase_order_status(
     if status_value != purchase_order.status:
         assert_status_transition_allowed(current_user, purchase_order, status_value)
 
-    if purchase_order.email_sent_at:
-        raise HTTPException(status_code=409, detail="Sent POs are locked for receipt matching. Create a new PO for changes.")
-
-    # Status-only actions must preserve the existing Busy reference.
-    supplied_fields = getattr(payload, "model_fields_set", None)
-    if supplied_fields is None:
-        supplied_fields = payload.__fields_set__
-    busy_number = purchase_order.busy_po_number
-    if "busy_po_number" in supplied_fields:
-        busy_number = (payload.busy_po_number or "").strip() or None
-    if busy_number:
-        duplicate = db.query(models.PurchaseOrder).filter(
-            models.PurchaseOrder.busy_po_number == busy_number,
-            models.PurchaseOrder.id != purchase_order_id,
-        ).first()
-        if duplicate:
-            raise HTTPException(
-                status_code=409,
-                detail=f"Busy PO number {busy_number} is already used by {duplicate.request_no}. "
-                       "Enter the correct unique PO number from Busy, or leave it blank until available.",
-            )
-
     if status_value == "Approved" and purchase_order.status != "Approved":
         purchase_order.approved_by_user_id = current_user.id
         purchase_order.approved_date = datetime.utcnow()
@@ -4406,11 +3271,9 @@ def update_purchase_order_status(
         purchase_order.approved_date = None
 
     purchase_order.status = status_value
-    purchase_order.busy_po_number = busy_number
-    if "ordered_date" in supplied_fields:
-        purchase_order.ordered_date = payload.ordered_date
-    if "processing_notes" in supplied_fields:
-        purchase_order.processing_notes = (payload.processing_notes or "").strip() or None
+    purchase_order.busy_po_number = (payload.busy_po_number or "").strip() or None
+    purchase_order.ordered_date = payload.ordered_date
+    purchase_order.processing_notes = (payload.processing_notes or "").strip() or None
 
     # Admin/MIS can fill in or correct procurement details while processing
     # a category manager's request. Only touch fields that were actually sent.
@@ -4440,19 +3303,7 @@ def update_purchase_order_status(
             raise HTTPException(status_code=400, detail="Every item needs a product name and quantity greater than zero")
         purchase_order.items = [models.PurchaseOrderItem(**item.dict()) for item in payload.items]
 
-    try:
-        db.commit()
-    except IntegrityError as exc:
-        db.rollback()
-        # Another user may have saved this number after our initial check.
-        constraint = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
-        if constraint == "purchase_orders_busy_po_number_key" or "UNIQUE constraint failed: purchase_orders.busy_po_number" in str(exc.orig):
-            raise HTTPException(
-                status_code=409,
-                detail=f"Busy PO number {busy_number} is already assigned to another purchase order. "
-                       "Enter the correct unique PO number from Busy, or leave it blank until available.",
-            ) from exc
-        raise
+    db.commit()
     db.refresh(purchase_order)
 
     if purchase_order.supplier_name:
@@ -4472,8 +3323,6 @@ def delete_purchase_order(
     purchase_order = db.query(models.PurchaseOrder).filter(models.PurchaseOrder.id == purchase_order_id).first()
     if not purchase_order:
         raise HTTPException(status_code=404, detail="Purchase order request not found")
-    if purchase_order.email_sent_at or purchase_order.receipts:
-        raise HTTPException(status_code=409, detail="Sent POs and their receipt audit history cannot be deleted")
     db.delete(purchase_order)
     db.commit()
     return {"message": "Purchase order request deleted"}
@@ -4594,7 +3443,7 @@ def list_schemes(
     query = db.query(models.Scheme)
     if status:
         query = query.filter(models.Scheme.status == status)
-    if not auth.has_admin_access(current_user):
+    if current_user.role != "Admin":
         # Draft schemes hold whatever a document upload extracted and
         # haven't been reviewed yet. Only Admin should see those fields -
         # everyone else (including the promoter who attached the
@@ -4613,7 +3462,7 @@ def list_my_scheme_attachments(
     etc.) - those stay hidden until an Admin reviews and activates the
     Draft. Non-admins only ever see their own uploads."""
     query = db.query(models.SchemeAttachment).order_by(models.SchemeAttachment.id.desc())
-    if not auth.has_admin_access(current_user):
+    if current_user.role != "Admin":
         query = query.filter(models.SchemeAttachment.uploaded_by_user_id == current_user.id)
 
     rows = []
@@ -4772,7 +3621,7 @@ def upload_scheme_document(
     db.add(attachment)
     db.commit()
 
-    if auth.has_admin_access(current_user):
+    if current_user.role == "Admin":
         # Admin uploads still extract right away, same as before.
         extraction = extract_scheme_from_document(db, filename, content_type, raw_bytes)
         apply_scheme_extraction(db, db_scheme, attachment, extraction)
@@ -4790,7 +3639,7 @@ def upload_scheme_document(
             "Document attached and scheme fields pre-filled. Review and Activate when ready."
             if attachment.extraction_status == "Extracted"
             else "Document attached. An Admin will review it shortly."
-            if not auth.has_admin_access(current_user)
+            if current_user.role != "Admin"
             else "Document attached, but automatic extraction did not complete - fill the scheme fields manually before activating."
         ),
     }
@@ -5048,7 +3897,7 @@ def create_sale(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    allowed_roles = {"Admin", "Owner", "HR", "StoreManager", "CategoryManager", "BrandManager", "BrandPartner", "Super Admin", "Management", "Branch Manager", "Sales Executive", "Scheme Manager"}
+    allowed_roles = {"Admin", "StoreManager", "CategoryManager", "BrandManager", "BrandPartner", "Super Admin", "Management", "Branch Manager", "Sales Executive", "Scheme Manager"}
     if current_user.role not in allowed_roles:
         raise HTTPException(status_code=403, detail="You are not allowed to create sales")
 
@@ -5057,11 +3906,10 @@ def create_sale(
             raise HTTPException(status_code=403, detail="You can only create sales for your assigned branch")
 
     if current_user.role == "CategoryManager":
-        category_codes = category_codes_for_user(current_user)
-        if not category_codes:
+        if not current_user.category_code:
             raise HTTPException(status_code=403, detail="You are not assigned to a category")
         sale_category = db.query(models.Category).filter(models.Category.id == sale.category_id).first()
-        if not sale_category or sale_category.code not in category_codes:
+        if not sale_category or sale_category.code != current_user.category_code:
             raise HTTPException(status_code=403, detail="You can only create sales for your assigned category")
 
     if current_user.role in {"BrandManager", "BrandPartner", "Scheme Manager"}:
@@ -5128,7 +3976,7 @@ def update_sale(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    if not auth.has_admin_access(current_user) and current_user.role not in ("MISExecutive", "CategoryManager"):
+    if current_user.role not in ("Admin", "MISExecutive", "CategoryManager"):
         raise HTTPException(status_code=403, detail="You are not allowed to edit sales")
 
     db_sale = db.query(models.Sale).filter(models.Sale.id == sale_id).first()
@@ -5143,7 +3991,7 @@ def update_sale(
         if not can_user_access_sale(db, current_user, db_sale):
             raise HTTPException(status_code=403, detail="You can only edit sales in your access scope")
         sale_category = db.query(models.Category).filter(models.Category.id == sale.category_id).first()
-        if not sale_category or sale_category.code not in category_codes_for_user(current_user):
+        if not sale_category or sale_category.code != current_user.category_code:
             raise HTTPException(status_code=403, detail="You can only edit sales into your assigned category")
 
     duplicate_invoice = (
@@ -5206,7 +4054,7 @@ def delete_sale(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    if not auth.has_admin_access(current_user):
+    if current_user.role != "Admin":
         raise HTTPException(status_code=403, detail="You are not allowed to delete sales")
 
     sale = db.query(models.Sale).filter(models.Sale.id == sale_id).first()
@@ -5779,108 +4627,6 @@ def build_daily_profitability_workbook(merged_items: list, period_label: str) ->
     return buffer.getvalue()
 
 
-def build_division_outlet_daily_report(merged_items: list, all_outlets: Optional[List[str]] = None) -> bytes:
-    """Build a date-wise sales matrix with divisions on rows and outlets on columns."""
-    import openpyxl as _openpyxl
-    from openpyxl.styles import Alignment as _Alignment, Border as _Border, Font as _Font, PatternFill as _PatternFill, Side as _Side
-    from openpyxl.utils import get_column_letter as _get_column_letter
-
-    division_labels = {
-        "HA": "HA", "HE": "HE", "Mobile": "MOBILE", "Computer": "COMPUTER",
-        "Digital Camera": "CAMERA", "Accessories": "ACCESSORY",
-    }
-    divisions = [division for division in DP_CATEGORIES if any(item["category"] == division for item in merged_items)]
-    outlets = sorted(set(all_outlets or []) | {str(item.get("store") or "UNK").upper() for item in merged_items})
-    dates = sorted({item["date"] for item in merged_items if item.get("date")})
-    sales = defaultdict(float)
-    for item in merged_items:
-        sales[(item.get("date"), item["category"], str(item.get("store") or "UNK").upper())] += item["sale"]
-
-    wb = _openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "Daily Report"
-    ws.sheet_view.showGridLines = False
-    thin = _Side(style="thin", color="000000")
-    border = _Border(left=thin, right=thin, top=thin, bottom=thin)
-    title_fill = _PatternFill("solid", fgColor="F8CBAD")
-    blue_fill = _PatternFill("solid", fgColor="9DC3E6")
-    header_font = _Font(name="Arial", size=11, bold=True)
-    body_font = _Font(name="Arial", size=10, bold=True)
-    number_format = '#,##0;[Red]-#,##0;-'
-    last_col = 3 + len(outlets)
-    total_col_letter = _get_column_letter(last_col)
-    row_no = 1
-    first_header_row = 2
-
-    for report_date in dates:
-        ws.merge_cells(start_row=row_no, start_column=1, end_row=row_no, end_column=last_col)
-        title = ws.cell(row_no, 1, f"Division Wise Sale Report {report_date.strftime('%d %b %Y').upper()}")
-        title.font = _Font(name="Arial", size=14, bold=True)
-        title.alignment = _Alignment(horizontal="center", vertical="center")
-        for cell in ws[row_no][:last_col]:
-            cell.fill = title_fill
-            cell.border = border
-        ws.row_dimensions[row_no].height = 24
-        row_no += 1
-
-        headers = ["SL no.", "Division", *outlets, "TOTAL VALUE"]
-        for col_no, header in enumerate(headers, 1):
-            cell = ws.cell(row_no, col_no, header)
-            cell.fill = blue_fill
-            cell.font = header_font
-            cell.border = border
-            cell.alignment = _Alignment(horizontal="center", vertical="center")
-        row_no += 1
-        first_division_row = row_no
-
-        for serial, division in enumerate(divisions, 1):
-            ws.cell(row_no, 1, serial)
-            ws.cell(row_no, 2, division_labels.get(division, division.upper()))
-            for outlet_index, outlet in enumerate(outlets, 3):
-                value = round(sales[(report_date, division, outlet)])
-                ws.cell(row_no, outlet_index, value if value else 0)
-            first_outlet_letter = _get_column_letter(3)
-            last_outlet_letter = _get_column_letter(2 + len(outlets))
-            ws.cell(row_no, last_col, f"=SUM({first_outlet_letter}{row_no}:{last_outlet_letter}{row_no})")
-            for cell in ws[row_no][:last_col]:
-                cell.border = border
-                cell.font = body_font
-                cell.alignment = _Alignment(horizontal="right" if cell.column >= 3 else "center" if cell.column == 1 else "left")
-                if cell.column >= 3:
-                    cell.number_format = number_format
-            row_no += 1
-
-        total_row = row_no
-        ws.merge_cells(start_row=total_row, start_column=1, end_row=total_row, end_column=2)
-        ws.cell(total_row, 1, "Total")
-        for col_no in range(3, last_col + 1):
-            col_letter = _get_column_letter(col_no)
-            ws.cell(total_row, col_no, f"=SUM({col_letter}{first_division_row}:{col_letter}{total_row - 1})")
-        for cell in ws[total_row][:last_col]:
-            cell.fill = blue_fill
-            cell.border = border
-            cell.font = header_font
-            cell.alignment = _Alignment(horizontal="center" if cell.column <= 2 else "right", vertical="center")
-            if cell.column >= 3:
-                cell.number_format = number_format
-        row_no += 2
-
-    ws.freeze_panes = "C3"
-    ws.column_dimensions["A"].width = 10
-    ws.column_dimensions["B"].width = 18
-    for col_no in range(3, last_col):
-        ws.column_dimensions[_get_column_letter(col_no)].width = 14
-    ws.column_dimensions[total_col_letter].width = 18
-    if len(dates) == 1:
-        ws.auto_filter.ref = f"A{first_header_row}:{total_col_letter}{row_no - 2}"
-    ws.page_setup.orientation = "landscape"
-    ws.page_setup.fitToWidth = 1
-    ws.sheet_properties.pageSetUpPr.fitToPage = True
-    buffer = BytesIO()
-    wb.save(buffer)
-    return buffer.getvalue()
-
-
 # ============================================================
 # DAILY PROFITABILITY REPORT (home-page "Daily Profitability" tile)
 # ============================================================
@@ -5900,7 +4646,7 @@ def build_division_outlet_daily_report(merged_items: list, all_outlets: Optional
 # shares the most name-tokens with it, and that attribution is listed in
 # "review_notes" so Admin can sanity-check anything non-obvious.
 
-DP_CATEGORIES = ["HA", "HE", "Computer", "Mobile", "Digital Camera", "Accessories"]
+DP_CATEGORIES = ["HA", "HE", "Computer", "Mobile", "Digital Camera", "Other"]
 
 # Busy's Bill-wise Profitability export is GST-exclusive. Every Sale Amount
 # and Purchase Price in the Daily Profitability report/dashboard is grossed
@@ -5935,21 +4681,16 @@ def dp_item_similarity(a: Optional[str], b: Optional[str]) -> float:
 
 # Accessories that ride along with a Mobile-category sale but are not a
 # phone/tablet themselves - adapters, cables, converters, speakers, etc.
-# These are pulled out into "Accessories" so product-brand checks cannot
-# sweep them into Computer/Mobile and the report keeps accessories separate
-# from genuinely unclassified "Other" items.
+# These are pulled out into "Other" so the Mobile section only ever holds
+# actual handsets/tablets, never their accessories.
 DP_ACCESSORY_KEYWORDS = (
     "ADAPTER", "ADAPTOR", "CABLE", "CONVERTER", "CONVERTOR", "CHARGER",
     "HDMI", "POWER BANK", "POWERBANK", "EARPHONE", "HEADPHONE",
     "EARBUD", "EARBUDS", "BUDS", "BATTERY",
     "NECK BAND", "NECKBAND", "NECK-BAND",
     "SMART WATCH", "SMARTWATCH", "TEMPERED GLASS", "SCREEN GUARD",
-    "MOBILE COVER", "BACK COVER", "PENDRIVE", "PEN DRIVE", "FLASH DRIVE",
-    "USB DRIVE", "MEMORY CARD", "OTG",
+    "MOBILE COVER", "BACK COVER", "PENDRIVE", "MEMORY CARD", "OTG",
     "KEYBOARD", "MOUSE",
-    # Printer consumables, including HP GT-series cartridge/ink bottles
-    # (e.g. "HP Cartridge Ink GT53/GT52Bottle 7K3W9AA").
-    "CARTRIDGE", "INK BOTTLE", "INKBOTTLE", "INK REFILL", "TONER",
     # Small laptop/desktop accessory, not a computer unit itself (e.g.
     # "Laptop Fan", "HP Laptop Fan Cooler") - without this it falls through
     # to the laptop_keywords check below, which matches bare "LAPTOP" as a
@@ -5962,30 +4703,11 @@ def dp_categorize(item_name: Optional[str]) -> str:
     n = (item_name or "").upper()
     padded = f" {n} "
 
-    # Payout and other uncategorized non-PW lines are included in Accessories;
-    # PW vouchers themselves are excluded from profitability entirely.
+    # Brand payouts/incentives (e.g. "Lenovo Payout") are not actual product
+    # sales - route to Other before any brand keyword below (LENOVO, HP,
+    # SAMSUNG, etc.) can sweep them into that brand's product category.
     if "PAYOUT" in n:
-        return "Accessories"
-
-    if "INVERTER EB 1100" in n:
-        return "HA"
-
-    # Recognize appliance types before OTG (USB accessory) and LED (TV)
-    # checks. An OTG oven has a litre capacity or explicit oven/fryer type;
-    # USB OTG adapters and appliance spares remain accessories.
-    appliance_type = re.search(
-        r"\b(?:AIR[\s-]*FRYER|FRYER|OVEN|HOBS?|COOK[\s-]*TOP|BURNERS?|"
-        r"OFR|OIL[\s-]*FILLED\s+(?:RADIATOR|HEATER)|"
-        r"WATER\s+(?:D\b|DISPENS[EO]R)|"
-        r"(?:FABER|ELICA|GLEN|KAFF|HINDWARE|SUNFLAME)\s+HOOD|"
-        r"(?:COOKER|KITCHEN)\s+HOOD|"
-        r"OTG\s+\d+\s*(?:L(?:ITRES?|ITERS?)?|RCSS))\b", n)
-    appliance_accessory = (
-        any(k in n for k in DP_ACCESSORY_KEYWORDS if k != "OTG")
-        or re.search(r"\b(?:USB|SPARES?|REPLACEMENT|COVERS?|FILTERS?|TRAYS?|BASKETS?|KNOBS?)\b", n)
-    )
-    if appliance_type and not appliance_accessory:
-        return "HA"
+        return "Other"
 
     # --- Mobile phones, first, before anything else can steal them ---
     # ASUS/dual-purpose brands make both laptops and phones, so a phone
@@ -6021,7 +4743,7 @@ def dp_categorize(item_name: Optional[str]) -> str:
     # so e.g. an HP keyboard or a Lenovo mouse never gets swept into Computer
     # just because the brand also makes laptops.
     if any(k in n for k in DP_ACCESSORY_KEYWORDS):
-        return "Accessories"
+        return "Other"
 
     laptop_keywords = (
         "DELL", "LAPTOP", "BACK PACK", "BACKPACK", "LENOVO", "ASUS", "ACER",
@@ -6044,12 +4766,6 @@ def dp_categorize(item_name: Optional[str]) -> str:
         " FAN ", " WM ", "WASHING MACHINE", "MIXER GRINDER", "INDUCTION",
         "IN ICT", "CHIMNEY", "DISHWASHER", "VACUUM CLEANER", "AIR PURIFIER",
         "ROOM HEATER", "IRON BOX", "STEAM IRON", "AQUAGUARD", " RO ",
-        # Drinking-water and small kitchen appliances. These explicit product
-        # types must win regardless of brand (e.g. Voltas/Bajaj).
-        # Accept both the standard spelling and the common inventory spelling
-        # "dispensor" so every water-dispenser model (including Blue Star
-        # BWD3FMRGA) is classified as Home Appliances.
-        "WATER DISPENSER", "WATER DISPENSOR", "SANDWICH TOASTER",
         # Bare "IRON" (any brand - dry iron, steam iron, curling iron,
         # garment iron, etc.) as a standalone word, not just the two
         # specific compounds above.
@@ -6106,7 +4822,7 @@ def dp_categorize(item_name: Optional[str]) -> str:
         return "Mobile"
     if "SAMSUNG" in n and re.search(r"\b[AMS]\d{2,3}[A-Z]?\b", n):
         return "Mobile"
-    return "Accessories"
+    return "Other"
 
 
 def dp_is_ac_od_component(item_name: Optional[str]) -> bool:
@@ -6126,8 +4842,6 @@ def dp_merge_rows(rows: List["models.IntervalSaleUpload"]) -> tuple:
     groups = defaultdict(list)
     for r in rows:
         key = r.vch_no or f"__no_vch_{r.id}"
-        if "PW" in str(key).upper():
-            continue
         groups[key].append(r)
 
     merged = []
@@ -6198,8 +4912,13 @@ def dp_merge_rows(rows: List["models.IntervalSaleUpload"]) -> tuple:
             })
 
     for m in merged:
-        # SR voucher products belong to Accessories regardless of item name.
-        m["category"] = "Accessories" if m["store"] == "SR" else dp_categorize(m["item"])
+        # Any voucher whose number contains "PW" (e.g. "PW/34/26-27") is
+        # always Other, regardless of what the item itself is - these are
+        # project/wholesale-type bills, not regular retail category sales.
+        if "PW" in str(m["vch"] or "").upper():
+            m["category"] = "Other"
+        else:
+            m["category"] = dp_categorize(m["item"])
         m["sale"] = m["sale"] * DP_GST_FACTOR
         m["cost"] = m["cost"] * DP_GST_FACTOR
         m["margin"] = m["sale"] - m["cost"]
@@ -6245,7 +4964,7 @@ def daily_profitability_meta(
     ).first()
     has_data = bool(date_bounds and date_bounds[0])
     vch_numbers = [row[0] for row in db.query(models.IntervalSaleUpload.vch_no).distinct().all()]
-    stores = sorted({dp_extract_store(v) for v in vch_numbers if v} - {"SR"})
+    stores = sorted({dp_extract_store(v) for v in vch_numbers if v})
 
     return {
         "has_data": has_data,
@@ -6253,7 +4972,7 @@ def daily_profitability_meta(
         "date_to": date_bounds[1] if has_data else None,
         "categories": DP_CATEGORIES,
         "stores": stores,
-        "can_upload": auth.has_admin_access(current_user) or current_user.role == "MISExecutive",
+        "can_upload": current_user.role in ("Admin", "MISExecutive"),
     }
 
 
@@ -6388,45 +5107,6 @@ def daily_profitability_download(
     )
 
 
-@app.get("/api/daily-profitability/daily-report")
-def daily_profitability_daily_report(
-    start_date: Optional[date] = Query(None),
-    end_date: Optional[date] = Query(None),
-    category: Optional[str] = Query(None),
-    store: Optional[str] = Query(None),
-    current_user: models.User = Depends(auth.get_current_user),
-    db: Session = Depends(get_db),
-):
-    rows = dp_filter_rows(db, start_date, end_date)
-    if not rows:
-        raise HTTPException(status_code=404, detail="No data available for the selected range.")
-    merged, _ = dp_merge_rows(rows)
-    merged = dp_apply_filters(merged, category, store)
-    if not merged:
-        raise HTTPException(status_code=404, detail="No rows match the selected filters.")
-    # The standalone division-wise Daily Report must show Busy's original
-    # GST-exclusive values. dp_merge_rows adds estimated GST for the main
-    # profitability dashboard/report, so reverse that uplift only for this
-    # endpoint and leave every other profitability view unchanged.
-    for item in merged:
-        item["sale"] /= DP_GST_FACTOR
-        item["cost"] /= DP_GST_FACTOR
-        item["margin"] = item["sale"] - item["cost"]
-        item["pl_pct"] = (item["margin"] / item["cost"]) if item["cost"] else 0.0
-    all_outlets = sorted({
-        dp_extract_store(voucher)
-        for (voucher,) in db.query(models.IntervalSaleUpload.vch_no).distinct().all()
-        if voucher and "PW" not in voucher.upper()
-    })
-    workbook_bytes = build_division_outlet_daily_report(merged, all_outlets)
-    filename_date = start_date.isoformat() if start_date and start_date == end_date else f"{start_date or 'first'}_{end_date or 'latest'}"
-    return Response(
-        content=workbook_bytes,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="Division_Wise_Daily_Report_{filename_date}.xlsx"'},
-    )
-
-
 @app.get("/daily-profitability")
 @app.get("/daily-profitability.html")
 def daily_profitability_page():
@@ -6492,9 +5172,7 @@ ANALYTICS_HEADER_ALIASES = {
     "sales_amt": {"salesamt", "salesamount", "salevalue", "amount", "invoicevalue"},
     "cost_amt": {"costamt", "costamount", "cost"},
     "profit_loss": {"profitloss", "grossprofit"},
-    "division": {"division", "div", "segment", "category"},
-    "store": {"store", "branch", "outlet", "location"},
-    "brand": {"brand", "brandname"},
+    "division": {"division", "div", "segment"},
 }
 
 
@@ -6553,8 +5231,6 @@ def parse_analytics_file(filename: str, content: bytes) -> List[dict]:
             "division": division,
             "division_from_file": division_raw.upper() if division_raw else None,
             "vch_no": vch_no,
-            "store": str(row_dict.get("store") or "").strip() or analytics_calc.outlet_from_voucher(vch_no),
-            "brand": str(row_dict.get("brand") or "").strip() or None,
             "qty": qty,
             "sales_amt": sales_amt,
             "cost_amt": cost_amt,
@@ -6751,7 +5427,105 @@ def build_analytics_dashboard(rows: List[models.AnalyticsSalesRow]) -> dict:
         for fy, s in sorted(yearly_stats.items())
     ]
 
-    recommendations = []  # Decision actions are attached by the dashboard endpoint.
+    # ---------------- Recommendations (rule-based, computed from the
+    # aggregates above - every number quoted is real, nothing is invented) ----
+    recommendations = []
+
+    if division_breakdown:
+        leader = division_breakdown[0]
+        if leader["profit"] > 0:
+            recommendations.append({
+                "type": "opportunity",
+                "priority": "high",
+                "title": f"{leader['division']} is your leading profit driver",
+                "detail": f"It contributed ₹{leader['profit']:,.0f} in profit, {leader['profit_share_percent']:.1f}% of total profit across the uploaded data. Prioritize stock availability and scheme/promotional support here to protect this contribution.",
+            })
+
+    # YoY growth/decline per division, comparing the two most recent fiscal
+    # years that division has data for.
+    division_years = defaultdict(dict)
+    for (division, fy), profit in division_year_profit.items():
+        division_years[division][fy] = profit
+    for division, year_map in division_years.items():
+        years_sorted = sorted(year_map.keys())
+        if len(years_sorted) < 2:
+            continue
+        prev_fy, latest_fy = years_sorted[-2], years_sorted[-1]
+        prev_profit, latest_profit = year_map[prev_fy], year_map[latest_fy]
+        if prev_profit == 0:
+            continue
+        change_pct = ((latest_profit - prev_profit) / abs(prev_profit)) * 100
+        if change_pct <= -15:
+            recommendations.append({
+                "type": "decline",
+                "priority": "high",
+                "title": f"{division} profit declined {abs(change_pct):.0f}% year-on-year",
+                "detail": f"FY {prev_fy} → FY {latest_fy}: ₹{prev_profit:,.0f} → ₹{latest_profit:,.0f}. Consider a fresh scheme, a pricing/cost review, or a promotional push to reverse the trend.",
+            })
+        elif change_pct >= 15:
+            recommendations.append({
+                "type": "growth",
+                "priority": "medium",
+                "title": f"{division} profit grew {change_pct:.0f}% year-on-year",
+                "detail": f"FY {prev_fy} → FY {latest_fy}: ₹{prev_profit:,.0f} → ₹{latest_profit:,.0f}. Increase inventory allocation and marketing focus here to capture the momentum.",
+            })
+
+    if loss_items:
+        names = ", ".join(f"{i['item']} (₹{i['profit']:,.0f})" for i in loss_items[:3])
+        recommendations.append({
+            "type": "loss",
+            "priority": "high",
+            "title": f"{len(loss_items)} item(s) are being sold at a net loss",
+            "detail": f"Worst offenders: {names}. Review purchase cost, scheme support, or selling price for these lines.",
+        })
+
+    if margin_eligible:
+        high_revenue_cutoff = sorted([i["sales"] for i in margin_eligible], reverse=True)
+        cutoff_value = high_revenue_cutoff[max(0, len(high_revenue_cutoff) // 4 - 1)] if len(high_revenue_cutoff) >= 4 else high_revenue_cutoff[0]
+        candidates = [
+            i for i in margin_eligible
+            if i["sales"] >= cutoff_value and i["margin_percent"] < overall_margin and i["margin_percent"] >= 0
+        ]
+        candidates.sort(key=lambda x: x["sales"], reverse=True)
+        if candidates:
+            top = candidates[0]
+            recommendations.append({
+                "type": "opportunity",
+                "priority": "medium",
+                "title": f"{top['item']} sells well but at a thin margin",
+                "detail": f"₹{top['sales']:,.0f} in revenue at only {top['margin_percent']:.1f}% margin, below your overall {overall_margin:.1f}% average. Consider bundling with a scheme, or renegotiating cost, to lift profitability on this high-volume line.",
+            })
+
+    if month_number_profit:
+        month_names = ["", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+        best_month_num = max(month_number_profit, key=month_number_profit.get)
+        worst_month_num = min(month_number_profit, key=month_number_profit.get)
+        if best_month_num != worst_month_num:
+            recommendations.append({
+                "type": "seasonal",
+                "priority": "low",
+                "title": f"{month_names[best_month_num]} is historically your strongest month",
+                "detail": f"Across the uploaded years, {month_names[best_month_num]} generated the most profit and {month_names[worst_month_num]} the least. Plan stock and staffing ahead of {month_names[best_month_num]}, and consider a targeted scheme in {month_names[worst_month_num]} to offset the seasonal dip.",
+            })
+
+    if total_sales > 0:
+        if overall_margin < 8:
+            recommendations.append({
+                "type": "decline",
+                "priority": "medium",
+                "title": f"Overall margin is {overall_margin:.1f}%",
+                "detail": "This is below a typical general-retail benchmark of ~10-12%. A broad cost or pricing review across top-selling lines may help.",
+            })
+        else:
+            recommendations.append({
+                "type": "growth",
+                "priority": "low",
+                "title": f"Overall margin of {overall_margin:.1f}% is healthy",
+                "detail": "Maintain current pricing and scheme discipline; use the division and item breakdowns above to reinforce what's already working.",
+            })
+
+    priority_rank = {"high": 0, "medium": 1, "low": 2}
+    recommendations.sort(key=lambda r: priority_rank.get(r["priority"], 3))
 
     return {
         "has_data": True,
@@ -6842,9 +5616,6 @@ DIVISION_NAMES = {
     "MH": "Mobile",
     "IT": "Computer/IT",
     "DC": "Digital Camera",
-    "ACC": "Accessories",
-    "PAYOUT": "Payouts",
-    "EXCLUDED": "Excluded / unrelated",
     "UNCATEGORIZED": "Uncategorized",
 }
 
@@ -6897,8 +5668,7 @@ def ac_merge_key(row: dict) -> tuple:
     since that code is the one thing that legitimately differs between an
     indoor and outdoor unit of the same sale."""
     if row.get("vch_no"):
-        return ("VCH", row["vch_no"].strip().upper(), row["sale_date"].isoformat(),
-                str(row.get("store") or "").strip().upper(), str(row.get("brand") or "").upper())
+        return ("VCH", row["vch_no"].strip().upper(), row["sale_date"].isoformat())
 
     tokens = row["item"].split()
     role_idx = None
@@ -6956,11 +5726,11 @@ def build_staged_rows(parsed_rows: List[dict]) -> List[dict]:
     staged = []
     for r in parsed_rows:
         row = dict(r)
-        row["division"] = analytics_calc.classify(row["item"], row.get("division"), detect_division_code)
-        row["brand"] = row.get("brand") or detect_brand(row["item"])
+        row["division"] = detect_division_code(row["item"])
+        row["brand"] = detect_brand(row["item"])
         row["ac_role"] = detect_ac_role(row["item"])
         row["merged"] = False
-        row["note"] = "Excluded from dashboard totals" if row["division"] == "EXCLUDED" else "Needs category review; excluded from totals until assigned" if row["division"] == "UNCATEGORIZED" else None
+        row["note"] = None
         staged.append(row)
     merged = merge_ac_pairs(staged)
     for i, row in enumerate(merged):
@@ -6976,11 +5746,10 @@ def serialize_staged_row(row: dict) -> dict:
         "division": row["division"],
         "division_name": DIVISION_NAMES.get(row["division"], row["division"]),
         "brand": row.get("brand"),
-        "store": row.get("store"),
-        "vch_no": row.get("vch_no"),
         "qty": row.get("qty"),
-        **analytics_calc.display_amounts(row, gst=False),
-        "with_gst": analytics_calc.display_amounts(row, gst=True),
+        "sales_amt": round(row.get("sales_amt") or 0.0, 2),
+        "cost_amt": round(row.get("cost_amt") or 0.0, 2),
+        "profit_loss": round(row.get("profit_loss") or 0.0, 2),
         "ac_role": row.get("ac_role"),
         "merged": bool(row.get("merged")),
         "note": row.get("note"),
@@ -7038,7 +5807,6 @@ def _staging_get_or_404(token: str) -> dict:
 @app.post("/api/analytics/stage")
 def stage_analytics_file(
     file: UploadFile = File(...),
-    amount_basis: str = Form("exclusive"),
     current_user: models.User = Depends(auth.require_roles("Admin")),
 ):
     filename = file.filename or "uploaded_file"
@@ -7053,10 +5821,6 @@ def stage_analytics_file(
             detail="No readable sales rows found. Ensure the file has columns for Date, Item, Sales Amt, Cost Amt and Profit/Loss (Division, Qty, and Vch No are optional).",
         )
 
-    try:
-        parsed_rows = analytics_calc.normalize_upload(parsed_rows, amount_basis)
-    except (ValueError, ArithmeticError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
     staged_rows = build_staged_rows(parsed_rows)
 
     if len(ANALYTICS_STAGING) >= ANALYTICS_STAGING_LIMIT:
@@ -7086,20 +5850,12 @@ def reassign_staged_rows(
 ):
     entry = _staging_get_or_404(token)
     rows = entry["rows"]
-    new_division = analytics_calc.category_code(payload.division) or "UNCATEGORIZED"
-    if new_division not in {*analytics_calc.CATEGORIES, "UNCATEGORIZED", "EXCLUDED"}:
-        raise HTTPException(status_code=400, detail="Choose a supported category")
+    new_division = (payload.division or "").strip().upper() or "UNCATEGORIZED"
     row_ids = set(payload.row_ids)
     updated = 0
     for row in rows:
         if row["row_id"] in row_ids:
             row["division"] = new_division
-            if new_division == "EXCLUDED":
-                row["note"] = "Excluded from dashboard totals"
-            elif new_division == "UNCATEGORIZED":
-                row["note"] = "Needs category review; excluded from totals until assigned"
-            elif row.get("note") in {"Excluded from dashboard totals", "Needs category review; excluded from totals until assigned"}:
-                row["note"] = None
             updated += 1
 
     return {
@@ -7112,7 +5868,6 @@ def reassign_staged_rows(
 @app.get("/api/analytics/stage/{token}/download")
 def download_staged_file(
     token: str,
-    gst: bool = Query(False),
     current_user: models.User = Depends(auth.require_roles("Admin")),
 ):
     entry = _staging_get_or_404(token)
@@ -7120,21 +5875,19 @@ def download_staged_file(
 
     buffer = StringIO()
     writer = csv.writer(buffer)
-    writer.writerow(["Date", "Item", "Division", "Brand", "Qty", "Sales Amt", "Cost Amt", "Profit/Loss", "AC Role", "Note", "Calculation basis"])
+    writer.writerow(["Date", "Item", "Division", "Brand", "Qty", "Sales Amt", "Cost Amt", "Profit/Loss", "AC Role", "Note"])
     for row in rows:
-        amounts = analytics_calc.display_amounts(row, gst=gst)
         writer.writerow([
             row["sale_date"].strftime("%d-%m-%Y") if row.get("sale_date") else "",
             row["item"],
             DIVISION_NAMES.get(row["division"], row["division"]),
             row.get("brand") or "",
             row.get("qty") if row.get("qty") is not None else "",
-            amounts["sales_amt"],
-            amounts["cost_amt"],
-            amounts["profit_loss"],
+            round(row.get("sales_amt") or 0.0, 2),
+            round(row.get("cost_amt") or 0.0, 2),
+            round(row.get("profit_loss") or 0.0, 2),
             row.get("ac_role") or "",
             row.get("note") or "",
-            "With GST (18%)" if gst else "Without GST",
         ])
 
     base_name = entry["filename"].rsplit(".", 1)[0] if "." in entry["filename"] else entry["filename"]
@@ -7329,25 +6082,6 @@ def read_ageing_sheet_rows(worksheet) -> List[dict]:
             continue
         out.append(row_dict)
     return out
-
-
-def detect_ageing_location_code(worksheet) -> Optional[str]:
-    """Resolve a location from its tab name or Tally Material Centre label."""
-    candidates = [str(worksheet.title or "")]
-    for row in worksheet.iter_rows(min_row=1, max_row=10, max_col=6, values_only=True):
-        for value in row:
-            text = str(value or "").strip()
-            if "material" in text.lower() and "centre" in text.lower():
-                candidates.append(text)
-
-    definitions = {**AGEING_LOCATION_DEFINITIONS, **AGEING_EXCLUDED_LOCATION_ALIASES}
-    for candidate in candidates:
-        normalized = re.sub(r"[^a-z0-9]", "", candidate.lower())
-        for code, definition in definitions.items():
-            aliases = definition["aliases"] if isinstance(definition, dict) else definition
-            if normalized in aliases or any(normalized.endswith(alias) for alias in aliases):
-                return code
-    return None
 
 
 # Category classification keyword rules, checked in this order. Each is
@@ -8053,8 +6787,11 @@ def parse_ageing_stock_workbook(content: bytes, db: Session) -> tuple:
             all_data_rows = read_ageing_sheet_rows(worksheet)
             continue
 
-        detected_code = detect_ageing_location_code(worksheet)
-        excluded_code = detected_code if detected_code in AGEING_EXCLUDED_LOCATION_ALIASES else None
+        excluded_code = None
+        for code, aliases in AGEING_EXCLUDED_LOCATION_ALIASES.items():
+            if title_normalized in aliases:
+                excluded_code = code
+                break
         if excluded_code:
             for row in read_ageing_sheet_rows(worksheet):
                 key = normalize_ageing_item_key(row.get("item_details"))
@@ -8062,7 +6799,11 @@ def parse_ageing_stock_workbook(content: bytes, db: Session) -> tuple:
                     excluded_item_keys.add(key)
             continue
 
-        matched_code = detected_code if detected_code in AGEING_LOCATION_DEFINITIONS else None
+        matched_code = None
+        for code, definition in AGEING_LOCATION_DEFINITIONS.items():
+            if title_normalized in definition["aliases"]:
+                matched_code = code
+                break
         if not matched_code:
             continue
 
@@ -8239,7 +6980,7 @@ def ageing_stock_meta(
 ):
     upload_record = db.query(models.AgeingStockUpload).order_by(models.AgeingStockUpload.id.desc()).first()
     if not upload_record:
-        return {"has_data": False, "last_upload": None, "can_upload": auth.has_admin_access(current_user)}
+        return {"has_data": False, "last_upload": None, "can_upload": current_user.role == "Admin"}
 
     return {
         "has_data": True,
@@ -8251,7 +6992,7 @@ def ageing_stock_meta(
             "location_sheets_found": (upload_record.location_sheets_found or "").split(",") if upload_record.location_sheets_found else [],
             "unclassified_count": upload_record.unclassified_count,
         },
-        "can_upload": auth.has_admin_access(current_user),
+        "can_upload": current_user.role == "Admin",
     }
 
 
@@ -8570,13 +7311,6 @@ def build_ageing_export_dataset(report: dict, active_age_fields: List[str], acti
     def item_qty_in_active_durations(item: dict) -> float:
         return sum(item.get(f) or 0 for f in active_age_fields)
 
-    def item_matches_location_total(item: dict) -> bool:
-        location_total = sum(
-            location_qty_for_durations(item, field, active_age_fields)
-            for field in AGEING_LOCATION_FIELDS
-        )
-        return abs(item_qty_in_active_durations(item) - location_total) < 0.005
-
     headers = ["Item Details", "Unit", "Closing Qty"]
     headers += [AGEING_AGE_LABELS[f] for f in active_age_fields]
     headers += [loc_labels[f] for f in location_fields]
@@ -8593,10 +7327,7 @@ def build_ageing_export_dataset(report: dict, active_age_fields: List[str], acti
         brands_out = []
         cat_totals = zero_totals()
         for brand_bucket in cat["brands"]:
-            filtered_items = [
-                it for it in brand_bucket["items"]
-                if item_qty_in_active_durations(it) > 0 and item_matches_location_total(it)
-            ]
+            filtered_items = [it for it in brand_bucket["items"] if item_qty_in_active_durations(it) > 0]
             if not filtered_items:
                 continue
             rows = []
@@ -8773,7 +7504,7 @@ def _ageing_build_xlsx(dataset: dict) -> bytes:
 
     for cat in dataset["categories"]:
         ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=n_cols)
-        cat_cell = ws.cell(row=r, column=1, value=f"  {cat['name']}")
+        cat_cell = ws.cell(row=r,  column=1, value=f"  {cat['name']}")
         cat_cell.font = FONT_CAT
         cat_cell.fill = _PatternFill("solid", fgColor=cat["color"])
         cat_cell.alignment = _Alignment(horizontal="center", vertical="center")
@@ -9374,870 +8105,6 @@ def clear_ageing_stock_data(
     return {"message": "Ageing Stock Analysis data cleared", "deleted": deleted_count}
 
 
-INCENTIVE_MONTH_ALIASES = {"month", "months", "period", "sale month", "sales month"}
-INCENTIVE_OUTLET_ALIASES = {"outlet", "outlet name", "branch", "branch name", "store", "store name", "manager", "manager name"}
-INCENTIVE_SALES_ALIASES = {"total sale", "total sales", "sales", "sale", "sales amount", "sale amount", "monthly sales", "net sales"}
-
-
-def _incentive_header(value) -> str:
-    return re.sub(r"[^a-z0-9]+", " ", str(value or "").strip().lower()).strip()
-
-
-def _incentive_number(value):
-    if value is None or value == "":
-        return None
-    if isinstance(value, (int, float, Decimal)) and not isinstance(value, bool):
-        return float(value)
-    cleaned = re.sub(r"[^0-9.()-]", "", str(value).strip()).replace("(", "-").replace(")", "")
-    try:
-        return float(cleaned) if cleaned not in {"", "-", "."} else None
-    except ValueError:
-        return None
-
-
-def _incentive_month(value) -> str:
-    if isinstance(value, (datetime, date)):
-        return value.strftime("%b %Y")
-    if isinstance(value, (int, float)) and 20000 < value < 80000:
-        # Excel's 1900 date system (including its historical leap-year offset).
-        return (datetime(1899, 12, 30) + timedelta(days=float(value))).strftime("%b %Y")
-    return str(value or "").strip()
-
-
-def _incentive_month_from_filename(filename: Optional[str]) -> str:
-    stem = re.sub(r"[_-]+", " ", (filename or "").rsplit(".", 1)[0])
-    match = re.search(
-        r"\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\b.*?\b(20\d{2})\b",
-        stem,
-        re.IGNORECASE,
-    )
-    if not match:
-        return stem.strip() or "Uploaded Report"
-    parsed = datetime.strptime(match.group(1)[:3].title(), "%b")
-    return f"{parsed.strftime('%b')} {match.group(2)}"
-
-
-def _parse_incentive_outlet_category_rows(rows: list, month: str) -> Optional[list]:
-    """Parse reports shaped as Outlets | Category | Sale.
-
-    An outlet name starts a block and each category sale becomes one source
-    row. The following TOTAL line is skipped so outlet totals can be rebuilt
-    without double-counting while category detail remains available.
-    """
-    header_idx = next((
-        idx for idx, row in enumerate(rows[:15])
-        if any(_incentive_header(value) == "outlets" for value in row)
-        and any(_incentive_header(value) == "category" for value in row)
-        and any(_incentive_header(value) in {"sale", "sales", "total sale", "total sales"} for value in row)
-    ), None)
-    if header_idx is None:
-        return None
-    parsed, current_outlet = [], None
-    ignored_outlets = {"outlets", "sum all branch", "grand total", "total"}
-    for row in rows[header_idx + 1:]:
-        outlet_value = str(row[0] or "").strip() if row else ""
-        category_value = str(row[1] or "").strip() if len(row) > 1 else ""
-        sale = _incentive_number(row[2]) if len(row) > 2 else None
-        if outlet_value and _incentive_header(outlet_value) not in ignored_outlets:
-            current_outlet = outlet_value
-        if not current_outlet:
-            continue
-        if _incentive_header(category_value) == "total":
-            current_outlet = None
-        elif category_value and sale is not None:
-            parsed.append({"month": month, "outlet": current_outlet, "category": category_value, "total_sales": sale})
-    return parsed
-
-
-def parse_incentive_workbook(content: bytes, filename: Optional[str] = None) -> list:
-    try:
-        wb = load_workbook(BytesIO(content), data_only=True, read_only=True)
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Could not read the Excel file: {exc}")
-
-    result = []
-    for ws in wb.worksheets:
-        rows = [list(row) for row in ws.iter_rows(min_row=1, max_row=min(ws.max_row, 10000), values_only=True)]
-        if not rows:
-            continue
-        width = min(max((len(r) for r in rows), default=0), 500)
-        rows = [(r + [None] * width)[:width] for r in rows]
-        scan_limit = min(15, len(rows))
-
-        outlet_category_rows = _parse_incentive_outlet_category_rows(
-            rows, _incentive_month_from_filename(filename)
-        )
-        if outlet_category_rows is not None:
-            result.extend(outlet_category_rows)
-            continue
-
-        # Long layout: Month | Outlet | Total Sales.
-        handled = False
-        for header_idx in range(scan_limit):
-            normalized = [_incentive_header(v) for v in rows[header_idx]]
-            outlet_col = next((i for i, h in enumerate(normalized) if h in INCENTIVE_OUTLET_ALIASES), None)
-            sales_col = next((i for i, h in enumerate(normalized) if h in INCENTIVE_SALES_ALIASES), None)
-            month_col = next((i for i, h in enumerate(normalized) if h in INCENTIVE_MONTH_ALIASES), None)
-            category_col = next((i for i, h in enumerate(normalized) if h == "category"), None)
-            if outlet_col is None or sales_col is None:
-                continue
-            for row in rows[header_idx + 1:]:
-                sales = _incentive_number(row[sales_col])
-                outlet = str(row[outlet_col] or "").strip()
-                if sales is None or not outlet:
-                    continue
-                month = _incentive_month(row[month_col]) if month_col is not None else ws.title
-                result.append({"month": month or ws.title, "outlet": outlet, "total_sales": sales,
-                               "category": row[category_col] if category_col is not None else None})
-            handled = True
-            break
-        if handled:
-            continue
-
-        # Grouped reference layout: manager/outlet names on one row and
-        # repeated Total Sale / Salary / Incentive columns on the next row.
-        for subheader_idx in range(1, scan_limit):
-            sales_cols = [i for i, v in enumerate(rows[subheader_idx]) if _incentive_header(v) in INCENTIVE_SALES_ALIASES]
-            if not sales_cols:
-                continue
-            month_col = next((i for i, v in enumerate(rows[subheader_idx - 1]) if _incentive_header(v) in INCENTIVE_MONTH_ALIASES), 0)
-            outlets = {}
-            for col in sales_cols:
-                name = ""
-                for lookup_col in range(col, -1, -1):
-                    candidate = str(rows[subheader_idx - 1][lookup_col] or "").strip()
-                    if candidate and _incentive_header(candidate) not in INCENTIVE_MONTH_ALIASES:
-                        name = candidate
-                        break
-                outlets[col] = name or f"Outlet {col + 1}"
-            for row in rows[subheader_idx + 1:]:
-                month = _incentive_month(row[month_col])
-                if not month:
-                    continue
-                for col, outlet in outlets.items():
-                    sales = _incentive_number(row[col])
-                    if sales is not None:
-                        result.append({"month": month, "outlet": outlet, "total_sales": sales})
-            handled = True
-            break
-        if handled:
-            continue
-
-        # Wide layout: Month | Outlet A | Outlet B | ...
-        for header_idx in range(scan_limit):
-            normalized = [_incentive_header(v) for v in rows[header_idx]]
-            month_col = next((i for i, h in enumerate(normalized) if h in INCENTIVE_MONTH_ALIASES), None)
-            if month_col is None:
-                continue
-            outlet_cols = [i for i, value in enumerate(rows[header_idx]) if i != month_col and str(value or "").strip()]
-            for row in rows[header_idx + 1:]:
-                month = _incentive_month(row[month_col])
-                if not month:
-                    continue
-                for col in outlet_cols:
-                    sales = _incentive_number(row[col])
-                    if sales is not None:
-                        result.append({"month": month, "outlet": str(rows[header_idx][col]).strip(), "total_sales": sales})
-            break
-
-    if not result:
-        raise HTTPException(status_code=400, detail="No readable sales rows found. Use Month, Outlet and Total Sales columns, or a Month row with outlet-wise sales columns.")
-    return result
-
-
-def parse_incentive_pdf(content: bytes, filename: Optional[str] = None) -> list:
-    try:
-        from pypdf import PdfReader
-        reader = PdfReader(BytesIO(content))
-        text = "\n".join(page.extract_text() or "" for page in reader.pages)
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Could not read the PDF file: {exc}")
-    if not text.strip():
-        raise HTTPException(status_code=400, detail="The PDF has no selectable text. Export it from Excel instead of uploading a scanned image PDF.")
-
-    month = _incentive_month_from_filename(filename)
-    lines = [re.sub(r"\s+", " ", line).strip() for line in text.splitlines() if line.strip()]
-    category_pattern = r"(?:MOB|COM|DC|HA|HE|ACC(?:\s+COM|\s+UNB)?)"
-    ignored = {"outlets", "category", "sale", "base table total monthly sale"}
-    parsed, current_outlet = [], None
-    for index, line in enumerate(lines):
-        # Some PDF exporters keep all three table cells on one text line.
-        category_row = re.match(rf"^(.+?)\s+({category_pattern})\s+([₹,0-9.() -]+)$", line, re.IGNORECASE)
-        if category_row:
-            sale = _incentive_number(category_row.group(3))
-            if sale is not None:
-                parsed.append({"month": month, "outlet": category_row.group(1).strip(), "category": category_row.group(2).upper(), "total_sales": sale})
-            continue
-        combined = re.match(rf"^(.+?)\s+TOTAL\s+([₹,0-9.() -]+)$", line, re.IGNORECASE)
-        if combined:
-            continue
-        total = re.match(r"^TOTAL\s+([₹,0-9.() -]+)$", line, re.IGNORECASE)
-        if total and current_outlet:
-            current_outlet = None
-            continue
-        category_only = re.match(rf"^({category_pattern})\s+([₹,0-9.() -]+)$", line, re.IGNORECASE)
-        if category_only and current_outlet:
-            sale = _incentive_number(category_only.group(2))
-            if sale is not None:
-                parsed.append({"month": month, "outlet": current_outlet, "category": category_only.group(1).upper(), "total_sales": sale})
-            continue
-        normalized = _incentive_header(line)
-        next_line = lines[index + 1] if index + 1 < len(lines) else ""
-        if normalized not in ignored and not re.match(rf"^(?:{category_pattern}|TOTAL)\b", line, re.IGNORECASE) and re.match(rf"^{category_pattern}\b", next_line, re.IGNORECASE):
-            current_outlet = line
-    if not parsed:
-        raise HTTPException(status_code=400, detail="No readable outlet/category sales rows found in the PDF. Use an exported text PDF with Outlets, Category and Sale columns.")
-    return parsed
-
-
-def parse_incentive_upload(content: bytes, filename: Optional[str]) -> list:
-    extension = (filename or "").lower().rsplit(".", 1)[-1]
-    if extension == "pdf":
-        return parse_incentive_pdf(content, filename)
-    if extension in {"xlsx", "xlsm"}:
-        return parse_incentive_workbook(content, filename)
-    raise HTTPException(status_code=400, detail="Upload an Excel (.xlsx/.xlsm) or PDF (.pdf) file.")
-
-
-def calculate_incentive_rows(rows: list, profit_rate: float, incentive_rate: float) -> list:
-    calculated = []
-    for row in rows:
-        sales = round(float(row["total_sales"]), 2)
-        avg_profit = round(sales * profit_rate / 100.0, 2)
-        incentive = round(avg_profit * incentive_rate / 100.0, 2)
-        calculated.append({**row, "outlet": _incentive_outlet_short_name(row["outlet"]), "total_sales": sales, "avg_profit": avg_profit, "total_incentive": incentive})
-    return calculated
-
-
-def _incentive_outlet_short_name(value: Optional[str]) -> str:
-    original = str(value or "").strip()
-    normalized = _incentive_header(original).replace(" ", "")
-    return {
-        "alambagh": "ALM", "alm": "ALM",
-        "ashiyana": "ASH", "ash": "ASH",
-        "gomtinagar": "GNG", "gng": "GNG",
-        "hazratganj": "HZT", "hzt": "HZT", "htz": "HZT",
-        "vikasnagar": "VKN", "vkn": "VKN",
-    }.get(normalized, original)
-
-
-def _incentive_report_category(value: Optional[str]) -> str:
-    normalized = _incentive_header(value).upper()
-    return normalized if normalized in {"HA", "HE", "MOB", "COM", "DC"} else "ACC"
-
-
-def _incentive_outlet_groups(outlet: str) -> list:
-    normalized = _incentive_header(outlet).replace(" ", "")
-    if normalized in {"alambagh", "alm"}:
-        return [("HA + HE", ("HA", "HE")), ("MOB + DC + ACC", ("MOB", "DC", "ACC")), ("COM", ("COM",))]
-    if normalized in {"hazratganj", "hzt"}:
-        return [("HA + HE", ("HA", "HE")), ("MOB + COM + DC + ACC", ("MOB", "COM", "DC", "ACC"))]
-    if normalized in {"gomtinagar", "gng", "ashiyana", "ash", "vikasnagar", "vkn"}:
-        return [("ALL", ("HA", "HE", "MOB", "COM", "DC", "ACC"))]
-    return [("ALL", ("HA", "HE", "MOB", "COM", "DC", "ACC"))]
-
-
-EXACT_INCENTIVE_RATES = {
-    ("ALM", "HA + HE"): 85,
-    ("ALM", "MOB + DC + ACC"): 13,
-    ("ALM", "COM"): 78,
-    ("ASH", "ALL"): 100,
-    ("GNG", "ALL"): 52,
-    ("HZT", "HA + HE"): 65,
-    ("HZT", "MOB + COM + DC + ACC"): 60,
-    ("VKN", "ALL"): 55,
-}
-
-
-IDS_FUND_SHARES = {"MOB": 30, "COM": 20, "DC": 25, "HA": 20, "HE": 25, "ACC COM": 25, "ACC": 25}
-
-
-def ids_fund_amounts(total_sales, incentive_rate, fund_rate) -> dict:
-    sales = Decimal(str(total_sales)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    incentive = (sales * Decimal(str(incentive_rate)) / 100).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    fund = (incentive * Decimal(str(fund_rate)) / 100).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    return {"total_sales": float(sales), "total_incentive": float(incentive), "ids_fund": float(fund)}
-
-
-NON_SALES_ALLOCATIONS = (
-    ("ALM", "Alambagh", (35, None, 12, 15, 15)),
-    ("ASH", "Ashiyana", (35, None, 10, 15, 10)),
-    ("HZT", "Hazratganj", (35, None, 12, 15, 12)),
-    ("GNG", "Gomti Nagar", (35, None, 10, 15, 10)),
-    ("VKN", "Vikas Nagar", (35, None, 10, 15, 10)),
-)
-
-
-def build_non_sales_report(summary):
-    funds = {_incentive_outlet_short_name(r["outlet"]): r["ids_fund"] for r in summary}
-    rows = []
-    for code, location, rates in NON_SALES_ALLOCATIONS:
-        fund = funds.get(code)
-        values = [None if rate is None or fund is None else float(
-            (Decimal(str(fund)) * rate / 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
-            for rate in rates]
-        rows.append(dict(outlet=code, location=location, ids_fund=fund, rates=rates, values=values))
-    base = None if any(r["ids_fund"] is None for r in rows) else sum(
-        (Decimal(str(r["ids_fund"])) for r in rows), Decimal(0))
-    warehouse = None if base is None else float((base * Decimal("0.16")).quantize(
-        Decimal("0.01"), rounding=ROUND_HALF_UP))
-    totals = [None if any(r["values"][i] is None for r in rows) else float(sum(
-        (Decimal(str(r["values"][i])) for r in rows), Decimal(0))) for i in range(5)]
-    totals[1] = warehouse
-    rows.append(dict(outlet="MWH", location="MWH", ids_fund=None if base is None else float(base),
-                     rates=[None, 16, None, None, None], values=[None, warehouse, None, None, None]))
-    return dict(rows=rows, totals=totals)
-
-
-def build_ids_fund_report(rows) -> dict:
-    # Read original categories: the older incentive matrix combines ACC COM into ACC.
-    grouped = defaultdict(lambda: Decimal(0))
-    for row in rows:
-        outlet = _incentive_outlet_short_name(row["outlet"])
-        category = _incentive_header(row.get("category")).upper() or "UNSPECIFIED"
-        grouped[(outlet, category)] += Decimal(str(row["total_sales"]))
-    detail = []
-    for (outlet, category), sales in sorted(grouped.items()):
-        rates = {"MOB": .125, "COM": .250, "HA": .250, "HE": .250, "DC": .250,
-                 "ACC": .500 if outlet == "HZT" else 1,
-                 "ACC COM": .250 if outlet == "HZT" else 1}
-        rate = rates.get(category) if outlet in {"ALM", "ASH", "GNG", "VKN", "HZT"} else None
-        fund_rate = IDS_FUND_SHARES.get(category)
-        amounts = ids_fund_amounts(sales, rate, fund_rate) if rate is not None and fund_rate is not None else {
-            "total_sales": float(sales.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)),
-            "total_incentive": None, "ids_fund": None}
-        detail.append({"outlet": outlet, "category": category, "incentive_rate": rate, "fund_rate": fund_rate, **amounts})
-
-    def totals(items):
-        result = {field: None if any(r[field] is None for r in items) else float(sum(
-            (Decimal(str(r[field])) for r in items), Decimal(0)))
-            for field in ("total_sales", "total_incentive", "ids_fund")}
-        return result
-
-    report = {"version": 3, "fund_rates": IDS_FUND_SHARES, "rows": detail,
-            "summary": [{"outlet": outlet, **totals([r for r in detail if r["outlet"] == outlet])}
-                        for outlet in sorted({r["outlet"] for r in detail})],
-            "totals": totals(detail), "pending_rows": sum(r["incentive_rate"] is None for r in detail)}
-    report["non_sales_report"] = build_non_sales_report(report["summary"])
-    return report
-
-
-def exact_incentive_summary(grouped_summary: list) -> list:
-    results = []
-    for row in grouped_summary:
-        rate = EXACT_INCENTIVE_RATES.get((_incentive_outlet_short_name(row["outlet"]), row["group"]))
-        amount = None if rate is None else float(
-            (Decimal(str(row["total_incentive"])) * Decimal(rate) / Decimal(100))
-            .quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        )
-        results.append({**row, "applied_rate": rate, "exact_incentive": amount})
-    return results
-
-
-@app.post("/api/incentive/calculate")
-def calculate_incentive_report(
-    file: UploadFile = File(...),
-    profit_rate: float = Form(7.0),
-    incentive_rate: float = Form(2.5),
-    current_user: models.User = Depends(auth.require_roles("Admin", "Owner", "Accounts", "MISExecutive", "HR")),
-):
-    if not (0 <= profit_rate <= 100 and 0 <= incentive_rate <= 100):
-        raise HTTPException(status_code=400, detail="Both rates must be between 0 and 100.")
-    content = file.file.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
-    rows = calculate_incentive_rows(parse_incentive_upload(content, file.filename), profit_rate, incentive_rate)
-    by_outlet = defaultdict(lambda: {"total_sales": 0.0, "avg_profit": 0.0, "total_incentive": 0.0})
-    by_outlet_category = defaultdict(lambda: {category: {"total_sales": 0.0, "avg_profit": 0.0, "total_incentive": 0.0} for category in ("HA", "HE", "MOB", "COM", "DC", "ACC")})
-    for row in rows:
-        for field in ("total_sales", "avg_profit", "total_incentive"):
-            by_outlet[row["outlet"]][field] += row[field]
-        category = _incentive_report_category(row.get("category"))
-        by_outlet_category[row["outlet"]][category]["total_sales"] += row["total_sales"]
-        by_outlet_category[row["outlet"]][category]["avg_profit"] += row["avg_profit"]
-        by_outlet_category[row["outlet"]][category]["total_incentive"] += row["total_incentive"]
-    # Preserve the original outlet report's calculation order: calculate
-    # profit from the outlet total, then incentive from that profit. This
-    # avoids category-level rounding changing the existing report by cents.
-    for totals in by_outlet.values():
-        totals["avg_profit"] = round(totals["total_sales"] * profit_rate / 100.0, 2)
-        totals["total_incentive"] = round(totals["avg_profit"] * incentive_rate / 100.0, 2)
-    grand_sales = round(sum(totals["total_sales"] for totals in by_outlet.values()), 2)
-    grand_profit = round(grand_sales * profit_rate / 100.0, 2)
-    grand_incentive = round(grand_profit * incentive_rate / 100.0, 2)
-    grouped_summary = []
-    for outlet, categories in sorted(by_outlet_category.items()):
-        for label, category_names in _incentive_outlet_groups(outlet):
-            grouped_summary.append({
-                "outlet": outlet,
-                "group": label,
-                "total_sales": round(sum(categories[name]["total_sales"] for name in category_names), 2),
-                "avg_profit": round(sum(categories[name]["avg_profit"] for name in category_names), 2),
-                "total_incentive": round(sum(categories[name]["total_incentive"] for name in category_names), 2),
-            })
-    return {
-        "rows": rows,
-        "summary": [{"outlet": outlet, **{k: round(v, 2) for k, v in totals.items()}} for outlet, totals in sorted(by_outlet.items())],
-        "category_summary": [{
-            "outlet": outlet,
-            "categories": {category: {field: round(value, 2) for field, value in values.items()} for category, values in categories.items()},
-            "total": {
-                "avg_profit": by_outlet[outlet]["avg_profit"],
-                "total_incentive": by_outlet[outlet]["total_incentive"],
-            },
-        } for outlet, categories in sorted(by_outlet_category.items())],
-        "grouped_summary": grouped_summary,
-        "exact_summary": exact_incentive_summary(grouped_summary),
-        "ids_fund_report": build_ids_fund_report(rows),
-        "totals": {"total_sales": grand_sales, "avg_profit": grand_profit, "total_incentive": grand_incentive},
-        "profit_rate": profit_rate,
-        "incentive_rate": incentive_rate,
-    }
-
-
-@app.post("/api/incentive/exact-export")
-def export_exact_incentive_report(
-    file: UploadFile = File(...),
-    profit_rate: float = Form(7.0),
-    incentive_rate: float = Form(2.5),
-    format: str = Query("xlsx"),
-    current_user: models.User = Depends(auth.require_roles("Admin", "Owner", "Accounts", "MISExecutive", "HR")),
-):
-    return export_selected_incentives(file, profit_rate, incentive_rate, "sales", format, current_user)
-
-
-@app.post("/api/incentive/selected-export")
-def export_selected_incentives(
-    file: UploadFile = File(...),
-    profit_rate: float = Form(7.0),
-    incentive_rate: float = Form(2.5),
-    selection: str = Query("both"),
-    format: str = Query("xlsx"),
-    current_user: models.User = Depends(auth.require_roles("Admin", "Owner", "Accounts", "MISExecutive", "HR")),
-):
-    if selection not in {"sales", "non-sales", "both"} or format not in {"xlsx", "pdf"}:
-        raise HTTPException(status_code=400, detail="Choose sales, non-sales or both and Excel or PDF.")
-    report = calculate_incentive_report(file, profit_rate, incentive_rate, current_user)
-    tables = []
-    if selection in {"sales", "both"}:
-        rows = report["exact_summary"]
-        tables.append(("Sales Incentive", "Sales Incentive",
-                       ["Outlet", "Category Group", "Exact Incentive"],
-                       [[r["outlet"], r["group"], r["exact_incentive"]] for r in rows]))
-    if selection in {"non-sales", "both"}:
-        staff = report["ids_fund_report"]["non_sales_report"]
-        values = [[r["location"], "" if r["outlet"] == "MWH" else r["ids_fund"],
-                   *["-" if rate is None else value for rate, value in zip(r["rates"], r["values"])]]
-                  for r in staff["rows"]]
-        values.append(["Central Service", "", *staff["totals"]])
-        tables.append(("Non-sales Incentive", "Non-sales Incentive",
-                       ["Location", "IDS Fund", "Accounts", "Ware House", "Customer Care", "Support", "HO"], values))
-    output = BytesIO()
-    if format == "xlsx":
-        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-        from openpyxl.utils import get_column_letter
-        grid_line = Side(style="thin", color="B8C4D3")
-        book = Workbook()
-        book.remove(book.active)
-        for name, title, headers, rows in tables:
-            sheet = book.create_sheet(name)
-            sheet.append([title])
-            sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(headers))
-            sheet.append(headers)
-            for row in rows:
-                sheet.append(["Pending" if value is None else value for value in row])
-            for cells in sheet.iter_rows():
-                for cell in cells:
-                    numeric_column = cell.column >= (2 if name == "Non-sales Incentive" else 3)
-                    cell.alignment = Alignment(horizontal="right" if cell.row > 1 and numeric_column else "left",
-                                               vertical="center", wrap_text=True)
-                    if cell.row <= 2:
-                        cell.font = Font(bold=True, color="FFFFFF")
-                        cell.fill = PatternFill("solid", fgColor="17365D")
-                    if isinstance(cell.value, (float, int)):
-                        cell.number_format = '#,##0.00'
-                    if cell.row >= 2:
-                        cell.border = Border(left=grid_line, right=grid_line, top=grid_line, bottom=grid_line)
-                        if cell.row > 2 and cell.row % 2 == 0:
-                            cell.fill = PatternFill("solid", fgColor="F2F6FC")
-            for cells in sheet.iter_cols():
-                sheet.column_dimensions[cells[1].column_letter].width = 25
-            sheet.row_dimensions[1].height = 30
-            sheet['A1'].font = Font(bold=True, color="FFFFFF", size=16)
-            for row_number in range(2, sheet.max_row + 1):
-                sheet.row_dimensions[row_number].height = 24
-            # Keep Central Service outside the filter so it is never sorted among outlets.
-            filter_end = sheet.max_row - (1 if name == "Non-sales Incentive" else 0)
-            sheet.auto_filter.ref = f"A2:{get_column_letter(len(headers))}{filter_end}"
-            if name == "Non-sales Incentive":
-                for cell in sheet[sheet.max_row]:
-                    cell.font = Font(bold=True, color="17365D")
-                    cell.fill = PatternFill("solid", fgColor="D9EAF7")
-            sheet.freeze_panes = "C3"
-            sheet.sheet_view.showGridLines = False
-        book.save(output)
-        media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    else:
-        from reportlab.lib import colors
-        from reportlab.lib.pagesizes import A4, landscape
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
-        from xml.sax.saxutils import escape
-        styles = getSampleStyleSheet()
-        document = SimpleDocTemplate(output, pagesize=landscape(A4), leftMargin=25, rightMargin=25)
-        story = []
-        for name, title, headers, rows in tables:
-            if story:
-                story.append(PageBreak())
-            story.extend([Paragraph(escape(title), styles["Heading1"]), Spacer(1, 12)])
-            def display(value):
-                return "Pending" if value is None else f"{value:,.2f}" if isinstance(value, (int, float)) else str(value)
-            right_style = ParagraphStyle("Amount", parent=styles["BodyText"], alignment=2)
-            numeric_start = 1 if name == "Non-sales Incentive" else 2
-            data = [[Paragraph(escape(display(value)), right_style if i >= numeric_start else styles["BodyText"])
-                     for i, value in enumerate(row)] for row in [headers, *rows]]
-            table = Table(data, colWidths=[document.width / len(headers)] * len(headers), repeatRows=1)
-            table.setStyle(TableStyle([
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#D9EAF7")),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("TOPPADDING", (0, 0), (-1, -1), 8),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-                ("LINEBELOW", (0, 0), (-1, -1), .4, colors.lightgrey),
-            ]))
-            story.append(table)
-        document.build(story)
-        media_type = "application/pdf"
-    filename = f"Incentive_{selection}_{india_today().isoformat()}.{format}"
-    return Response(output.getvalue(), media_type=media_type, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
-
-
-@app.post("/api/incentive/export")
-def export_incentive_report(
-    file: UploadFile = File(...),
-    profit_rate: float = Form(7.0),
-    incentive_rate: float = Form(2.5),
-    current_user: models.User = Depends(auth.require_roles("Admin", "Owner", "Accounts", "MISExecutive", "HR")),
-):
-    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-    from openpyxl.utils import get_column_letter
-
-    if not (0 <= profit_rate <= 100 and 0 <= incentive_rate <= 100):
-        raise HTTPException(status_code=400, detail="Both rates must be between 0 and 100.")
-    content = file.file.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
-    parsed_rows = parse_incentive_upload(content, file.filename)
-    source_totals = defaultdict(float)
-    for row in parsed_rows:
-        source_totals[(row["month"], _incentive_outlet_short_name(row["outlet"]))] += float(row["total_sales"])
-    # Keep the existing downloadable outlet report unchanged even though the
-    # parser now retains category detail for the additional on-screen matrix.
-    source_rows = [
-        {"month": month, "outlet": outlet, "total_sales": round(total, 2)}
-        for (month, outlet), total in sorted(source_totals.items())
-    ]
-    book = Workbook()
-    sheet = book.active
-    sheet.title = "Incentive Report"
-    sheet.merge_cells("A1:E1")
-    sheet["A1"] = "OUTLET-WISE MONTHLY SALES & INCENTIVE REPORT"
-    sheet["A2"], sheet["B2"] = "AVG Profit Rate", profit_rate / 100
-    sheet["D2"], sheet["E2"] = "Incentive Rate", incentive_rate / 100
-    sheet["B2"].number_format = sheet["E2"].number_format = "0.00%"
-    headers = ["Month", "Outlet", "Total Sales", "AVG Profit", "Total Incentive"]
-    for col, header in enumerate(headers, 1):
-        sheet.cell(4, col, header)
-    for row_no, row in enumerate(source_rows, 5):
-        sheet.cell(row_no, 1, row["month"])
-        sheet.cell(row_no, 2, row["outlet"])
-        sheet.cell(row_no, 3, round(float(row["total_sales"]), 2))
-        sheet.cell(row_no, 4, f"=C{row_no}*$B$2")
-        sheet.cell(row_no, 5, f"=D{row_no}*$E$2")
-    end_row = 4 + len(source_rows)
-    total_row = end_row + 1
-    sheet.cell(total_row, 2, "GRAND TOTAL")
-    for col in range(3, 6):
-        letter = get_column_letter(col)
-        sheet.cell(total_row, col, f"=SUM({letter}5:{letter}{end_row})")
-    navy, blue, pale, white = "17365D", "4472C4", "D9EAF7", "FFFFFF"
-    sheet["A1"].fill = PatternFill("solid", fgColor=navy)
-    sheet["A1"].font = Font(color=white, bold=True, size=15)
-    sheet["A1"].alignment = Alignment(horizontal="center")
-    for cell in sheet[4]:
-        cell.fill = PatternFill("solid", fgColor=blue)
-        cell.font = Font(color=white, bold=True)
-        cell.alignment = Alignment(horizontal="left" if cell.column <= 2 else "right", vertical="center")
-    for cell in sheet[total_row]:
-        cell.fill = PatternFill("solid", fgColor=pale); cell.font = Font(bold=True)
-    thin = Side(style="thin", color="B8C2CC")
-    for row in sheet.iter_rows(min_row=4, max_row=total_row, min_col=1, max_col=5):
-        for cell in row:
-            cell.border = Border(bottom=thin)
-    for col in range(3, 6):
-        for row_no in range(5, total_row + 1):
-            sheet.cell(row_no, col).number_format = '#,##0.00'
-            sheet.cell(row_no, col).alignment = Alignment(horizontal="right", vertical="center")
-    for row_no in range(5, total_row + 1):
-        for col in range(1, 3):
-            sheet.cell(row_no, col).alignment = Alignment(horizontal="left", vertical="center")
-    for col, width in enumerate((15, 28, 18, 18, 20), 1):
-        sheet.column_dimensions[get_column_letter(col)].width = width
-    sheet.freeze_panes = "A5"
-    sheet.auto_filter.ref = f"A4:E{end_row}"
-    sheet.sheet_view.showGridLines = False
-    sheet.row_dimensions[1].height = 26
-    sheet.page_setup.orientation = "landscape"
-    sheet.page_setup.fitToWidth = 1
-
-    calculated_detail = calculate_incentive_rows(parsed_rows, profit_rate, incentive_rate)
-    export_categories = ("HA", "HE", "MOB", "COM", "DC", "ACC")
-    category_totals = defaultdict(lambda: {category: {"avg_profit": 0.0, "total_incentive": 0.0, "total_sales": 0.0} for category in export_categories})
-    for row in calculated_detail:
-        category = _incentive_report_category(row.get("category"))
-        for field in ("total_sales", "avg_profit", "total_incentive"):
-            category_totals[row["outlet"]][category][field] += row[field]
-
-    category_sheet = book.create_sheet("Category-wise Report")
-    category_sheet.merge_cells("A1:I1")
-    category_sheet["A1"] = "CATEGORY-WISE AVG PROFIT & INCENTIVE"
-    category_sheet["A1"].fill = PatternFill("solid", fgColor=navy)
-    category_sheet["A1"].font = Font(color=white, bold=True, size=14)
-    category_sheet["A1"].alignment = Alignment(horizontal="center")
-    category_sheet.append([])
-    category_sheet.append(["Outlet", "Metric", *export_categories, "TOTAL"])
-    for cell in category_sheet[3]:
-        cell.fill = PatternFill("solid", fgColor=blue)
-        cell.font = Font(color=white, bold=True)
-        cell.alignment = Alignment(horizontal="left" if cell.column <= 2 else "right", vertical="center")
-    row_no = 4
-    for outlet, categories in sorted(category_totals.items()):
-        for metric_label, field in (("AVG Profit", "avg_profit"), ("Total Incentive", "total_incentive")):
-            category_sheet.cell(row_no, 1, outlet)
-            category_sheet.cell(row_no, 2, metric_label)
-            for col_no, category in enumerate(export_categories, 3):
-                category_sheet.cell(row_no, col_no, round(categories[category][field], 2))
-            category_sheet.cell(row_no, 9, f"=SUM(C{row_no}:H{row_no})")
-            for cell in category_sheet[row_no][:9]:
-                cell.border = Border(bottom=thin)
-                cell.alignment = Alignment(horizontal="left" if cell.column <= 2 else "right", vertical="center")
-                if cell.column >= 3: cell.number_format = '#,##0.00'
-            row_no += 1
-    category_sheet.freeze_panes = "C4"
-    category_sheet.sheet_view.showGridLines = False
-    category_sheet.column_dimensions["A"].width = 14
-    category_sheet.column_dimensions["B"].width = 20
-    for letter in "CDEFGHI": category_sheet.column_dimensions[letter].width = 17
-
-    group_sheet = book.create_sheet("Group-wise Report")
-    group_sheet.merge_cells("A1:E1")
-    group_sheet["A1"] = "OUTLET GROUP-WISE SALES, AVG PROFIT & INCENTIVE"
-    group_sheet["A1"].fill = PatternFill("solid", fgColor=navy)
-    group_sheet["A1"].font = Font(color=white, bold=True, size=14)
-    group_sheet["A1"].alignment = Alignment(horizontal="center")
-    group_sheet.append([])
-    group_sheet.append(["Outlet", "Category Group", "Total Sales", "AVG Profit", "Total Incentive"])
-    for cell in group_sheet[3]:
-        cell.fill = PatternFill("solid", fgColor=blue)
-        cell.font = Font(color=white, bold=True)
-        cell.alignment = Alignment(horizontal="left" if cell.column <= 2 else "right", vertical="center")
-    row_no = 4
-    for outlet, categories in sorted(category_totals.items()):
-        for label, category_names in _incentive_outlet_groups(outlet):
-            group_sheet.cell(row_no, 1, outlet)
-            group_sheet.cell(row_no, 2, label)
-            for col_no, field in ((3, "total_sales"), (4, "avg_profit"), (5, "total_incentive")):
-                group_sheet.cell(row_no, col_no, round(sum(categories[name][field] for name in category_names), 2))
-                group_sheet.cell(row_no, col_no).number_format = '#,##0.00'
-            for cell in group_sheet[row_no][:5]:
-                cell.border = Border(bottom=thin)
-                cell.alignment = Alignment(horizontal="left" if cell.column <= 2 else "right", vertical="center")
-            row_no += 1
-    group_sheet.freeze_panes = "A4"
-    group_sheet.sheet_view.showGridLines = False
-    group_sheet.column_dimensions["A"].width = 14
-    group_sheet.column_dimensions["B"].width = 30
-    for letter in "CDE": group_sheet.column_dimensions[letter].width = 20
-
-    exact_sheet = book.create_sheet("Exact Incentive Report")
-    exact_sheet.merge_cells("A1:E1")
-    exact_sheet["A1"] = "EXACT INCENTIVE BY OUTLET & CATEGORY GROUP"
-    exact_sheet["A1"].fill = PatternFill("solid", fgColor=navy)
-    exact_sheet["A1"].font = Font(color=white, bold=True, size=14)
-    exact_sheet["A1"].alignment = Alignment(horizontal="center")
-    exact_sheet.merge_cells("A2:E2")
-    exact_sheet["A2"] = "Exact incentive = group total incentive × applied rate. ASH rate is 100%."
-    exact_sheet.append(["Outlet", "Category Group", "Total Incentive", "Applied Rate", "Exact Incentive"])
-    for cell in exact_sheet[3]:
-        cell.fill = PatternFill("solid", fgColor=blue)
-        cell.font = Font(color=white, bold=True)
-    for exact_row in range(4, row_no):
-        outlet = group_sheet.cell(exact_row, 1).value
-        label = group_sheet.cell(exact_row, 2).value
-        rate = EXACT_INCENTIVE_RATES.get((outlet, label))
-        exact_sheet.cell(exact_row, 1, outlet)
-        exact_sheet.cell(exact_row, 2, label)
-        exact_sheet.cell(exact_row, 3, f"='Group-wise Report'!E{exact_row}")
-        exact_sheet.cell(exact_row, 4, "Pending" if rate is None else rate / 100)
-        exact_sheet.cell(exact_row, 5, f'=IF(ISNUMBER(D{exact_row}),ROUND(C{exact_row}*D{exact_row},2),"Pending")')
-        exact_sheet.cell(exact_row, 4).number_format = '0%'
-        for col in (3, 5):
-            exact_sheet.cell(exact_row, col).number_format = '#,##0.00'
-        for cell in exact_sheet[exact_row]:
-            cell.border = Border(bottom=thin)
-            cell.alignment = Alignment(horizontal="left" if cell.column <= 2 else "right")
-    exact_sheet.freeze_panes = "C4"
-    exact_sheet.sheet_view.showGridLines = False
-    for letter, width in zip("ABCDE", (14, 32, 22, 18, 22)):
-        exact_sheet.column_dimensions[letter].width = width
-
-    fund_report = build_ids_fund_report(calculated_detail)
-    fund_sheet = book.create_sheet("IDS Fund")
-    fund_sheet.append(["IDS FUND BY OUTLET AND CATEGORY"])
-    fund_sheet.merge_cells("A1:G1")
-    fund_sheet.append(["IDS Fund shares: MOB 30%; COM / HA 20%; DC / HE / ACC COM / ACC 25%."])
-    fund_sheet["B2"].number_format = "0%"
-    fund_sheet.append(["Outlet and grand totals sum rounded category IDS Fund amounts. Missing rates remain Pending."])
-    fund_sheet.merge_cells("A3:G3")
-    fund_sheet.append(["Outlet", "Category", "Total Sales", "Incentive Rate", "Total Incentive", "IDS Fund Share", "IDS Fund"])
-    for fund_row, record in enumerate(fund_report["rows"], 5):
-        for col, value in enumerate([record["outlet"], record["category"], record["total_sales"],
-                                     "Pending" if record["incentive_rate"] is None else record["incentive_rate"] / 100], 1):
-            fund_sheet.cell(fund_row, col, value)
-        fund_sheet.cell(fund_row, 4).number_format = "0.000%"
-        fund_sheet.cell(fund_row, 5, f'=IF(ISNUMBER(D{fund_row}),ROUND(C{fund_row}*D{fund_row},2),"Pending")')
-        fund_sheet.cell(fund_row, 6, "Pending" if record["fund_rate"] is None else record["fund_rate"] / 100)
-        fund_sheet.cell(fund_row, 6).number_format = "0%"
-        fund_sheet.cell(fund_row, 7, f'=IF(AND(ISNUMBER(E{fund_row}),ISNUMBER(F{fund_row})),ROUND(E{fund_row}*F{fund_row},2),"Pending")')
-    fund_total_row = 5 + len(fund_report["rows"])
-    fund_sheet.cell(fund_total_row, 1, "GRAND TOTAL")
-    fund_sheet.cell(fund_total_row, 3, f"=SUM(C5:C{fund_total_row-1})")
-    for col in (5, 7):
-        letter = get_column_letter(col)
-        fund_sheet.cell(fund_total_row, col, f'=IF(COUNT({letter}5:{letter}{fund_total_row-1})=ROWS({letter}5:{letter}{fund_total_row-1}),SUM({letter}5:{letter}{fund_total_row-1}),"Pending")')
-    for row in fund_sheet.iter_rows(min_row=4, max_row=fund_total_row):
-        for cell in row:
-            cell.border = Border(bottom=thin)
-            cell.alignment = Alignment(horizontal="left" if cell.column <= 2 else "right")
-            if cell.row > 4 and cell.column in (3, 5, 7):
-                cell.number_format = '#,##0.00'
-            if cell.row == 4:
-                cell.fill = PatternFill("solid", fgColor=navy)
-                cell.font = Font(color=white, bold=True)
-            elif cell.row == fund_total_row:
-                cell.fill = PatternFill("solid", fgColor=pale)
-                cell.font = Font(bold=True)
-    fund_sheet["A1"].font = Font(size=15, bold=True)
-    fund_sheet.freeze_panes = "C5"
-    fund_sheet.sheet_view.showGridLines = False
-    for letter, width in zip("ABCDEFG", (20, 22, 22, 20, 22, 20, 22)):
-        fund_sheet.column_dimensions[letter].width = width
-
-    outlet_fund = book.create_sheet("IDS Fund Outlet Summary")
-    outlet_fund.append(["TOTAL IDS FUND BY OUTLET"])
-    outlet_fund.merge_cells("A1:B1")
-    outlet_fund.append(["Outlet", "Total IDS Fund"])
-    for summary_row, record in enumerate(fund_report["summary"], 3):
-        outlet_fund.cell(summary_row, 1, record["outlet"])
-        refs = [f"'IDS Fund'!G{i}" for i, detail in enumerate(fund_report["rows"], 5) if detail["outlet"] == record["outlet"]]
-        arguments = ",".join(refs)
-        outlet_fund.cell(summary_row, 2, f'=IF(COUNT({arguments})={len(refs)},SUM({arguments}),"Pending")')
-    summary_total = 3 + len(fund_report["summary"])
-    outlet_fund.cell(summary_total, 1, "GRAND TOTAL")
-    outlet_fund.cell(summary_total, 2, f'=IF(COUNT(B3:B{summary_total-1})=ROWS(B3:B{summary_total-1}),SUM(B3:B{summary_total-1}),"Pending")')
-    outlet_fund.column_dimensions["A"].width = 28
-    outlet_fund.column_dimensions["B"].width = 24
-    outlet_fund.freeze_panes = "B3"
-    outlet_fund.sheet_view.showGridLines = False
-    outlet_fund["A1"].font = Font(size=15, bold=True)
-    for cells in outlet_fund.iter_rows(min_row=2, max_row=summary_total):
-        for cell in cells:
-            cell.alignment = Alignment(horizontal="left" if cell.column == 1 else "right")
-            cell.border = Border(bottom=thin)
-            if cell.column == 2 and cell.row > 2:
-                cell.number_format = '#,##0.00'
-            if cell.row == 2:
-                cell.fill = PatternFill("solid", fgColor=navy)
-                cell.font = Font(color=white, bold=True)
-            elif cell.row == summary_total:
-                cell.fill = PatternFill("solid", fgColor=pale)
-                cell.font = Font(bold=True)
-
-    staff = book.create_sheet("Non-sales Staff Incentive")
-    headers = ["Location", "IDS Fund", "Accounts", "Ware House", "Customer Care", "Support", "HO"]
-    staff.append(headers)
-    source_rows = {r["outlet"]: i for i, r in enumerate(fund_report["summary"], 3)}
-    for index, (code, location, rates) in enumerate(NON_SALES_ALLOCATIONS, 2):
-        source = source_rows.get(code)
-        staff.append([location, f"='IDS Fund Outlet Summary'!B{source}" if source else "Pending",
-                      *[None if rate is None else rate / 100 for rate in rates]])
-    staff.append(["MWH", '=IF(COUNT(B2:B6)=5,SUM(B2:B6),"Pending")', None, .16])
-    staff.append([])
-    staff.append(["Non-sales staff Incentive Value"])
-    staff.merge_cells("A9:G9")
-    staff.append(headers)
-    for source in range(2, 8):
-        target = source + 9
-        staff.cell(target, 1, f'=A{source}')
-        if source != 7:
-            staff.cell(target, 2, f'=B{source}')
-        for col, letter in enumerate("CDEFG", 3):
-            if staff.cell(source, col).value is not None:
-                precision = 2 if source == 7 else 0
-                staff.cell(target, col, f'=IF(ISNUMBER(B{source}),ROUND(B{source}*{letter}{source},{precision}),"Pending")')
-    staff.cell(17, 1, "Outlet total")
-    staff.cell(18, 1, "Central Service")
-    for col, letter in enumerate("CDEFG", 3):
-        if letter != "D":
-            staff.cell(17, col, f'=IF(COUNT({letter}11:{letter}15)=5,SUM({letter}11:{letter}15),"Pending")')
-        staff.cell(18, col, f'={letter}{16 if letter == "D" else 17}')
-    staff.freeze_panes = "C2"
-    staff.sheet_view.showGridLines = False
-    for letter, width in zip("ABCDEFG", (24, 22, 20, 20, 22, 20, 20)):
-        staff.column_dimensions[letter].width = width
-    for cells in staff.iter_rows():
-        for cell in cells:
-            cell.alignment = Alignment(horizontal="left" if cell.column == 1 else "right")
-            cell.border = Border(bottom=thin)
-            if cell.column > 1:
-                cell.number_format = '0%' if 2 <= cell.row <= 7 and cell.column > 2 else '#,##0.00;[Red](#,##0.00);"-"'
-            if cell.row in (1, 10):
-                cell.fill = PatternFill("solid", fgColor=navy)
-                cell.font = Font(color=white, bold=True)
-            elif cell.row in (9, 17, 18):
-                cell.fill = PatternFill("solid", fgColor=pale)
-                cell.font = Font(bold=True, color="FF0000" if cell.row == 18 else navy)
-    staff.sheet_properties.pageSetUpPr.fitToPage = True
-    staff.page_setup.orientation = "landscape"
-    staff.page_setup.paperSize = staff.PAPERSIZE_A4
-    staff.page_setup.fitToWidth = 1
-    staff.page_setup.fitToHeight = 1
-    staff.print_options.horizontalCentered = True
-    staff.print_area = "A1:G18"
-
-    # Use the same column edge for headings, amounts, formulas and Pending values.
-    for report_sheet, first_row, last_row, text_columns in (
-        (sheet, 4, sheet.max_row, 2),
-        (category_sheet, 3, category_sheet.max_row, 2),
-        (group_sheet, 3, group_sheet.max_row, 2),
-        (exact_sheet, 3, exact_sheet.max_row, 2),
-        (fund_sheet, 4, fund_sheet.max_row, 2),
-        (outlet_fund, 2, outlet_fund.max_row, 1),
-        (staff, 1, 7, 1),
-        (staff, 10, 18, 1),
-    ):
-        for cells in report_sheet.iter_rows(min_row=first_row, max_row=last_row):
-            for cell in cells:
-                cell.alignment = Alignment(horizontal="left" if cell.column <= text_columns else "right",
-                                           vertical="center", wrap_text=True)
-                cell.border = Border(left=thin, right=thin, top=thin, bottom=thin)
-        report_sheet.row_dimensions[first_row].height = 30
-
-    output = BytesIO()
-    book.save(output)
-    filename = f"Outlet_Incentive_Report_{india_today().isoformat()}.xlsx"
-    return Response(output.getvalue(), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f'attachment; filename="{filename}"'})
-
-
 @app.post("/api/analytics/stage/{token}/commit")
 def commit_staged_file(
     token: str,
@@ -10252,7 +8119,7 @@ def commit_staged_file(
     # only the most recently committed file.
     db.query(models.AnalyticsSalesRow).delete()
     db.query(models.AnalyticsUpload).delete()
-    db.flush()
+    db.commit()
 
     sheet_names = {r.get("source_sheet") for r in rows if r.get("source_sheet")}
     dates = [r["sale_date"] for r in rows if r.get("sale_date")]
@@ -10267,7 +8134,8 @@ def commit_staged_file(
         date_to=max(dates) if dates else None,
     )
     db.add(upload_record)
-    db.flush()
+    db.commit()
+    db.refresh(upload_record)
 
     insert_mappings = [
         {
@@ -10276,8 +8144,6 @@ def commit_staged_file(
             "item": r["item"],
             "division": r["division"],
             "brand": r.get("brand"),
-            "store": r.get("store"),
-            "vch_no": r.get("vch_no"),
             "qty": r.get("qty"),
             "sales_amt": r.get("sales_amt") or 0.0,
             "cost_amt": r.get("cost_amt") or 0.0,
@@ -10305,7 +8171,6 @@ def commit_staged_file(
 @app.post("/api/analytics/upload")
 def upload_analytics_file(
     file: UploadFile = File(...),
-    amount_basis: str = Form("exclusive"),
     current_user: models.User = Depends(auth.require_roles("Admin")),
     db: Session = Depends(get_db),
 ):
@@ -10321,18 +8186,11 @@ def upload_analytics_file(
             detail="No readable sales rows found. Ensure the file has columns for Date, Item, Sales Amt, Cost Amt and Profit/Loss (Division and Qty are optional).",
         )
 
-    try:
-        parsed_rows = build_staged_rows(analytics_calc.normalize_upload(parsed_rows, amount_basis))
-    except (ValueError, ArithmeticError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    allowed = {column.name for column in models.AnalyticsSalesRow.__table__.columns}
-    parsed_rows = [{k: v for k, v in r.items() if k in allowed} for r in parsed_rows]
-
     # Replace the previous dataset wholesale - this dashboard always reflects
     # only the most recently uploaded file.
     db.query(models.AnalyticsSalesRow).delete()
     db.query(models.AnalyticsUpload).delete()
-    db.flush()
+    db.commit()
 
     sheet_names = {r["source_sheet"] for r in parsed_rows if r["source_sheet"]}
     dates = [r["sale_date"] for r in parsed_rows]
@@ -10347,7 +8205,8 @@ def upload_analytics_file(
         date_to=max(dates) if dates else None,
     )
     db.add(upload_record)
-    db.flush()
+    db.commit()
+    db.refresh(upload_record)
 
     for r in parsed_rows:
         r["upload_id"] = upload_record.id
@@ -10364,103 +8223,60 @@ def upload_analytics_file(
     }
 
 
-def analytics_filtered_rows(db, start_date=None, end_date=None):
-    if start_date and end_date and start_date > end_date:
-        raise HTTPException(status_code=400, detail="Start Date must be on or before End Date")
-    query = db.query(models.AnalyticsSalesRow)
-    if start_date:
-        query = query.filter(models.AnalyticsSalesRow.sale_date >= start_date)
-    if end_date:
-        query = query.filter(models.AnalyticsSalesRow.sale_date <= end_date)
-    return query.order_by(models.AnalyticsSalesRow.sale_date, models.AnalyticsSalesRow.id).all()
-
-
 @app.get("/api/analytics/meta")
-def analytics_meta(current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
-    upload = db.query(models.AnalyticsUpload).order_by(models.AnalyticsUpload.id.desc()).first()
-    stores = sorted({r[0] or "Unknown" for r in db.query(models.AnalyticsSalesRow.store).distinct().all()})
+def analytics_meta(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    upload_record = db.query(models.AnalyticsUpload).order_by(models.AnalyticsUpload.id.desc()).first()
+    divisions = [
+        row[0] for row in
+        db.query(models.AnalyticsSalesRow.division).distinct().order_by(models.AnalyticsSalesRow.division).all()
+        if row[0]
+    ]
+    if not upload_record:
+        return {"has_data": False, "divisions": [], "last_upload": None, "can_upload": current_user.role == "Admin"}
+
     return {
-        "has_data": bool(upload), "divisions": list(analytics_calc.CATEGORIES),
-        "categories": list(analytics_calc.CATEGORIES), "stores": stores,
-        "can_upload": auth.has_admin_access(current_user),
-        "last_upload": {"file_name": upload.source_file, "uploaded_by": upload.uploaded_by_username,
-                        "uploaded_at": upload.created_date, "row_count": upload.row_count,
-                        "sheet_count": upload.sheet_count, "date_from": upload.date_from,
-                        "date_to": upload.date_to} if upload else None,
+        "has_data": True,
+        "divisions": divisions,
+        "last_upload": {
+            "file_name": upload_record.source_file,
+            "uploaded_by": upload_record.uploaded_by_username,
+            "uploaded_at": upload_record.created_date,
+            "row_count": upload_record.row_count,
+            "sheet_count": upload_record.sheet_count,
+            "date_from": upload_record.date_from,
+            "date_to": upload_record.date_to,
+        },
+        "can_upload": current_user.role == "Admin",
     }
 
 
 @app.get("/api/analytics/dashboard")
 def analytics_dashboard(
-    division: Optional[str] = Query(None), store: Optional[str] = Query(None),
-    search: Optional[str] = Query(None),
-    gst: bool = Query(True),
-    start_date: Optional[date] = Query(None), end_date: Optional[date] = Query(None),
-    current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db),
+    division: Optional[str] = Query(None),
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
 ):
-    source_rows = analytics_filtered_rows(db, start_date, end_date)
-    rows, quality = analytics_calc.project(source_rows, detect_division_code, division, store, search, gst=gst)
+    query = db.query(models.AnalyticsSalesRow)
+    if division and division.upper() != "ALL":
+        query = query.filter(models.AnalyticsSalesRow.division == division.upper())
+    if start_date:
+        query = query.filter(models.AnalyticsSalesRow.sale_date >= start_date)
+    if end_date:
+        query = query.filter(models.AnalyticsSalesRow.sale_date <= end_date)
+
+    rows = query.all()
     result = build_analytics_dashboard(rows)
-    result["advanced"] = analytics_calc.advanced_stats(rows)
-    result["decisions"] = analytics_calc.decision_stats(rows)
-    result["recommendations"] = result["decisions"]["actions"]
-    result["quality"] = quality
-    review_rows, _ = analytics_calc.project(source_rows, detect_division_code, division, store, search, view="review", gst=False)
-    result["coverage"] = {"review_sales": round(sum(r.sales_amt for r in review_rows), 2),
-                          "review_cost": round(sum(r.cost_amt for r in review_rows), 2)}
-    result["gst"] = {"rate": 18 if gst else 0, "enabled": gst, "basis": "inclusive" if gst else "exclusive", "sales_gst": round(sum(r.sales_gst for r in rows), 2),
-                     "cost_gst": round(sum(r.cost_gst for r in rows), 2),
-                     "sales_before_gst": round(sum(r.sales_before_gst for r in rows), 2),
-                     "cost_before_gst": round(sum(r.cost_before_gst for r in rows), 2)}
-    result["filters"] = {"division": division or "ALL", "store": store or "ALL", "search": search or "",
-                         "start_date": start_date, "end_date": end_date}
+    result["filters"] = {
+        "division": division or "ALL",
+        "start_date": start_date,
+        "end_date": end_date,
+    }
     return result
-
-
-@app.get("/api/analytics/items")
-def analytics_items(
-    division: Optional[str] = Query(None), store: Optional[str] = Query(None), search: Optional[str] = Query(None),
-    start_date: Optional[date] = Query(None), end_date: Optional[date] = Query(None),
-    view: str = Query("included", pattern="^(included|review|excluded|all)$"),
-    gst: bool = Query(True),
-    page: int = Query(1, ge=1), page_size: int = Query(100, ge=1, le=500),
-    current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db),
-):
-    rows, quality = analytics_calc.project(analytics_filtered_rows(db, start_date, end_date), detect_division_code,
-                                         division, store, search, view, gst=gst)
-    offset = (page - 1) * page_size
-    return {"items": [vars(r) for r in rows[offset:offset+page_size]], "total": len(rows), "page": page,
-            "page_size": page_size, "quality": quality, "amount_basis": "With GST (18%)" if gst else "Without GST"}
-
-
-@app.get("/api/analytics/export")
-def analytics_export(
-    division: Optional[str] = Query(None), store: Optional[str] = Query(None), search: Optional[str] = Query(None),
-    start_date: Optional[date] = Query(None), end_date: Optional[date] = Query(None),
-    view: str = Query("included", pattern="^(included|review|excluded|all)$"),
-    gst: bool = Query(True),
-    current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db),
-):
-    rows, _ = analytics_calc.project(analytics_filtered_rows(db, start_date, end_date), detect_division_code,
-                                    division, store, search, view, gst=gst)
-    def safe(value):
-        if isinstance(value, str) and value.lstrip().startswith(("=", "+", "-", "@")):
-            return "'" + value
-        return value
-    buffer = StringIO()
-    writer = csv.writer(buffer)
-    writer.writerow(["Date", "Voucher", "Item", "Category", "Store", "Brand", "Qty", "Sales before GST",
-                     "Sales GST 18%" if gst else "Sales GST (not applied)", "Sales incl GST" if gst else "Sales without GST",
-                     "Cost before GST", "Cost GST 18%" if gst else "Cost GST (not applied)", "Cost incl GST" if gst else "Cost without GST",
-                     "Profit incl GST" if gst else "Profit without GST", "Status", "Review reason"])
-    for r in rows:
-        writer.writerow([safe(v) for v in [r.sale_date.isoformat() if r.sale_date else "", r.vch_no, r.item,
-            analytics_calc.CATEGORIES.get(r.division, r.division), r.store, r.brand, r.qty,
-            r.sales_before_gst, r.sales_gst, r.sales_amt, r.cost_before_gst, r.cost_gst, r.cost_amt,
-            r.profit_loss, r.status, r.exclusion_reason]])
-    filename = "AI_Analysis_With_GST.csv" if gst else "AI_Analysis_Without_GST.csv"
-    return Response(content=("\ufeff"+buffer.getvalue()).encode("utf-8"), media_type="text/csv",
-                    headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
 @app.delete("/api/analytics/clear")
