@@ -3,6 +3,7 @@
   const ERP=document.documentElement.dataset.erp==='true';
   const base=location.pathname.startsWith('/erp/')?'/erp':'';
   const erpUrl=path=>base+path;
+  if(ERP&&!['Admin','HR'].includes(localStorage.getItem('role'))){location.replace(erpUrl('/home'));return;}
   const $=id=>document.getElementById(id), esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const money=n=>new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:2}).format((n||0)/100);
   const date=v=>v?new Date(v.length===10?v+'T00:00:00+05:30':v).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric',timeZone:'Asia/Kolkata'}):'—';

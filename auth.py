@@ -100,3 +100,9 @@ def require_user_management_admin(
 
 def has_admin_access(user: models.User) -> bool:
     return user.role in ADMIN_ACCESS_ROLES
+
+
+def require_purchase_order_access(current_user: models.User = Depends(get_current_user)):
+    if current_user.role not in {"Admin", "HR", "MISExecutive", "Accounts"}:
+        raise HTTPException(status_code=403, detail="Purchase Orders is available only to Admin, HR, MIS Executive and Accounts")
+    return current_user

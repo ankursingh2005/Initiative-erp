@@ -10,7 +10,7 @@ import auth
 import models
 from database import get_db
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(auth.require_purchase_order_access)])
 WAREHOUSE_ROLES = {"LogisticManager", "Supervisor"}
 VERIFIERS = {"Accounts", "MISExecutive"} | WAREHOUSE_ROLES
 OUTLET_MANAGER_ROLES = {"AsstSalesManager", "StoreManager", "Branch Manager"}

@@ -24,8 +24,8 @@ IST = timezone(timedelta(hours=5, minutes=30))
 
 def member(response: Response, user=Depends(auth.get_current_user)):
     response.headers['Cache-Control'] = 'no-store'
-    if user.role == 'BrandPartner':
-        raise HTTPException(403, 'Brand Promotor access remains limited to Home and Attendance')
+    if user.role not in {'Admin', 'HR'}:
+        raise HTTPException(403, 'EMS is available only to Admin and HR')
     return user
 
 

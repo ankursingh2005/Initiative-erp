@@ -87,8 +87,8 @@
     .nav-item.n-scheme,.nav-item.n-po,.nav-item.n-ai,.nav-item.n-dp,.nav-item.n-price,.nav-item.n-age,.nav-item.n-calc,.nav-item.n-incentive { display:none; }
     :is(.role-Admin,.role-Owner,.role-HR,.role-MISExecutive,.role-Accounts) .nav-item:is(.n-scheme,.n-po,.n-ai,.n-dp,.n-price,.n-age,.n-calc,.n-incentive) { display:flex; }
     :is(.role-CategoryManager,.role-BrandManager) .nav-item.n-scheme { display:flex; }
-    .role-CategoryManager .nav-item.n-po { display:flex; }
-    body:not(.role-BrandPartner) .nav-item.n-po { display:flex; }
+
+    html:not(.role-Admin):not(.role-HR):not(.role-MISExecutive):not(.role-Accounts) .nav-item.n-po { display:none; }
     .nav-item.n-mobile-logout { display:none; width:100%; border:0; background:transparent; text-align:left; }
     .nav-item.n-dash { --nav-color: var(--brand); }
     .nav-item.n-scheme { --nav-color: var(--ai); }
@@ -102,7 +102,7 @@
     .nav-item.n-identity { --nav-color: #0c7b76; }
     .role-BrandPartner .nav-item.n-identity { display:none; }
     .nav-item.n-ems { --nav-color: #245e4c; }
-    .role-BrandPartner .nav-item.n-ems { display:none; }
+    html:not(.role-Admin):not(.role-HR) .nav-item.n-ems { display:none; }
     .nav-item.n-um { --nav-color: var(--um); }
     .sidebar-foot { padding: 16px 20px; border-top: 1px solid var(--line); }
     .sidebar-user { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }

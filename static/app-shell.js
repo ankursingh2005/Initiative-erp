@@ -1,4 +1,10 @@
-(function(){
+(function enforceProjectAccess(){
+  const role=localStorage.getItem('role')||'';
+  const base=location.pathname.startsWith('/erp/')?'/erp':'';
+  const route=location.pathname.slice(base.length).replace(/\.html$/,'');
+  const rules={'/ems':['Admin','HR'],'/purchase-orders':['Admin','HR','MISExecutive','Accounts'],'/static/purchase_orders':['Admin','HR','MISExecutive','Accounts']};
+  if(rules[route]&&!rules[route].includes(role))location.replace(base+'/home');
+})();
 (function(){
   'use strict';
   const path=location.pathname,base=path==='/erp'||path.startsWith('/erp/')?'/erp':'';

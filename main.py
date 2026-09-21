@@ -3116,7 +3116,7 @@ def upsert_supplier_email(db: Session, supplier_name: Optional[str], email: Opti
     db.commit()
 
 
-@app.get("/api/supplier-profile", response_model=schemas.SupplierProfileOut)
+@app.get("/api/supplier-profile", response_model=schemas.SupplierProfileOut, dependencies=[Depends(auth.require_purchase_order_access)])
 def get_supplier_profile(
     supplier_name: str,
     db: Session = Depends(get_db),
@@ -3145,7 +3145,7 @@ def get_supplier_profile(
     }
 
 
-@app.post("/api/supplier-emails", response_model=schemas.SupplierEmailEntry)
+@app.post("/api/supplier-emails", response_model=schemas.SupplierEmailEntry, dependencies=[Depends(auth.require_purchase_order_access)])
 def add_supplier_email(
     payload: schemas.SupplierEmailCreate,
     db: Session = Depends(get_db),
@@ -3169,7 +3169,7 @@ def add_supplier_email(
     return row
 
 
-@app.delete("/api/supplier-emails/{email_id}")
+@app.delete("/api/supplier-emails/{email_id}", dependencies=[Depends(auth.require_purchase_order_access)])
 def delete_supplier_email(
     email_id: int,
     db: Session = Depends(get_db),
@@ -3232,7 +3232,7 @@ def send_purchase_order_email(purchase_order: models.PurchaseOrder, recipients: 
     return f"Emailed to {len(recipients)} recipient(s)."
 
 
-@app.post("/api/purchase-orders/{purchase_order_id}/send-email", response_model=schemas.SendPurchaseOrderEmailResult)
+@app.post("/api/purchase-orders/{purchase_order_id}/send-email", response_model=schemas.SendPurchaseOrderEmailResult, dependencies=[Depends(auth.require_purchase_order_access)])
 def send_purchase_order_email_endpoint(
     purchase_order_id: int,
     db: Session = Depends(get_db),
@@ -3269,7 +3269,7 @@ def send_purchase_order_email_endpoint(
     return {"sent_to": recipients, "notification_status": notification_status}
 
 
-@app.post("/api/purchase-orders", response_model=schemas.PurchaseOrderOut)
+@app.post("/api/purchase-orders", response_model=schemas.PurchaseOrderOut, dependencies=[Depends(auth.require_purchase_order_access)])
 def create_purchase_order(
     payload: schemas.PurchaseOrderCreate,
     db: Session = Depends(get_db),
@@ -3309,7 +3309,7 @@ def create_purchase_order(
     return serialize_purchase_order(purchase_order, notification_status)
 
 
-@app.get("/api/purchase-orders", response_model=List[schemas.PurchaseOrderOut])
+@app.get("/api/purchase-orders", response_model=List[schemas.PurchaseOrderOut], dependencies=[Depends(auth.require_purchase_order_access)])
 def list_purchase_orders(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
@@ -3321,7 +3321,7 @@ def list_purchase_orders(
     return [serialize_purchase_order(item) for item in purchase_orders]
 
 
-@app.get("/api/purchase-orders/{purchase_order_id}", response_model=schemas.PurchaseOrderOut)
+@app.get("/api/purchase-orders/{purchase_order_id}", response_model=schemas.PurchaseOrderOut, dependencies=[Depends(auth.require_purchase_order_access)])
 def get_purchase_order(
     purchase_order_id: int,
     db: Session = Depends(get_db),
@@ -3335,7 +3335,7 @@ def get_purchase_order(
     return serialize_purchase_order(purchase_order)
 
 
-@app.patch("/api/purchase-orders/{purchase_order_id}/status", response_model=schemas.PurchaseOrderOut)
+@app.patch("/api/purchase-orders/{purchase_order_id}/status", response_model=schemas.PurchaseOrderOut, dependencies=[Depends(auth.require_purchase_order_access)])
 def update_purchase_order_status(
     purchase_order_id: int,
     payload: schemas.PurchaseOrderStatusUpdate,
@@ -3406,7 +3406,7 @@ def update_purchase_order_status(
     return serialize_purchase_order(purchase_order)
 
 
-@app.delete("/api/purchase-orders/{purchase_order_id}")
+@app.delete("/api/purchase-orders/{purchase_order_id}", dependencies=[Depends(auth.require_purchase_order_access)])
 def delete_purchase_order(
     purchase_order_id: int,
     db: Session = Depends(get_db),
@@ -3420,7 +3420,7 @@ def delete_purchase_order(
     return {"message": "Purchase order request deleted"}
 
 
-@app.post("/api/purchase-orders/mark-exported-to-busy")
+@app.post("/api/purchase-orders/mark-exported-to-busy", dependencies=[Depends(auth.require_purchase_order_access)])
 def mark_purchase_orders_exported_to_busy(
     payload: schemas.MarkExportedToBusyRequest,
     db: Session = Depends(get_db),
