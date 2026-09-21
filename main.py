@@ -103,6 +103,7 @@ def ensure_username_not_unique():
 
 
 def ensure_database_schema():
+    ensure_column("users", "weekoff_day", "VARCHAR(10)")
     ensure_username_not_unique()
     ensure_column("stores", "code", "VARCHAR(20)")
     ensure_column("stores", "city", "VARCHAR(100)")
@@ -535,7 +536,7 @@ async def brand_promotor_limited_access(request: Request, call_next):
             if payload.get("role") == "BrandPartner":
                 allowed = {
                     "/attendance", "/attendance.html", "/home", "/home.html",
-                    "/api/me", "/stores", "/auth/login", "/openapi.json", "/docs",
+                    "/api/me", "/api/me/weekoff", "/api/me/attendance-status", "/stores", "/auth/login", "/openapi.json", "/docs",
                 }
                 static_html = request.url.path.startswith("/static/") and request.url.path.endswith(".html")
                 attendance_request = request.url.path == "/api/attendance" or request.url.path.startswith("/api/attendance/")
@@ -2377,11 +2378,55 @@ def get_my_profile(current_user: models.User = Depends(auth.get_current_user)):
     return {
         "id": current_user.id,
         "username": current_user.username,
+        "weekoff_day": current_user.weekoff_day,
         "role": current_user.role,
         "store_id": current_user.store_id,
         "category_code": current_user.category_code,
         "brand_ids": [ub.brand_id for ub in current_user.brands],
     }
+
+
+@app.put("/api/me/weekoff")
+def update_my_weekoff(
+    payload: schemas.WeekoffUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    day = (payload.weekoff_day or "").strip() or None
+    if day not in {None, "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}:
+        raise HTTPException(400, "Choose a valid weekly off day")
+    current_user.weekoff_day = day
+    db.commit()
+    return {"weekoff_day": day}
+
+
+@app.get("/api/me/attendance-status")
+def my_attendance_status(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+    today = india_today()
+    record = db.query(models.AttendanceRecord).filter_by(user_id=current_user.id, attendance_date=today).first()
+    leave = db.query(models.AttendanceLeave).filter_by(user_id=current_user.id, leave_date=today).first()
+    status = ("Present" if record and record.checkin_at else "Leave" if leave else
+              "Week Off" if current_user.weekoff_day == today.strftime("%A") else "Working")
+    return {"status": status, "weekoff_day": current_user.weekoff_day}
+
+
+@app.put("/api/me/attendance-status")
+def update_my_attendance_status(
+    payload: schemas.MyAttendanceStatusUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    today = india_today()
+    if payload.on_leave:
+        record = db.query(models.AttendanceRecord).filter_by(user_id=current_user.id, attendance_date=today).first()
+        if record and record.checkin_at:
+            raise HTTPException(400, "You have already punched in today")
+        if not db.query(models.AttendanceLeave).filter_by(user_id=current_user.id, leave_date=today).first():
+            db.add(models.AttendanceLeave(user_id=current_user.id, leave_date=today, created_by=current_user.id))
+    else:
+        db.query(models.AttendanceLeave).filter_by(user_id=current_user.id, leave_date=today).delete()
+    db.commit()
+    return my_attendance_status(db, current_user)
 
 
 @app.post("/api/attendance", response_model=schemas.AttendanceOut)

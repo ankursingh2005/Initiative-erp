@@ -44,6 +44,8 @@ class UsernameHistoryTests(unittest.TestCase):
                     app.patch('/users/{user_id}/details', response_model=schemas.UserAdminOut)(main.update_user_details)
                     app.get('/attendance')(main.list_attendance)
                     app.get('/history/{user_id}')(main.attendance_user_history)
+                    app.put('/api/me/weekoff')(main.update_my_weekoff)
+                    app.get('/api/me', response_model=schemas.MyProfileOut)(main.get_my_profile)
                     app.dependency_overrides[main.get_db] = lambda: db
                     app.dependency_overrides[auth.get_current_user] = lambda: actor
                     with TestClient(app) as client:
@@ -72,6 +74,16 @@ class UsernameHistoryTests(unittest.TestCase):
                         self.assertEqual(pdf.status_code, 200)
                         self.assertTrue(pdf.content.startswith(b'%PDF'))
                         app.dependency_overrides[auth.get_current_user] = lambda: employee
+                        for employee_role in ('Employee', 'BrandPartner', 'SupportingStaff'):
+                            employee.role = employee_role
+                            employee.weekoff_day = None
+                            db.commit()
+                            saved = client.put('/api/me/weekoff', json={'weekoff_day': 'Wednesday'})
+                            self.assertEqual(saved.status_code, 200, saved.text)
+                            self.assertEqual(client.get('/api/me').json()['weekoff_day'], 'Wednesday')
+                            self.assertEqual(client.put('/api/me/weekoff', json={'weekoff_day': 'Invalid'}).status_code, 400)
+                            self.assertEqual(employee.weekoff_day, 'Wednesday')
+                        employee.role = 'Employee'
                         self.assertEqual(client.get('/api/attendance/admin-export?date=2026-09-01').status_code, 403)
                         self.assertEqual(client.get(f'/history/{actor.id}').status_code, 403)
                         history = client.get('/attendance').json()
