@@ -10,7 +10,6 @@
 .selfie-actions{display:flex;justify-content:flex-end;margin-top:12px}.view-selfies{padding:9px 12px;background:var(--soft);color:var(--blue);font-size:12px}.selfie-gallery{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:18px 0}.selfie-card{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}.selfie-card .selfie-label{padding:10px 12px;font-size:11px;font-weight:800;color:var(--muted);border-bottom:1px solid var(--line)}.selfie-card img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;cursor:zoom-in;background:#eef2f7}.selfie-missing{display:grid;place-items:center;aspect-ratio:4/3;padding:12px;text-align:center;color:var(--muted);font-size:11px;background:#f8fafc}.image-lightbox{position:fixed;inset:0;z-index:10050;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.86)}.image-lightbox img{max-width:96vw;max-height:92vh;border-radius:10px;box-shadow:0 20px 70px rgba(0,0,0,.45)}.image-lightbox button{position:fixed;top:18px;right:18px;background:#fff;color:#111;padding:10px 14px}@media(max-width:700px){.selfie-gallery{grid-template-columns:1fr}.record-dialog{width:min(100%,94vw)}}
 @media(max-width:760px){.top{height:auto;min-height:72px;gap:8px;flex-wrap:wrap;padding-block:8px}.top-actions{gap:6px}.weekoff-control span{display:none}.weekoff-control select{min-width:112px;min-height:44px}.back{min-height:44px;padding:0 6px}.summary .metric{min-width:0;padding:12px 8px;text-align:center}.summary .metric strong{font-size:clamp(16px,5vw,21px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
 .record-dialog .record-date{display:block;width:100%;min-width:180px;min-height:48px;margin:8px 0 6px;padding:10px 14px;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:10px;font:inherit}
-.weekoff-calendar-control{display:flex;flex-direction:column;gap:8px;color:var(--muted);font-size:13px}.weekoff-calendar-control input{width:100%;min-height:48px;padding:10px 14px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);font:inherit}.weekoff-calendar-control small{font-size:12px}
 </style>
 <style>
 .admin-row,.admin-row *{cursor:pointer}.admin-row{user-select:none}.admin-row:hover{background:#f5f8ff}.record-modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:20px;background:#10182899;z-index:10}.record-modal.show{display:flex}.record-dialog{width:min(100%,520px);max-height:90vh;overflow:auto;padding:22px;border-radius:10px;background:#fff;box-shadow:0 20px 70px #10182844}.record-dialog h2{margin:0 0 5px}.record-dialog p{margin:5px 0;color:var(--muted);font-size:12px}.record-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:18px 0}.record-stat{padding:12px;border:1px solid var(--line);border-radius:8px}.record-stat small{display:block;color:var(--muted);font-size:10px}.record-stat b{display:block;margin-top:5px;font-size:15px}.record-close{width:100%;color:var(--blue);background:var(--soft)}
@@ -182,7 +181,7 @@
 <body>
 <header class="top"><a class="brand" href="/home"><span>Initiative ERP</span><b class="page-chip">Attendance</b></a><div class="top-actions"><a class="back" href="/home" title="Back to Home"><span aria-hidden="true">&#8592;</span> Back</a></div></header>
 <main><section class="head"><div class="mobile-attendance-user" aria-label="Signed-in user"><span id="mobileAttendanceAvatar" class="mobile-attendance-avatar">?</span><span id="mobileAttendanceName" class="mobile-attendance-name">User</span></div><div><h1>My Attendance</h1><p>Mark attendance securely from your assigned outlet.</p></div><label class="date">Today <input id="date" type="date" readonly></label></section>
-<section class="personal-status-panel" aria-label="Leave and weekly off"><h2>Leave &amp; Weekly Off</h2><p>Choose your weekly off day or mark Leave for today from anywhere. No location or selfie is required. Weekly off repeats on the selected weekday. Select Week Off to leave it unset.</p><div class="personal-status-options"><label class="weekoff-control"><span id="weekoffLabel">Weekly off day</span><select id="weekoffSelect" aria-label="Choose your weekly off day"><option value="">Week Off</option><option>Monday</option><option>Tuesday</option><option>Wednesday</option><option>Thursday</option><option>Friday</option><option>Saturday</option><option>Sunday</option></select></label><label class="weekoff-calendar-control"><span>Choose weekly off from calendar</span><input id="weekoffCalendar" type="date" aria-label="Choose a date to set its weekday as your recurring weekly off" /><small>The selected weekday repeats every week.</small></label><label class="personal-leave-control"><span>Today’s status</span><select id="personalWorkStatus" aria-label="Choose today's work status"><option value="working">Working</option><option value="leave">Leave</option></select></label></div></section>
+<section class="personal-status-panel" aria-label="Leave and weekly off"><h2>Leave &amp; Weekly Off</h2><p>Choose your weekly off day or mark Leave for today from anywhere. No location or selfie is required. Weekly off repeats on the selected weekday. Select Week Off to leave it unset.</p><div class="personal-status-options"><label class="weekoff-control"><span id="weekoffLabel">Weekly off day</span><select id="weekoffSelect" aria-label="Choose your weekly off day"><option value="">Week Off</option><option>Monday</option><option>Tuesday</option><option>Wednesday</option><option>Thursday</option><option>Friday</option><option>Saturday</option><option>Sunday</option></select></label><label class="personal-leave-control"><span>Today’s status</span><select id="personalWorkStatus" aria-label="Choose today's work status"><option value="working">Working</option><option value="leave">Leave</option></select></label></div></section>
 <div class="grid"><section class="panel"><div class="panelHead"><h2>Today</h2><span id="todayBadge" class="badge warn">Not marked</span></div><div class="body"><div class="identity"><div id="avatar" class="avatar">?</div><div><strong id="userName">Signed-in user</strong><small id="userRole">Loading account...</small><small id="selectedWeekoff">Your weekly off: Not selected</small></div></div><div class="location">● <span id="outletText">Checking assigned outlet...</span></div><div class="state"><i id="gpsDot" class="dot"></i><span id="gpsText">Checking your live location...</span></div><button id="mark" class="primary mark">Punch In</button><button id="checkout" class="secondary mark" style="display:none;margin-top:10px">Punch Out</button><p id="checkoutInfo" class="hint"></p><p class="hint">Your current time, GPS position, distance from the outlet, and selfie are recorded together. Attendance is accepted only within 100 meters.</p></div></section>
 <section class="panel"><div class="panelHead"><h2>Today’s record</h2><span id="sync" class="badge warn">Checking</span></div><div class="body"><div class="summary"><div class="metric"><span>Marked at</span><strong id="markedAt">--:--</strong></div><div class="metric"><span>Distance</span><strong id="distance">-- m</strong></div><div class="metric"><span>Work hours</span><strong id="hours">00:00</strong></div></div><div class="history"><div id="recordText" class="empty">No attendance marked today.</div></div></div></section></div>
 <section class="panel summary-panel"><div class="panelHead summary-head-row"><h2>Attendance Summary</h2><div class="summary-month-actions"><select id="summaryMonth" class="month-select" aria-label="Choose attendance month"></select><button id="downloadMyMonth" class="summary-download" type="button" title="Download monthly attendance in Excel">Monthly Attendance <span aria-hidden="true">&#8595;</span></button></div></div><div class="body">
@@ -385,6 +384,12 @@ function updateMonthlyAttendanceCount(select,badge){const selectedDate=select.op
 async function downloadFullUserAttendance(modal,button,format){const username=modal.dataset.username||modal.querySelector('h2')?.textContent.trim(),userId=Number(modal.dataset.userId);if(!username||!Number.isInteger(userId)||userId<=0){alert('Please wait for the attendance history to load, then try again.');return}const original=button.textContent;button.disabled=true;button.textContent='Preparing...';try{const response=await fetch('/api/attendance/admin-user-export?user_id='+userId+'&format='+encodeURIComponent(format),{headers:{Authorization:'Bearer '+localStorage.getItem('token')}});if(!response.ok){const error=await response.json().catch(()=>({}));throw new Error(typeof error.detail==='string'?error.detail:'Unable to download attendance (HTTP '+response.status+').')}const blob=await response.blob(),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=username.replace(/[^A-Za-z0-9_-]+/g,'-')+'-full-attendance.'+format;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);button.closest('details').open=false}catch(error){alert(error.message||'Unable to download this employee attendance. Please try again.')}finally{button.disabled=false;button.textContent=original}}
 function enhanceAdminHistoryCounter(modal){const select=modal.querySelector('.record-date');if(!select||select.dataset.monthCounterReady)return;select.dataset.monthCounterReady='true';const label=select.closest('label'),badge=document.createElement('span');badge.className='monthly-attendance-count';badge.hidden=true;label.classList.add('record-date-row');label.appendChild(badge);select.addEventListener('change',()=>updateMonthlyAttendanceCount(select,badge));new MutationObserver(()=>updateMonthlyAttendanceCount(select,badge)).observe(select,{childList:true});updateMonthlyAttendanceCount(select,badge);const download=document.createElement('details');download.className='user-download-menu';download.innerHTML='<summary>Download ▾</summary><div class="user-download-options"><button type="button" data-format="xlsx">Excel</button><button type="button" data-format="pdf">PDF</button></div>';download.addEventListener('click',event=>{const button=event.target.closest('[data-format]');if(button)downloadFullUserAttendance(modal,button,button.dataset.format)});modal.querySelector('.record-dialog').appendChild(download)}
 new MutationObserver(mutations=>{for(const mutation of mutations)for(const node of mutation.addedNodes)if(node.nodeType===1){if(node.matches?.('.record-modal'))enhanceAdminHistoryCounter(node);node.querySelectorAll?.('.record-modal').forEach(enhanceAdminHistoryCounter)}}).observe(document.body,{childList:true});
+function attendanceEmployeeTitle(user){
+  const name=user.username||'';
+  if(user.role==='BrandPartner')return name+' (BrandPartner – '+(user.brand_names?.length?user.brand_names.join(', '):'Company not assigned')+')';
+  const labels={SupportingStaff:'Supporting Staff',CategoryManager:'Category Manager',BrandManager:'Brand Manager',ServiceManager:'Service Manager',ACTechnicianA:'AC Technician A',ACTechnicianB:'AC Technician B',MISExecutive:'MIS Executive'};
+  return user.role?name+' ('+(labels[user.role]||user.role)+')':name;
+}
 async function openAdminRecord(row){
   const userId=Number(row.dataset.userId),name=row.dataset.username||row.children[0].textContent.trim(),panel=row.closest('.panel'),date=panel?.querySelector('.admin-date-filter')?.value||today;
   const checkin=row.cells[2]?.textContent.trim()||'—',checkout=row.cells[3]?.textContent.trim()||'—',outletName=row.cells[4]?.textContent.trim()||'—',hasCheckin=!/^[-—–:]*(?:--:--)?$/.test(checkin),hasCheckout=!/^[-—–:]*(?:--:--)?$/.test(checkout),workState=hasCheckin?(hasCheckout?'Completed':'In progress'):'Not started';
@@ -402,7 +407,7 @@ async function openAdminRecord(row){
     if(!response.ok)throw new Error('Unable to load attendance history. Close and try again.');
     const data=await response.json();if(!modal.isConnected)return;
     modal.dataset.userId=String(data.user_id);modal.dataset.username=data.username;
-    modal.querySelector('h2').textContent=data.username;
+    modal.querySelector('h2').textContent=attendanceEmployeeTitle(data);
     const records=data.history||[];
     select.innerHTML=records.map(item=>'<option value="'+item.id+'">'+safeText(item.attendance_date)+'</option>').join('');
     select.disabled=!records.length;
@@ -427,21 +432,13 @@ const WEEKOFF_DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday
 (async function initializeWeekoffPreference(){
   const select=document.getElementById('weekoffSelect'),label=document.getElementById('weekoffLabel'),token=localStorage.getItem('token');
   if(!select||!token)return;
-  const calendar=document.getElementById('weekoffCalendar');
-  if(calendar)calendar.addEventListener('change',()=>{
-    if(!calendar.value)return;
-    const date=new Date(calendar.value+'T12:00:00');
-    if(Number.isNaN(date.getTime()))return;
-    select.value=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][date.getDay()];
-    select.dispatchEvent(new Event('change'));
-  });
   let savedDay='';
   try{
     const response=await fetch('/api/me',{headers:{Authorization:'Bearer '+token}});
     if(response.ok){const user=await response.json();savedDay=user.weekoff_day||'';select.value=savedDay;document.getElementById('selectedWeekoff').textContent='Your weekly off: '+(savedDay||'Not selected');if(user.weekoff_day)label.textContent='Week Off';}
   }catch(error){}
   select.addEventListener('change',async()=>{
-    const selected=select.value;select.disabled=true;if(calendar)calendar.disabled=true;label.textContent='Saving...';label.classList.remove('weekoff-saved');
+    const selected=select.value;select.disabled=true;label.textContent='Saving...';label.classList.remove('weekoff-saved');
     try{
       const response=await fetch('/api/me/weekoff',{method:'PUT',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({weekoff_day:selected})});
       const data=await response.json().catch(()=>({}));
@@ -452,7 +449,7 @@ const WEEKOFF_DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday
       document.getElementById('selectedWeekoff').textContent='Your weekly off: '+(selected||'Not selected');
       label.textContent='Saved';label.classList.add('weekoff-saved');
       setTimeout(()=>{label.textContent='Week Off';label.classList.remove('weekoff-saved')},1400);
-    }catch(error){select.value=savedDay;label.textContent='Weekly off day';alert(error.message)}finally{select.disabled=false;if(calendar){calendar.disabled=false;calendar.value=''}}
+    }catch(error){select.value=savedDay;label.textContent='Weekly off day';alert(error.message)}finally{select.disabled=false;}
   });
 })();
 
@@ -606,32 +603,7 @@ function attendanceStatusCount(status, label) {
 })();
 </script>
 <script>
-(function showUserIdentityInAttendancePopup(){
-  document.addEventListener('click',async event=>{
-    const row=event.target.closest('.admin-row');
-    if(!row)return;
-    const accountName=row.cells?.[0]?.textContent?.trim();
-    if(!accountName)return;
-    try{
-      const response=await fetch('/api/users',{headers:{Authorization:'Bearer '+localStorage.getItem('token')}});
-      if(!response.ok)return;
-      const user=(await response.json()).find(item=>item.id===Number(row.dataset.userId));
-      if(!user)return;
-      const modal=await new Promise(resolve=>{
-        let attempts=0;
-        const wait=setInterval(()=>{
-          const found=document.querySelector('.record-modal.show');
-          if(found||++attempts>20){clearInterval(wait);resolve(found)}
-        },25);
-      });
-      const heading=modal?.querySelector('.record-dialog h2');
-      if(!heading)return;
-      if(user.role==='BrandPartner'&&user.brand_names?.length){heading.textContent=accountName+' ('+user.brand_names.join(', ')+'-PRO)';return}
-      const roleLabels={SupportingStaff:'Supporting Staff',CategoryManager:'Category Manager',BrandManager:'Brand Manager',ServiceManager:'Service Manager',ACTechnicianA:'AC Technician A',ACTechnicianB:'AC Technician B',MISExecutive:'MIS Executive'};
-      heading.textContent=accountName+' ('+(roleLabels[user.role]||user.role||'User')+')';
-    }catch(error){}
-  });
-})();
+
 </script>
 <script>
 (function keepAdminDashboardAtTopOnRefresh(){

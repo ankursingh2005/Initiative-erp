@@ -2516,7 +2516,11 @@ def attendance_user_history(
     records = db.query(models.AttendanceRecord).filter(
         models.AttendanceRecord.user_id == user_id,
     ).order_by(models.AttendanceRecord.attendance_date.desc(), models.AttendanceRecord.id.desc()).all()
-    return {"user_id": user.id, "username": user.username, "history": [
+    brand_names = [name for (name,) in db.query(models.Brand.name).join(
+        models.UserBrand, models.UserBrand.brand_id == models.Brand.id,
+    ).filter(models.UserBrand.user_id == user.id).distinct().order_by(models.Brand.name).all()]
+    return {"user_id": user.id, "username": user.username, "role": user.role,
+            "brand_names": brand_names, "history": [
         {"id": record.id, "attendance_date": record.attendance_date,
          "checkin_at": record.checkin_at, "checkout_at": record.checkout_at}
         for record in records

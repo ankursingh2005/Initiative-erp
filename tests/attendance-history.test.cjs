@@ -1,6 +1,14 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const html=fs.readFileSync('static/attendance.html','utf8');
+test('BrandPartner heading shows assigned companies and a clear unassigned fallback',()=>{
+  const context={};vm.createContext(context);
+  vm.runInContext(html.slice(html.indexOf('function attendanceEmployeeTitle('),html.indexOf('async function openAdminRecord(')),context);
+  assert.equal(context.attendanceEmployeeTitle({username:'ravi pal',role:'BrandPartner',brand_names:['Samsung']}),'ravi pal (BrandPartner – Samsung)');
+  assert.equal(context.attendanceEmployeeTitle({username:'ravi pal',role:'BrandPartner',brand_names:['Samsung','LG']}),'ravi pal (BrandPartner – Samsung, LG)');
+  assert.match(context.attendanceEmployeeTitle({username:'ravi pal',role:'BrandPartner'}),/Company not assigned/);
+  assert.equal(context.attendanceEmployeeTitle({username:'Priyanshu',role:'ACTechnicianA'}),'Priyanshu (AC Technician A)');
+});
 test('employee history loads by permanent ID after a rename, with older dates available',async()=>{
   const select={value:'',disabled:true},detail={},heading={},close={};
   const modal={dataset:{},isConnected:true,querySelector:q=>({'h2':heading,'.record-detail':detail,'.record-date':select,'.record-close':close}[q])};
@@ -11,7 +19,7 @@ test('employee history loads by permanent ID after a rename, with older dates av
     fetchSelfieRecord:async id=>({attendance_date:id==='99'?'2026-08-01':'2026-09-21',checkin_at:'09:00',checkout_at:'18:00',checkin_selfie:'photo-'+id}),
     formatTime:String,workingHours:()=> '9 hours',selfieTile:(label,photo)=>photo||'',bindSelfieZoom(){}};
   vm.createContext(context);
-  vm.runInContext(html.slice(html.indexOf('async function openAdminRecord('),html.indexOf('</script>',html.indexOf('async function openAdminRecord('))),context);
+  vm.runInContext(html.slice(html.indexOf('function attendanceEmployeeTitle('),html.indexOf('</script>',html.indexOf('async function openAdminRecord('))),context);
   await context.openAdminRecord({dataset:{userId:'7',username:'Old name'},children:[{textContent:'Old name'}],cells:[],closest:()=>null});
   assert.deepEqual(calls,['/api/attendance/users/7/history']);
   assert.equal(heading.textContent,'Renamed employee');
