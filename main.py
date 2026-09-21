@@ -2201,9 +2201,9 @@ def update_my_weekoff(
     current_user: models.User = Depends(auth.get_current_user),
 ):
     selected_day = (payload.weekoff_day or "").strip().title()
-    if selected_day not in WEEKDAYS:
+    if selected_day and selected_day not in WEEKDAYS:
         raise HTTPException(status_code=400, detail="Week Off must be Monday through Sunday")
-    current_user.weekoff_day = selected_day
+    current_user.weekoff_day = selected_day or None
     db.commit()
     db.refresh(current_user)
     return current_user

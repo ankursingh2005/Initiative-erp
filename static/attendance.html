@@ -180,7 +180,7 @@
 <body>
 <header class="top"><a class="brand" href="/home"><span>Initiative ERP</span><b class="page-chip">Attendance</b></a><div class="top-actions"><a class="back" href="/home" title="Back to Home"><span aria-hidden="true">&#8592;</span> Back</a></div></header>
 <main><section class="head"><div class="mobile-attendance-user" aria-label="Signed-in user"><span id="mobileAttendanceAvatar" class="mobile-attendance-avatar">?</span><span id="mobileAttendanceName" class="mobile-attendance-name">User</span></div><div><h1>My Attendance</h1><p>Mark attendance securely from your assigned outlet.</p></div><label class="date">Today <input id="date" type="date" readonly></label></section>
-<section class="personal-status-panel" aria-label="Leave and weekly off"><h2>Leave &amp; Weekly Off</h2><p>Choose your weekly off day or mark Leave for today from anywhere. No location or selfie is required. Weekly off repeats on the selected weekday.</p><div class="personal-status-options"><label class="weekoff-control"><span id="weekoffLabel">Weekly off day</span><select id="weekoffSelect" aria-label="Choose your weekly off day"><option value="">Week Off</option><option>Monday</option><option>Tuesday</option><option>Wednesday</option><option>Thursday</option><option>Friday</option><option>Saturday</option><option>Sunday</option></select></label><label class="personal-leave-control"><span>Today’s status</span><select id="personalWorkStatus" aria-label="Choose today's work status"><option value="working">Working</option><option value="leave">Leave</option></select></label></div></section>
+<section class="personal-status-panel" aria-label="Leave and weekly off"><h2>Leave &amp; Weekly Off</h2><p>Choose your weekly off day or mark Leave for today from anywhere. No location or selfie is required. Weekly off repeats on the selected weekday. Select Choose week off to leave it unset.</p><div class="personal-status-options"><label class="weekoff-control"><span id="weekoffLabel">Weekly off day</span><select id="weekoffSelect" aria-label="Choose your weekly off day"><option value="">Choose week off</option><option>Monday</option><option>Tuesday</option><option>Wednesday</option><option>Thursday</option><option>Friday</option><option>Saturday</option><option>Sunday</option></select></label><label class="personal-leave-control"><span>Today’s status</span><select id="personalWorkStatus" aria-label="Choose today's work status"><option value="working">Working</option><option value="leave">Leave</option></select></label></div></section>
 <div class="grid"><section class="panel"><div class="panelHead"><h2>Today</h2><span id="todayBadge" class="badge warn">Not marked</span></div><div class="body"><div class="identity"><div id="avatar" class="avatar">?</div><div><strong id="userName">Signed-in user</strong><small id="userRole">Loading account...</small><small id="selectedWeekoff">Your weekly off: Not selected</small></div></div><div class="location">● <span id="outletText">Checking assigned outlet...</span></div><div class="state"><i id="gpsDot" class="dot"></i><span id="gpsText">Checking your live location...</span></div><button id="mark" class="primary mark">Punch In</button><button id="checkout" class="secondary mark" style="display:none;margin-top:10px">Punch Out</button><p id="checkoutInfo" class="hint"></p><p class="hint">Your current time, GPS position, distance from the outlet, and selfie are recorded together. Attendance is accepted only within 100 meters.</p></div></section>
 <section class="panel"><div class="panelHead"><h2>Today’s record</h2><span id="sync" class="badge warn">Checking</span></div><div class="body"><div class="summary"><div class="metric"><span>Marked at</span><strong id="markedAt">--:--</strong></div><div class="metric"><span>Distance</span><strong id="distance">-- m</strong></div><div class="metric"><span>Work hours</span><strong id="hours">00:00</strong></div></div><div class="history"><div id="recordText" class="empty">No attendance marked today.</div></div></div></section></div>
 <section class="panel summary-panel"><div class="panelHead summary-head-row"><h2>Attendance Summary</h2><div class="summary-month-actions"><select id="summaryMonth" class="month-select" aria-label="Choose attendance month"></select><button id="downloadMyMonth" class="summary-download" type="button" title="Download monthly attendance in Excel">Monthly Attendance <span aria-hidden="true">&#8595;</span></button></div></div><div class="body">
@@ -404,20 +404,21 @@ const WEEKOFF_DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday
 (async function initializeWeekoffPreference(){
   const select=document.getElementById('weekoffSelect'),label=document.getElementById('weekoffLabel'),token=localStorage.getItem('token');
   if(!select||!token)return;
+  let savedDay='';
   try{
     const response=await fetch('/api/me',{headers:{Authorization:'Bearer '+token}});
-    if(response.ok){const user=await response.json();select.value=user.weekoff_day||'';document.getElementById('selectedWeekoff').textContent='Your weekly off: '+(user.weekoff_day||'Not selected');if(user.weekoff_day)label.textContent='Week Off';}
+    if(response.ok){const user=await response.json();savedDay=user.weekoff_day||'';select.value=savedDay;document.getElementById('selectedWeekoff').textContent='Your weekly off: '+(savedDay||'Not selected');if(user.weekoff_day)label.textContent='Week Off';}
   }catch(error){}
   select.addEventListener('change',async()=>{
-    if(!select.value)return;
     const selected=select.value;select.disabled=true;label.textContent='Saving...';label.classList.remove('weekoff-saved');
     try{
       const response=await fetch('/api/me/weekoff',{method:'PUT',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({weekoff_day:selected})});
       if(!response.ok)throw new Error('Unable to save');
-      document.getElementById('selectedWeekoff').textContent='Your weekly off: '+selected;
+      savedDay=selected;
+      document.getElementById('selectedWeekoff').textContent='Your weekly off: '+(selected||'Not selected');
       label.textContent='Saved';label.classList.add('weekoff-saved');
       setTimeout(()=>{label.textContent='Week Off';label.classList.remove('weekoff-saved')},1400);
-    }catch(error){select.value='';label.textContent='Try again'}finally{select.disabled=false}
+    }catch(error){select.value=savedDay;label.textContent='Try again'}finally{select.disabled=false}
   });
 })();
 

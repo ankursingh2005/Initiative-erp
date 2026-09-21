@@ -329,7 +329,7 @@ class PasswordVerify(BaseModel):
 
 
 class WeekoffUpdate(BaseModel):
-    weekoff_day: str
+    weekoff_day: Optional[str] = None
 
 
 class MyAttendanceStatusUpdate(BaseModel):
