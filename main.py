@@ -2544,6 +2544,7 @@ def attendance_admin_summary(
     to_date: Optional[date] = Query(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.require_roles("Admin")),
+    weekoff_day: Optional[str] = None,
 ):
     today = india_today()
     start_date = from_date or today
@@ -2556,6 +2557,8 @@ def attendance_admin_summary(
     user_query = db.query(models.User).filter(models.User.status == "Active")
     if store_id is not None:
         user_query = user_query.filter(models.User.store_id == store_id)
+    if weekoff_day:
+        user_query = user_query.filter(models.User.weekoff_day == weekoff_day)
     users = user_query.all()
     stores_by_id = {
         store.id: store for store in db.query(models.Store).all()
@@ -2579,12 +2582,22 @@ def attendance_admin_summary(
     for record in record_query.all():
         records_by_user.setdefault(record.user_id, []).append(record)
 
+    leaves_by_user = {}
+    for leave in db.query(models.AttendanceLeave).filter(
+        models.AttendanceLeave.leave_date >= start_date,
+        models.AttendanceLeave.leave_date <= end_date,
+        models.AttendanceLeave.user_id.in_([user.id for user in users] or [-1]),
+    ).all():
+        leaves_by_user.setdefault(leave.user_id, set()).add(leave.leave_date)
+
     range_start_dt = datetime.combine(start_date, datetime.min.time())
     range_end_dt = datetime.combine(end_date + timedelta(days=1), datetime.min.time())
 
     rows = []
     present_total = 0
     absent_total = 0
+    weekoff_total = 0
+    leave_total = 0
     for user in users:
         outlet = stores_by_id.get(user.store_id)
         outlet_name = outlet.name if outlet else None
@@ -2593,10 +2606,23 @@ def attendance_admin_summary(
             outlet.code if outlet and outlet.code else "—",
         )
         user_records = sorted(records_by_user.get(user.id, []), key=lambda r: r.attendance_date)
-        present_days = sum(1 for r in user_records if r.checkin_at)
-        absent_days = days_in_range - present_days
+        present_dates = {r.attendance_date for r in user_records if r.checkin_at}
+        leave_dates = leaves_by_user.get(user.id, set()) - present_dates
+        weekoff_dates = {
+            start_date + timedelta(days=offset) for offset in range(days_in_range)
+            if (start_date + timedelta(days=offset)).strftime("%A") == user.weekoff_day
+        } - present_dates - leave_dates
+        present_days = len(present_dates)
+        leave_days = len(leave_dates)
+        weekoff_days = len(weekoff_dates)
+        absent_days = days_in_range - present_days - leave_days - weekoff_days
         present_total += present_days
         absent_total += absent_days
+        leave_total += leave_days
+        weekoff_total += weekoff_days
+        day_status = "Present" if present_days else "Leave" if leave_days else "Week Off" if weekoff_days else "Absent"
+        status_counts = {"absent_days": absent_days, "leave_days": leave_days,
+                         "weekoff_days": weekoff_days, "weekoff_day": user.weekoff_day}
 
         points = db.query(models.AttendanceLocationPoint).filter(
             models.AttendanceLocationPoint.user_id == user.id,
@@ -2610,7 +2636,8 @@ def attendance_admin_summary(
             rows.append({
                 "user_id": user.id, "username": user.username, "outlet_id": user.store_id,
                 "outlet_name": outlet_name, "outlet_abbreviation": outlet_abbreviation,
-                "status": "Present" if record and record.checkin_at else "Absent",
+                "status": day_status,
+                **status_counts,
                 "present_days": present_days, "days_in_range": days_in_range,
                 "checkin_at": record.checkin_at if record else None,
                 "checkout_at": record.checkout_at if record else None,
@@ -2625,7 +2652,8 @@ def attendance_admin_summary(
             rows.append({
                 "user_id": user.id, "username": user.username, "outlet_id": user.store_id,
                 "outlet_name": outlet_name, "outlet_abbreviation": outlet_abbreviation,
-                "status": f"{present_days}/{days_in_range} Present",
+                "status": f"{present_days}/{days_in_range} Present · {weekoff_days} Week Off · {leave_days} Leave · {absent_days} Absent",
+                **status_counts,
                 "present_days": present_days, "days_in_range": days_in_range,
                 "checkin_at": None,
                 "checkout_at": None,
@@ -2642,6 +2670,8 @@ def attendance_admin_summary(
         "total": len(users) * days_in_range if not single_day else len(users),
         "present": present_total if not single_day else sum(row["status"] == "Present" for row in rows),
         "absent": absent_total if not single_day else sum(row["status"] == "Absent" for row in rows),
+        "weekoff": weekoff_total,
+        "leave": leave_total,
         "rows": rows,
     }
 
@@ -2718,6 +2748,8 @@ def update_user_details(
         raise HTTPException(status_code=400, detail="Select a valid week off day")
     if db.query(models.User).filter(func.lower(models.User.email) == email, models.User.id != user_id).first():
         raise HTTPException(status_code=409, detail="Email is already used by another account")
+    # Rename the existing account in place. Attendance and other linked records
+    # retain this user's permanent ID; reports resolve its current username.
     target_user.username = username
     if target_user.email != email:
         target_user.reset_token = None

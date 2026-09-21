@@ -464,6 +464,12 @@ const WEEKOFF_DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday
 })();
 </script>
 <script>
+function attendanceStatusCount(status, label) {
+  const text = (status || '').trim();
+  if (text === label) return 1;
+  const part = text.split(' · ').find(value => value.endsWith(' ' + label));
+  return part ? Number(part.split(' ')[0]) || 0 : 0;
+}
 (function addWeekOffSummaryCard(){
   function enhance(){
     const panel=document.querySelector('.admin-dashboard-panel'),summary=panel?.querySelector('.summary');
@@ -474,9 +480,9 @@ const WEEKOFF_DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday
       card=document.createElement('div');card.className='metric weekoff-metric';card.dataset.filter='Week Off';card.tabIndex=0;card.setAttribute('role','button');card.setAttribute('aria-label','Show week off employees');card.innerHTML='<span>Week Off</span><strong>0</strong>';summary.appendChild(card);
     }
     const tableWrap=panel.querySelector('table')?.parentElement,toggle=panel.querySelector('.admin-users-toggle');
-    function sync(){const rows=[...(panel.querySelector('tbody')?.rows||[])];card.querySelector('strong').textContent=rows.filter(row=>row.cells[1]?.textContent.trim()==='Week Off').length}
+    function sync(){const rows=[...(panel.querySelector('tbody')?.rows||[])];card.querySelector('strong').textContent=rows.reduce((sum,row)=>sum+attendanceStatusCount(row.cells[1]?.textContent,'Week Off'),0)}
     function filterWeekOff(){
-      const rows=[...(panel.querySelector('tbody')?.rows||[])];for(const row of rows)row.hidden=row.cells[1]?.textContent.trim()!=='Week Off';
+      const rows=[...(panel.querySelector('tbody')?.rows||[])];for(const row of rows)row.hidden=attendanceStatusCount(row.cells[1]?.textContent,'Week Off')===0;
       summary.querySelectorAll('.metric').forEach(metric=>metric.classList.toggle('active-filter',metric===card));
       if(tableWrap)tableWrap.hidden=false;if(toggle){toggle.setAttribute('aria-expanded','true');toggle.querySelector('span').textContent='Hide employees'}
     }
@@ -493,8 +499,8 @@ const WEEKOFF_DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday
     const panel=document.querySelector('.admin-dashboard-panel'),summary=panel?.querySelector('.summary'),body=panel?.querySelector('tbody');if(!panel||!summary||!body)return false;
     let card=summary.querySelector('.leave-metric');if(!card){card=document.createElement('div');card.className='metric leave-metric';card.dataset.filter='Leave';card.tabIndex=0;card.setAttribute('role','button');card.setAttribute('aria-label','Show employees on leave');card.innerHTML='<span>Leave</span><strong>0</strong>';summary.appendChild(card)}
     const tableWrap=body.closest('table')?.parentElement,toggle=panel.querySelector('.admin-users-toggle');
-    function sync(){const rows=[...body.rows];card.querySelector('strong').textContent=rows.filter(row=>row.cells[1]?.textContent.trim()==='Leave').length;body.querySelectorAll('.badge').forEach(badge=>{if(badge.textContent.trim()==='Leave'){badge.classList.remove('bad','ok','weekoff');badge.classList.add('leave')}})}
-    function filterLeave(){for(const row of body.rows)row.hidden=row.cells[1]?.textContent.trim()!=='Leave';summary.querySelectorAll('.metric').forEach(metric=>metric.classList.toggle('active-filter',metric===card));if(tableWrap)tableWrap.hidden=false;if(toggle){toggle.setAttribute('aria-expanded','true');toggle.querySelector('span').textContent='Hide employees'}}
+    function sync(){const rows=[...body.rows];card.querySelector('strong').textContent=rows.reduce((sum,row)=>sum+attendanceStatusCount(row.cells[1]?.textContent,'Leave'),0);body.querySelectorAll('.badge').forEach(badge=>{if(badge.textContent.trim()==='Leave'){badge.classList.remove('bad','ok','weekoff');badge.classList.add('leave')}})}
+    function filterLeave(){for(const row of body.rows)row.hidden=attendanceStatusCount(row.cells[1]?.textContent,'Leave')===0;summary.querySelectorAll('.metric').forEach(metric=>metric.classList.toggle('active-filter',metric===card));if(tableWrap)tableWrap.hidden=false;if(toggle){toggle.setAttribute('aria-expanded','true');toggle.querySelector('span').textContent='Hide employees'}}
     card.onclick=filterLeave;card.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();filterLeave()}};new MutationObserver(sync).observe(body,{childList:true,subtree:true});sync();return true;
   }
   if(!enhance()){const wait=setInterval(()=>{if(enhance())clearInterval(wait)},50);setTimeout(()=>clearInterval(wait),15000)}

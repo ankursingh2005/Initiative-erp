@@ -549,6 +549,7 @@
   <dialog id="editUserDialog" aria-labelledby="editUserTitle" style="border:0;border-radius:14px;padding:24px;width:min(420px,90vw);max-height:85vh;overflow:auto">
     <form onsubmit="saveUserDetails(event)">
       <h3 id="editUserTitle">Edit user</h3>
+      <p style="font-size:13px;color:var(--muted);line-height:1.5">Changing the username keeps this account's existing records. Previous attendance will appear under the updated name.</p>
       <div class="field"><label for="editUserName">Username</label><input id="editUserName" maxlength="50" required /></div>
       <div class="field"><label for="editUserEmail">Email</label><input id="editUserEmail" type="email" maxlength="150" required /></div>
       <div class="field"><label for="editUserWeekoff">Week Off</label><select id="editUserWeekoff"><option value="">Week Off</option><option>Monday</option><option>Tuesday</option><option>Wednesday</option><option>Thursday</option><option>Friday</option><option>Saturday</option><option>Sunday</option></select></div>
