@@ -37,3 +37,28 @@ INFO:     127.0.0.1:61453 - "GET /brands HTTP/1.1" 200 OK
 INFO:     127.0.0.1:62527 - "GET /api/po-receiving-options HTTP/1.1" 200 OK
 INFO:     127.0.0.1:55742 - "GET /api/purchase-orders HTTP/1.1" 200 OK
 INFO:     127.0.0.1:55742 - "GET /sw.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63648 - "GET /purchase-orders HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63648 - "GET /static/app-shell.css HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:55298 - "GET /static/app-shell.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:65131 - "GET /static/purchase-orders-ui.css HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:50313 - "GET /static/po-receiving.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:50313 - "GET /stores HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65131 - "GET /categories HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56168 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53963 - "GET /api/brand-category-visibility HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63648 - "GET /subcategories HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50313 - "GET /api/po-receiving-options HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55298 - "GET /brands HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65131 - "GET /api/purchase-orders HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65131 - "GET /sw.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60646 - "PATCH /api/purchase-orders/11/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60646 - "GET /api/purchase-orders HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61610 - "GET /api/supplier-profile?supplier_name=xyz HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61610 - "PATCH /api/purchase-orders/18/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61610 - "GET /api/purchase-orders HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55657 - "PATCH /api/purchase-orders/18/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63299 - "PATCH /api/purchase-orders/18/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63299 - "GET /api/purchase-orders/18 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63299 - "GET /static/app-shell.css HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:61848 - "GET /static/purchase-orders-ui.css HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:61848 - "POST /api/purchase-orders/18/send-email HTTP/1.1" 503 Service Unavailable

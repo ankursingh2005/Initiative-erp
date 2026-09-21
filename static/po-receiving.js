@@ -7,8 +7,8 @@ function receivingActions(order) {
   const summary = order.receiving || {};
   const progress = summary.verified_at ? 100 : 50;
   return `<div class="po-loop-ring" style="--po-progress:${progress}%" role="img" aria-label="PO loop ${progress}% complete"><span>${progress}%</span></div><div class="po-meta"><strong>${escapeHtml(summary.stage || 'Sent — awaiting receipt')}</strong>
-    <span> · ${summary.verified_at ? 'Loop complete' : 'First half complete · receipt and verification pending'}</span></div>
-    <button type="button" class="btn-outline" onclick="openReceiving(${order.id})">Receive / match / verify</button>`;
+    </div>
+    <button type="button" class="btn-outline" onclick="openReceiving(${order.id})">Receive</button>`;
 }
 
 async function openReceiving(id) {
