@@ -857,7 +857,7 @@
     function openEditUser(userId) {
       if (!['Admin','HR'].includes(role)) return;
       const user = userManagementUsers.find(item => item.id === userId);
-      if (!user) return;
+      if (!user || (role === 'HR' && user.role === 'Admin')) return;
       editUserTargetId = userId;
       document.getElementById('editUserName').value = user.username;
       document.getElementById('editUserEmail').value = user.email;
@@ -883,7 +883,12 @@
         if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Unable to save user details');
         const user = userManagementUsers.find(item => item.id === userId);
         if (user) Object.assign(user, data);
-        if (userId === userManagementActorId) localStorage.setItem('username', data.username);
+        if (userId === userManagementActorId) {
+          localStorage.setItem('username', data.username);
+          document.getElementById('userName').textContent = data.username;
+          document.getElementById('userAvatar').textContent = data.username.charAt(0).toUpperCase();
+          document.getElementById('welcomeHeading').textContent = `Welcome back, ${data.username}`;
+        }
         document.getElementById('editUserDialog').close();
         renderUserManagementTable();
         const message = document.getElementById('userManagementMsg');
@@ -905,7 +910,7 @@
       }
       tbody.innerHTML = users.map(u => `
         <tr>
-          <td>${escapeOutletText(u.username)}</td>
+          <td>${escapeOutletText(u.username)} ${['Admin','HR'].includes(role) && !(role === 'HR' && u.role === 'Admin') ? `<button type="button" class="um-reset-btn" aria-label="Edit username for ${escapeOutletText(u.username)}" onclick="openEditUser(${u.id})">Edit</button>` : ''}</td>
           <td>${escapeOutletText(u.email)}</td>
           <td>${userRoleDropdown(u)}</td>
           <td>${userAssignmentLabel(u)}</td>
@@ -914,7 +919,6 @@
           <td>${u.status}</td>
           <td>${formatDateShort(u.created_date)}</td>
           <td class="um-actions">
-            <button type="button" class="um-reset-btn" onclick="openEditUser(${u.id})">Edit</button>
             <button type="button" class="um-reset-btn" onclick="openResetPasswordModal(${u.id})">Reset Password</button>
             <button type="button" class="um-delete-btn" onclick="openDeleteUserModal(${u.id})" ${(u.id === userManagementActorId || (role === 'HR' && u.role === 'Admin')) ? 'disabled' : ''}>Delete</button>
           </td>

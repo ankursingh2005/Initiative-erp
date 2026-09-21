@@ -2367,6 +2367,7 @@ def serialize_user_with_brands(user: models.User) -> dict:
         "category_code": user.category_code,
         "brand_ids": [ub.brand_id for ub in user.brands],
         "status": user.status,
+        "weekoff_day": user.weekoff_day,
         "created_date": user.created_date,
     }
 
@@ -2692,6 +2693,44 @@ def admin_reset_user_password(
     db.commit()
 
     return {"message": f"Password reset for {target_user.username}"}
+
+
+@app.patch("/api/users/{user_id}/details", response_model=schemas.UserAdminOut)
+def update_user_details(
+    user_id: int,
+    payload: schemas.UserDetailsUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_user_management_admin),
+):
+    target_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if current_user.role == "HR" and target_user.role == "Admin":
+        raise HTTPException(status_code=403, detail="Only Admin can edit Admin accounts")
+    username = payload.username.strip()
+    email = payload.email.strip().lower()
+    weekoff = (payload.weekoff_day or "").strip() or None
+    if not username:
+        raise HTTPException(status_code=400, detail="Username cannot be blank")
+    if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
+        raise HTTPException(status_code=400, detail="Enter a valid email address")
+    if weekoff not in {None, "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}:
+        raise HTTPException(status_code=400, detail="Select a valid week off day")
+    if db.query(models.User).filter(func.lower(models.User.email) == email, models.User.id != user_id).first():
+        raise HTTPException(status_code=409, detail="Email is already used by another account")
+    target_user.username = username
+    if target_user.email != email:
+        target_user.reset_token = None
+        target_user.reset_token_expires = None
+    target_user.email = email
+    target_user.weekoff_day = weekoff
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Email is already used by another account")
+    db.refresh(target_user)
+    return serialize_user_with_brands(target_user)
 
 
 @app.patch("/api/users/{user_id}/assignments", response_model=schemas.UserAdminOut)
