@@ -1076,6 +1076,12 @@ def _calculate_reward_for_interval_row(scheme: models.Scheme, row: models.Interv
     return 0
 
 
+@app.get("/incentive")
+@app.get("/incentive.html")
+def incentive_page():
+    return FileResponse("static/incentive.html")
+
+
 def serve_html(path: str):
     return FileResponse(path)
 
