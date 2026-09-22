@@ -5010,7 +5010,7 @@ def dp_categorize(item_name: Optional[str]) -> str:
         "SAC ", "WAC ", "CASSETTE AC", "AC 3T", " AC ", " TON ", "SPLIT AC",
         "WINDOW AC", "INVERTER AC", "PANEL", "CHEST FREEZER", "DEEP FREEZER",
         " REF ", "REF EON", "REF RD", "REF HRD", "REF SJ", "REFRIGERATOR",
-        "FRIDGE", "COOLER", "WATER PURIFIER", "WATER HEATER", "GEYSER",
+        "FRIDGE", "COOLER", "WATER PURIFIER", "WATER DISPENSER", "WATER HEATER", "GEYSER",
         "EXCELL PART", "GARMENT STEAMER", " MW ", "MICROWAVE", "MWO",
         " FAN ", " WM ", "WASHING MACHINE", "MIXER GRINDER", "INDUCTION",
         "IN ICT", "CHIMNEY", "DISHWASHER", "VACUUM CLEANER", "AIR PURIFIER",
