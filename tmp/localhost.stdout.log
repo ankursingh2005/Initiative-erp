@@ -1,2 +1,38 @@
 INFO:     127.0.0.1:60282 - "GET /home HTTP/1.1" 200 OK
 INFO:     127.0.0.1:60282 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52075 - "GET /login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52075 - "GET /signup HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52075 - "GET /home HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52075 - "GET /ems HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52075 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52080 - "GET /login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51984 - "GET /login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51984 - "GET /static/app-shell.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51984 - "GET /static/app-shell.css HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:51984 - "GET /sw.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55273 - "POST /auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55273 - "GET /home HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55273 - "GET /static/app-shell.css HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:63249 - "GET /static/app-shell.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:63249 - "GET /sw.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64933 - "GET /login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64933 - "GET /static/app-shell.css HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:51388 - "GET /static/app-shell.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51388 - "GET /home HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64933 - "GET /static/app-shell.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:51388 - "GET /static/app-shell.css HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:51388 - "GET /sw.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61999 - "GET /purchase-orders HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61999 - "GET /static/app-shell.css HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:60254 - "GET /static/purchase-orders-ui.css HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:58988 - "GET /static/app-shell.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:49737 - "GET /static/po-receiving.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58988 - "GET /categories HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52382 - "GET /api/brand-category-visibility HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56312 - "GET /api/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49737 - "GET /stores HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58988 - "GET /api/po-receiving-options HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60254 - "GET /brands HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61999 - "GET /subcategories HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52382 - "GET /api/purchase-orders HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52382 - "GET /sw.js HTTP/1.1" 200 OK

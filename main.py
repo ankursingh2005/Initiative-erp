@@ -2570,9 +2570,18 @@ def save_attendance_location(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    if current_user.store_id is None:
-        raise HTTPException(status_code=400, detail="No outlet is assigned to this account")
-    store = db.query(models.Store).filter(models.Store.id == current_user.store_id).first()
+    captured_at = india_datetime(point.captured_at)
+    now = datetime.now(INDIA_TZ).replace(tzinfo=None)
+    record = db.query(models.AttendanceRecord).filter(
+        models.AttendanceRecord.user_id == current_user.id,
+        models.AttendanceRecord.checkin_at <= captured_at,
+        models.AttendanceRecord.checkout_at.is_(None),
+    ).order_by(models.AttendanceRecord.checkin_at.desc()).first()
+    if not record or captured_at > now + timedelta(seconds=30) or captured_at < now - timedelta(minutes=2):
+        raise HTTPException(status_code=409, detail="Live location requires a current punch-in session")
+    if not math.isfinite(point.latitude) or not math.isfinite(point.longitude) or not -90 <= point.latitude <= 90 or not -180 <= point.longitude <= 180:
+        raise HTTPException(status_code=422, detail="Invalid GPS coordinates")
+    store = db.query(models.Store).filter(models.Store.id == record.store_id).first()
     if not store or store.latitude is None or store.longitude is None:
         raise HTTPException(status_code=400, detail="Assigned outlet has no GPS coordinates")
     radius = 6371000
@@ -2581,11 +2590,9 @@ def save_attendance_location(
     lon_delta = (point.longitude - store.longitude) * radians
     value = math.sin(lat_delta / 2) ** 2 + math.cos(store.latitude * radians) * math.cos(point.latitude * radians) * math.sin(lon_delta / 2) ** 2
     actual_distance = 2 * radius * math.atan2(math.sqrt(value), math.sqrt(1 - value))
-    if actual_distance > (store.geofence_radius_m or 100):
-        raise HTTPException(status_code=403, detail=f"Location tracking blocked outside {store.name} geofence")
     previous = db.query(models.AttendanceLocationPoint).filter(
             models.AttendanceLocationPoint.user_id == current_user.id,
-            models.AttendanceLocationPoint.captured_at >= datetime.combine(india_datetime(point.captured_at).date(), datetime.min.time()),
+            models.AttendanceLocationPoint.captured_at >= record.checkin_at,
             models.AttendanceLocationPoint.captured_at < india_datetime(point.captured_at),
         ).order_by(models.AttendanceLocationPoint.captured_at.desc()).first()
     route_distance = 0
@@ -2599,7 +2606,7 @@ def save_attendance_location(
     location = models.AttendanceLocationPoint(
         user_id=current_user.id, store_id=store.id, captured_at=india_datetime(point.captured_at),
         latitude=point.latitude, longitude=point.longitude,
-        accuracy_m=point.accuracy_m, distance_from_store_m=point.distance_from_store_m,
+        accuracy_m=point.accuracy_m, distance_from_store_m=actual_distance,
         route_distance_m=route_distance,
     )
     db.add(location)
@@ -2698,8 +2705,28 @@ def attendance_admin_summary(
             models.AttendanceLocationPoint.user_id == user.id,
             models.AttendanceLocationPoint.captured_at >= range_start_dt,
             models.AttendanceLocationPoint.captured_at < range_end_dt,
-        ).all()
+        ).order_by(models.AttendanceLocationPoint.captured_at, models.AttendanceLocationPoint.id).all()
+        points = [point for point in points if any(
+            record.checkin_at and record.checkin_at <= point.captured_at
+            and (not record.checkout_at or point.captured_at <= record.checkout_at)
+            for record in user_records
+        )]
         max_point = max(points, key=lambda point: point.distance_from_store_m or 0) if points else None
+        latest_record = user_records[-1] if user_records else None
+        latest_point = points[-1] if points else None
+        last_at = latest_point.captured_at if latest_point else None
+        distance = latest_point.distance_from_store_m if latest_point else None
+        tracking_status = "Not started"
+        if latest_record and latest_record.checkin_at:
+            if not last_at or last_at < latest_record.checkin_at:
+                last_at, distance = latest_record.checkin_at, latest_record.checkin_distance_m
+            tracking_status = "Active" if datetime.now(INDIA_TZ).replace(tzinfo=None) - last_at <= timedelta(minutes=2) else "Inactive"
+            if latest_record.checkout_at:
+                last_at = latest_record.checkout_at
+                distance = latest_record.checkout_distance_m if latest_record.checkout_distance_m is not None else distance
+                tracking_status = "Completed"
+        location_summary = {"current_distance_from_store_m": distance,
+                            "last_location_at": last_at, "location_tracking_status": tracking_status}
 
         if single_day:
             record = user_records[0] if user_records else None
@@ -2708,6 +2735,7 @@ def attendance_admin_summary(
                 "outlet_name": outlet_name, "outlet_abbreviation": outlet_abbreviation,
                 "status": day_status,
                 **status_counts,
+                **location_summary,
                 "present_days": present_days, "days_in_range": days_in_range,
                 "checkin_at": record.checkin_at if record else None,
                 "checkout_at": record.checkout_at if record else None,
@@ -2724,6 +2752,7 @@ def attendance_admin_summary(
                 "outlet_name": outlet_name, "outlet_abbreviation": outlet_abbreviation,
                 "status": f"{present_days}/{days_in_range} Present · {weekoff_days} Week Off · {leave_days} Leave · {absent_days} Absent",
                 **status_counts,
+                **location_summary,
                 "present_days": present_days, "days_in_range": days_in_range,
                 "checkin_at": None,
                 "checkout_at": None,
