@@ -395,7 +395,7 @@ function enhanceAdminHistoryCounter(modal){const select=modal.querySelector('.re
 new MutationObserver(mutations=>{for(const mutation of mutations)for(const node of mutation.addedNodes)if(node.nodeType===1){if(node.matches?.('.record-modal'))enhanceAdminHistoryCounter(node);node.querySelectorAll?.('.record-modal').forEach(enhanceAdminHistoryCounter)}}).observe(document.body,{childList:true});
 function attendanceEmployeeTitle(user){
   const name=user.username||'';
-  if(user.role==='BrandPartner')return name+' (BrandPartner – '+(user.brand_names?.length?user.brand_names.join(', '):'Company not assigned')+')';
+  if(user.role==='BrandPartner')return name+' (BrandPartner'+(user.brand_names?.length?' – '+user.brand_names.join(', '):'')+')';
   const labels={SupportingStaff:'Supporting Staff',CategoryManager:'Category Manager',BrandManager:'Brand Manager',ServiceManager:'Service Manager',ACTechnicianA:'AC Technician A',ACTechnicianB:'AC Technician B',MISExecutive:'MIS Executive'};
   return user.role?name+' ('+(labels[user.role]||user.role)+')':name;
 }

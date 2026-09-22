@@ -6,7 +6,7 @@ test('BrandPartner heading shows assigned companies and a clear unassigned fallb
   vm.runInContext(html.slice(html.indexOf('function attendanceEmployeeTitle('),html.indexOf('async function openAdminRecord(')),context);
   assert.equal(context.attendanceEmployeeTitle({username:'ravi pal',role:'BrandPartner',brand_names:['Samsung']}),'ravi pal (BrandPartner – Samsung)');
   assert.equal(context.attendanceEmployeeTitle({username:'ravi pal',role:'BrandPartner',brand_names:['Samsung','LG']}),'ravi pal (BrandPartner – Samsung, LG)');
-  assert.match(context.attendanceEmployeeTitle({username:'ravi pal',role:'BrandPartner'}),/Company not assigned/);
+  assert.equal(context.attendanceEmployeeTitle({username:'ravi pal',role:'BrandPartner'}),'ravi pal (BrandPartner)');
   assert.equal(context.attendanceEmployeeTitle({username:'Priyanshu',role:'ACTechnicianA'}),'Priyanshu (AC Technician A)');
 });
 test('employee history loads by permanent ID after a rename, with older dates available',async()=>{
