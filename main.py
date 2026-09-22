@@ -2818,6 +2818,38 @@ def list_users_for_admin(
     return [serialize_user_with_brands(u) for u in users]
 
 
+USER_MANAGEMENT_ROLES = sorted(set(VALID_ROLES) | {
+    "ACTechnicianA", "ACTechnicianB", "Assistant", "AsstSalesManager",
+    "Cashier", "CustomerCare", "Employee", "HR", "ITEngineer", "Loader",
+    "LogisticManager", "Owner", "SalesExecutive", "ServiceHead",
+    "ServiceManager", "Supervisor", "Other",
+})
+
+
+@app.get("/api/users/roles", response_model=List[str])
+def list_user_roles(current_user: models.User = Depends(auth.require_user_management_admin)):
+    return USER_MANAGEMENT_ROLES
+
+
+@app.patch("/api/users/{user_id}/role", response_model=schemas.UserAdminOut)
+def update_user_role(
+    user_id: int,
+    payload: schemas.UserRoleUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_user_management_admin),
+):
+    auth.require_user_management_admin(current_user)
+    if payload.role not in USER_MANAGEMENT_ROLES:
+        raise HTTPException(400, "Choose a valid role")
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+    user.role = payload.role
+    db.commit()
+    db.refresh(user)
+    return serialize_user_with_brands(user)
+
+
 @app.get("/api/users/count", response_model=schemas.UserCountOut)
 def count_registered_users(
     db: Session = Depends(get_db),
