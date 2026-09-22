@@ -16,10 +16,10 @@ test('heartbeat requests fresh GPS only during a shift and ignores fixes after p
   tick();record.out='2026-09-22';success({coords:{latitude:0,longitude:0}});
   assert.equal(uploads,1);tick();assert.equal(requests,2);
 });
-test('distance renders zero, stale state and completed reading',()=>{
+test('distance stays visible without signal-status badges',()=>{
   const context={safeText:String};
   vm.runInNewContext(html.slice(html.indexOf('function liveDistanceHtml('),html.indexOf('function adminEmployeeLabel(')),context);
   assert.match(context.liveDistanceHtml({current_distance_from_store_m:0,location_tracking_status:'Active'}),/0 m/);
-  assert.match(context.liveDistanceHtml({current_distance_from_store_m:42,location_tracking_status:'Inactive'}),/Signal stale/);
-  assert.match(context.liveDistanceHtml({current_distance_from_store_m:42,location_tracking_status:'Completed'}),/Completed/);
+  assert.equal(context.liveDistanceHtml({current_distance_from_store_m:42,location_tracking_status:'Inactive'}),'<span class="live-distance">42 m</span>');
+  assert.equal(context.liveDistanceHtml({current_distance_from_store_m:42,location_tracking_status:'Completed'}),'<span class="live-distance">42 m</span>');
 });
