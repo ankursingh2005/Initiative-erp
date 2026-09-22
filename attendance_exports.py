@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 import auth
 import models
 from database import get_db
+from attendance_categories import filter_employee_category
 
 router = APIRouter(prefix='/api/attendance')
 HEADERS = ['User ID', 'Employee', 'Date', 'Outlet', 'Status', 'Punch in', 'Punch out', 'Hours']
@@ -69,12 +70,7 @@ def export_rows(db, start=None, end=None, user_id=None, store_id=None, weekoff_d
         users = users.filter(models.User.status == 'Active')
     if weekoff_day:
         users = users.filter(models.User.weekoff_day == weekoff_day)
-    if emp_category == 'brand_pro':
-        users = users.filter(models.User.role == 'BrandPartner')
-    elif emp_category == 'ids_emp':
-        users = users.filter(~models.User.role.in_(['BrandPartner', 'ACTechnicianA', 'ACTechnicianB']))
-    elif emp_category:
-        raise HTTPException(400, 'This employee category is not configured for export. Select all categories.')
+    users = filter_employee_category(users, emp_category)
     users = users.order_by(models.User.username, models.User.id).all()
     ids = [user.id for user in users]
     records = db.query(models.AttendanceRecord).filter(models.AttendanceRecord.user_id.in_(ids))

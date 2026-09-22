@@ -2644,6 +2644,7 @@ def attendance_admin_summary(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.require_roles("Admin")),
     weekoff_day: Optional[str] = None,
+    emp_category: Optional[str] = None,
 ):
     today = india_today()
     start_date = from_date or today
@@ -2658,7 +2659,8 @@ def attendance_admin_summary(
         user_query = user_query.filter(models.User.store_id == store_id)
     if weekoff_day:
         user_query = user_query.filter(models.User.weekoff_day == weekoff_day)
-    users = user_query.all()
+    from attendance_categories import filter_employee_category
+    users = filter_employee_category(user_query, emp_category).all()
     stores_by_id = {
         store.id: store for store in db.query(models.Store).all()
     }
