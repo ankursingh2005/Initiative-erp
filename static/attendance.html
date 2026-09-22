@@ -326,7 +326,7 @@ const renderTodayAndSummary=render;
 render=function(){renderTodayAndSummary();populateMonths();renderSummary()};
 </script>
 <script>
-function liveDistanceHtml(row){const distance=row.current_distance_from_store_m;const value=distance===null||distance===undefined?'?':Math.round(Number(distance))+' m';return '<span class="live-distance">'+value+'</span>'}
+function liveDistanceHtml(row){const distance=row.current_distance_from_store_m;const value=distance===null||distance===undefined?'-':Math.round(Number(distance))+' m';return '<span class="live-distance">'+value+'</span>'}
 function adminEmployeeLabel(row,category){const name=row.display_name||row.username||'';if(category==='brand_pro')return name+' / '+(row.promoter_brand||'Brand not assigned');if(category==='ids_emp')return name+' / '+(row.role||'Employee');return row.username}
 function showAdminLoading(){
   if(document.getElementById('adminLoading'))return;
