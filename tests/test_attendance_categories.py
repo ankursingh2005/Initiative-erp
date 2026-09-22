@@ -19,7 +19,7 @@ class AttendanceCategoryTests(unittest.TestCase):
                 status='Active', password_hash='unused', store_id=self.stores[0].id))
         self.db.commit()
         for category, username in [('ids_emp', 'Employee'), ('brand_pro', 'employee'),
-                                   ('ac_retails', 'ACTechnicianA'), ('ac_projects', 'ACTechnicianB')]:
+                                   ('ac_retails', 'ACTechnicianB'), ('ac_projects', 'ACTechnicianA')]:
             with self.subTest(category=category):
                 data = main.attendance_admin_summary(store_id=None, from_date=today, to_date=today,
                     db=self.db, current_user=self.actor, emp_category=category)
