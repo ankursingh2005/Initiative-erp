@@ -569,7 +569,7 @@ async def handle_unexpected_error(request: Request, exc: Exception):
 # "static" folder sitting next to this file.
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-VALID_ROLES = ["Admin", "CategoryManager", "BrandManager", "BrandPartner", "SupportingStaff", "Accounts", "MISExecutive"]
+VALID_ROLES = ["Accounts","ACTechnicianA","ACTechnicianB","Admin","Assistant","AsstSalesManager","BrandManager","BrandPartner","Cashier","CategoryManager","CustomerCare","Employee","HR","ITEngineer","Loader","LogisticManager","MISExecutive","Owner","SalesExecutive","ServiceHead","ServiceManager","SupportingStaff","Supervisor","Other"]
 
 
 def normalize_category_code(raw_value: Optional[str]) -> Optional[str]:
@@ -1946,74 +1946,13 @@ def offline_page():
 
 @app.post("/auth/signup", response_model=schemas.UserOut)
 def signup(user: schemas.UserSignup, db: Session = Depends(get_db)):
-    # --------------------------------------------------------------
-    # Invite-code gate: the signup page is public (anyone can reach it
-    # once this app is on the Play/App Store), so each role -- and each
-    # Category Manager's category, and each Brand Manager/Partner's
-    # brand -- requires its own separate code. This means a code that
-    # leaks only exposes that one role/category/brand, not the whole
-    # system, and you can rotate a single one without affecting others.
-    #
-    # Override any of these in your environment (Render dashboard ->
-    # Environment, or a local .env file) without changing code:
-    #   SIGNUP_CODE_ADMIN, SIGNUP_CODE_ACCOUNTS, SIGNUP_CODE_MIS,
-    #   SIGNUP_CODE_CAT_HA, SIGNUP_CODE_CAT_HE, SIGNUP_CODE_CAT_IT,
-    #   SIGNUP_CODE_CAT_MOBILE, SIGNUP_CODE_UNIVERSAL
-    # Brand codes are not env vars -- they're always "INITIATIVE@<BRAND NAME>"
-    # (uppercased, spaces removed), generated automatically per brand.   
-    # --------------------------------------------------------------
-    ROLE_INVITE_CODES = {
-        "Admin": os.getenv("SIGNUP_CODE_ADMIN", "Initiative@#%_-Admin"),
-        "Accounts": os.getenv("SIGNUP_CODE_ACCOUNTS", "Initiative/AC"),
-        "MISExecutive": os.getenv("SIGNUP_CODE_MIS", "Initiative%MS"),
-    }
-    CATEGORY_INVITE_CODES = {
-        "HA": os.getenv("SIGNUP_CODE_CAT_HA", "Initiative@HA"),
-        "HE": os.getenv("SIGNUP_CODE_CAT_HE", "Initiative#HE"),
-        "IT": os.getenv("SIGNUP_CODE_CAT_IT", "Initiative-IT"),
-        "MH": os.getenv("SIGNUP_CODE_CAT_MOBILE", "Initiative_MO"),
-    }
-    UNIVERSAL_INVITE_CODE = os.getenv("SIGNUP_CODE_UNIVERSAL", "Initiative@Universal")
-
-    def brand_invite_code(brand_name: str) -> str:
-        normalized = re.sub(r"\s+", "", brand_name or "").upper()
-        return f"INITIATIVE@{normalized}"
-
-    submitted_code = (user.invite_code or "").strip()
-
-    if user.role in ROLE_INVITE_CODES:
-        expected = ROLE_INVITE_CODES[user.role]
-        if submitted_code != expected:
-            raise HTTPException(status_code=403, detail="Invalid invite code for this role")
-
-    elif user.role == "CategoryManager":
-        category_code = normalize_category_code(user.category_code)
-        expected = CATEGORY_INVITE_CODES.get(category_code)
-        if expected is None:
-            # No code configured for this category yet -- fall back to
-            # the universal code rather than locking everyone out.
-            expected = UNIVERSAL_INVITE_CODE
-        if submitted_code != expected:
-            raise HTTPException(status_code=403, detail="Invalid invite code for this category")
-
-    elif user.role in ("BrandManager", "BrandPartner"):
-        if not user.brand_ids:
-            raise HTTPException(status_code=400, detail="Select at least one brand")
-        brands = db.query(models.Brand).filter(models.Brand.id.in_(user.brand_ids)).all()
-        matched = any(
-            submitted_code.strip().upper() == brand_invite_code(b.name)
-            for b in brands
-        )
-        if not matched:
-            raise HTTPException(
-                status_code=403,
-                detail="Invalid invite code for the selected brand(s). "
-                       "Code format: INITIATIVE@<BRAND NAME IN CAPITALS>",
-            )
-
-    else:
-        if submitted_code != UNIVERSAL_INVITE_CODE:
-            raise HTTPException(status_code=403, detail="Invalid invite code")
+    # Admin retains its separate invite code; all other roles use the universal code.
+    universal_code = os.getenv("SIGNUP_CODE_UNIVERSAL", "Initiative@Universal")
+    expected_code = os.getenv("SIGNUP_CODE_ADMIN", "Initiative@#%_-Admin") if user.role == "Admin" else universal_code
+    if (user.invite_code or "").strip() != expected_code or (user.role == "Admin" and expected_code == universal_code):
+        raise HTTPException(status_code=403, detail="Invalid invite code")
+    if user.role not in VALID_ROLES:
+        raise HTTPException(status_code=400, detail="Choose a valid role")
 
     existing = (
         db.query(models.User)
@@ -2831,12 +2770,7 @@ def list_users_for_admin(
     return [serialize_user_with_brands(u) for u in users]
 
 
-USER_MANAGEMENT_ROLES = sorted(set(VALID_ROLES) | {
-    "ACTechnicianA", "ACTechnicianB", "Assistant", "AsstSalesManager",
-    "Cashier", "CustomerCare", "Employee", "HR", "ITEngineer", "Loader",
-    "LogisticManager", "Owner", "SalesExecutive", "ServiceHead",
-    "ServiceManager", "Supervisor", "Other",
-})
+USER_MANAGEMENT_ROLES = sorted(VALID_ROLES)
 
 
 @app.get("/api/users/roles", response_model=List[str])
