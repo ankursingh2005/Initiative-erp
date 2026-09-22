@@ -2773,6 +2773,28 @@ def list_users_for_admin(
 USER_MANAGEMENT_ROLES = sorted(VALID_ROLES)
 
 
+@app.patch("/api/users/{user_id}/attendance-outlet", response_model=schemas.UserAdminOut)
+def update_attendance_outlet(
+    user_id: int,
+    payload: schemas.AttendanceOutletUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_user_management_admin),
+):
+    auth.require_user_management_admin(current_user)
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+    store = db.query(models.Store).filter(models.Store.id == payload.store_id).first()
+    if not store or store.status != "Active":
+        raise HTTPException(400, "Select an active outlet")
+    if store.latitude is None or store.longitude is None:
+        raise HTTPException(400, "Selected outlet needs GPS coordinates before attendance can be assigned")
+    user.store_id = store.id
+    db.commit()
+    db.refresh(user)
+    return serialize_user_with_brands(user)
+
+
 @app.get("/api/users/roles", response_model=List[str])
 def list_user_roles(current_user: models.User = Depends(auth.require_user_management_admin)):
     return USER_MANAGEMENT_ROLES
