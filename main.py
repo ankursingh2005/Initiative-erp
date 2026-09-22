@@ -1082,6 +1082,13 @@ def incentive_page():
     return FileResponse("static/incentive.html")
 
 
+@app.get("/identity-card")
+@app.get("/identity-card.html")
+@app.get("/identity_card.html")
+def identity_card_page():
+    return FileResponse("static/identity_card.html")
+
+
 def serve_html(path: str):
     return FileResponse(path)
 
@@ -8534,6 +8541,8 @@ def clear_analytics_data(
 
 from attendance_exports import router as attendance_exports_router
 app.include_router(attendance_exports_router)
+from identity_cards import router as identity_cards_router
+app.include_router(identity_cards_router)
 
 
 if __name__ == "__main__":
