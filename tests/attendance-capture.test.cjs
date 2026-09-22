@@ -42,6 +42,17 @@ async function openCamera(t,action='checkout'){
   const opening=t.context.beginAction(action);await Promise.resolve();t.resolve();await opening;
 }
 
+test('both AC technician roles can capture punches outside the outlet',async()=>{
+  for(const role of ['ACTechnicianA','ACTechnicianB']){
+    for(const action of ['checkin','checkout']){
+      const t=setup();t.context.profile.role=role;t.context.meters=()=>50000;
+      await openCamera(t,action);
+      assert.equal(t.$('capture').disabled,false);
+      await t.$('capture').onclick();assert.equal(t.posts(),1);
+    }
+  }
+});
+
 test('an outlet transfer is refreshed before the punch location is checked',async()=>{
   const t=setup();let refreshed=false;
   t.context.refreshAttendanceOutlet=async()=>{refreshed=true;};

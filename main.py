@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Que
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, Response, RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 from sqlalchemy import inspect, text, func, or_
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
@@ -2429,6 +2429,30 @@ def update_my_attendance_status(
     return my_attendance_status(db, current_user)
 
 
+ATTENDANCE_ANYWHERE_ROLES = {"ServiceManager", "ACTechnicianA", "ACTechnicianB", "HR"}
+
+
+def attendance_reference_store(db, user, distance_to_store):
+    if user.role in ATTENDANCE_ANYWHERE_ROLES:
+        stores = db.query(models.Store).filter(
+            models.Store.status == "Active", models.Store.latitude.isnot(None),
+            models.Store.longitude.isnot(None),
+        ).all()
+        if not stores:
+            raise HTTPException(400, "No active outlet has GPS coordinates")
+        return min(stores, key=distance_to_store)
+    store = db.query(models.Store).filter(models.Store.id == user.store_id).first()
+    if not store or store.latitude is None or store.longitude is None:
+        raise HTTPException(400, "Assigned outlet has no GPS coordinates")
+    return store
+
+
+def attendance_distance(latitude, longitude, store):
+    lat1, lat2 = math.radians(latitude), math.radians(store.latitude)
+    value = math.sin((lat1 - lat2) / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(math.radians(longitude - store.longitude) / 2) ** 2
+    return 6371000 * 2 * math.asin(math.sqrt(min(1, max(0, value))))
+
+
 @app.post("/api/attendance", response_model=schemas.AttendanceOut)
 def save_attendance(
     attendance: schemas.AttendanceCreate,
@@ -2437,19 +2461,11 @@ def save_attendance(
 ):
     if attendance.action not in {"checkin", "checkout"}:
         raise HTTPException(status_code=400, detail="Action must be checkin or checkout")
-    if current_user.store_id is None:
-        raise HTTPException(status_code=400, detail="No outlet is assigned to this account")
-    store = db.query(models.Store).filter(models.Store.id == current_user.store_id).first()
-    if not store or store.latitude is None or store.longitude is None:
-        raise HTTPException(status_code=400, detail="Assigned outlet has no GPS coordinates")
-    radius = 6371000
-    radians = math.pi / 180
-    lat_delta = (attendance.latitude - store.latitude) * radians
-    lon_delta = (attendance.longitude - store.longitude) * radians
-    value = math.sin(lat_delta / 2) ** 2 + math.cos(store.latitude * radians) * math.cos(attendance.latitude * radians) * math.sin(lon_delta / 2) ** 2
-    actual_distance = 2 * radius * math.atan2(math.sqrt(value), math.sqrt(1 - value))
+    distance_to_store = lambda outlet: attendance_distance(attendance.latitude, attendance.longitude, outlet)
+    store = attendance_reference_store(db, current_user, distance_to_store)
+    actual_distance = distance_to_store(store)
     allowed_radius = store.geofence_radius_m or 100
-    if actual_distance > allowed_radius:
+    if current_user.role not in ATTENDANCE_ANYWHERE_ROLES and actual_distance > allowed_radius:
         raise HTTPException(status_code=403, detail=f"Attendance blocked: you are {round(actual_distance)} m from {store.name}; maximum allowed distance is {round(allowed_radius)} m")
     captured_at = india_datetime(attendance.captured_at)
     record = db.query(models.AttendanceRecord).filter(
@@ -2461,7 +2477,7 @@ def save_attendance(
             raise HTTPException(status_code=409, detail="Punch in is required before punch out")
         record = models.AttendanceRecord(
             user_id=current_user.id,
-            store_id=current_user.store_id,
+            store_id=store.id,
             attendance_date=captured_at.date(),
         )
         db.add(record)
@@ -2474,7 +2490,7 @@ def save_attendance(
     setattr(record, f"{prefix}_selfie", attendance.selfie)
     setattr(record, f"{prefix}_latitude", attendance.latitude)
     setattr(record, f"{prefix}_longitude", attendance.longitude)
-    setattr(record, f"{prefix}_distance_m", attendance.distance_m)
+    setattr(record, f"{prefix}_distance_m", actual_distance)
     setattr(record, f"{prefix}_accuracy_m", attendance.accuracy_m)
     db.commit()
     db.refresh(record)
@@ -2485,16 +2501,22 @@ def save_attendance(
 def list_attendance(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
+    scope: str = "all",
+    include_selfies: bool = True,
 ):
     query = db.query(models.AttendanceRecord)
-    if current_user.role != "Admin":
+    if current_user.role != "Admin" or scope == "self":
         query = query.filter(models.AttendanceRecord.user_id == current_user.id)
+    selfie_fields = {"checkin_selfie", "second_punch_selfie", "checkout_selfie"}
+    if not include_selfies:
+        query = query.options(*(defer(getattr(models.AttendanceRecord, name)) for name in selfie_fields))
     records = query.order_by(models.AttendanceRecord.attendance_date.desc()).all()
     users = {user.id: user.username for user in db.query(models.User).all()}
     stores = {store.id: store.name for store in db.query(models.Store).all()}
     return [
         {
-            **{column.name: getattr(record, column.name) for column in models.AttendanceRecord.__table__.columns},
+            **{column.name: None if not include_selfies and column.name in selfie_fields else getattr(record, column.name)
+               for column in models.AttendanceRecord.__table__.columns},
             "username": users.get(record.user_id),
             "outlet_name": stores.get(record.store_id),
         }
