@@ -238,6 +238,7 @@ let locationWatch=null;function locationEvent(message,severity){state.events=sta
 </script>
 <script>
 let geofenceAlertOutside=false;
+let geofenceOutsideReadings=0;
 let lastLocationUploadAt=0;
 async function uploadWorkingLocation(p,d){const now=Date.now();const session=currentAttendance();if(!session?.at||session.out)return;if(now-lastLocationUploadAt<15000)return;lastLocationUploadAt=now;const token=localStorage.getItem('token');if(!token)return;try{const response=await fetch('/api/attendance/location',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({captured_at:new Date().toISOString(),latitude:p.coords.latitude,longitude:p.coords.longitude,accuracy_m:p.coords.accuracy||null,distance_from_store_m:d})});if(!response.ok)lastLocationUploadAt=0}catch(error){lastLocationUploadAt=0}}
 stopApprovedTracking();
@@ -250,12 +251,20 @@ startApprovedTracking=function(){
     state.locations=state.locations||[];
     state.locations.push({at:new Date().toISOString(),latitude:p.coords.latitude,longitude:p.coords.longitude,distance:d});
     uploadWorkingLocation(p,d);
-    if(d>100&&!geofenceAlertOutside){
-      geofenceAlertOutside=true;
-      locationEvent('User moved more than 100 m from assigned '+assignedOutlet()+' outlet','warn');
-      alert('Location alert: You are '+d+' m away from '+assignedOutlet()+'. Please return within 100 m of your assigned outlet.');
-    }else if(d<=100){
-      geofenceAlertOutside=false;
+    const store=(liveStores||[]).find(item=>item.id===profile?.store_id);
+    const radius=Number(store?.geofence_radius_m)||100;
+    const accuracy=Number(p.coords.accuracy);
+    const clearlyOutside=Number.isFinite(accuracy)&&accuracy<=50&&d-accuracy>radius;
+    if(clearlyOutside){
+      geofenceOutsideReadings++;
+      if(geofenceOutsideReadings>=2&&!geofenceAlertOutside){
+        geofenceAlertOutside=true;
+        locationEvent('GPS reports employee outside assigned '+assignedOutlet()+' outlet','warn');
+        setGps('GPS reports '+d+' m from '+assignedOutlet()+'. Check precise location or refresh GPS.','bad');
+      }
+    }else{
+      geofenceOutsideReadings=0;geofenceAlertOutside=false;
+      setGps(d<=radius?'Location verified inside '+assignedOutlet():'GPS is near the outlet boundary. Waiting for a more precise reading.',d<=radius?'ok':'');
     }
     save();
   },()=>{}, {enableHighAccuracy:true,maximumAge:15000,timeout:15000});
@@ -570,7 +579,9 @@ function attendanceStatusCount(status, label) {
           setGps(nearest.distance<=Number(nearest.store.geofence_radius_m||100)?'Present at '+nearest.store.name+' · '+formatDistance(nearest.distance):formatDistance(nearest.distance)+' from '+nearest.store.name,'ok');
         }else{
           const outletName=assignedOutlet(),d=meters(p.coords.latitude,p.coords.longitude,outlets[outletName]);
-          $('distance').textContent=formatDistance(d);setGps(d<=100?'Location verified inside '+outletName:'You are '+formatDistance(d)+' away. Move within 100 m of '+outletName+'.',d<=100?'ok':'bad');
+          const store=(liveStores||[]).find(item=>item.id===profile?.store_id),radius=Number(store?.geofence_radius_m)||100;
+          const uncertain=d>radius&&d-Number(p.coords.accuracy)<=radius;
+          $('distance').textContent=formatDistance(d);setGps(d<=radius?'Location verified inside '+outletName:uncertain?'GPS is near the outlet boundary. Refresh GPS for a precise reading.':'GPS reports '+formatDistance(d)+' from '+outletName+'. Check precise location or refresh GPS.',d<=radius?'ok':uncertain?'':'bad');
         }
       },error=>{const messages={1:'Location permission was denied. Allow it in browser settings.',2:'Your location is unavailable. Turn on GPS and try again.',3:'Location timed out. Move outdoors and try again.'};setGps(messages[error.code]||'Unable to get your location.','bad')},{enableHighAccuracy:true,timeout:15000,maximumAge:5000});
     };
@@ -669,7 +680,7 @@ function attendanceStatusCount(status, label) {
 })();
 </script>
 <script src="static/attendance-outlets.js?v=2"></script>
-<script src="static/attendance-capture.js?v=4"></script>
+<script src="static/attendance-capture.js?v=5"></script>
 <script>
 (function keepWorkingLocationFresh(){
   let pending=false;

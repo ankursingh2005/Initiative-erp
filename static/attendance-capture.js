@@ -58,16 +58,28 @@
         // Reuse a recent page/tracking fix instead of forcing another GPS acquisition.
         // Leave at least 30 seconds of the validity window for taking the selfie.
         const cached = validGps(position) && Date.now() - position.timestamp <= 30000 ? position : null;
-        const gps = cached || await new Promise((resolve, reject) => {
+        let gps = cached || await new Promise((resolve, reject) => {
           if (!navigator.geolocation) return reject(new Error('Location is unavailable.'));
           navigator.geolocation.getCurrentPosition(resolve, reject, {enableHighAccuracy:true, timeout:15000, maximumAge:30000});
         });
         if (id !== session) return;
         if (!validGps(gps)) throw new Error('GPS reading is invalid or inaccurate. Please enable precise location and retry.');
         position = gps;
-        const outlet = assignedOutlet(), distance = meters(gps.coords.latitude, gps.coords.longitude, outlets[outlet]);
+        let outlet = assignedOutlet(), distance = meters(gps.coords.latitude, gps.coords.longitude, outlets[outlet]);
         const anywhere = ['ServiceManager','ACTechnicianA','ACTechnicianB','HR'].includes(profile.role);
-        if (!anywhere && distance > 100) throw new Error('Verify your GPS location within the allowed outlet area and try again.');
+        const store = typeof liveStores !== 'undefined' ? liveStores.find(item=>item.id===profile.store_id) : null;
+        const radius = Number(store?.geofence_radius_m) || 100;
+        if (!anywhere && distance > radius) {
+          $('modalText').textContent = 'GPS is outside the outlet boundary. Checking a fresh precise location...';
+          gps = await new Promise((resolve,reject)=>navigator.geolocation.getCurrentPosition(resolve,reject,
+            {enableHighAccuracy:true,timeout:15000,maximumAge:0}));
+          if (id !== session) return;
+          if (!validGps(gps)) throw new Error('GPS is inaccurate. Enable precise location and retry.');
+          position = gps;
+          outlet = assignedOutlet();
+          distance = meters(gps.coords.latitude,gps.coords.longitude,outlets[outlet]);
+        }
+        if (!anywhere && distance > radius) throw new Error('GPS reports '+Math.round(distance)+' m from '+outlet+' (accuracy +/- '+Math.round(gps.coords.accuracy)+' m). Enable precise location and retry. If you are at the outlet, ask Admin to verify its saved map location.');
         active.gps = gps;
         active.distance = distance;
         ready();

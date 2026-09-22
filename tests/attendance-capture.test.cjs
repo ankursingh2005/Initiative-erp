@@ -53,6 +53,23 @@ test('both AC technician roles can capture punches outside the outlet',async()=>
   }
 });
 
+test('borderline cached GPS is replaced by a fresh inside reading before capture',async()=>{
+  const t=setup();let fixes=0;
+  t.context.position={timestamp:Date.now(),coords:{latitude:1,longitude:0,accuracy:25}};
+  t.context.meters=latitude=>latitude===1?112:40;
+  t.context.navigator.geolocation.getCurrentPosition=(resolve,reject,options)=>{
+    fixes++;assert.equal(options.maximumAge,0);
+    resolve({timestamp:Date.now(),coords:{latitude:0,longitude:0,accuracy:10}});
+  };
+  await openCamera(t);assert.equal(fixes,1);assert.equal(t.$('capture').disabled,false);
+});
+
+test('capture respects the configured outlet radius',async()=>{
+  const t=setup();t.context.profile.store_id=7;
+  t.context.liveStores=[{id:7,geofence_radius_m:150}];t.context.meters=()=>112;
+  await openCamera(t);assert.equal(t.$('capture').disabled,false);
+});
+
 test('an outlet transfer is refreshed before the punch location is checked',async()=>{
   const t=setup();let refreshed=false;
   t.context.refreshAttendanceOutlet=async()=>{refreshed=true;};
