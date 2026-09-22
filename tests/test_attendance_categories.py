@@ -11,6 +11,23 @@ class AttendanceCategoryTests(unittest.TestCase):
     setUp = fixtures.AttendanceOutletTests.setUp
     tearDown = fixtures.AttendanceOutletTests.tearDown
 
+    def test_dashboard_returns_assigned_brand_names_for_daily_and_range_views(self):
+        from datetime import timedelta
+        today = main.india_today()
+        for name in ['Samsung', 'LG']:
+            brand = models.Brand(name=name)
+            self.db.add(brand)
+            self.db.flush()
+            self.db.add(models.UserBrand(user_id=self.employee.id, brand_id=brand.id))
+        self.db.commit()
+        for end in [today, today + timedelta(days=1)]:
+            data = main.attendance_admin_summary(store_id=None, from_date=today, to_date=end,
+                db=self.db, current_user=self.actor, emp_category='brand_pro')
+            row = data['rows'][0]
+            self.assertEqual(row['username'], self.employee.username)
+            self.assertEqual(row['brand_names'], ['LG', 'Samsung'])
+            self.assertEqual(row['promoter_brand'], 'LG, Samsung')
+
     def test_named_accounts_override_role_group_without_changing_roles(self):
         today = main.india_today()
         accounts = [

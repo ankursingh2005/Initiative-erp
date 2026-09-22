@@ -2661,6 +2661,11 @@ def attendance_admin_summary(
         user_query = user_query.filter(models.User.weekoff_day == weekoff_day)
     from attendance_categories import filter_employee_category
     users = filter_employee_category(user_query, emp_category).all()
+    brand_names_by_user = defaultdict(list)
+    for user_id, brand_name in db.query(models.UserBrand.user_id, models.Brand.name).join(
+        models.Brand, models.Brand.id == models.UserBrand.brand_id,
+    ).filter(models.UserBrand.user_id.in_([user.id for user in users] or [-1])).distinct().order_by(models.Brand.name).all():
+        brand_names_by_user[user_id].append(brand_name)
     stores_by_id = {
         store.id: store for store in db.query(models.Store).all()
     }
@@ -2751,6 +2756,9 @@ def attendance_admin_summary(
                 tracking_status = "Completed"
         location_summary = {"current_distance_from_store_m": distance,
                             "last_location_at": last_at, "location_tracking_status": tracking_status}
+        employee_summary = {"role": user.role,
+                            "brand_names": brand_names_by_user[user.id],
+                            "promoter_brand": ", ".join(brand_names_by_user[user.id])}
 
         if single_day:
             record = user_records[0] if user_records else None
@@ -2760,6 +2768,7 @@ def attendance_admin_summary(
                 "status": day_status,
                 **status_counts,
                 **location_summary,
+                **employee_summary,
                 "present_days": present_days, "days_in_range": days_in_range,
                 "checkin_at": record.checkin_at if record else None,
                 "checkout_at": record.checkout_at if record else None,
@@ -2777,6 +2786,7 @@ def attendance_admin_summary(
                 "status": f"{present_days}/{days_in_range} Present · {weekoff_days} Week Off · {leave_days} Leave · {absent_days} Absent",
                 **status_counts,
                 **location_summary,
+                **employee_summary,
                 "present_days": present_days, "days_in_range": days_in_range,
                 "checkin_at": None,
                 "checkout_at": None,
