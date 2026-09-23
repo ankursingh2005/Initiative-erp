@@ -403,6 +403,13 @@
 .employee-attendance .employee-outlet .outlet-line{display:inline-block;white-space:nowrap;font-size:11px;line-height:1.5;font-weight:800}
 .employee-attendance .employee-outlet strong{font-size:inherit;overflow-wrap:normal;white-space:nowrap}
 </style>
+<style>
+.employee-attendance .employee-profile>div:last-child{flex:1;min-width:0}
+.employee-attendance .employee-profile h2{white-space:nowrap;overflow-wrap:normal;word-break:normal;width:max-content;max-width:none}
+</style>
+<style>
+.employee-attendance .employee-designation{margin-top:4px;font-size:10px;font-weight:800;line-height:1.4;color:#111;overflow-wrap:anywhere}
+</style>
 </head>
 <body>
 <header class="top"><a class="brand" href="/home"><span>Initiative ERP</span><b class="page-chip">Attendance</b></a><div class="top-actions"><a class="back" href="/home" title="Back to Home"><span aria-hidden="true">&#8592;</span> Back</a></div></header>
@@ -562,11 +569,13 @@ render=function(){renderTodayAndSummary();populateMonths();renderSummary()};
 </script>
 <script>
 function liveDistanceHtml(row){const distance=row.current_distance_from_store_m;const value=distance===null||distance===undefined?'-':Math.round(Number(distance))+' m';return '<span class="live-distance">'+value+'</span>'}
-function adminEmployeeLabel(row,category){const name=row.display_name||row.username||'';if(category==='brand_pro')return name+' / '+(row.promoter_brand||'Brand not assigned');if(category==='ids_emp')return name+' / '+(row.role||'Employee');return row.username}
+function adminEmployeeLabel(row,category){const name=row.display_name||row.username||'';if(category==='brand_pro')return name+' / '+(row.promoter_brand||'Brand not assigned');if(category==='ids_emp')return name+' / '+(row.role||'Employee');return name}
+function hasAttendanceDashboard(){return ['Admin','Owner','HR','CategoryManager'].includes(localStorage.getItem('role'))}
+function attendanceDashboardTitle(){return localStorage.getItem('role')==='CategoryManager'?'Manager Attendance Dashboard':'Admin Attendance Dashboard'}
 function showAdminLoading(){
   if(document.getElementById('adminLoading'))return;
   const panel=document.createElement('section');panel.id='adminLoading';panel.className='panel';panel.style.cssText='margin-bottom:18px;border-radius:18px;overflow:hidden';
-  panel.innerHTML='<div class="panelHead"><h2>Admin Attendance Dashboard</h2><span class="badge warn" role="status">Loading live data...</span></div><div class="body"><div class="summary">'+['Total Users','Present','Absent','Week Off','Leave'].map(label=>'<div class="metric"><span>'+label+'</span><strong>—</strong></div>').join('')+'</div></div>';
+  panel.innerHTML='<div class="panelHead"><h2>'+attendanceDashboardTitle()+'</h2><span class="badge warn" role="status">Loading live data...</span></div><div class="body"><div class="summary">'+['Total Users','Present','Absent','Week Off','Leave'].map(label=>'<div class="metric"><span>'+label+'</span><strong>—</strong></div>').join('')+'</div></div>';
   panel.querySelector('.panelHead').style.cssText='background:linear-gradient(110deg,#173b73,#155eef,#5040ac);color:white;padding:28px';
   document.querySelector('main').insertBefore(panel,document.querySelector('.grid'));
 }
@@ -580,19 +589,19 @@ function sortAttendanceByCheckin(rows) {
     return first === second ? 0 : first > second ? -1 : 1;
   });
 }
-async function loadAdminSummary(){if(localStorage.getItem('role')!=='Admin')return;const token=localStorage.getItem('token');if(!token)return;showAdminLoading();try{const response=await fetch('/api/attendance/admin-summary',{headers:{Authorization:'Bearer '+token}});if(!response.ok)throw new Error('Dashboard request failed');const data=await response.json(),panel=document.createElement('section');panel.className='panel';panel.style.marginBottom='18px';panel.innerHTML='<div class="panelHead"><h2>Admin Attendance Dashboard</h2><span class="badge ok">All users</span></div><div class="body"><div class="summary"><div class="metric"><span>Total active users</span><strong>'+data.total+'</strong></div><div class="metric"><span>Present</span><strong>'+data.present+'</strong></div><div class="metric"><span>Absent</span><strong>'+data.absent+'</strong></div></div><div style="overflow:auto;margin-top:18px"><table style="width:100%;min-width:1160px;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:10px">Employee</th><th style="text-align:left;padding:10px">Status</th><th style="text-align:left;padding:10px">Check-in</th><th style="text-align:left;padding:10px">Check-out</th><th style="text-align:left;padding:10px">Outlet</th><th style="text-align:left;padding:10px">Route distance</th><th style="text-align:left;padding:10px">Live distance</th><th style="text-align:left;padding:10px">Last location</th><th style="text-align:left;padding:10px">GPS points</th></tr></thead><tbody>'+sortAttendanceByCheckin(data.rows).map(row=>'<tr class="admin-row" data-user-id="'+row.user_id+'" title="Click to view attendance details"><td style="padding:10px">'+safeText(row.username)+'</td><td style="padding:10px"><span class="badge '+(row.status==='Present'?'ok':'bad')+'">'+safeText(row.status)+'</span></td><td style="padding:10px">'+formatTime(row.checkin_at)+'</td><td style="padding:10px">'+formatTime(row.checkout_at)+'</td><td style="padding:10px"><span class="badge ok" title="'+safeText(row.outlet_name||'Unassigned')+'">'+safeText(row.outlet_abbreviation||'—')+'</span></td><td style="padding:10px">'+row.route_distance_m+' m</td><td style="padding:10px">'+liveDistanceHtml(row)+'</td><td style="padding:10px">'+formatTime(row.last_location_at)+'</td><td style="padding:10px">'+row.location_points+'</td></tr>').join('')+'</tbody></table></div></div>';const main=document.querySelector('main');document.getElementById('adminLoading')?.remove();main.insertBefore(panel,main.querySelector('.grid'));initializeAdminDashboard()}catch(error){const badge=document.querySelector('#adminLoading .badge');if(badge)badge.textContent='Unable to load. Refresh to retry.'}finally{document.body.classList.remove('admin-dashboard-loading')}}if(localStorage.getItem('role')==='Admin'){document.body.classList.add('attendance-admin','admin-dashboard-loading');loadAdminSummary()}
+async function loadAdminSummary(){if(!hasAttendanceDashboard())return;const token=localStorage.getItem('token');if(!token)return;showAdminLoading();try{const response=await fetch('/api/attendance/admin-summary',{headers:{Authorization:'Bearer '+token}});if(!response.ok){const failure=await response.json().catch(()=>({}));throw new Error(failure.detail||'Dashboard request failed')}const data=await response.json(),panel=document.createElement('section');panel.className='panel';panel.style.marginBottom='18px';panel.innerHTML='<div class="panelHead"><h2>'+attendanceDashboardTitle()+'</h2><span class="badge ok">'+(localStorage.getItem('role')==='CategoryManager'?'My outlet':'All users')+'</span></div><div class="body"><div class="summary"><div class="metric"><span>Total active users</span><strong>'+data.total+'</strong></div><div class="metric"><span>Present</span><strong>'+data.present+'</strong></div><div class="metric"><span>Absent</span><strong>'+data.absent+'</strong></div></div><div style="overflow:auto;margin-top:18px"><table style="width:100%;min-width:1160px;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:10px">Employee</th><th style="text-align:left;padding:10px">Status</th><th style="text-align:left;padding:10px">Check-in</th><th style="text-align:left;padding:10px">Check-out</th><th style="text-align:left;padding:10px">Outlet</th><th style="text-align:left;padding:10px">Route distance</th><th style="text-align:left;padding:10px">Live distance</th><th style="text-align:left;padding:10px">Last location</th><th style="text-align:left;padding:10px">GPS points</th></tr></thead><tbody>'+sortAttendanceByCheckin(data.rows).map(row=>'<tr class="admin-row" data-user-id="'+row.user_id+'" data-username="'+safeText(row.username)+'" title="Click to view attendance details"><td style="padding:10px">'+safeText(adminEmployeeLabel(row,''))+'</td><td style="padding:10px"><span class="badge '+(row.status==='Present'?'ok':'bad')+'">'+safeText(row.status)+'</span></td><td style="padding:10px">'+formatTime(row.checkin_at)+'</td><td style="padding:10px">'+formatTime(row.checkout_at)+'</td><td style="padding:10px"><span class="badge ok" title="'+safeText(row.outlet_name||'Unassigned')+'">'+safeText(row.outlet_abbreviation||'—')+'</span></td><td style="padding:10px">'+row.route_distance_m+' m</td><td style="padding:10px">'+liveDistanceHtml(row)+'</td><td style="padding:10px">'+formatTime(row.last_location_at)+'</td><td style="padding:10px">'+row.location_points+'</td></tr>').join('')+'</tbody></table></div></div>';const main=document.querySelector('main');document.getElementById('adminLoading')?.remove();main.insertBefore(panel,main.querySelector('.grid'));initializeAdminDashboard()}catch(error){const badge=document.querySelector('#adminLoading .badge');if(badge)badge.textContent=error.message||'Unable to load. Refresh to retry.'}finally{document.body.classList.remove('admin-dashboard-loading')}}if(hasAttendanceDashboard()){document.body.classList.add('attendance-admin','admin-dashboard-loading');loadAdminSummary()}
 </script>
 <script>
 async function refreshAdminOutlet(panel,storeId,fromDate,toDate,empCategory){const requestId=panel.attendanceRequestId=(panel.attendanceRequestId||0)+1;const token=localStorage.getItem('token'),params=new URLSearchParams();if(storeId)params.set('store_id',storeId);if(fromDate)params.set('from_date',fromDate);if(toDate)params.set('to_date',toDate);if(empCategory)params.set('emp_category',empCategory);const weekoff=panel.querySelector('.admin-weekoff-filter')?.value;if(weekoff)params.set('weekoff_day',weekoff);const query=params.toString()?'?'+params.toString():'';const response=await fetch('/api/attendance/admin-summary'+query,{headers:{Authorization:'Bearer '+token}});if(!response.ok)return;const data=await response.json();if(requestId!==panel.attendanceRequestId)return;const metrics=panel.querySelectorAll('.summary strong');metrics[0].textContent=data.total;metrics[1].textContent=data.present;metrics[2].textContent=data.absent;const body=panel.querySelector('tbody');body.innerHTML=sortAttendanceByCheckin(data.rows).map(row=>{const isPresent=row.status==='Present'||(row.present_days>0);return'<tr class="admin-row" data-user-id="'+row.user_id+'" data-username="'+safeText(row.username)+'" title="Click to view attendance details"><td style="padding:10px">'+safeText(adminEmployeeLabel(row,empCategory))+'</td><td style="padding:10px"><span class="badge '+(isPresent?'ok':'bad')+'">'+safeText(row.status)+'</span></td><td style="padding:10px">'+(row.checkin_at?formatTime(row.checkin_at):'—')+'</td><td style="padding:10px">'+(row.checkout_at?formatTime(row.checkout_at):'—')+'</td><td style="padding:10px"><span class="badge ok" title="'+safeText(row.outlet_name||'Unassigned')+'">'+safeText(row.outlet_abbreviation||'—')+'</span></td><td style="padding:10px">'+row.route_distance_m+' m</td><td style="padding:10px">'+liveDistanceHtml(row)+'</td><td style="padding:10px">'+formatTime(row.last_location_at)+'</td><td style="padding:10px">'+row.location_points+'</td></tr>'}).join('')}
-function initializeAdminDashboard(){if(localStorage.getItem('role')!=='Admin')return;const panel=[...document.querySelectorAll('.panel')].find(item=>item.id!=='adminLoading'&&item.textContent.includes('Admin Attendance Dashboard'));if(!panel){setTimeout(initializeAdminDashboard,500);return}panel.classList.add('admin-dashboard-panel');if(panel.dataset.controlsReady==='true')return;panel.dataset.controlsReady='true';const head=panel.querySelector('.panelHead'),wrap=document.createElement('div');wrap.className='admin-filters';
+function initializeAdminDashboard(){if(!hasAttendanceDashboard())return;const panel=[...document.querySelectorAll('.panel')].find(item=>item.id!=='adminLoading'&&item.textContent.includes('Attendance Dashboard'));if(!panel){setTimeout(initializeAdminDashboard,500);return}panel.classList.add('admin-dashboard-panel');if(panel.dataset.controlsReady==='true')return;panel.dataset.controlsReady='true';const head=panel.querySelector('.panelHead'),wrap=document.createElement('div');wrap.className='admin-filters';
 function simplifyDistanceColumns(){const table=panel.querySelector('table');if(!table)return;table.style.minWidth='760px';for(const row of table.rows){if(row.cells.length>=9){row.deleteCell(8);row.deleteCell(7);row.deleteCell(5)}}const distanceHeader=table.tHead?.rows[0]?.cells[5];if(distanceHeader){distanceHeader.textContent='Live Distance';distanceHeader.title='Latest distance received after Punch In'}for(const row of table.tBodies[0]?.rows||[]){if(row.cells[5])row.cells[5].title='Latest reported distance from the assigned outlet'}}
 const tableWrap=panel.querySelector('table')?.parentElement,toggle=document.createElement('button');if(tableWrap){toggle.type='button';toggle.className='admin-users-toggle';toggle.setAttribute('aria-expanded','false');toggle.innerHTML='<span>Show all employees</span><span class="toggle-arrow" aria-hidden="true">▼</span>';tableWrap.hidden=true;tableWrap.before(toggle);toggle.onclick=()=>{const expanded=toggle.getAttribute('aria-expanded')==='true';toggle.setAttribute('aria-expanded',String(!expanded));toggle.querySelector('span').textContent=expanded?'Show all employees':'Hide employees';tableWrap.hidden=expanded};const body=tableWrap.querySelector('tbody');if(body)body.addEventListener('click',event=>{const row=event.target.closest('tr');if(row)openAdminRecord(row)})}
 const metrics=[...panel.querySelectorAll('.summary .metric')];function filterEmployees(filter){const body=panel.querySelector('tbody');if(!body||!tableWrap)return;for(const row of body.rows){const status=row.cells[1]?.textContent.trim();row.hidden=filter!=='all'&&status!==filter}metrics.forEach(metric=>metric.classList.toggle('active-filter',metric.dataset.filter===filter));tableWrap.hidden=false;toggle.setAttribute('aria-expanded','true');toggle.querySelector('span').textContent='Hide employees'}metrics.forEach((metric,index)=>{const filter=['all','Present','Absent'][index];metric.dataset.filter=filter;metric.tabIndex=0;metric.setAttribute('role','button');metric.setAttribute('aria-label',(filter==='all'?'Show all':filter==='Present'?'Show present':'Show absent')+' employees');metric.onclick=()=>filterEmployees(filter);metric.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();filterEmployees(filter)}}});
 const employeeBody=panel.querySelector('tbody');simplifyDistanceColumns();if(employeeBody)new MutationObserver(()=>{simplifyDistanceColumns();const active=metrics.find(metric=>metric.classList.contains('active-filter'));if(active)for(const row of employeeBody.rows){const status=row.cells[1]?.textContent.trim();row.hidden=active.dataset.filter!=='all'&&status!==active.dataset.filter}}).observe(employeeBody,{childList:true});
 const dateInput=document.createElement('input');dateInput.type='date';dateInput.className='admin-date-filter';dateInput.setAttribute('aria-label','Choose attendance date');dateInput.value=today;
 const dateControl=document.createElement('div');dateControl.className='admin-calendar-control';dateControl.setAttribute('role','group');dateControl.setAttribute('aria-label','Choose attendance date');const calendarButton=document.createElement('button');calendarButton.type='button';calendarButton.className='admin-calendar-button';calendarButton.setAttribute('aria-label','Open calendar');calendarButton.innerHTML='&#128197;';dateControl.appendChild(dateInput);dateControl.appendChild(calendarButton);function openAdminCalendar(){dateInput.focus();if(typeof dateInput.showPicker==='function')try{dateInput.showPicker()}catch(error){}}dateControl.onclick=openAdminCalendar;dateInput.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();openAdminCalendar()}};
-const outletSelect=document.createElement('select');outletSelect.className='admin-outlet-filter';outletSelect.setAttribute('aria-label','Filter attendance by outlet');outletSelect.innerHTML='<option value="">Outlets</option>';fetch('/stores').then(response=>response.ok?response.json():[]).then(stores=>{outletSelect.innerHTML='<option value="">Outlets</option>'+stores.filter(store=>store.status==='Active').map(store=>'<option value="'+store.id+'">'+safeText((store.code?store.code+' - ':'')+store.name)+'</option>').join('')}).catch(()=>{});
-const empCategorySelect=document.createElement('select');empCategorySelect.className='admin-emp-category-filter';empCategorySelect.setAttribute('aria-label','Filter by employee category');empCategorySelect.innerHTML='<option value="">Emp Category</option><option value="ids_emp">IDS EMP</option><option value="brand_pro">BRAND PRO</option><option value="ac_retails">AC RETAILS</option><option value="ac_projects">AC PROJECTS</option>';
+const outletSelect=document.createElement('select');outletSelect.className='admin-outlet-filter';outletSelect.setAttribute('aria-label','Filter attendance by outlet');outletSelect.innerHTML='<option value="">Outlets</option>';const outletManager=localStorage.getItem('role')==='CategoryManager';if(outletManager){outletSelect.disabled=true;outletSelect.innerHTML='<option value="">My assigned outlet</option>'}Promise.all([fetch('/stores').then(response=>response.ok?response.json():[]),outletManager?fetch('/api/me',{headers:{Authorization:'Bearer '+localStorage.getItem('token')}}).then(response=>response.ok?response.json():null):Promise.resolve(null)]).then(([stores,actor])=>{const available=stores.filter(store=>store.status==='Active'&&(!outletManager||store.id===actor?.store_id));outletSelect.innerHTML=(outletManager?'':'<option value="">Outlets</option>')+available.map(store=>'<option value="'+store.id+'">'+safeText((store.code?store.code+' - ':'')+store.name)+'</option>').join('');if(outletManager){outletSelect.value=String(actor?.store_id||'');if(!available.length)outletSelect.innerHTML='<option value="">No outlet assigned</option>'}}).catch(()=>{});
+const empCategorySelect=document.createElement('select');empCategorySelect.className='admin-emp-category-filter';empCategorySelect.setAttribute('aria-label','Filter by employee category');empCategorySelect.innerHTML='<option value="">Emp Category</option><option value="ids_emp">IDS EMP</option><option value="brand_pro">BRAND PRO</option>'+(localStorage.getItem('role')==='CategoryManager'?'':'<option value="ac_retails">AC RETAILS</option><option value="ac_projects">AC PROJECTS</option>');
 const downloadMenu=document.createElement('details');downloadMenu.className='download-menu';downloadMenu.innerHTML='<summary>Download ▾</summary><div class="download-options"><button type="button" data-format="xlsx">Excel</button><button type="button" data-format="pdf">PDF</button></div>';
 const monthPicker=document.createElement('select');monthPicker.className='admin-month-filter';monthPicker.setAttribute('aria-label','Choose monthly attendance period');for(let offset=0;offset<24;offset++){const current=new Date(today+'T00:00:00'),d=new Date(current.getFullYear(),current.getMonth()-offset,1),key=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'),option=document.createElement('option');option.value=key;option.textContent=monthLabel(key);monthPicker.appendChild(option)}monthPicker.value=today.slice(0,7);
 const monthlyButton=document.createElement('button');monthlyButton.type='button';monthlyButton.className='monthly-all-download';monthlyButton.textContent='Monthly Excel';downloadMenu.querySelector('.download-options').appendChild(monthlyButton);
@@ -648,6 +657,10 @@ function monthlyAttendanceCalendar(data,month,currentDate){
   }
   return html+'</div><div class="calendar-legend"><span><i class="present"></i>Present</span><span><i class="absent"></i>Absent / Leave</span><span><i class="weekoff"></i>Week Off</span></div>';
 }
+function attendanceDesignation(user){
+  if(user.role==='BrandPartner')return (user.brand_names?.length?user.brand_names.join(', '):'Brand not assigned')+' (BP)';
+  return user.designation||String(user.role||'Not available').replace(/([a-z])([A-Z])/g,'$1 $2').replace(/^ACTechnician/,'AC Technician');
+}
 async function openAdminRecord(row){
   const panel=row.closest('.panel');
   return openEmployeeAttendance(row.dataset.userId,row.dataset.username||row.children[0].textContent.trim(),panel?.querySelector('.admin-date-filter')?.value||today);
@@ -657,14 +670,18 @@ function fitAttendanceOutlet(outlet){
   const fit=()=>{if(!outlet.isConnected)return;const style=getComputedStyle(outlet),width=outlet.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight);if(width<=0)return;line.style.fontSize='11px';const natural=line.getBoundingClientRect().width;if(natural>width)line.style.fontSize=(11*width/natural*.99)+'px'};
   const observer=new ResizeObserver(fit);observer.observe(outlet);fit();document.fonts?.ready.then(fit);return observer;
 }
+function fitAttendanceName(identity,heading){
+  const fit=()=>{if(!identity.isConnected)return;const width=identity.clientWidth;if(width<=0)return;heading.style.fontSize='18px';const natural=heading.getBoundingClientRect().width;if(natural>width)heading.style.fontSize=(18*width/natural*.99)+'px'};
+  const observer=new ResizeObserver(fit);observer.observe(identity);const changes=new MutationObserver(fit);changes.observe(heading,{childList:true,characterData:true,subtree:true});fit();document.fonts?.ready.then(fit);return {disconnect(){observer.disconnect();changes.disconnect()}};
+}
 async function openEmployeeAttendance(employeeUserId,name,date=today){
   const userId=Number(employeeUserId);
   const instantDetail='<div class="selfie-gallery"><div class="selfie-missing">Loading attendance images...</div></div>';
   const modal=document.createElement('div');modal.className='record-modal show employee-attendance';modal.dataset.username=name;modal.innerHTML='<div class="record-dialog"><button type="button" class="record-close modal-top-close" aria-label="Close attendance details">&#10005; Close</button><h2>'+safeText(name)+'</h2><label>Attendance date <select class="record-date" aria-label="Select attendance date" disabled><option>'+safeText(date)+'</option></select></label><div class="record-detail">'+instantDetail+'</div></div>';document.body.appendChild(modal);
   const detail=modal.querySelector('.record-detail'),select=modal.querySelector('.record-date');
-  let detailRequest=0,outletResizeObserver;
+  let detailRequest=0,outletResizeObserver,nameResizeObserver;
   async function loadSelected(showLoading=true){if(!select.value)return;const request=++detailRequest;try{if(showLoading)detail.innerHTML='<div class="empty">Loading attendance details...</div>';const item=await fetchSelfieRecord(select.value);if(request!==detailRequest||!modal.isConnected)return;if(!item){if(showLoading)detail.innerHTML='<div class="empty">Unable to load attendance details.</div>';return}detail.innerHTML='<div class="selfie-gallery">'+selfieTile('Punch In - '+formatTime(item.checkin_at),item.checkin_selfie)+selfieTile('Punch Out - '+formatTime(item.checkout_at),item.checkout_selfie)+'</div>';bindSelfieZoom(detail)}catch(error){if(request===detailRequest&&modal.isConnected)detail.innerHTML='<div class="empty">Unable to load this date. Select the date again to retry.</div>'}}
-  const closeRecord=()=>{outletResizeObserver?.disconnect();modal.remove()};select.onchange=()=>loadSelected(true);modal.querySelector('.record-close').onclick=closeRecord;modal.onclick=event=>{if(event.target===modal)closeRecord()};
+  const closeRecord=()=>{outletResizeObserver?.disconnect();nameResizeObserver?.disconnect();modal.remove()};select.onchange=()=>loadSelected(true);modal.querySelector('.record-close').onclick=closeRecord;modal.onclick=event=>{if(event.target===modal)closeRecord()};
   // Let the browser display the popup before starting slower network work.
   await new Promise(resolve=>requestAnimationFrame(resolve));
   try {
@@ -678,7 +695,7 @@ async function openEmployeeAttendance(employeeUserId,name,date=today){
     const avatar=document.createElement('div');avatar.className='employee-avatar';avatar.textContent=(data.username||'?').charAt(0).toUpperCase();
     if(/^data:image\/(jpeg|png|webp);base64,/i.test(data.profile_photo||'')){const photo=document.createElement('img');photo.className='employee-avatar';photo.alt='Profile photo';photo.src=data.profile_photo;avatar.replaceChildren(photo)}
     const identity=document.createElement('div');heading.textContent=(data.display_name||data.username||'').toUpperCase();heading.before(profileCard);identity.appendChild(heading);
-    const employeeId=document.createElement('div');employeeId.className='employee-id';employeeId.textContent='EMP ID: '+(data.employee_id||'Not available');identity.appendChild(employeeId);profileCard.append(avatar,identity);
+    const employeeId=document.createElement('div');employeeId.className='employee-id';employeeId.textContent='EMP ID: '+(data.employee_id||'Not available');identity.appendChild(employeeId);const designation=document.createElement('div');designation.className='employee-designation';designation.textContent='DESIGNATION: '+attendanceDesignation(data);identity.appendChild(designation);profileCard.append(avatar,identity);nameResizeObserver=fitAttendanceName(identity,heading);
     const contact=document.createElement('div');contact.className='employee-contact';contact.textContent='CONTACT NO: '+(data.contact_number||'Not available');
     const outlet=document.createElement('div');outlet.className='employee-outlet';outlet.innerHTML='<span class="outlet-line">OUTLET: <strong>'+safeText(('Initiative Data System Pvt. Ltd. ('+(data.assigned_outlet||'Unassigned')+')').toUpperCase())+'</strong></span>';profileCard.after(contact,outlet);outletResizeObserver=fitAttendanceOutlet(outlet);
     if(data.can_edit_profile){
@@ -692,7 +709,7 @@ async function openEmployeeAttendance(employeeUserId,name,date=today){
           try{const payload={name:form.elements.name.value.trim(),email:form.elements.email.value.trim(),mobile:form.elements.mobile.value.trim()},file=form.elements.photo.files[0];
             if(file){if(file.size>3000000)throw Error('Choose a photo smaller than 3 MB.');payload.photo=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(Error('Unable to read photo'));reader.readAsDataURL(file)})}
             const response=await fetch('/api/identity-cards/profile/'+userId,{method:'PATCH',headers:{Authorization:'Bearer '+localStorage.getItem('token'),'Content-Type':'application/json'},body:JSON.stringify(payload)});const saved=await response.json();if(!response.ok)throw Error(typeof saved.detail==='string'?saved.detail:'Unable to save. Check the name, phone number and photo.');
-            data.email=saved.email;data.employee_id=saved.employee_id;data.display_name=saved.name;data.contact_number=saved.contact_number;data.profile_photo=saved.profile_photo;heading.textContent=saved.name.toUpperCase();employeeId.textContent='EMP ID: '+saved.employee_id;contact.textContent='CONTACT NO: '+(saved.contact_number||'Not available');avatar.replaceChildren();avatar.textContent=saved.name.charAt(0).toUpperCase();if(/^data:image\/(jpeg|png|webp);base64,/i.test(saved.profile_photo||'')){const img=document.createElement('img');img.className='employee-avatar';img.src=saved.profile_photo;img.alt='Profile photo';avatar.replaceChildren(img)}form.remove();
+            data.email=saved.email;data.employee_id=saved.employee_id;data.display_name=saved.name;data.contact_number=saved.contact_number;data.profile_photo=saved.profile_photo;heading.textContent=saved.name.toUpperCase();employeeId.textContent='EMP ID: '+saved.employee_id;contact.textContent='CONTACT NO: '+(saved.contact_number||'Not available');avatar.replaceChildren();avatar.textContent=saved.name.charAt(0).toUpperCase();if(/^data:image\/(jpeg|png|webp);base64,/i.test(saved.profile_photo||'')){const img=document.createElement('img');img.className='employee-avatar';img.src=saved.profile_photo;img.alt='Profile photo';avatar.replaceChildren(img)}form.remove();if(profile?.id===userId){profile.full_name=saved.name;$('userName').textContent=saved.name;$('avatar').textContent=saved.name.charAt(0).toUpperCase();syncMobileAttendanceUser()}document.querySelector('.admin-dashboard-panel .admin-date-filter')?.dispatchEvent(new Event('change'));
           }catch(error){message.textContent=error.message}finally{saveButton.disabled=false}
         };
       };
@@ -737,7 +754,7 @@ function syncMobileAttendanceUser(){
   $('mobileAttendanceName').textContent=name;
   $('mobileAttendanceAvatar').textContent=(name.charAt(0)||'U').toUpperCase();
 }
-if(localStorage.getItem('role')==='Admin')document.body.classList.add('attendance-admin');
+if(hasAttendanceDashboard())document.body.classList.add('attendance-admin');
 document.addEventListener('DOMContentLoaded',()=>document.querySelector('.app-mobile-nav a[href$="/dashboard"]')?.remove(),{once:true});
 new MutationObserver(syncMobileAttendanceUser).observe($('userName'),{childList:true,subtree:true});
 syncMobileAttendanceUser();
@@ -769,7 +786,7 @@ const WEEKOFF_DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday
 })();
 
 (function addAdminWeekoffFilter(){
-  if(!['Admin','Owner','HR'].includes(localStorage.getItem('role')))return;
+  if(!['Admin','Owner','HR','CategoryManager'].includes(localStorage.getItem('role')))return;
   const wait=setInterval(()=>{
     const panel=document.querySelector('.admin-dashboard-panel'),filters=panel?.querySelector('.admin-filters');
     if(!panel||!filters)return;
@@ -795,20 +812,7 @@ const WEEKOFF_DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday
 })();
 </script>
 <script>
-// Owner and HR inherit the Admin attendance dashboard without changing the
-// stored role (User Management must still remain unavailable to them).
-(async function enableFullAttendanceAccess() {
-  const actualRole = localStorage.getItem('role');
-  if (!['Owner', 'HR'].includes(actualRole)) return;
-  document.body.classList.add('attendance-admin', 'admin-dashboard-loading');
-  localStorage.setItem('role', 'Admin');
-  const loading = loadAdminSummary();
-  localStorage.setItem('role', actualRole);
-  await loading;
-  localStorage.setItem('role', 'Admin');
-  initializeAdminDashboard();
-  localStorage.setItem('role', actualRole);
-})();
+// Dashboard access uses the signed-in role without changing local storage.
 </script>
 <script>
 function attendanceStatusCount(status, label) {
@@ -925,7 +929,7 @@ function attendanceStatusCount(status, label) {
 </script>
 <script>
 (function keepAdminDashboardAtTopOnRefresh(){
-  if(!['Admin','Owner','HR'].includes(localStorage.getItem('role')))return;
+  if(!['Admin','Owner','HR','CategoryManager'].includes(localStorage.getItem('role')))return;
   if('scrollRestoration' in history)history.scrollRestoration='manual';
   let positioned=false;
   function positionAtTop(){
@@ -942,7 +946,7 @@ function attendanceStatusCount(status, label) {
 </script>
 <script>
 (function addAdminEmployeeSearch(){
-  if(!['Admin','Owner','HR'].includes(localStorage.getItem('role')))return;
+  if(!['Admin','Owner','HR','CategoryManager'].includes(localStorage.getItem('role')))return;
   function install(){
     const panel=document.querySelector('.admin-dashboard-panel'),toggle=panel?.querySelector('.admin-users-toggle'),tableWrap=panel?.querySelector('table')?.parentElement;
     if(!panel||!toggle||!tableWrap||panel.querySelector('.admin-employee-search'))return false;
@@ -955,14 +959,14 @@ function attendanceStatusCount(status, label) {
       let emailMatches=new Set();
       function showMatches(){
         const activeStatus=panel.querySelector('.summary .metric.active-filter')?.dataset.filter;
-        for(const row of rows){const name=row.cells[0]?.textContent.trim()||'',username=row.dataset.username||name,status=row.cells[1]?.textContent.trim(),matchesSearch=!query||name.toLocaleLowerCase().includes(query)||emailMatches.has(username),matchesStatus=!activeStatus||activeStatus==='all'||status===activeStatus;row.hidden=!(matchesSearch&&matchesStatus)}
+        for(const row of rows){const name=row.cells[0]?.textContent.trim()||'',username=row.dataset.username||name,status=row.cells[1]?.textContent.trim(),matchesSearch=!query||name.toLocaleLowerCase().includes(query)||username.toLocaleLowerCase().includes(query)||emailMatches.has(String(row.dataset.userId)),matchesStatus=!activeStatus||activeStatus==='all'||status===activeStatus;row.hidden=!(matchesSearch&&matchesStatus)}
       }
       // Filter by the visible employee name immediately on every keystroke.
       showMatches();
       if(query.length>1){
         const params=new URLSearchParams(),date=panel.querySelector('.admin-date-filter')?.value,outlet=panel.querySelector('.admin-outlet-filter')?.value,weekoff=panel.querySelector('.admin-weekoff-filter')?.value;
         if(date){params.set('from_date',date);params.set('to_date',date)}if(outlet)params.set('store_id',outlet);if(weekoff)params.set('weekoff_day',weekoff);
-        try{const response=await fetch('/api/attendance/admin-summary?'+params,{headers:{Authorization:'Bearer '+localStorage.getItem('token')}});if(response.ok)emailMatches=new Set((await response.json()).rows.filter(item=>(item.email||'').toLocaleLowerCase().includes(query)).map(item=>item.username))}catch(error){}
+        try{const response=await fetch('/api/attendance/admin-summary?'+params,{headers:{Authorization:'Bearer '+localStorage.getItem('token')}});if(response.ok)emailMatches=new Set((await response.json()).rows.filter(item=>(item.email||'').toLocaleLowerCase().includes(query)).map(item=>String(item.user_id)))}catch(error){}
         if(input.value.trim().toLocaleLowerCase()!==query)return;
         showMatches();
       }

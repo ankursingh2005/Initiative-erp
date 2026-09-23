@@ -14,7 +14,7 @@ test('employee history loads by permanent ID after a rename, with older dates av
   const modal={dataset:{},isConnected:true,querySelector:q=>({'h2':heading,'.record-detail':detail,'.record-date':select,'.record-close':close}[q])};
   const calls=[];
   let created=0;const context={document:{createElement:()=>created++===0?modal:{append(){},appendChild(){},after(){},setAttribute(){},replaceChildren(){},querySelector(){return {style:{}}}},body:{appendChild(){}}},today:'2026-09-21',
-    ResizeObserver:class{observe(){}disconnect(){}},safeText:String,localStorage:{getItem:()=> 'token'},requestAnimationFrame:fn=>fn(),
+    ResizeObserver:class{observe(){}disconnect(){}},MutationObserver:class{observe(){}disconnect(){}},safeText:String,localStorage:{getItem:()=> 'token'},requestAnimationFrame:fn=>fn(),
     fetch:async url=>{calls.push(url);return{ok:true,json:async()=>({user_id:7,username:'Renamed employee',history:[{id:100,attendance_date:'2026-09-21'},{id:99,attendance_date:'2026-08-01'}]})}},
     fetchSelfieRecord:async id=>({attendance_date:id==='99'?'2026-08-01':'2026-09-21',checkin_at:'09:00',checkout_at:'18:00',checkin_selfie:'photo-'+id}),
     formatTime:String,workingHours:()=> '9 hours',selfieTile:(label,photo)=>label+' '+(photo||''),bindSelfieZoom(){}};

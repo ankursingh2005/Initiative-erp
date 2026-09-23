@@ -341,6 +341,7 @@ class MyProfileOut(BaseModel):
     Category Manager's Division and Brand dropdowns to only what's assigned
     to their account."""
     id: int
+    full_name: Optional[str] = None
     username: str
     role: str
     store_id: Optional[int]

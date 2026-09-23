@@ -1,5 +1,6 @@
 """Attendance downloads built from saved user IDs and attendance records."""
 from attendance_history import weekoff_on
+from attendance_access import dashboard_outlet, can_view_attendance
 import calendar
 from datetime import date, timedelta
 from io import BytesIO
@@ -10,7 +11,7 @@ from sqlalchemy.orm import Session
 import auth
 import models
 from database import get_db
-from attendance_categories import filter_employee_category
+from attendance_categories import filter_employee_category, filter_manager_employees
 
 router = APIRouter(prefix='/api/attendance')
 HEADERS = ['User ID', 'Employee', 'Date', 'Outlet', 'Status', 'Punch in', 'Punch out', 'Hours']
@@ -63,12 +64,14 @@ def render_export(rows, format, filename):
                     headers={'Content-Disposition': f'attachment; filename="{filename}.{format}"'})
 
 
-def export_rows(db, start=None, end=None, user_id=None, store_id=None, weekoff_day=None, status=None, emp_category=None):
+def export_rows(db, start=None, end=None, user_id=None, store_id=None, weekoff_day=None, status=None, emp_category=None, assigned_store_id=None):
     users = db.query(models.User)
     if user_id is not None:
         users = users.filter(models.User.id == user_id)
     else:
         users = users.filter(models.User.status == 'Active')
+    if assigned_store_id is not None:
+        users = filter_manager_employees(users.filter(models.User.store_id == assigned_store_id), emp_category)
     if weekoff_day:
         users = users.filter(models.User.weekoff_day == weekoff_day)
     users = filter_employee_category(users, emp_category)
@@ -105,29 +108,33 @@ def export_rows(db, start=None, end=None, user_id=None, store_id=None, weekoff_d
 @router.get('/admin-export')
 def daily_export(date: date, format: str = 'xlsx', store_id: int | None = None,
                  weekoff_day: str | None = None, status: str | None = None, emp_category: str | None = None,
-                 db: Session = Depends(get_db), actor=Depends(auth.require_roles('Admin'))):
-    rows = export_rows(db, date, date, store_id=store_id, weekoff_day=weekoff_day, status=status, emp_category=emp_category)
+                 db: Session = Depends(get_db), actor=Depends(auth.require_roles('Admin', 'CategoryManager'))):
+    store_id = dashboard_outlet(actor, store_id)
+    rows = export_rows(db, date, date, assigned_store_id=actor.store_id if actor.role == "CategoryManager" else None, store_id=store_id, weekoff_day=weekoff_day, status=status, emp_category=emp_category)
     return render_export(rows, format, f'attendance-{date}')
 
 
 @router.get('/monthly-export')
 def monthly_export(month: str, store_id: int | None = None, weekoff_day: str | None = None,
                    status: str | None = None, emp_category: str | None = None,
-                   db: Session = Depends(get_db), actor=Depends(auth.require_roles('Admin'))):
+                   db: Session = Depends(get_db), actor=Depends(auth.require_roles('Admin', 'CategoryManager'))):
+    store_id = dashboard_outlet(actor, store_id)
     try:
         start = date.fromisoformat(month + '-01')
     except ValueError:
         raise HTTPException(400, 'Month must be YYYY-MM')
     end = start.replace(day=calendar.monthrange(start.year, start.month)[1])
-    return render_export(export_rows(db, start, end, store_id=store_id, weekoff_day=weekoff_day,
+    return render_export(export_rows(db, start, end, assigned_store_id=actor.store_id if actor.role == "CategoryManager" else None, store_id=store_id, weekoff_day=weekoff_day,
                          status=status, emp_category=emp_category), 'xlsx', f'attendance-{month}')
 
 
 @router.get('/admin-user-export')
 def user_export(user_id: int, format: str = 'xlsx', db: Session = Depends(get_db),
                 actor=Depends(auth.get_current_user)):
-    if actor.id != user_id and not auth.has_admin_access(actor):
-        raise HTTPException(403, "You cannot download another user's attendance")
-    if not db.query(models.User).filter(models.User.id == user_id).first():
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
         raise HTTPException(404, 'User not found')
-    return render_export(export_rows(db, user_id=user_id), format, f'attendance-user-{user_id}')
+    if not can_view_attendance(actor, user):
+        raise HTTPException(403, "You cannot download another user's attendance")
+    outlet = actor.store_id if actor.role == 'CategoryManager' and actor.id != user_id else None
+    return render_export(export_rows(db, user_id=user_id, store_id=outlet), format, f'attendance-user-{user_id}')

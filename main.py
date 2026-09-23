@@ -1,3 +1,4 @@
+from attendance_access import dashboard_outlet, can_view_attendance
 from attendance_history import change_weekoff, weekoff_on, weekoff_history
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Query, Request
 from fastapi.staticfiles import StaticFiles
@@ -2344,6 +2345,7 @@ def get_my_profile(current_user: models.User = Depends(auth.get_current_user)):
     return {
         "id": current_user.id,
         "username": current_user.username,
+        "full_name": current_user.full_name,
         "weekoff_day": current_user.weekoff_day,
         "role": current_user.role,
         "store_id": current_user.store_id,
@@ -2496,14 +2498,17 @@ def attendance_user_history(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    if current_user.id != user_id and current_user.role not in {"Admin", "HR", "Owner"}:
-        raise HTTPException(status_code=403, detail="You cannot view this user's attendance")
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    records = db.query(models.AttendanceRecord).filter(
+    if not can_view_attendance(current_user, user):
+        raise HTTPException(403, "You cannot view this user's attendance")
+    record_query = db.query(models.AttendanceRecord).filter(
         models.AttendanceRecord.user_id == user_id,
-    ).order_by(models.AttendanceRecord.attendance_date.desc(), models.AttendanceRecord.id.desc()).all()
+    )
+    if current_user.role == "CategoryManager" and current_user.id != user_id:
+        record_query = record_query.filter(models.AttendanceRecord.store_id == current_user.store_id)
+    records = record_query.order_by(models.AttendanceRecord.attendance_date.desc(), models.AttendanceRecord.id.desc()).all()
     brand_names = [name for (name,) in db.query(models.Brand.name).join(
         models.UserBrand, models.UserBrand.brand_id == models.Brand.id,
     ).filter(models.UserBrand.user_id == user.id).distinct().order_by(models.Brand.name).all()]
@@ -2512,6 +2517,7 @@ def attendance_user_history(
     return {"user_id": user.id, "username": user.username, "role": user.role,
             "employee_id": card.employee_id if card else None,
             "display_name": card.employee_name if card else user.full_name or user.username,
+            "designation": card.designation if card else re.sub(r"(?<=[a-z])(?=[A-Z])", " ", user.role),
             "can_edit_profile": current_user.id == user.id or current_user.role in {"Admin", "HR", "Owner"},
             "email": user.email,
             "contact_number": card.mobile if card else None,
@@ -2546,10 +2552,9 @@ def get_attendance_selfies(
     ).first()
     if not record:
         raise HTTPException(status_code=404, detail="Attendance record not found")
-    if current_user.role not in {"Admin", "HR", "Owner"} and record.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="You are not allowed to view these attendance images")
-
     user = db.query(models.User).filter(models.User.id == record.user_id).first()
+    if not can_view_attendance(current_user, user) or (current_user.role == "CategoryManager" and record.user_id != current_user.id and record.store_id != current_user.store_id):
+        raise HTTPException(status_code=403, detail="You are not allowed to view these attendance images")
     store = db.query(models.Store).filter(models.Store.id == record.store_id).first() if record.store_id else None
     return {
         "id": record.id,
@@ -2622,10 +2627,11 @@ def attendance_admin_summary(
     from_date: Optional[date] = Query(None),
     to_date: Optional[date] = Query(None),
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.require_roles("Admin")),
+    current_user: models.User = Depends(auth.require_roles("Admin", "CategoryManager")),
     weekoff_day: Optional[str] = None,
     emp_category: Optional[str] = None,
 ):
+    store_id = dashboard_outlet(current_user, store_id)
     today = india_today()
     start_date = from_date or today
     end_date = to_date or today
@@ -2639,8 +2645,12 @@ def attendance_admin_summary(
         user_query = user_query.filter(models.User.store_id == store_id)
     if weekoff_day:
         user_query = user_query.filter(models.User.weekoff_day == weekoff_day)
-    from attendance_categories import filter_employee_category
+    from attendance_categories import filter_employee_category, filter_manager_employees
+    if current_user.role == "CategoryManager":
+        user_query = filter_manager_employees(user_query, emp_category)
     users = filter_employee_category(user_query, emp_category).all()
+    profile_names = dict(db.query(models.IdentityCard.user_id, models.IdentityCard.employee_name).filter(
+        models.IdentityCard.user_id.in_([user.id for user in users] or [-1])).all())
     brand_names_by_user = defaultdict(list)
     for user_id, brand_name in db.query(models.UserBrand.user_id, models.Brand.name).join(
         models.Brand, models.Brand.id == models.UserBrand.brand_id,
@@ -2664,6 +2674,8 @@ def attendance_admin_summary(
         models.AttendanceRecord.attendance_date <= end_date,
         models.AttendanceRecord.user_id.in_([user.id for user in users] or [-1]),
     )
+    if current_user.role == "CategoryManager":
+        record_query = record_query.filter(models.AttendanceRecord.store_id == store_id)
     records_by_user = {}
     for record in record_query.all():
         records_by_user.setdefault(record.user_id, []).append(record)
@@ -2737,6 +2749,8 @@ def attendance_admin_summary(
         location_summary = {"current_distance_from_store_m": distance,
                             "last_location_at": last_at, "location_tracking_status": tracking_status}
         employee_summary = {"role": user.role,
+                            "display_name": profile_names.get(user.id) or user.full_name or user.username,
+                            "email": user.email,
                             "brand_names": brand_names_by_user[user.id],
                             "promoter_brand": ", ".join(brand_names_by_user[user.id])}
 
