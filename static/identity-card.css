@@ -55,7 +55,7 @@
 .id-front .card-data dd{font-weight:750;color:#102d3c}
 .id-front .card-data dd:first-of-type{font-size:.9em;padding:4px 5px;letter-spacing:0;background:#dcece3;border-left:3px solid #b89958}
 .id-front .card-data dd.name{font-size:17px;line-height:1.15;letter-spacing:normal;white-space:nowrap;overflow-wrap:normal;min-width:0}
-.id-front .card-data dd.designation{white-space:nowrap;overflow-wrap:normal;min-width:0}
+.id-front .card-data dd.designation{text-transform:uppercase;white-space:nowrap;overflow-wrap:normal;min-width:0}
 .id-front:after{height:23px}
 
 /* Back card: a company plaque framed by gold and layered teal geometry. */
