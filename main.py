@@ -526,6 +526,12 @@ ensure_default_master_data()
 
 from identity_cards import assign_employee_id, ensure_employee_ids
 with SessionLocal() as employee_id_db:
+    for helper_user in employee_id_db.query(models.User).filter(models.User.role == "Helper").all():
+        helper_user.role = "AC Helper"
+        helper_card = employee_id_db.get(models.IdentityCard, helper_user.id)
+        if helper_card:
+            helper_card.designation = "AC Helper"
+    employee_id_db.commit()
     ensure_employee_ids(employee_id_db)
 
 app = FastAPI(title="IDSPL Scheme Management ERP")
@@ -578,7 +584,7 @@ async def handle_unexpected_error(request: Request, exc: Exception):
 # "static" folder sitting next to this file.
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-VALID_ROLES = ["Accounts","ACTechnicianA","ACTechnicianB","Admin","Assistant","AsstSalesManager","BrandManager","BrandPartner","Cashier","CategoryManager","CustomerCare","Employee","Helper","HR","ITEngineer","Loader","LogisticManager","MISExecutive","Owner","SalesExecutive","ServiceHead","ServiceManager","SupportingStaff","Supervisor","Other"]
+VALID_ROLES = ["Accounts","ACTechnicianA","ACTechnicianB","Admin","Assistant","AsstSalesManager","BrandManager","BrandPartner","Cashier","CategoryManager","CustomerCare","Employee","AC Helper","HR","ITEngineer","Loader","LogisticManager","MISExecutive","Owner","SalesExecutive","ServiceHead","ServiceManager","SupportingStaff","Supervisor","Other"]
 
 
 def normalize_category_code(raw_value: Optional[str]) -> Optional[str]:
@@ -2397,7 +2403,7 @@ def update_my_attendance_status(
     return my_attendance_status(db, current_user)
 
 
-ATTENDANCE_ANYWHERE_ROLES = {"ServiceManager", "ACTechnicianA", "ACTechnicianB", "HR"}
+ATTENDANCE_ANYWHERE_ROLES = {"ServiceManager", "ACTechnicianA", "ACTechnicianB", "AC Helper", "HR"}
 
 
 def attendance_reference_store(db, user, distance_to_store):
@@ -2621,6 +2627,28 @@ def save_attendance_location(
     return {"id": location.id, "route_distance_m": route_distance}
 
 
+def nearest_attendance_outlet(stores, record, point):
+    """Pair the outlet and distance using the latest saved attendance coordinates."""
+    if record is None or not record.checkin_at:
+        return None, None
+    latitude, longitude = record.checkin_latitude, record.checkin_longitude
+    if point is not None and point.captured_at >= record.checkin_at:
+        latitude, longitude = point.latitude, point.longitude
+    if record.checkout_at:
+        latitude, longitude = record.checkout_latitude, record.checkout_longitude
+    candidates = [store for store in stores if store.status == "Active" and
+                  store.latitude is not None and store.longitude is not None]
+    if latitude is not None and longitude is not None and candidates:
+        outlet = min(candidates, key=lambda store: attendance_distance(latitude, longitude, store))
+        return outlet, round(attendance_distance(latitude, longitude, outlet), 1)
+    # Older records can lack GPS; only use their recorded reference outlet.
+    if record.checkout_at:
+        return next((store for store in stores if store.id == record.store_id), None), record.checkout_distance_m
+    if point is not None and point.captured_at >= record.checkin_at:
+        return next((store for store in stores if store.id == point.store_id), None), point.distance_from_store_m
+    return next((store for store in stores if store.id == record.store_id), None), record.checkin_distance_m
+
+
 @app.get("/api/attendance/admin-summary")
 def attendance_admin_summary(
     store_id: Optional[int] = Query(None),
@@ -2746,6 +2774,11 @@ def attendance_admin_summary(
                 last_at = latest_record.checkout_at
                 distance = latest_record.checkout_distance_m if latest_record.checkout_distance_m is not None else distance
                 tracking_status = "Completed"
+        if user.role in ATTENDANCE_ANYWHERE_ROLES:
+            outlet, distance = nearest_attendance_outlet(list(stores_by_id.values()), latest_record, latest_point)
+            outlet_name = outlet.name if outlet else None
+            outlet_abbreviation = outlet_abbreviations.get(
+                (outlet_name or "").strip().lower(), (outlet.code or outlet.name) if outlet else "\u2014")
         location_summary = {"current_distance_from_store_m": distance,
                             "last_location_at": last_at, "location_tracking_status": tracking_status}
         employee_summary = {"role": user.role,
@@ -2757,7 +2790,7 @@ def attendance_admin_summary(
         if single_day:
             record = user_records[0] if user_records else None
             rows.append({
-                "user_id": user.id, "username": user.username, "outlet_id": user.store_id,
+                "user_id": user.id, "username": user.username, "outlet_id": outlet.id if outlet else None,
                 "outlet_name": outlet_name, "outlet_abbreviation": outlet_abbreviation,
                 "status": day_status,
                 **status_counts,
@@ -2775,7 +2808,7 @@ def attendance_admin_summary(
             })
         else:
             rows.append({
-                "user_id": user.id, "username": user.username, "outlet_id": user.store_id,
+                "user_id": user.id, "username": user.username, "outlet_id": outlet.id if outlet else None,
                 "outlet_name": outlet_name, "outlet_abbreviation": outlet_abbreviation,
                 "status": f"{present_days}/{days_in_range} Present · {weekoff_days} Week Off · {leave_days} Leave · {absent_days} Absent",
                 **status_counts,

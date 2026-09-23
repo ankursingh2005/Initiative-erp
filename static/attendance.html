@@ -658,7 +658,7 @@ function monthlyAttendanceCalendar(data,month,currentDate){
   return html+'</div><div class="calendar-legend"><span><i class="present"></i>Present</span><span><i class="absent"></i>Absent / Leave</span><span><i class="weekoff"></i>Week Off</span></div>';
 }
 function attendanceDesignation(user){
-  if(user.role==='BrandPartner')return (user.brand_names?.length?user.brand_names.join(', '):'Brand not assigned')+' (BP)';
+  if(user.role==='BrandPartner')return (user.brand_names?.length?user.brand_names.join(', '):'Brand not assigned')+' (ISP)';
   return user.designation||String(user.role||'Not available').replace(/([a-z])([A-Z])/g,'$1 $2').replace(/^ACTechnician/,'AC Technician');
 }
 async function openAdminRecord(row){
@@ -697,7 +697,7 @@ async function openEmployeeAttendance(employeeUserId,name,date=today){
     const identity=document.createElement('div');heading.textContent=(data.display_name||data.username||'').toUpperCase();heading.before(profileCard);identity.appendChild(heading);
     const employeeId=document.createElement('div');employeeId.className='employee-id';employeeId.textContent='EMP ID: '+(data.employee_id||'Not available');identity.appendChild(employeeId);const designation=document.createElement('div');designation.className='employee-designation';designation.textContent='DESIGNATION: '+attendanceDesignation(data);identity.appendChild(designation);profileCard.append(avatar,identity);nameResizeObserver=fitAttendanceName(identity,heading);
     const contact=document.createElement('div');contact.className='employee-contact';contact.textContent='CONTACT NO: '+(data.contact_number||'Not available');
-    const outlet=document.createElement('div');outlet.className='employee-outlet';outlet.innerHTML='<span class="outlet-line">OUTLET: <strong>'+safeText(('Initiative Data System Pvt. Ltd. ('+(data.assigned_outlet||'Unassigned')+')').toUpperCase())+'</strong></span>';profileCard.after(contact,outlet);outletResizeObserver=fitAttendanceOutlet(outlet);
+    const outlet=document.createElement('div');outlet.className='employee-outlet';outlet.innerHTML='<span class="outlet-line">OUTLET: <strong>'+safeText(('Initiative Data System Pvt. Ltd.'+(data.assigned_outlet?' ('+data.assigned_outlet+')':'')).toUpperCase())+'</strong></span>';profileCard.after(contact,outlet);outletResizeObserver=fitAttendanceOutlet(outlet);
     if(data.can_edit_profile){
       const edit=document.createElement('button');edit.type='button';edit.className='attendance-profile-edit';edit.textContent='Edit';edit.setAttribute('aria-label','Edit employee profile');modal.querySelector('.record-dialog').appendChild(edit);
       edit.onclick=()=>{
@@ -859,7 +859,7 @@ function attendanceStatusCount(status, label) {
 </script>
 <script>
 (function enableServiceManagerAttendance(){
-  function canMarkFromAnywhere(){return ['ServiceManager','ACTechnicianA','ACTechnicianB','HR'].includes(profile?.role)}
+  function canMarkFromAnywhere(){return ['ServiceManager','ACTechnicianA','ACTechnicianB','AC Helper','HR'].includes(profile?.role)}
   function nearestServiceOutlet(p){
     if(!p)return null;
     const candidates=(liveStores||[]).filter(store=>store.status==='Active'&&store.latitude!=null&&store.longitude!=null&&Number.isFinite(Number(store.latitude))&&Number.isFinite(Number(store.longitude)));

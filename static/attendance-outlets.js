@@ -14,7 +14,7 @@ async function refreshAttendanceOutlet() {
   for (const store of stores) {
     if (store.latitude != null && store.longitude != null) outlets[store.name] = [Number(store.latitude), Number(store.longitude)];
   }
-  if (!['ServiceManager','ACTechnicianA','ACTechnicianB','HR'].includes(profile.role)) {
+  if (!['ServiceManager','ACTechnicianA','ACTechnicianB','AC Helper','HR'].includes(profile.role)) {
     const store = stores.find(item => item.id === profile.store_id);
     if (!store || store.latitude == null || store.longitude == null) throw new Error('Your assigned outlet needs GPS coordinates. Contact Admin or HR.');
     $('outletText').textContent = 'Assigned outlet: ' + store.name + ' · 100 m geofence';

@@ -286,7 +286,7 @@
         <option value="Employee">Employee</option>
         <option value="HR">HR</option>
         <option value="ITEngineer">IT Engineer</option>
-        <option value="Helper">Helper</option>
+        <option value="AC Helper">AC Helper</option>
         <option value="Loader">Loader</option>
         <option value="LogisticManager">Logistic Manager</option>
         <option value="MISExecutive">MIS Executive</option>
@@ -437,7 +437,7 @@
 
     function onRoleChange() {
       const role = document.getElementById("role").value;
-      const canMarkFromAnywhere = ["ServiceManager", "ACTechnicianA", "ACTechnicianB"].includes(role);
+      const canMarkFromAnywhere = ["ServiceManager", "ACTechnicianA", "ACTechnicianB", "AC Helper"].includes(role);
       const outletSelect = document.getElementById("outletSelect");
       document.getElementById("outletField").style.display = canMarkFromAnywhere ? "none" : "block";
       outletSelect.required = !canMarkFromAnywhere;
@@ -514,7 +514,7 @@
       if (!password) missingFields.push(fieldLabel("Password"));
       if (!inviteCode) missingFields.push(fieldLabel("Invite Code"));
       if (!role) missingFields.push(fieldLabel("Role"));
-      if (!["ServiceManager", "ACTechnicianA", "ACTechnicianB"].includes(role) && !document.getElementById("outletSelect").value) missingFields.push(fieldLabel("Assigned Outlet"));
+      if (!["ServiceManager", "ACTechnicianA", "ACTechnicianB", "AC Helper"].includes(role) && !document.getElementById("outletSelect").value) missingFields.push(fieldLabel("Assigned Outlet"));
 
       if (role === "CategoryManager") {
         if (!selectedCategoryCodes().length) missingFields.push(fieldLabel("Category Manager Category"));
@@ -539,7 +539,7 @@
         password,
         role,
         invite_code: inviteCode,
-        store_id: ["ServiceManager", "ACTechnicianA", "ACTechnicianB"].includes(role) ? null : Number(document.getElementById("outletSelect").value),
+        store_id: ["ServiceManager", "ACTechnicianA", "ACTechnicianB", "AC Helper"].includes(role) ? null : Number(document.getElementById("outletSelect").value),
         category_code: null,
         category_codes: [],
         brand_ids: [],

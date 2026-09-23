@@ -43,7 +43,7 @@ async function openCamera(t,action='checkout'){
 }
 
 test('both AC technician roles can capture punches outside the outlet',async()=>{
-  for(const role of ['ACTechnicianA','ACTechnicianB']){
+  for(const role of ['ACTechnicianA','ACTechnicianB','AC Helper']){
     for(const action of ['checkin','checkout']){
       const t=setup();t.context.profile.role=role;t.context.meters=()=>50000;
       await openCamera(t,action);
