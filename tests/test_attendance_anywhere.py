@@ -76,3 +76,17 @@ class AnywhereAttendanceTests(unittest.TestCase):
         self.assertEqual(row['outlet_name'], self.stores[1].name)
         self.assertEqual(row['outlet_abbreviation'], self.stores[1].name)
         self.assertIsNotNone(row['current_distance_from_store_m'])
+
+    def test_inaccurate_live_updates_are_skipped_without_overwriting_location(self):
+        self.employee.role = 'AC Helper'
+        main.save_attendance(self.payload(), self.db, self.employee)
+        for accuracy in (None, 0, 5000):
+            point = schemas.AttendanceLocationCreate(captured_at=datetime.now(timezone.utc),
+                latitude=28, longitude=82, accuracy_m=accuracy)
+            result = main.save_attendance_location(point, self.db, self.employee)
+            self.assertFalse(result['accepted'])
+        self.assertEqual(self.db.query(models.AttendanceLocationPoint).count(), 0)
+        point = schemas.AttendanceLocationCreate(captured_at=datetime.now(timezone.utc),
+            latitude=28, longitude=82, accuracy_m=10)
+        self.assertTrue(main.save_attendance_location(point, self.db, self.employee)['accepted'])
+        self.assertEqual(self.db.query(models.AttendanceLocationPoint).count(), 1)

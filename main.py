@@ -2596,7 +2596,7 @@ def save_attendance_location(
     if not math.isfinite(point.latitude) or not math.isfinite(point.longitude) or not -90 <= point.latitude <= 90 or not -180 <= point.longitude <= 180:
         raise HTTPException(status_code=422, detail="Invalid GPS coordinates")
     if point.accuracy_m is None or not math.isfinite(point.accuracy_m) or not 0 < point.accuracy_m <= 100:
-        raise HTTPException(status_code=422, detail="Live GPS accuracy must be within 100 metres. Waiting for a precise location.")
+        return {"accepted": False, "reason": "Waiting for a GPS reading accurate to within 100 metres"}
     store = db.query(models.Store).filter(models.Store.id == record.store_id).first()
     if not store or store.latitude is None or store.longitude is None:
         raise HTTPException(status_code=400, detail="Assigned outlet has no GPS coordinates")
@@ -2627,7 +2627,7 @@ def save_attendance_location(
     )
     db.add(location)
     db.commit()
-    return {"id": location.id, "route_distance_m": route_distance}
+    return {"accepted": True, "id": location.id, "route_distance_m": route_distance}
 
 
 def nearest_attendance_outlet(stores, record, point):
