@@ -372,6 +372,7 @@ class User(Base):
     status = Column(String(20), default="Active")
     # Employee-selected recurring weekly holiday (Monday-Sunday).
     weekoff_day = Column(String(10), nullable=True)
+    weekoff_history = Column(Text, nullable=True)
     created_date = Column(DateTime, default=datetime.utcnow)
 
     # Email OTP hash and persistent recovery limits (shared by all workers).

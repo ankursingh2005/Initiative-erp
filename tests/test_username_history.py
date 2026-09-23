@@ -50,7 +50,7 @@ class UsernameHistoryTests(unittest.TestCase):
                     app.dependency_overrides[auth.get_current_user] = lambda: actor
                     with TestClient(app) as client:
                         response = client.patch(f'/users/{user_id}/details', json={
-                            'username': 'New name', 'email': employee.email, 'weekoff_day': 'Wednesday'})
+                            'username': 'New name', 'email': 'updated@example.test', 'weekoff_day': 'Wednesday'})
                         self.assertEqual(response.status_code, 200, response.text)
                         self.assertEqual(response.json()['id'], user_id)
                         db.refresh(record)
@@ -76,8 +76,9 @@ class UsernameHistoryTests(unittest.TestCase):
                         app.dependency_overrides[auth.get_current_user] = lambda: employee
                         for employee_role in ('Employee', 'BrandPartner', 'SupportingStaff'):
                             employee.role = employee_role
-                            employee.weekoff_day = None
                             db.commit()
+                            cleared = client.put('/api/me/weekoff', json={'weekoff_day': None})
+                            self.assertEqual(cleared.status_code, 200, cleared.text)
                             saved = client.put('/api/me/weekoff', json={'weekoff_day': 'Wednesday'})
                             self.assertEqual(saved.status_code, 200, saved.text)
                             self.assertEqual(client.get('/api/me').json()['weekoff_day'], 'Wednesday')

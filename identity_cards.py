@@ -168,6 +168,55 @@ def serialize(user, card, store):
     }
 
 
+class AttendanceProfileUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=1, max_length=150)
+    email: str = Field(min_length=3, max_length=150)
+    mobile: str = Field(default="", max_length=25)
+    photo: str | None = Field(default=None, max_length=4_000_000)
+
+
+@router.patch("/profile/{user_id}")
+def update_attendance_profile(user_id: int, payload: AttendanceProfileUpdate,
+                              db: Session = Depends(get_db), current_user=Depends(auth.get_current_user)):
+    if current_user.id != user_id and current_user.role not in MANAGERS:
+        raise HTTPException(403, "You can only edit your own profile")
+    user = db.get(models.User, user_id)
+    if not user:
+        raise HTTPException(404, "User not found")
+    name, mobile = payload.name.strip(), payload.mobile.strip()
+    email = payload.email.strip().lower()
+    if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
+        raise HTTPException(422, "Enter a valid email address")
+    from sqlalchemy import func
+    if db.query(models.User).filter(func.lower(models.User.email) == email, models.User.id != user_id).first():
+        raise HTTPException(409, "Email is already used by another account")
+    if not name or any(ord(c) < 32 for c in name):
+        raise HTTPException(422, "Enter a valid name")
+    if mobile and (not re.fullmatch(r"\+?[0-9 ()-]+", mobile) or not 7 <= len(re.sub(r"\D", "", mobile)) <= 15):
+        raise HTTPException(422, "Enter a valid contact number")
+    photo = normalize_photo(payload.photo) if "photo" in payload.model_fields_set else None
+    card = db.get(models.IdentityCard, user_id)
+    if not card:
+        store = db.get(models.Store, user.store_id) if user.store_id else None
+        card = models.IdentityCard(user_id=user_id, employee_id=next_employee_id(db, outlet_abbreviation(store)),
+                                   employee_name=name, designation=user.role, mobile=mobile)
+        db.add(card)
+    card.employee_name, card.mobile = name, mobile
+    user.full_name = name
+    if user.email != email:
+        user.email = email
+        user.reset_token = None
+    if "photo" in payload.model_fields_set:
+        card.photo = photo
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "Email or employee ID is already in use. Reload and try again.")
+    return {"name": name, "email": user.email, "contact_number": mobile, "profile_photo": card.photo, "employee_id": card.employee_id}
+
+
 @router.get("")
 def list_cards(response: Response, db: Session = Depends(get_db), current_user=Depends(auth.get_current_user)):
     eligible(current_user)

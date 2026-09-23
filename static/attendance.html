@@ -177,12 +177,233 @@
 .personal-status-options label>span{display:block}
 .personal-status-options select{width:100%;min-width:0;min-height:48px;font-size:14px}
 @media(max-width:380px){.personal-status-options{grid-template-columns:1fr}}
-</style></head>
+</style><style>
+.employee-profile{display:flex;align-items:center;gap:16px;margin:12px 0 20px}.employee-profile h2{text-transform:uppercase;margin:0 0 8px;font-size:22px;overflow-wrap:anywhere}.employee-avatar{width:72px;height:72px;flex:0 0 72px;border-radius:50%;object-fit:cover;background:#eaf1ff;display:grid;place-items:center;font-size:28px;font-weight:800;color:#155eef}.employee-id,.employee-contact{color:#475467;line-height:1.7}.employee-outlet{margin:14px 0 20px;line-height:1.6}.employee-outlet strong{display:block;text-transform:uppercase}.employee-attendance .selfie-gallery{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.employee-attendance .selfie-gallery img{width:100%;height:130px;object-fit:cover}.employee-attendance .selfie-gallery .selfie-missing{min-height:100px;height:130px}.employee-attendance .record-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.monthly-view-toggle{display:flex;justify-content:space-between;align-items:center;width:100%;padding:18px 0;margin-top:20px;border:0;border-top:1px solid #e4e7ec;background:white;color:#173b73;font:inherit;font-weight:700;cursor:pointer}.employee-monthly table{width:100%;border-collapse:collapse;font-size:13px}.employee-monthly th,.employee-monthly td{padding:10px 4px;text-align:left;border-bottom:1px solid #eee}.employee-monthly input{max-width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;margin-bottom:12px}
+</style>
+<style>
+/* Compact employee card, including narrow mobile screens. */
+.record-modal.employee-attendance{align-items:center;padding:12px}
+.employee-attendance .record-dialog{position:relative;width:min(100%,430px);max-height:calc(100dvh - 24px);padding:16px;border-radius:20px;font-size:13px;line-height:1.4;background:linear-gradient(145deg,#eef4ff 0,#fff 155px);border:1px solid #ffffffb3;border-top:4px solid #3569ed;box-shadow:0 24px 80px #10234b55}
+.employee-attendance .record-dialog .modal-top-close{position:absolute;top:8px;right:8px;min-width:44px;width:44px!important;height:44px;min-height:44px;margin:0!important;padding:0!important;align-items:center;justify-content:center;font-size:0;box-shadow:none;border:0;background:transparent!important}
+.employee-attendance .modal-top-close::after{content:'\00D7';font-size:25px}
+.employee-attendance .employee-profile{gap:12px;margin:0 32px 12px 0;min-height:56px}
+.employee-attendance .employee-avatar{width:54px;height:54px;flex-basis:54px;font-size:23px;background:linear-gradient(135deg,#2765ed,#6746d8);color:#fff;box-shadow:0 4px 12px #315ed52b;outline:3px solid #fff}
+.employee-attendance .employee-profile h2{font-size:18px;line-height:1.2;margin:0 0 5px}
+.employee-attendance .employee-id{font-size:12px;line-height:1.4;font-weight:700}
+.employee-attendance .employee-contact{font-size:11px;line-height:1.5;color:#15243d;font-weight:800;letter-spacing:.15px}
+.employee-attendance .employee-outlet{font-weight:800;display:flex;align-items:baseline;gap:6px;margin:8px 0 12px;padding:10px 11px;font-size:11px;line-height:1.5;color:#15243d;background:linear-gradient(110deg,#e8f0ff,#f2f5ff);border:1px solid #d1def6;border-left:3px solid #3569ed;border-radius:10px;box-shadow:0 2px 6px #244b8710}
+.employee-attendance .employee-outlet strong{display:inline;flex:1;min-width:0;font-size:11px;font-weight:800;margin:0;color:#10213b;overflow-wrap:anywhere}
+.employee-attendance .employee-profile h2{color:#12243f;font-weight:800;letter-spacing:.25px}
+.employee-attendance .employee-id{color:#344768}
+.employee-attendance .selfie-card{box-shadow:0 3px 10px #1c3e6e0a}
+.employee-attendance .monthly-view-toggle:hover{background:#e1ebff;border-color:#abc4f5}
+.employee-attendance .user-download-menu summary:hover{filter:brightness(1.06)}
+.employee-attendance .record-date-row{display:grid;grid-template-columns:max-content max-content;justify-content:start;align-items:center;gap:4px 8px;font-size:11px;font-weight:700}
+.employee-attendance .record-dialog .record-date{grid-column:1;width:auto;max-width:100%;min-width:0;min-height:44px;height:44px;margin:0;padding:6px 9px;font-size:12px;font-weight:700}
+.employee-attendance .monthly-attendance-count{grid-column:2;grid-row:2;padding:5px 7px;font-size:10px;white-space:nowrap}
+.employee-attendance .monthly-attendance-count[data-status="Absent"]{color:#b42318;background:#fee4e2}
+.employee-attendance .record-detail>p{margin:6px 0;font-size:11px}
+.employee-attendance .record-grid{gap:6px;margin:8px 0}
+.employee-attendance .record-stat{min-width:0;padding:8px 5px;text-align:center;background:#f5f8ff;border-color:#e1e9fa;border-radius:11px}
+.employee-attendance .record-stat:first-child{background:#effaf5;border-color:#d5f0e2;color:#08794f}
+.employee-attendance .record-stat:last-child{background:#f5f1fd;border-color:#e9dff9;color:#7041ae}
+.employee-attendance .record-stat small{font-size:10px}
+.employee-attendance .record-stat b{font-size:13px;margin-top:3px;white-space:normal}
+.employee-attendance .selfie-gallery{gap:8px;margin:10px 0}
+.employee-attendance .selfie-card{border-radius:11px;border-color:#e1e9f4}
+.employee-attendance .selfie-card .selfie-label{padding:5px 8px;font-size:11px;background:#f1f5fc;color:#385577}
+.employee-attendance .selfie-gallery img,.employee-attendance .selfie-gallery .selfie-missing{height:88px;min-height:88px;aspect-ratio:auto;object-fit:contain;padding:0;font-size:10px}
+.employee-attendance .monthly-view-toggle{margin:8px 0;padding:10px 12px;min-height:44px;font-size:13px;border:1px solid #dde7fc;border-radius:11px;background:#eef4ff;color:#2353a5}
+.employee-attendance .user-download-menu{margin:2px 0 0}
+.employee-attendance .user-download-menu summary{padding:8px;min-height:44px;font-size:12px;border-radius:11px;background:linear-gradient(110deg,#245de4,#6345ce);color:#fff;box-shadow:0 4px 10px #315bdd20}
+.employee-attendance button:focus-visible,.employee-attendance summary:focus-visible{outline:3px solid #8ab1ff;outline-offset:2px}
+@media(max-width:360px){.employee-attendance .record-dialog{padding:12px}.employee-attendance .employee-profile h2{font-size:16px}.employee-attendance .employee-avatar{width:46px;height:46px;flex-basis:46px}.employee-attendance .selfie-gallery img,.employee-attendance .selfie-gallery .selfie-missing{height:72px;min-height:72px}}
+</style>
+<style>
+.employee-attendance .monthly-view-toggle{justify-content:center;text-align:center}
+.employee-monthly{padding:12px 0}.employee-monthly[hidden]{display:none}
+.attendance-calendar{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:7px 3px;text-align:center;padding:10px 4px;background:#f8faff;border:1px solid #e4eaf5;border-radius:12px}
+.calendar-weekday{font-size:10px;font-weight:700;color:#64748b;padding-bottom:5px}
+.calendar-day{display:flex;align-items:center;justify-content:center;min-height:34px}
+.calendar-day span{display:grid;place-items:center;width:32px;height:32px;border-radius:50%;font-size:12px;font-weight:700}
+.calendar-day.present span,.calendar-legend i.present{background:#16835a;color:#fff}
+.calendar-day.absent span,.calendar-legend i.absent{background:#d63c4a;color:#fff}
+.calendar-day.weekoff span,.calendar-legend i.weekoff{background:#f6cf49;color:#513b00}
+.calendar-day.neutral span{color:#94a3b8;background:#edf0f5}
+.calendar-legend{display:flex;justify-content:center;flex-wrap:wrap;gap:8px 12px;font-size:10px;padding-top:10px;color:#475467}.calendar-legend span{display:flex;align-items:center;gap:4px}.calendar-legend i{display:inline-block;width:9px;height:9px;border-radius:50%}
+</style><style>
+.employee-attendance .record-dialog .calendar-day{padding:0;min-height:38px;min-width:0;border:0;background:transparent;cursor:pointer;border-radius:8px}
+.calendar-day:hover span{box-shadow:0 0 0 3px #d5e3ff}
+.calendar-day[aria-pressed="true"] span{outline:2px solid #173b73;outline-offset:2px}
+.calendar-date-detail{margin:12px 0;padding:14px;border:1px solid #dce6f6;border-radius:10px;background:#f5f8ff;font-size:13px}
+</style><style>
+.calendar-month-header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.employee-attendance .calendar-month-header select{width:auto;min-width:0;max-width:60%;padding:8px 10px;border:1px solid #dce5f3;border-radius:10px;background:#fff;font-size:14px;min-height:44px}
+.calendar-month-count{white-space:nowrap;padding:7px 10px;border-radius:20px;background:#e0f6ed;color:#08794f;font-size:12px;font-weight:800}
+</style><style>
+.employee-attendance .attendance-profile-edit{position:absolute;right:52px;top:8px;min-height:44px;padding:8px 10px;background:transparent;color:#245de4;font-size:12px;font-weight:700}
+.employee-attendance .employee-profile{margin-right:82px}
+.attendance-profile-form{padding:14px;background:#f1f5ff;border:1px solid #dce6f6;border-radius:12px;margin:12px 0}.attendance-profile-form label{display:block;font-size:12px;font-weight:700;margin:10px 0}.attendance-profile-form input{display:block;width:100%;min-width:0;box-sizing:border-box;margin-top:5px;padding:9px;border:1px solid #cddaf0;border-radius:8px;font-size:16px}.attendance-profile-form button{margin-right:8px;padding:10px 16px;background:#245de4;color:white}.attendance-profile-form .cancel-edit{background:white;color:#245de4}
+</style>
+<style>
+/* Personal attendance overview */
+.admin-compact-title{margin:26px 0 16px;padding:2px 0 2px 14px;border-left:4px solid #3569ed}
+.admin-compact-title h3{font-size:20px;color:#172d50;letter-spacing:-.5px}
+.admin-compact-title p{margin-top:5px;font-size:12px}
+.personal-attendance{gap:20px;align-items:stretch}
+.personal-attendance>.panel{min-width:0;overflow:hidden;border:1px solid #e0e8f6;border-radius:20px;box-shadow:0 10px 30px #18396c0a}
+.personal-attendance>.panel:first-child{background:linear-gradient(150deg,#f5f8ff 0,#fff 55%)}
+.personal-attendance .panelHead{padding:18px 22px;border-bottom:1px solid #e3eaf6}
+.personal-attendance .panelHead h2{font-size:17px;letter-spacing:-.3px}
+.personal-attendance .body{padding:22px}
+.personal-attendance .identity{padding-bottom:18px;margin-bottom:18px;border-bottom:1px solid #e8eef7}
+.personal-attendance .avatar{width:56px;height:56px;flex-shrink:0;border:3px solid #fff;background:linear-gradient(135deg,#2465ee,#6a4ace);color:white;font-size:22px;box-shadow:0 5px 14px #3569ed25}
+.personal-attendance .identity strong{font-size:18px;letter-spacing:-.3px;color:#16305a}
+.personal-attendance .identity small{font-size:11px;line-height:1.5}
+.personal-attendance .location{border:1px solid #caebdf;border-left:3px solid #0a9b76;border-radius:12px;background:#eaf8f2;color:#06664c;padding:12px 14px}
+.personal-attendance .state{font-size:11px;line-height:1.6;margin:15px 0}
+.personal-attendance .mark{min-height:50px;border-radius:12px;color:#fff;background:linear-gradient(110deg,#205ce6,#5b48ce);box-shadow:0 6px 16px #315edd26;transition:filter .15s,box-shadow .15s}
+.personal-attendance .mark:hover:not(:disabled){filter:brightness(1.08);box-shadow:0 8px 20px #315edd35}
+.personal-attendance #checkout{background:linear-gradient(110deg,#0b826f,#099d80)}
+.personal-attendance #checkoutInfo{color:#526887;font-weight:600;margin-top:13px}
+.personal-attendance .hint{font-size:10px;line-height:1.7}
+.personal-attendance>.panel:last-child{background:radial-gradient(ellipse at top right,#334d84 0,transparent 65%),linear-gradient(140deg,#152b50,#1c345c);border-color:#213d69;color:#fff;box-shadow:0 12px 30px #172f5624}
+.personal-attendance>.panel:last-child .panelHead{border-color:#ffffff1c;background:#ffffff04}
+.personal-attendance>.panel:last-child .body{display:flex;flex-direction:column;gap:22px}
+.personal-attendance>.panel:last-child .summary{grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.personal-attendance .metric{position:relative;min-width:0;min-height:120px;padding:17px 12px;border:1px solid #ffffff20;border-radius:14px;background:#ffffff0c;box-shadow:inset 0 1px 0 #ffffff0c;text-align:left}
+.personal-attendance .metric:before{content:'';display:block;width:22px;height:3px;margin-bottom:16px;border-radius:4px;background:#8bb5ff}
+.personal-attendance .metric:nth-child(2):before{background:#62dbc0}
+.personal-attendance .metric:nth-child(3):before{background:#c0a7ff}
+.personal-attendance .metric span{font-size:10px;color:#c0cee5;line-height:1.5}
+.personal-attendance .metric strong{font-size:clamp(18px,2vw,25px);letter-spacing:-.5px;line-height:1.4;font-variant-numeric:tabular-nums;color:#fff;white-space:normal;overflow-wrap:anywhere}
+.personal-attendance .history{margin:0;border:1px solid #ffffff16;border-radius:14px;background:#ffffff08}
+.personal-attendance #recordText{padding:18px 16px;color:#c1cee3;line-height:1.7;font-size:11px;text-align:left}
+.personal-attendance #recordText b{display:block;margin-bottom:5px;color:#fff;font-size:12px}
+.personal-attendance .badge{padding:6px 10px;border:1px solid #ffffff30}
+.personal-attendance>.panel:last-child .badge.ok{color:#a7f3d7;background:#0d665b}
+.personal-attendance>.panel:last-child .badge.warn{color:#ffe2a6;background:#604b25}
+.summary-panel{margin-top:22px;border:1px solid #dfe7f4;border-radius:20px;overflow:hidden;box-shadow:0 10px 30px #18396c08}
+.summary-panel>.panelHead{padding:20px 22px;background:linear-gradient(110deg,#f1f5ff,#fafbff);border-bottom:1px solid #e1e9f7}
+.summary-panel h2{color:#193760;font-size:17px;letter-spacing:-.3px}
+.summary-panel .month-select{border-radius:10px;border-color:#d6e1f3;min-height:40px}
+.summary-panel .summary-download{min-height:40px;border-radius:10px;background:linear-gradient(110deg,#087e62,#0c9c7d);box-shadow:0 4px 10px #087e621a}
+.summary-panel .avg-stats{gap:12px;border-bottom:0;padding-bottom:0}
+.summary-panel .avg-stat{align-items:center;min-width:0;padding:17px 14px;border:1px solid #dfe8fb;border-radius:14px;background:#f1f5ff;gap:12px}
+.summary-panel .avg-stat:nth-child(2){background:#edf9f5;border-color:#d7eee5}
+.summary-panel .avg-stat:nth-child(3){background:#f6f2fd;border-color:#e8def8}
+.summary-panel .avg-stat svg{width:32px;height:32px;padding:7px;margin:0;border-radius:9px;background:#fff;box-shadow:0 3px 8px #23396608}
+.summary-panel .avg-stat:nth-child(2) svg,.summary-panel .avg-stat:nth-child(2) strong{color:#078064}
+.summary-panel .avg-stat:nth-child(3) svg,.summary-panel .avg-stat:nth-child(3) strong{color:#7645b6}
+.summary-panel .avg-stat-text strong{font-size:18px;font-variant-numeric:tabular-nums}
+.personal-attendance button:focus-visible,.summary-panel button:focus-visible{outline:3px solid #8cb6ff;outline-offset:3px}
+@media(max-width:760px){.personal-attendance{grid-template-columns:1fr}.personal-attendance .metric{min-height:110px}.personal-attendance .metric strong{font-size:22px}.summary-panel .avg-stats{grid-template-columns:1fr}.summary-panel .avg-stat{padding:14px 16px}.summary-panel .avg-stat-text{flex:1;display:flex;align-items:center;justify-content:space-between;gap:12px}.summary-panel .avg-stat-text strong{margin:0;font-size:16px}}
+@media(max-width:420px){.personal-attendance .body{padding:16px}.personal-attendance .panelHead,.summary-panel>.panelHead{padding:16px}.personal-attendance .metric{padding:14px 9px}.personal-attendance .metric strong{font-size:19px}.personal-attendance .metric span{font-size:9px}.admin-compact-title h3{font-size:18px}}
+</style>
+
+<style>
+/* Keep record values aligned in narrow desktop columns and on phones. */
+.personal-attendance>.panel:last-child .summary{container-type:inline-size;align-items:stretch}
+.personal-attendance .metric{padding:14px 10px;min-height:106px}
+.personal-attendance .metric:before{margin-bottom:13px}
+.personal-attendance .metric span{font-size:9px;line-height:1.5;white-space:nowrap}
+.personal-attendance .metric strong{font-size:16px;font-size:clamp(13px,5.1cqi,21px);line-height:1.35;letter-spacing:-.3px;margin-top:9px;white-space:nowrap;overflow-wrap:normal;word-break:normal;overflow:visible;text-overflow:clip;font-variant-numeric:tabular-nums}
+.personal-attendance>.panel:last-child .panelHead h2{font-size:16px}
+.personal-attendance #recordText b{font-size:12px;line-height:1.5}
+.personal-attendance #recordText{font-size:11px;line-height:1.65}
+@media(max-width:360px){.personal-attendance>.panel:last-child .summary{gap:6px}.personal-attendance .metric{padding:12px 7px}.personal-attendance .metric span{font-size:8px}}
+</style>
+
+<style>
+/* Match the light dashboard cards. */
+.personal-attendance>.panel:last-child{align-self:start;background:#fff;border:1px solid #e0e8f6;color:var(--ink);box-shadow:0 8px 24px #18396c0a;border-radius:16px}
+.personal-attendance>.panel:last-child .panelHead{background:#f7f9fe;border-bottom:1px solid #e4eaf5;padding:18px 20px}
+.personal-attendance>.panel:last-child .panelHead h2{color:#193760;font-size:17px}
+.personal-attendance>.panel:last-child .body{padding:20px;gap:16px}
+.personal-attendance>.panel:last-child .badge.ok{color:#087f5b;background:#e4f7ef;border:1px solid #c8efdf}
+.personal-attendance>.panel:last-child .badge.warn{color:#956000;background:#fff5dc;border:1px solid #f5e6b7}
+.personal-attendance .metric{min-height:100px;background:#edf3ff;border:1px solid #dce6fa;border-radius:12px;box-shadow:none;padding:15px 10px}
+.personal-attendance .metric:nth-child(2){background:#eaf8f1;border-color:#d5ede0}
+.personal-attendance .metric:nth-child(3){background:#f4effb;border-color:#e5dcf3}
+.personal-attendance .metric:before{display:none}
+.personal-attendance .metric span{color:#53647e;font-size:9px}
+.personal-attendance .metric strong{color:#245bb5;margin-top:12px}
+.personal-attendance .metric:nth-child(2) strong{color:#087f5b}
+.personal-attendance .metric:nth-child(3) strong{color:#7543ad}
+.personal-attendance .history{background:#f8faff;border:1px solid #e3eaf5;border-left:3px solid #18a17b;border-radius:10px}
+.personal-attendance #recordText{padding:14px;color:#667085;font-size:11px}
+.personal-attendance #recordText b{color:#243b59;font-size:12px;margin-bottom:4px}
+@media(max-width:420px){.personal-attendance>.panel:last-child .body{padding:16px}.personal-attendance>.panel:last-child .panelHead{padding:16px}.personal-attendance .metric{padding:13px 8px;min-height:94px}}
+</style>
+
+<style>
+/* Compact Today card, consistent with Today's record. */
+.personal-attendance{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}
+.personal-attendance>.panel:first-child{background:#fff;border-radius:16px;align-self:start}
+.personal-attendance>.panel:first-child .panelHead{padding:16px 20px;background:#f7f9fe}
+.personal-attendance>.panel:first-child .panelHead h2{font-size:17px;color:#193760}
+.personal-attendance>.panel:first-child .body{padding:16px 20px}
+.personal-attendance .identity{gap:11px;margin-bottom:12px;padding-bottom:12px}
+.personal-attendance .avatar{width:42px;height:42px;font-size:18px;border-width:2px}
+.personal-attendance .identity strong{font-size:15px;line-height:1.3}
+.personal-attendance .identity small{margin-top:3px;font-size:10px;line-height:1.4}
+.personal-attendance .location{padding:9px 11px;font-size:11px;border-radius:10px;line-height:1.5}
+.personal-attendance .state{margin:12px 0;font-size:10px;gap:8px}
+.personal-attendance .mark{min-height:44px;padding:11px 14px;font-size:13px;border-radius:10px;box-shadow:0 4px 10px #315edd18}
+.personal-attendance #checkout{margin-top:0!important}
+.personal-attendance #checkoutInfo{margin-top:9px;font-size:10px;line-height:1.5}
+.personal-attendance .hint{margin-top:9px;font-size:9px;line-height:1.6}
+@media(max-width:760px){.personal-attendance{grid-template-columns:1fr}}
+@media(max-width:420px){.personal-attendance>.panel:first-child .body,.personal-attendance>.panel:first-child .panelHead{padding:14px 16px}}
+</style>
+<style>
+.personal-attendance>.panel:first-child .panelHead h2,.personal-attendance>.panel:last-child .panelHead h2{font-size:13px;line-height:1.4;font-weight:700;letter-spacing:0}
+</style>
+<style>
+.personal-attendance>.panel:first-child .panelHead,.personal-attendance>.panel:last-child .panelHead{padding:8px 16px;min-height:40px;gap:8px}
+.personal-attendance .panelHead .badge{padding:3px 8px;font-size:9px;line-height:1.4}
+</style>
+<style>
+.personal-attendance .identity #userRole{display:none}
+.personal-attendance .identity{gap:9px;margin-bottom:9px;padding-bottom:9px}
+.personal-attendance .avatar{width:32px;height:32px;font-size:14px;box-shadow:0 3px 8px #3569ed18}
+.personal-attendance .identity strong{font-size:13px;line-height:1.3}
+</style>
+<style>
+.summary-panel{margin-top:16px;border-radius:16px}
+.summary-panel>.panelHead{padding:10px 16px;gap:8px}
+.summary-panel h2{font-size:13px;line-height:1.4}
+.summary-panel .month-select,.summary-panel .summary-download{min-height:34px;padding:6px 10px;font-size:11px;border-radius:8px}
+.summary-panel>.body{padding:14px 16px}
+.summary-panel .avg-stats{gap:10px;margin-bottom:14px}
+.summary-panel .avg-stat{padding:10px 12px;gap:9px;border-radius:10px}
+.summary-panel .avg-stat svg{width:27px;height:27px;padding:6px}
+.summary-panel .avg-stat-text span{font-size:9px}
+.summary-panel .avg-stat-text strong{font-size:14px;margin-top:3px}
+.summary-panel .history-list{gap:8px}
+.summary-panel .history-card{padding:10px 12px;gap:8px 16px}
+.summary-panel .history-card-head{margin-bottom:8px}
+.summary-panel .history-card-head .h-date{font-size:12px}
+.summary-panel .punch span,.summary-panel .history-card-head .h-spent span{font-size:9px}
+.summary-panel .punch b,.summary-panel .history-card-head .h-spent b{font-size:11px;margin-top:3px}
+.summary-panel .view-selfies{min-height:34px;padding:7px 10px;font-size:10px}
+.summary-panel .previous-attendance-toggle{min-height:34px;margin:4px 0;padding:8px 12px;font-size:11px}
+@media(max-width:600px){.summary-panel .summary-head-row h2{margin-bottom:8px}.summary-panel .summary-month-actions{grid-template-columns:auto 1fr;gap:6px}.summary-panel .summary-month-actions>*{width:100%;min-width:0;min-height:40px}.summary-panel .view-selfies,.summary-panel .previous-attendance-toggle{min-height:40px}}
+</style>
+<style>
+.personal-attendance .identity{flex-wrap:wrap;align-items:center}
+.personal-attendance .identity>.location{margin-left:auto;max-width:100%;padding:6px 9px;font-size:9px;line-height:1.5;border-left-width:1px;border-radius:8px;flex:0 1 auto}
+@media(max-width:420px){.personal-attendance .identity>.location{flex:1 1 140px;min-width:0;font-size:8px}}
+</style>
+<style>
+.personal-attendance .own-profile-button{display:block;min-height:28px;margin-top:2px;padding:3px 0;background:transparent;color:#245bb5;font-size:10px;font-weight:700;text-align:left;text-decoration:underline;text-underline-offset:3px}
+</style>
+</head>
 <body>
 <header class="top"><a class="brand" href="/home"><span>Initiative ERP</span><b class="page-chip">Attendance</b></a><div class="top-actions"><a class="back" href="/home" title="Back to Home"><span aria-hidden="true">&#8592;</span> Back</a></div></header>
 <main><section class="head"><div class="mobile-attendance-user" aria-label="Signed-in user"><span id="mobileAttendanceAvatar" class="mobile-attendance-avatar">?</span><span id="mobileAttendanceName" class="mobile-attendance-name">User</span></div><div><h1>My Attendance</h1><p>Mark attendance securely from your assigned outlet.</p></div><label class="date">Today <input id="date" type="date" readonly></label></section>
 <section class="personal-status-panel" aria-label="Leave and weekly off"><div class="personal-status-options"><label class="weekoff-control"><span id="weekoffLabel">Weekly off day</span><select id="weekoffSelect" aria-label="Choose your weekly off day"><option value="">Week Off</option><option>Monday</option><option>Tuesday</option><option>Wednesday</option><option>Thursday</option><option>Friday</option><option>Saturday</option><option>Sunday</option></select></label><label class="personal-leave-control"><span>Today’s status</span><select id="personalWorkStatus" aria-label="Choose today's work status"><option value="working">Working</option><option value="leave">Leave</option></select></label></div></section>
-<div class="grid"><section class="panel"><div class="panelHead"><h2>Today</h2><span id="todayBadge" class="badge warn">Not marked</span></div><div class="body"><div class="identity"><div id="avatar" class="avatar">?</div><div><strong id="userName">Signed-in user</strong><small id="userRole">Loading account...</small><small id="selectedWeekoff">Your weekly off: Not selected</small></div></div><div class="location">● <span id="outletText">Checking assigned outlet...</span></div><div class="state"><i id="gpsDot" class="dot"></i><span id="gpsText">Checking your live location...</span></div><button id="mark" class="primary mark">Punch In</button><button id="checkout" class="secondary mark" style="display:none;margin-top:10px">Punch Out</button><p id="checkoutInfo" class="hint"></p><p class="hint">Your current time, GPS position, distance from the outlet, and selfie are recorded together. Attendance is accepted only within 100 meters.</p></div></section>
+<div class="grid personal-attendance"><section class="panel"><div class="panelHead"><h2>Today</h2><span id="todayBadge" class="badge warn">Not marked</span></div><div class="body"><div class="identity"><div id="avatar" class="avatar">?</div><div><strong id="userName">Signed-in user</strong><button type="button" class="own-profile-button" onclick="openMyAttendanceProfile()">My profile</button><small id="userRole">Loading account...</small></div><div class="location">● <span id="outletText">Checking assigned outlet...</span></div></div><div class="state"><i id="gpsDot" class="dot"></i><span id="gpsText">Checking your live location...</span></div><button id="mark" class="primary mark">Punch In</button><button id="checkout" class="secondary mark" style="display:none;margin-top:10px">Punch Out</button><p id="checkoutInfo" class="hint"></p><p class="hint">Your current time, GPS position, distance from the outlet, and selfie are recorded together. Attendance is accepted only within 100 meters.</p></div></section>
 <section class="panel"><div class="panelHead"><h2>Today’s record</h2><span id="sync" class="badge warn">Checking</span></div><div class="body"><div class="summary"><div class="metric"><span>Marked at</span><strong id="markedAt">--:--</strong></div><div class="metric"><span>Distance</span><strong id="distance">-- m</strong></div><div class="metric"><span>Work hours</span><strong id="hours">00:00</strong></div></div><div class="history"><div id="recordText" class="empty">No attendance marked today.</div></div></div></section></div>
 <section class="panel summary-panel"><div class="panelHead summary-head-row"><h2>Attendance Summary</h2><div class="summary-month-actions"><select id="summaryMonth" class="month-select" aria-label="Choose attendance month"></select><button id="downloadMyMonth" class="summary-download" type="button" title="Download monthly attendance in Excel">Monthly Attendance <span aria-hidden="true">&#8595;</span></button></div></div><div class="body">
 <div class="avg-stats">
@@ -198,14 +419,14 @@
 const attendanceBasePath=window.location.pathname==='/erp'||window.location.pathname.startsWith('/erp/')?'/erp':'';function attendanceUrl(path){return typeof path==='string'&&path.startsWith('/')&&!path.startsWith(attendanceBasePath+'/')?attendanceBasePath+path:path}const nativeFetch=window.fetch.bind(window);let authRedirecting=false;window.fetch=async function(resource,options){const response=await nativeFetch(attendanceUrl(resource),options);if((response.status===401||response.status===410)&&!authRedirecting){authRedirecting=true;localStorage.removeItem('token');localStorage.removeItem('role');localStorage.removeItem('username');sessionStorage.setItem('authMessage','Your session expired. Please sign in again.');window.location.replace(attendanceUrl('/login'));}return response};
 const outlets={Alambagh:[26.8023316384953,80.89578659627016],Gomtinagar:[26.850130023596396,81.00713531584118],Ashiyana:[26.795911774284612,80.92089772123978],Hazratganj:[26.84924030483742,80.94773860240677],'Vikas Nagar':[26.90188397262733,80.95513690261241],Warehouse:[26.779149508725354,80.88470873166187],'Head Office':[26.84904218332385,80.94789353821966]},key='attendanceState',today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kolkata'}).format(new Date()),$=id=>document.getElementById(id);let stream=null,position=null,profile=null,state=readAttendanceCache();$('date').type='text';$('date').value=new Date(today+'T00:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short'});
 function readAttendanceCache(){try{const cached=JSON.parse(localStorage.getItem(key)||'null');return {records:Array.isArray(cached?.records)?cached.records.filter(item=>item&&typeof item.date==='string'):[],queue:[]}}catch(error){return {records:[],queue:[]}}}
-function save(){try{localStorage.setItem(key,JSON.stringify(state))}catch(error){/* Server records remain usable when browser storage is full or blocked. */}}function formatTime(value){return value?new Date(value).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'--:--'}function formatDistance(value){const distance=Number(value);return Number.isFinite(distance)?Math.round(distance)+' m':'—'}function meters(lat,lon,point){const r=6371000,p=Math.PI/180,a=(point[0]-lat)*p,b=(point[1]-lon)*p,c=Math.sin(a/2)**2+Math.cos(lat*p)*Math.cos(point[0]*p)*Math.sin(b/2)**2;return Math.round(2*r*Math.atan2(Math.sqrt(c),Math.sqrt(1-c)))}function setGps(text,type=''){ $('gpsText').textContent=text;$('gpsDot').className='dot '+type}function assignedOutlet(){const item=profile?.store_id?Object.keys(outlets)[profile.store_id-1]:null;return item||'Hazratganj'}function record(){return state.records.find(item=>item.date===today&&item.user===profile?.username)}function render(){const item=record();$('markedAt').textContent=formatTime(item?.at);$('distance').textContent=item?formatDistance(item.distance):'-- m';$('todayBadge').textContent=item?'Marked':'Not marked';$('todayBadge').className='badge '+(item?'ok':'warn');$('recordText').innerHTML=item?'<b>Attendance marked successfully</b>Selfie verified at '+formatTime(item.at)+' from '+item.outlet+'.':'No attendance marked today.';$('mark').disabled=!!item}async function loadProfile(){const token=localStorage.getItem('token');if(!token){window.location.replace(attendanceUrl('/login'));return}try{const response=await fetch('/api/me',{headers:{Authorization:'Bearer '+token}});if(response.ok)profile=await response.json();else return}catch(error){setGps('Unable to verify your session. Check your connection and try again.','bad');return}if(!profile)return;const name=profile.full_name||profile.username||localStorage.getItem('username')||'Signed-in user';$('userName').textContent=name;$('avatar').textContent=name.charAt(0).toUpperCase();$('userRole').textContent=profile.role||localStorage.getItem('role')||'Employee';$('outletText').textContent='Assigned outlet: '+assignedOutlet()+' · 100 m geofence';render();checkLocation()}function checkLocation(){if(!navigator.geolocation){setGps('Location is off or unavailable. Allow location in browser settings.','bad');return}navigator.geolocation.getCurrentPosition(p=>{position=p;const d=meters(p.coords.latitude,p.coords.longitude,outlets[assignedOutlet()]);$('distance').textContent=formatDistance(d);setGps(d<=100?'Location verified inside '+assignedOutlet():'You are '+formatDistance(d)+' away. Move within 100 m of '+assignedOutlet()+'.',d<=100?'ok':'bad')},error=>{const messages={1:'Location permission was denied. Allow it in browser settings.',2:'Your location is unavailable. Turn on GPS and try again.',3:'Location timed out. Move outdoors and try again.'};setGps(messages[error.code]||'Unable to get your location.','bad')},{enableHighAccuracy:true,timeout:15000,maximumAge:5000})}async function openMark(){checkLocation();if(!position||meters(position.coords.latitude,position.coords.longitude,outlets[assignedOutlet()])>100){setGps('Location must be enabled and within 100 m before marking.','bad');return}if(!window.isSecureContext||!navigator.mediaDevices?.getUserMedia){$('modalText').textContent='Camera requires HTTPS or localhost. Open the secure app URL and try again.';$('modal').classList.add('show');return}$('modal').classList.add('show');try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'user'},width:{ideal:720},height:{ideal:960}},audio:false});$('camera').srcObject=stream;$('camera').style.display='block';$('capture').disabled=false;$('modalText').textContent='Look at the camera, then tap Capture & Mark.'}catch(error){$('modalText').textContent=error.name==='NotAllowedError'?'Camera permission was denied. Allow it in browser settings.':'The front camera is unavailable or already in use.'}}function closeModal(){if(stream)stream.getTracks().forEach(track=>track.stop());stream=null;$('camera').srcObject=null;$('camera').style.display='none';$('capture').disabled=true;$('modal').classList.remove('show')}async function capture(){}$('mark').disabled=true;$('cancel').onclick=closeModal;$('capture').onclick=capture;window.addEventListener('online',()=>{if((state.queue||[]).length){$('sync').textContent='Syncing';$('sync').className='badge warn';syncAllLocalAttendance()}else{$('sync').textContent='Synced';$('sync').className='badge ok'}});window.addEventListener('offline',()=>{$('sync').textContent='Offline queue';$('sync').className='badge warn'});document.addEventListener('visibilitychange',()=>{if(document.hidden)closeModal()});window.addEventListener('pagehide',()=>closeModal());loadProfile();
+function save(){try{localStorage.setItem(key,JSON.stringify(state))}catch(error){/* Server records remain usable when browser storage is full or blocked. */}}function formatTime(value){return value?new Date(value).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'--:--'}function formatDistance(value){const distance=Number(value);return Number.isFinite(distance)?Math.round(distance)+' m':'—'}function meters(lat,lon,point){const r=6371000,p=Math.PI/180,a=(point[0]-lat)*p,b=(point[1]-lon)*p,c=Math.sin(a/2)**2+Math.cos(lat*p)*Math.cos(point[0]*p)*Math.sin(b/2)**2;return Math.round(2*r*Math.atan2(Math.sqrt(c),Math.sqrt(1-c)))}function setGps(text,type=''){ $('gpsText').textContent=text;$('gpsDot').className='dot '+type}function assignedOutlet(){const item=profile?.store_id?Object.keys(outlets)[profile.store_id-1]:null;return item||'Hazratganj'}function record(){return state.records.find(item=>item.date===today&&(item.userId===profile?.id||(!item.userId&&item.user===profile?.username)))}function render(){const item=record();$('markedAt').textContent=formatTime(item?.at);$('distance').textContent=item?formatDistance(item.distance):'-- m';$('todayBadge').textContent=item?'Marked':'Not marked';$('todayBadge').className='badge '+(item?'ok':'warn');$('recordText').innerHTML=item?'<b>Attendance marked successfully</b>Selfie verified at '+formatTime(item.at)+' from '+item.outlet+'.':'No attendance marked today.';$('mark').disabled=!!item}async function loadProfile(){const token=localStorage.getItem('token');if(!token){window.location.replace(attendanceUrl('/login'));return}try{const response=await fetch('/api/me',{headers:{Authorization:'Bearer '+token}});if(response.ok)profile=await response.json();else return}catch(error){setGps('Unable to verify your session. Check your connection and try again.','bad');return}if(!profile)return;const name=profile.full_name||profile.username||localStorage.getItem('username')||'Signed-in user';$('userName').textContent=name;$('avatar').textContent=name.charAt(0).toUpperCase();$('userRole').textContent=profile.role||localStorage.getItem('role')||'Employee';$('outletText').textContent='Assigned outlet: '+assignedOutlet()+' · 100 m geofence';render();checkLocation()}function checkLocation(){if(!navigator.geolocation){setGps('Location is off or unavailable. Allow location in browser settings.','bad');return}navigator.geolocation.getCurrentPosition(p=>{position=p;const d=meters(p.coords.latitude,p.coords.longitude,outlets[assignedOutlet()]);$('distance').textContent=formatDistance(d);setGps(d<=100?'Location verified inside '+assignedOutlet():'You are '+formatDistance(d)+' away. Move within 100 m of '+assignedOutlet()+'.',d<=100?'ok':'bad')},error=>{const messages={1:'Location permission was denied. Allow it in browser settings.',2:'Your location is unavailable. Turn on GPS and try again.',3:'Location timed out. Move outdoors and try again.'};setGps(messages[error.code]||'Unable to get your location.','bad')},{enableHighAccuracy:true,timeout:15000,maximumAge:5000})}async function openMark(){checkLocation();if(!position||meters(position.coords.latitude,position.coords.longitude,outlets[assignedOutlet()])>100){setGps('Location must be enabled and within 100 m before marking.','bad');return}if(!window.isSecureContext||!navigator.mediaDevices?.getUserMedia){$('modalText').textContent='Camera requires HTTPS or localhost. Open the secure app URL and try again.';$('modal').classList.add('show');return}$('modal').classList.add('show');try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'user'},width:{ideal:720},height:{ideal:960}},audio:false});$('camera').srcObject=stream;$('camera').style.display='block';$('capture').disabled=false;$('modalText').textContent='Look at the camera, then tap Capture & Mark.'}catch(error){$('modalText').textContent=error.name==='NotAllowedError'?'Camera permission was denied. Allow it in browser settings.':'The front camera is unavailable or already in use.'}}function closeModal(){if(stream)stream.getTracks().forEach(track=>track.stop());stream=null;$('camera').srcObject=null;$('camera').style.display='none';$('capture').disabled=true;$('modal').classList.remove('show')}async function capture(){}$('mark').disabled=true;$('cancel').onclick=closeModal;$('capture').onclick=capture;window.addEventListener('online',()=>{if((state.queue||[]).length){$('sync').textContent='Syncing';$('sync').className='badge warn';syncAllLocalAttendance()}else{$('sync').textContent='Synced';$('sync').className='badge ok'}});window.addEventListener('offline',()=>{$('sync').textContent='Offline queue';$('sync').className='badge warn'});document.addEventListener('visibilitychange',()=>{if(document.hidden)closeModal()});window.addEventListener('pagehide',()=>closeModal());loadProfile();
 </script><script>
 let liveStores=[];(async()=>{const token=localStorage.getItem('token');if(!token)return;try{const response=await fetch('/stores');if(response.ok){liveStores=await response.json();assignedOutlet=function(){const store=liveStores.find(item=>item.id===profile?.store_id);if(store?.latitude&&store?.longitude){outlets[store.name]=[store.latitude,store.longitude]}return store?.name||'Hazratganj'};if(profile){$('outletText').textContent='Assigned outlet: '+assignedOutlet()+' · 100 m geofence';checkLocation()}}}catch(error){}})();
 // Keep both attendance actions in the HTML.  Creating Punch Out at runtime made
 // it disappear on some mobile/Render page loads when another script rendered
 // the attendance state before the dynamic button existed.
 const checkoutButton=$('checkout'),checkoutInfo=$('checkoutInfo');let checkoutMode=false;
-function checkoutRecord(){return state.records.find(item=>item.date===today&&item.user===profile?.username)}function updateCheckout(){const item=checkoutRecord();checkoutButton.style.display=item?.at&&!item.out?'block':'none';checkoutButton.disabled=!item?.at||!!item.out;$('hours').textContent=item?.at?(item.out?workingHours(item.at,item.out):workingHours(item.at,new Date().toISOString())):'00:00';checkoutInfo.textContent=item?.out?'Check-in: '+formatTime(item.at)+' · Check-out: '+formatTime(item.out)+' · '+workingHours(item.at,item.out)+' hours worked':''}function workingHours(start,end){const minutes=Math.max(0,Math.floor((new Date(end)-new Date(start))/60000));return String(Math.floor(minutes/60)).padStart(2,'0')+':'+String(minutes%60).padStart(2,'0')}
+function checkoutRecord(){return state.records.find(item=>item.date===today&&(item.userId===profile?.id||(!item.userId&&item.user===profile?.username)))}function updateCheckout(){const item=checkoutRecord();checkoutButton.style.display=item?.at&&!item.out?'block':'none';checkoutButton.disabled=!item?.at||!!item.out;$('hours').textContent=item?.at?(item.out?workingHours(item.at,item.out):workingHours(item.at,new Date().toISOString())):'00:00';checkoutInfo.textContent=item?.out?'Check-in: '+formatTime(item.at)+' · Check-out: '+formatTime(item.out)+' · '+workingHours(item.at,item.out)+' hours worked':''}function workingHours(start,end){const minutes=Math.max(0,Math.floor((new Date(end)-new Date(start))/60000));return String(Math.floor(minutes/60)).padStart(2,'0')+':'+String(minutes%60).padStart(2,'0')}
 const originalRender=render;render=function(){originalRender();updateCheckout()};render();
 </script><script>
 let attendanceRefreshVersion=0;
@@ -232,9 +453,9 @@ async function syncAttendanceHistory(){
 }setTimeout(syncAttendanceHistory,1200);window.addEventListener('online',syncAttendanceHistory);
 </script><script>
 </script><script>
-let pendingAction='checkin';function currentAttendance(){return state.records.find(item=>item.date===today&&item.user===profile?.username)}function updateStages(){const item=currentAttendance();checkoutButton.style.display=item?.at&&!item.out?'block':'none';checkoutButton.disabled=!item?.at||!!item.out;$('mark').style.display=item?.at?'none':'block';checkoutInfo.textContent=item?.out?'Punch in: '+formatTime(item.at)+' · Punch out: '+formatTime(item.out)+' · '+workingHours(item.at,item.out)+' hours worked':item?.at?'Punched in at '+formatTime(item.at)+'. Punch out is available.':'';$('hours').textContent=item?.at?(item.out?workingHours(item.at,item.out):workingHours(item.at,new Date().toISOString())):'00:00'}function workingHours(start,end){const minutes=Math.max(0,Math.floor((new Date(end)-new Date(start))/60000));return String(Math.floor(minutes/60)).padStart(2,'0')+':'+String(minutes%60).padStart(2,'0')}function beginAction(){setGps('Camera module is loading. Refresh the page if this continues.','bad')}$('mark').onclick=()=>beginAction('checkin');checkoutButton.onclick=()=>beginAction('checkout');setInterval(updateStages,60000);updateStages();
+let pendingAction='checkin';function currentAttendance(){return state.records.find(item=>item.date===today&&(item.userId===profile?.id||(!item.userId&&item.user===profile?.username)))}function updateStages(){const item=currentAttendance();checkoutButton.style.display=item?.at&&!item.out?'block':'none';checkoutButton.disabled=!item?.at||!!item.out;$('mark').style.display=item?.at?'none':'block';checkoutInfo.textContent=item?.out?'Punch in: '+formatTime(item.at)+' · Punch out: '+formatTime(item.out)+' · '+workingHours(item.at,item.out)+' hours worked':item?.at?'Punched in at '+formatTime(item.at)+'. Punch out is available.':'';$('hours').textContent=item?.at?(item.out?workingHours(item.at,item.out):workingHours(item.at,new Date().toISOString())):'00:00'}function workingHours(start,end){const minutes=Math.max(0,Math.floor((new Date(end)-new Date(start))/60000));return String(Math.floor(minutes/60)).padStart(2,'0')+':'+String(minutes%60).padStart(2,'0')}function beginAction(){setGps('Camera module is loading. Refresh the page if this continues.','bad')}$('mark').onclick=()=>beginAction('checkin');checkoutButton.onclick=()=>beginAction('checkout');setInterval(updateStages,60000);updateStages();
 </script><script>
-let locationWatch=null;function locationEvent(message,severity){state.events=state.events||[];state.events.push({date:today,user:profile?.username,type:'Location alert',message,severity,at:new Date().toISOString()});save()}function startApprovedTracking(){if(locationWatch!==null||!navigator.geolocation)return;locationWatch=navigator.geolocation.watchPosition(p=>{const d=meters(p.coords.latitude,p.coords.longitude,outlets[assignedOutlet()]);state.locations=state.locations||[];state.locations.push({at:new Date().toISOString(),latitude:p.coords.latitude,longitude:p.coords.longitude,distance:d});if(d>100)locationEvent('Employee outside assigned '+assignedOutlet()+' geofence','warn');save()},()=>{}, {enableHighAccuracy:true,maximumAge:30000,timeout:10000})}function stopApprovedTracking(){if(locationWatch!==null){navigator.geolocation.clearWatch(locationWatch);locationWatch=null}}const priorStages=updateStages;updateStages=function(){priorStages();const item=currentAttendance();if(item?.at&&!item.out)startApprovedTracking();else stopApprovedTracking();if(item?.at){const arrival=new Date(item.at).getHours()+new Date(item.at).getMinutes()/60;const departure=item.out?new Date(item.out).getHours()+new Date(item.out).getMinutes()/60:null;const flags=[];if(arrival>10)flags.push('Late arrival');if(departure!==null&&departure<18)flags.push('Early departure');if(flags.length)checkoutInfo.textContent+=(checkoutInfo.textContent?' · ':'')+flags.join(' · ')}};const priorOpenMark=openMark;openMark=function(){if(!position){setGps('Location is required before marking.','bad');checkLocation();return}if(position.coords.accuracy>100||navigator.webdriver){setGps('Attendance blocked: GPS accuracy or device integrity check failed.','bad');return}priorOpenMark()};setInterval(updateStages,60000);updateStages();
+let locationWatch=null;function locationEvent(message,severity){state.events=state.events||[];state.events.push({date:today,user:profile?.username,type:'Location alert',message,severity,at:new Date().toISOString()});save()}function startApprovedTracking(){if(locationWatch!==null||!navigator.geolocation)return;locationWatch=navigator.geolocation.watchPosition(p=>{const d=meters(p.coords.latitude,p.coords.longitude,outlets[assignedOutlet()]);state.locations=state.locations||[];state.locations.push({at:new Date().toISOString(),latitude:p.coords.latitude,longitude:p.coords.longitude,distance:d});if(d>100)locationEvent('Employee outside assigned '+assignedOutlet()+' geofence','warn');save()},()=>{}, {enableHighAccuracy:true,maximumAge:30000,timeout:10000})}function stopApprovedTracking(){if(locationWatch!==null){navigator.geolocation.clearWatch(locationWatch);locationWatch=null}}const priorStages=updateStages;updateStages=function(){priorStages();const item=currentAttendance();if(item?.at&&!item.out)startApprovedTracking();else stopApprovedTracking();if(item?.at){const departure=item.out?new Date(item.out).getHours()+new Date(item.out).getMinutes()/60:null;const flags=[];if(departure!==null&&departure<18)flags.push('Early departure');if(flags.length)checkoutInfo.textContent+=(checkoutInfo.textContent?' · ':'')+flags.join(' · ')}};const priorOpenMark=openMark;openMark=function(){if(!position){setGps('Location is required before marking.','bad');checkLocation();return}if(position.coords.accuracy>100||navigator.webdriver){setGps('Attendance blocked: GPS accuracy or device integrity check failed.','bad');return}priorOpenMark()};setInterval(updateStages,60000);updateStages();
 </script>
 <script>
 let geofenceAlertOutside=false;
@@ -373,7 +594,7 @@ const monthlyButton=document.createElement('button');monthlyButton.type='button'
 function addAttendanceExportFilters(params){if(empCategorySelect.value)params.set('emp_category',empCategorySelect.value);const weekoff=panel.querySelector('.admin-weekoff-filter')?.value;if(weekoff)params.set('weekoff_day',weekoff);const status=panel.querySelector('.summary .metric.active-filter')?.dataset.filter;if(status&&status!=='all')params.set('status',status);params.set('date',dateInput.value);return params}
 monthlyButton.onclick=async event=>{event.stopPropagation();const original=monthlyButton.textContent;monthlyButton.disabled=true;monthlyButton.textContent='Preparing...';try{const params=new URLSearchParams({scope:'all',month:monthPicker.value||today.slice(0,7)});if(outletSelect.value)params.set('store_id',outletSelect.value);addAttendanceExportFilters(params);const response=await fetch('/api/attendance/monthly-export?'+params,{headers:{Authorization:'Bearer '+localStorage.getItem('token')}});if(!response.ok){const error=await response.json().catch(()=>({}));throw new Error(typeof error.detail==='string'?error.detail:'Unable to download attendance (HTTP '+response.status+').')}const blob=await response.blob(),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='all-outlets-attendance-'+(monthPicker.value||today.slice(0,7))+'.xlsx';document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);downloadMenu.open=false}catch(error){alert(error.message||'Unable to download monthly attendance. Please try again.')}finally{monthlyButton.disabled=false;monthlyButton.textContent=original}};
 async function downloadAttendance(format){const params=new URLSearchParams({format,date:dateInput.value});if(outletSelect.value)params.set('store_id',outletSelect.value);addAttendanceExportFilters(params);const button=downloadMenu.querySelector('[data-format="'+format+'"]'),original=button.textContent;button.disabled=true;button.textContent='Preparing...';try{const response=await fetch('/api/attendance/admin-export?'+params,{headers:{Authorization:'Bearer '+localStorage.getItem('token')}});if(!response.ok){const error=await response.json().catch(()=>({}));throw new Error(typeof error.detail==='string'?error.detail:'Unable to download attendance (HTTP '+response.status+').')}const blob=await response.blob(),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='attendance-'+dateInput.value+'.'+format;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);downloadMenu.open=false}catch(error){alert(error.message||'Unable to download attendance. Please try again.')}finally{button.disabled=false;button.textContent=original}}
-downloadMenu.addEventListener('click',event=>{const button=event.target.closest('[data-format]');if(button)downloadAttendance(button.dataset.format)});wrap.appendChild(dateControl);wrap.appendChild(outletSelect);wrap.appendChild(empCategorySelect);wrap.appendChild(monthPicker);wrap.appendChild(downloadMenu);head.appendChild(wrap);const todayGrid=document.querySelector('.grid');if(todayGrid&&!document.querySelector('.admin-compact-title')){const compactTitle=document.createElement('div');compactTitle.className='admin-compact-title';compactTitle.innerHTML='<h3>My Attendance</h3><p>Review your attendance records and previous days.</p>';todayGrid.before(compactTitle)}
+downloadMenu.addEventListener('click',event=>{const button=event.target.closest('[data-format]');if(button)downloadAttendance(button.dataset.format)});wrap.appendChild(dateControl);wrap.appendChild(outletSelect);wrap.appendChild(empCategorySelect);wrap.appendChild(monthPicker);wrap.appendChild(downloadMenu);head.appendChild(wrap);const todayGrid=document.querySelector('.grid');if(todayGrid&&!document.querySelector('.admin-compact-title')){const compactTitle=document.createElement('div');compactTitle.className='admin-compact-title';compactTitle.innerHTML='<h3>My Attendance</h3>';todayGrid.before(compactTitle)}
 function applyFilter(){if(dateInput.value)refreshAdminOutlet(panel,outletSelect.value,dateInput.value,dateInput.value,empCategorySelect.value)}
 dateInput.onchange=applyFilter;outletSelect.onchange=applyFilter;empCategorySelect.onchange=applyFilter;setInterval(()=>{if(!document.hidden&&dateInput.value===new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'}))applyFilter()},15000)}initializeAdminDashboard();
 </script>
@@ -387,9 +608,10 @@ function openImageLightbox(src,alt){if(!src)return;const box=document.createElem
 function bindSelfieZoom(root){root.querySelectorAll('.attendance-selfie').forEach(img=>img.onclick=()=>openImageLightbox(img.src,img.alt))}
 function showSelfieRecord(item,title){const modal=document.createElement('div');modal.className='record-modal show';modal.innerHTML='<div class="record-dialog"><button type="button" class="record-close modal-top-close" aria-label="Close attendance details">&#10005; Close</button><h2>'+safeText(title||item.username||'Attendance selfies')+'</h2><p>'+safeText(item.outlet_name||'')+' · '+safeText(item.attendance_date||'')+'</p><div class="record-grid"><div class="record-stat"><small>Punch in</small><b>'+formatTime(item.checkin_at)+'</b></div><div class="record-stat"><small>Punch out</small><b>'+formatTime(item.checkout_at)+'</b></div><div class="record-stat"><small>Working hours</small><b>'+(item.checkin_at&&item.checkout_at?workingHours(item.checkin_at,item.checkout_at):'In progress')+'</b></div></div><div class="selfie-gallery">'+selfieTile('Punch In',item.checkin_selfie)+selfieTile('Punch Out',item.checkout_selfie)+'</div></div>';document.body.appendChild(modal);bindSelfieZoom(modal);modal.querySelector('.record-close').onclick=()=>modal.remove();modal.onclick=event=>{if(event.target===modal)modal.remove()}}
 async function fetchSelfieRecord(recordId){const token=localStorage.getItem('token');if(!token||!recordId)return null;const response=await fetch('/api/attendance/'+recordId+'/selfies',{headers:{Authorization:'Bearer '+token}});if(!response.ok)return null;return response.json()}
-async function openUserSelfies(recordId,date){let item=null;if(recordId)item=await fetchSelfieRecord(recordId);if(!item){const token=localStorage.getItem('token');const response=await fetch('/api/attendance',{headers:{Authorization:'Bearer '+token}});if(response.ok){const records=await response.json();const match=records.find(r=>r.attendance_date===date&&r.user_id===profile?.id);if(match){item=match;const local=currentAttendance();if(local&&local.date===date)local.serverRecordId=match.id}}}if(!item){const local=state.records.find(r=>r.date===date&&r.user===profile?.username);if(local)item={attendance_date:date,outlet_name:local.outlet,checkin_at:local.at,checkout_at:local.out,checkin_selfie:local.selfie,checkout_selfie:local.checkoutSelfie}}if(item)showSelfieRecord(item,'My attendance')}
+function openMyAttendanceProfile(){if(!profile?.id){alert('Your account is still loading. Please try again shortly.');return}return openEmployeeAttendance(profile.id,profile.full_name||profile.username,today)}
+async function openUserSelfies(recordId,date){if(profile?.id)return openEmployeeAttendance(profile.id,profile.full_name||profile.username,date);let item=null;if(recordId)item=await fetchSelfieRecord(recordId);if(!item){const token=localStorage.getItem('token');const response=await fetch('/api/attendance',{headers:{Authorization:'Bearer '+token}});if(response.ok){const records=await response.json();const match=records.find(r=>r.attendance_date===date&&r.user_id===profile?.id);if(match){item=match;const local=currentAttendance();if(local&&local.date===date)local.serverRecordId=match.id}}}if(!item){const local=state.records.find(r=>r.date===date&&r.user===profile?.username);if(local)item={attendance_date:date,outlet_name:local.outlet,checkin_at:local.at,checkout_at:local.out,checkin_selfie:local.selfie,checkout_selfie:local.checkoutSelfie}}if(item)showSelfieRecord(item,'My attendance')}
 document.getElementById('historyList').addEventListener('click',event=>{const viewButton=event.target.closest('.view-selfies');if(viewButton){openUserSelfies(viewButton.dataset.recordId,viewButton.dataset.date);return}const toggle=event.target.closest('.previous-attendance-toggle');if(toggle){const previousList=toggle.nextElementSibling,expanded=toggle.getAttribute('aria-expanded')==='true';toggle.setAttribute('aria-expanded',String(!expanded));toggle.querySelector('span').textContent=expanded?'Previous days ('+previousList.children.length+')':'Hide previous days';previousList.hidden=expanded}});
-function updateMonthlyAttendanceCount(select,badge){const selectedDate=select.options[select.selectedIndex]?.textContent?.trim();if(!/^\d{4}-\d{2}-\d{2}$/.test(selectedDate||'')){badge.textContent='';badge.hidden=true;return}const month=selectedDate.slice(0,7),presentDays=[...select.options].filter(option=>option.textContent.trim().startsWith(month+'-')).length,[year,monthNumber]=month.split('-').map(Number),totalDays=new Date(year,monthNumber,0).getDate();badge.textContent='Present '+presentDays+' / '+totalDays+' days';badge.hidden=false}
+function updateMonthlyAttendanceCount(select,badge){const option=select.options[select.selectedIndex],selectedDate=option?.textContent?.trim();if(!/^\d{4}-\d{2}-\d{2}$/.test(selectedDate||'')||!option.dataset.attendanceStatus){badge.textContent='';badge.hidden=true;return}const status=option.dataset.attendanceStatus;badge.textContent=status;badge.dataset.status=status;badge.hidden=false}
 async function downloadFullUserAttendance(modal,button,format){const username=modal.dataset.username||modal.querySelector('h2')?.textContent.trim(),userId=Number(modal.dataset.userId);if(!username||!Number.isInteger(userId)||userId<=0){alert('Please wait for the attendance history to load, then try again.');return}const original=button.textContent;button.disabled=true;button.textContent='Preparing...';try{const response=await fetch('/api/attendance/admin-user-export?user_id='+userId+'&format='+encodeURIComponent(format),{headers:{Authorization:'Bearer '+localStorage.getItem('token')}});if(!response.ok){const error=await response.json().catch(()=>({}));throw new Error(typeof error.detail==='string'?error.detail:'Unable to download attendance (HTTP '+response.status+').')}const blob=await response.blob(),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=username.replace(/[^A-Za-z0-9_-]+/g,'-')+'-full-attendance.'+format;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);button.closest('details').open=false}catch(error){alert(error.message||'Unable to download this employee attendance. Please try again.')}finally{button.disabled=false;button.textContent=original}}
 function enhanceAdminHistoryCounter(modal){const select=modal.querySelector('.record-date');if(!select||select.dataset.monthCounterReady)return;select.dataset.monthCounterReady='true';const label=select.closest('label'),badge=document.createElement('span');badge.className='monthly-attendance-count';badge.hidden=true;label.classList.add('record-date-row');label.appendChild(badge);select.addEventListener('change',()=>updateMonthlyAttendanceCount(select,badge));new MutationObserver(()=>updateMonthlyAttendanceCount(select,badge)).observe(select,{childList:true});updateMonthlyAttendanceCount(select,badge);const download=document.createElement('details');download.className='user-download-menu';download.innerHTML='<summary>Download ▾</summary><div class="user-download-options"><button type="button" data-format="xlsx">Excel</button><button type="button" data-format="pdf">PDF</button></div>';download.addEventListener('click',event=>{const button=event.target.closest('[data-format]');if(button)downloadFullUserAttendance(modal,button,button.dataset.format)});modal.querySelector('.record-dialog').appendChild(download)}
 new MutationObserver(mutations=>{for(const mutation of mutations)for(const node of mutation.addedNodes)if(node.nodeType===1){if(node.matches?.('.record-modal'))enhanceAdminHistoryCounter(node);node.querySelectorAll?.('.record-modal').forEach(enhanceAdminHistoryCounter)}}).observe(document.body,{childList:true});
@@ -399,14 +621,39 @@ function attendanceEmployeeTitle(user){
   const labels={SupportingStaff:'Supporting Staff',CategoryManager:'Category Manager',BrandManager:'Brand Manager',ServiceManager:'Service Manager',ACTechnicianA:'AC Technician A',ACTechnicianB:'AC Technician B',MISExecutive:'MIS Executive'};
   return user.role?name+' ('+(labels[user.role]||user.role)+')':name;
 }
+function monthlyAttendanceCalendar(data,month,currentDate){
+  if(!/^\d{4}-\d{2}$/.test(month))return '';
+  const [year,number]=month.split('-').map(Number);if(number<1||number>12)return '';
+  const weekdays=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const present=new Set((data.history||[]).filter(item=>item.checkin_at).map(item=>item.attendance_date));
+  const leaves=new Set(data.leave_dates||[]),start=data.attendance_start_date;
+  let html='<div class="attendance-calendar" aria-label="Monthly attendance">'+weekdays.map(day=>'<div class="calendar-weekday">'+day.slice(0,3)+'</div>').join('');
+  const offset=new Date(year,number-1,1).getDay(),days=new Date(year,number,0).getDate();
+  html+='<span aria-hidden="true"></span>'.repeat(offset);
+  for(let day=1;day<=days;day++){
+    const date=month+'-'+String(day).padStart(2,'0');let status='Not due',style='neutral';
+    let weekoff=data.weekoff_day;for(const entry of data.weekoff_history||[]){if(entry.from>date)break;weekoff=entry.day}
+    if(present.has(date)){status='Present';style='present'}
+    else if(date>currentDate){status='Future date'}
+    else if(start&&date<start){status='Before joining'}
+    else if(leaves.has(date)){status='Leave';style='absent'}
+    else if(weekdays[new Date(year,number-1,day).getDay()]===weekoff){status='Week Off';style='weekoff'}
+    else{status='Absent';style='absent'}
+    html+='<button type="button" class="calendar-day '+style+'" data-date="'+date+'" data-status="'+status+'" title="'+date+' - '+status+'" aria-label="'+date+' - '+status+'"><span>'+day+'</span></button>';
+  }
+  return html+'</div><div class="calendar-legend"><span><i class="present"></i>Present</span><span><i class="absent"></i>Absent / Leave</span><span><i class="weekoff"></i>Week Off</span></div>';
+}
 async function openAdminRecord(row){
-  const userId=Number(row.dataset.userId),name=row.dataset.username||row.children[0].textContent.trim(),panel=row.closest('.panel'),date=panel?.querySelector('.admin-date-filter')?.value||today;
-  const checkin=row.cells[2]?.textContent.trim()||'—',checkout=row.cells[3]?.textContent.trim()||'—',outletName=row.cells[4]?.textContent.trim()||'—',hasCheckin=!/^[-—–:]*(?:--:--)?$/.test(checkin),hasCheckout=!/^[-—–:]*(?:--:--)?$/.test(checkout),workState=hasCheckin?(hasCheckout?'Completed':'In progress'):'Not started';
-  const instantDetail='<p>'+safeText(outletName)+' · '+safeText(date)+'</p><div class="record-grid"><div class="record-stat"><small>Punch in</small><b>'+safeText(checkin)+'</b></div><div class="record-stat"><small>Punch out</small><b>'+safeText(checkout)+'</b></div><div class="record-stat"><small>Working hours</small><b>'+workState+'</b></div></div><div class="selfie-gallery"><div class="selfie-missing">Loading attendance images...</div></div>';
-  const modal=document.createElement('div');modal.className='record-modal show';modal.dataset.username=name;modal.innerHTML='<div class="record-dialog"><button type="button" class="record-close modal-top-close" aria-label="Close attendance details">&#10005; Close</button><h2>'+safeText(name)+'</h2><label>Attendance date <select class="record-date" aria-label="Select attendance date" disabled><option>'+safeText(date)+'</option></select></label><div class="record-detail">'+instantDetail+'</div></div>';document.body.appendChild(modal);
+  const panel=row.closest('.panel');
+  return openEmployeeAttendance(row.dataset.userId,row.dataset.username||row.children[0].textContent.trim(),panel?.querySelector('.admin-date-filter')?.value||today);
+}
+async function openEmployeeAttendance(employeeUserId,name,date=today){
+  const userId=Number(employeeUserId);
+  const instantDetail='<div class="selfie-gallery"><div class="selfie-missing">Loading attendance images...</div></div>';
+  const modal=document.createElement('div');modal.className='record-modal show employee-attendance';modal.dataset.username=name;modal.innerHTML='<div class="record-dialog"><button type="button" class="record-close modal-top-close" aria-label="Close attendance details">&#10005; Close</button><h2>'+safeText(name)+'</h2><label>Attendance date <select class="record-date" aria-label="Select attendance date" disabled><option>'+safeText(date)+'</option></select></label><div class="record-detail">'+instantDetail+'</div></div>';document.body.appendChild(modal);
   const detail=modal.querySelector('.record-detail'),select=modal.querySelector('.record-date');
   let detailRequest=0;
-  async function loadSelected(showLoading=true){if(!select.value)return;const request=++detailRequest;try{if(showLoading)detail.innerHTML='<div class="empty">Loading attendance details...</div>';const item=await fetchSelfieRecord(select.value);if(request!==detailRequest||!modal.isConnected)return;if(!item){if(showLoading)detail.innerHTML='<div class="empty">Unable to load attendance details.</div>';return}detail.innerHTML='<p>'+safeText(item.outlet_name||'')+' · '+safeText(item.attendance_date||'')+'</p><div class="record-grid"><div class="record-stat"><small>Punch in</small><b>'+formatTime(item.checkin_at)+'</b></div><div class="record-stat"><small>Punch out</small><b>'+formatTime(item.checkout_at)+'</b></div><div class="record-stat"><small>Working hours</small><b>'+(item.checkin_at&&item.checkout_at?workingHours(item.checkin_at,item.checkout_at):'In progress')+'</b></div></div><div class="selfie-gallery">'+selfieTile('Punch In',item.checkin_selfie)+selfieTile('Punch Out',item.checkout_selfie)+'</div>';bindSelfieZoom(detail)}catch(error){if(request===detailRequest&&modal.isConnected)detail.innerHTML='<div class="empty">Unable to load this date. Select the date again to retry.</div>'}}
+  async function loadSelected(showLoading=true){if(!select.value)return;const request=++detailRequest;try{if(showLoading)detail.innerHTML='<div class="empty">Loading attendance details...</div>';const item=await fetchSelfieRecord(select.value);if(request!==detailRequest||!modal.isConnected)return;if(!item){if(showLoading)detail.innerHTML='<div class="empty">Unable to load attendance details.</div>';return}detail.innerHTML='<div class="selfie-gallery">'+selfieTile('Punch In - '+formatTime(item.checkin_at),item.checkin_selfie)+selfieTile('Punch Out - '+formatTime(item.checkout_at),item.checkout_selfie)+'</div>';bindSelfieZoom(detail)}catch(error){if(request===detailRequest&&modal.isConnected)detail.innerHTML='<div class="empty">Unable to load this date. Select the date again to retry.</div>'}}
   select.onchange=()=>loadSelected(true);modal.querySelector('.record-close').onclick=()=>modal.remove();modal.onclick=event=>{if(event.target===modal)modal.remove()};
   // Let the browser display the popup before starting slower network work.
   await new Promise(resolve=>requestAnimationFrame(resolve));
@@ -416,9 +663,58 @@ async function openAdminRecord(row){
     if(!response.ok)throw new Error('Unable to load attendance history. Close and try again.');
     const data=await response.json();if(!modal.isConnected)return;
     modal.dataset.userId=String(data.user_id);modal.dataset.username=data.username;
-    modal.querySelector('h2').textContent=attendanceEmployeeTitle(data);
+    const heading=modal.querySelector('h2');
+    const profileCard=document.createElement('div');profileCard.className='employee-profile';
+    const avatar=document.createElement('div');avatar.className='employee-avatar';avatar.textContent=(data.username||'?').charAt(0).toUpperCase();
+    if(/^data:image\/(jpeg|png|webp);base64,/i.test(data.profile_photo||'')){const photo=document.createElement('img');photo.className='employee-avatar';photo.alt='Profile photo';photo.src=data.profile_photo;avatar.replaceChildren(photo)}
+    const identity=document.createElement('div');heading.textContent=(data.display_name||data.username||'').toUpperCase();heading.before(profileCard);identity.appendChild(heading);
+    const employeeId=document.createElement('div');employeeId.className='employee-id';employeeId.textContent='EMP ID: '+(data.employee_id||'Not available');identity.appendChild(employeeId);profileCard.append(avatar,identity);
+    const contact=document.createElement('div');contact.className='employee-contact';contact.textContent='CONTACT NO: '+(data.contact_number||'Not available');
+    const outlet=document.createElement('div');outlet.className='employee-outlet';outlet.innerHTML='OUTLET:<strong>'+safeText(('Initiative Data System Pvt. Ltd. ('+(data.assigned_outlet||'Unassigned')+')').toUpperCase())+'</strong>';profileCard.after(contact,outlet);
+    if(data.can_edit_profile){
+      const edit=document.createElement('button');edit.type='button';edit.className='attendance-profile-edit';edit.textContent='Edit';edit.setAttribute('aria-label','Edit employee profile');modal.querySelector('.record-dialog').appendChild(edit);
+      edit.onclick=()=>{
+        if(modal.querySelector('.attendance-profile-form'))return;
+        const form=document.createElement('form');form.className='attendance-profile-form';
+        form.innerHTML='<h3>Edit profile</h3><label>Employee ID (cannot be edited)<input name="employee_id" readonly aria-readonly="true"></label><label>Email ID<input name="email" type="email" required maxlength="150" autocomplete="email"></label><label>Name<input name="name" required maxlength="150" autocomplete="name"></label><label>Contact number<input name="mobile" type="tel" maxlength="25" autocomplete="tel"></label><label>Profile photo<input name="photo" type="file" accept="image/jpeg,image/png,image/webp"></label><p role="status"></p><div><button type="submit">Save</button><button type="button" class="cancel-edit">Cancel</button></div>';
+        form.elements.employee_id.value=data.employee_id||'Assigned when saved';form.elements.email.value=data.email||'';form.elements.name.value=data.display_name||data.username||'';form.elements.mobile.value=data.contact_number||'';edit.after(form);form.elements.name.focus();form.querySelector('.cancel-edit').onclick=()=>form.remove();
+        form.onsubmit=async event=>{event.preventDefault();const saveButton=form.querySelector('[type="submit"]'),message=form.querySelector('[role="status"]');saveButton.disabled=true;message.textContent='Saving...';
+          try{const payload={name:form.elements.name.value.trim(),email:form.elements.email.value.trim(),mobile:form.elements.mobile.value.trim()},file=form.elements.photo.files[0];
+            if(file){if(file.size>3000000)throw Error('Choose a photo smaller than 3 MB.');payload.photo=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(Error('Unable to read photo'));reader.readAsDataURL(file)})}
+            const response=await fetch('/api/identity-cards/profile/'+userId,{method:'PATCH',headers:{Authorization:'Bearer '+localStorage.getItem('token'),'Content-Type':'application/json'},body:JSON.stringify(payload)});const saved=await response.json();if(!response.ok)throw Error(typeof saved.detail==='string'?saved.detail:'Unable to save. Check the name, phone number and photo.');
+            data.email=saved.email;data.employee_id=saved.employee_id;data.display_name=saved.name;data.contact_number=saved.contact_number;data.profile_photo=saved.profile_photo;heading.textContent=saved.name.toUpperCase();employeeId.textContent='EMP ID: '+saved.employee_id;contact.textContent='CONTACT NO: '+(saved.contact_number||'Not available');avatar.replaceChildren();avatar.textContent=saved.name.charAt(0).toUpperCase();if(/^data:image\/(jpeg|png|webp);base64,/i.test(saved.profile_photo||'')){const img=document.createElement('img');img.className='employee-avatar';img.src=saved.profile_photo;img.alt='Profile photo';avatar.replaceChildren(img)}form.remove();
+          }catch(error){message.textContent=error.message}finally{saveButton.disabled=false}
+        };
+      };
+    }
     const records=data.history||[];
-    select.innerHTML=records.map(item=>'<option value="'+item.id+'">'+safeText(item.attendance_date)+'</option>').join('');
+    const monthly=document.createElement('section');monthly.className='employee-monthly';monthly.hidden=true;
+    const monthlyToggle=document.createElement('button');monthlyToggle.type='button';monthlyToggle.className='monthly-view-toggle';monthlyToggle.textContent='View Monthly Attendance \u2192';monthlyToggle.setAttribute('aria-expanded','false');
+    const monthPicker=document.createElement('select');monthPicker.setAttribute('aria-label','Attendance month');
+    const months=new Set(records.map(item=>item.attendance_date.slice(0,7)));months.add(date.slice(0,7));
+    for(let offset=0;offset<24;offset++){const d=new Date(Number(today.slice(0,4)),Number(today.slice(5,7))-1-offset,1);months.add(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'))}
+    monthPicker.innerHTML=[...months].sort().reverse().map(month=>{const [year,num]=month.split('-').map(Number);return '<option value="'+month+'">'+new Date(year,num-1,1).toLocaleDateString('en-US',{month:'short',year:'numeric'})+'</option>'}).join('');monthPicker.value=date.slice(0,7);
+    const monthHeader=document.createElement('div');monthHeader.className='calendar-month-header';
+    const monthCount=document.createElement('span');monthCount.className='calendar-month-count';monthCount.setAttribute('aria-live','polite');monthHeader.append(monthPicker,monthCount);
+    const monthRows=document.createElement('div');monthly.append(monthHeader,monthRows);
+    function renderMonth(){const month=monthPicker.value,[year,num]=month.split('-').map(Number),total=new Date(year,num,0).getDate(),present=new Set(records.filter(item=>item.checkin_at&&item.attendance_date.startsWith(month+'-')).map(item=>item.attendance_date)).size;monthCount.textContent='Present '+present+'/'+total;monthRows.innerHTML=monthlyAttendanceCalendar(data,month,today)}
+    monthRows.onclick=async event=>{
+      const day=event.target.closest('button[data-date]');if(!day)return;
+      const selectedDate=day.dataset.date,item=records.find(record=>record.attendance_date===selectedDate);
+      monthRows.querySelectorAll('button[data-date]').forEach(button=>button.setAttribute('aria-pressed',String(button===day)));
+      select.querySelectorAll('option[data-calendar-only]').forEach(option=>option.remove());
+      if(item){select.disabled=false;select.value=String(item.id);await loadSelected(true)}
+      else{
+        detailRequest++;
+        const option=document.createElement('option');option.value='';option.textContent=selectedDate;option.dataset.calendarOnly='true';option.dataset.attendanceStatus='Absent';select.appendChild(option);select.value='';
+        detail.innerHTML='<div class="calendar-date-detail"><strong>'+safeText(selectedDate)+' - '+safeText(day.dataset.status)+'</strong><p>No punch-in or punch-out recorded for this date.</p></div>';
+      }
+      const badge=modal.querySelector('.monthly-attendance-count');if(badge)updateMonthlyAttendanceCount(select,badge)
+      detail.scrollIntoView({behavior:'smooth',block:'nearest'});
+    };
+    monthlyToggle.onclick=()=>{monthly.hidden=!monthly.hidden;monthlyToggle.setAttribute('aria-expanded',String(!monthly.hidden));monthlyToggle.textContent=monthly.hidden?'View Monthly Attendance \u2192':'Hide Monthly Attendance \u2191';if(!monthly.hidden)renderMonth()};monthPicker.onchange=renderMonth;
+    detail.after(monthlyToggle,monthly);
+    select.innerHTML=records.map(item=>'<option value="'+item.id+'" data-attendance-status="'+(item.checkin_at?'Present':'Absent')+'">'+safeText(item.attendance_date)+'</option>').join('');
     select.disabled=!records.length;
     if(records.length){const selected=records.find(item=>item.attendance_date===date)||records[0];select.value=String(selected.id);await loadSelected(true)}
     else {select.innerHTML='<option>No saved dates</option>';detail.innerHTML='<div class="empty">No saved attendance records for this employee.</div>'}
@@ -444,7 +740,7 @@ const WEEKOFF_DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday
   let savedDay='';
   try{
     const response=await fetch('/api/me',{headers:{Authorization:'Bearer '+token}});
-    if(response.ok){const user=await response.json();savedDay=user.weekoff_day||'';select.value=savedDay;document.getElementById('selectedWeekoff').textContent='Your weekly off: '+(savedDay||'Not selected');if(user.weekoff_day)label.textContent='Week Off';}
+    if(response.ok){const user=await response.json();savedDay=user.weekoff_day||'';select.value=savedDay;if(user.weekoff_day)label.textContent='Week Off';}
   }catch(error){}
   select.addEventListener('change',async()=>{
     const selected=select.value;select.disabled=true;label.textContent='Saving...';label.classList.remove('weekoff-saved');
@@ -455,7 +751,7 @@ const WEEKOFF_DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday
       savedDay=data.weekoff_day||'';
       select.value=savedDay;
       if(profile)profile.weekoff_day=data.weekoff_day;
-      document.getElementById('selectedWeekoff').textContent='Your weekly off: '+(selected||'Not selected');
+
       label.textContent='Saved';label.classList.add('weekoff-saved');
       setTimeout(()=>{label.textContent='Week Off';label.classList.remove('weekoff-saved')},1400);
     }catch(error){select.value=savedDay;label.textContent='Weekly off day';alert(error.message)}finally{select.disabled=false;}

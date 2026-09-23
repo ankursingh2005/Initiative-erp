@@ -1,4 +1,5 @@
 """Attendance downloads built from saved user IDs and attendance records."""
+from attendance_history import weekoff_on
 import calendar
 from datetime import date, timedelta
 from io import BytesIO
@@ -91,7 +92,7 @@ def export_rows(db, start=None, end=None, user_id=None, store_id=None, weekoff_d
             if store_id is not None and outlet_id != store_id:
                 continue
             state = ('Present' if record and record.checkin_at else 'Leave' if (user.id, day) in leave_days
-                     else 'Week Off' if day.strftime('%A') == user.weekoff_day else 'Absent')
+                     else 'Week Off' if day.strftime('%A') == weekoff_on(user, day) else 'Absent')
             if status and state != status:
                 continue
             checkin, checkout = (record.checkin_at, record.checkout_at) if record else (None, None)
@@ -124,7 +125,9 @@ def monthly_export(month: str, store_id: int | None = None, weekoff_day: str | N
 
 @router.get('/admin-user-export')
 def user_export(user_id: int, format: str = 'xlsx', db: Session = Depends(get_db),
-                actor=Depends(auth.require_roles('Admin'))):
+                actor=Depends(auth.get_current_user)):
+    if actor.id != user_id and not auth.has_admin_access(actor):
+        raise HTTPException(403, "You cannot download another user's attendance")
     if not db.query(models.User).filter(models.User.id == user_id).first():
         raise HTTPException(404, 'User not found')
     return render_export(export_rows(db, user_id=user_id), format, f'attendance-user-{user_id}')

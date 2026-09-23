@@ -1,3 +1,4 @@
+from attendance_history import change_weekoff, weekoff_on, weekoff_history
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Query, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, Response, RedirectResponse
@@ -104,6 +105,7 @@ def ensure_username_not_unique():
 
 def ensure_database_schema():
     ensure_column("users", "weekoff_day", "VARCHAR(10)")
+    ensure_column("users", "weekoff_history", "TEXT")
     ensure_username_not_unique()
     ensure_column("stores", "code", "VARCHAR(20)")
     ensure_column("stores", "city", "VARCHAR(100)")
@@ -540,7 +542,9 @@ async def brand_promotor_limited_access(request: Request, call_next):
                 }
                 static_html = request.url.path.startswith("/static/") and request.url.path.endswith(".html")
                 attendance_request = request.url.path == "/api/attendance" or request.url.path.startswith("/api/attendance/")
-                if request.url.path not in allowed and not attendance_request and not request.url.path.startswith("/static/"):
+                own_profile_edit = (request.method == "PATCH" and request.url.path ==
+                                    f"/api/identity-cards/profile/{payload.get('user_id')}")
+                if request.url.path not in allowed and not attendance_request and not own_profile_edit and not request.url.path.startswith("/static/"):
                     return JSONResponse(
                         status_code=403,
                         content={"detail": "Brand Promotor access is limited to Home and Attendance."},
@@ -2309,8 +2313,10 @@ def list_stores(db: Session = Depends(get_db)):
 #  what's assigned to their account.)
 # ============================================================
 
-def serialize_user_with_brands(user: models.User) -> dict:
+def serialize_user_with_brands(user: models.User, db: Session = None) -> dict:
+    card = db.query(models.IdentityCard).filter(models.IdentityCard.user_id == user.id).first() if db is not None else None
     return {
+        "employee_id": card.employee_id if card else None,
         "id": user.id,
         "username": user.username,
         "email": user.email,
@@ -2347,7 +2353,7 @@ def update_my_weekoff(
     day = (payload.weekoff_day or "").strip() or None
     if day not in {None, "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}:
         raise HTTPException(400, "Choose a valid weekly off day")
-    current_user.weekoff_day = day
+    change_weekoff(current_user, day)
     db.commit()
     return {"weekoff_day": day}
 
@@ -2493,7 +2499,21 @@ def attendance_user_history(
     brand_names = [name for (name,) in db.query(models.Brand.name).join(
         models.UserBrand, models.UserBrand.brand_id == models.Brand.id,
     ).filter(models.UserBrand.user_id == user.id).distinct().order_by(models.Brand.name).all()]
+    card = db.query(models.IdentityCard).filter(models.IdentityCard.user_id == user.id).first()
+    outlet = db.query(models.Store).filter(models.Store.id == user.store_id).first() if user.store_id else None
     return {"user_id": user.id, "username": user.username, "role": user.role,
+            "employee_id": card.employee_id if card else None,
+            "display_name": card.employee_name if card else user.full_name or user.username,
+            "can_edit_profile": current_user.id == user.id or current_user.role in {"Admin", "HR", "Owner"},
+            "email": user.email,
+            "contact_number": card.mobile if card else None,
+            "profile_photo": card.photo if card else None,
+            "assigned_outlet": outlet.name if outlet else None,
+            "weekoff_day": user.weekoff_day,
+            "weekoff_history": weekoff_history(user),
+            "attendance_start_date": card.joining_date if card and card.joining_date else user.created_date.date() if user.created_date else None,
+            "leave_dates": [leave.leave_date for leave in db.query(models.AttendanceLeave).filter(
+                models.AttendanceLeave.user_id == user.id).all()],
             "brand_names": brand_names, "history": [
         {"id": record.id, "attendance_date": record.attendance_date,
          "checkin_at": record.checkin_at, "checkout_at": record.checkout_at}
@@ -2668,7 +2688,7 @@ def attendance_admin_summary(
         leave_dates = leaves_by_user.get(user.id, set()) - present_dates
         weekoff_dates = {
             start_date + timedelta(days=offset) for offset in range(days_in_range)
-            if (start_date + timedelta(days=offset)).strftime("%A") == user.weekoff_day
+            if (start_date + timedelta(days=offset)).strftime("%A") == weekoff_on(user, start_date + timedelta(days=offset))
         } - present_dates - leave_dates
         present_days = len(present_dates)
         leave_days = len(leave_dates)
@@ -2767,7 +2787,8 @@ def list_users_for_admin(
     current_user: models.User = Depends(auth.require_roles("Admin")),
 ):
     users = db.query(models.User).order_by(models.User.username).all()
-    return [serialize_user_with_brands(u) for u in users]
+    employee_ids = dict(db.query(models.IdentityCard.user_id, models.IdentityCard.employee_id).all())
+    return [{**serialize_user_with_brands(u), "employee_id": employee_ids.get(u.id)} for u in users]
 
 
 USER_MANAGEMENT_ROLES = sorted(VALID_ROLES)
@@ -2792,7 +2813,7 @@ def update_attendance_outlet(
     user.store_id = store.id
     db.commit()
     db.refresh(user)
-    return serialize_user_with_brands(user)
+    return serialize_user_with_brands(user, db)
 
 
 @app.get("/api/users/roles", response_model=List[str])
@@ -2816,7 +2837,7 @@ def update_user_role(
     user.role = payload.role
     db.commit()
     db.refresh(user)
-    return serialize_user_with_brands(user)
+    return serialize_user_with_brands(user, db)
 
 
 @app.get("/api/users/count", response_model=schemas.UserCountOut)
@@ -2889,14 +2910,14 @@ def update_user_details(
         target_user.reset_token = None
         target_user.reset_token_expires = None
     target_user.email = email
-    target_user.weekoff_day = weekoff
+    change_weekoff(target_user, weekoff)
     try:
         db.commit()
     except IntegrityError:
         db.rollback()
         raise HTTPException(status_code=409, detail="Email is already used by another account")
     db.refresh(target_user)
-    return serialize_user_with_brands(target_user)
+    return serialize_user_with_brands(target_user, db)
 
 
 @app.patch("/api/users/{user_id}/assignments", response_model=schemas.UserAdminOut)
@@ -2923,7 +2944,7 @@ def update_user_assignments(
 
     db.commit()
     db.refresh(target_user)
-    return serialize_user_with_brands(target_user)
+    return serialize_user_with_brands(target_user, db)
 
 
 @app.delete("/api/users/{user_id}")
