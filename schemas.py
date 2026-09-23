@@ -395,6 +395,7 @@ class AttendanceLocationCreate(BaseModel):
 
 
 class UserAdminOut(BaseModel):
+    display_name: Optional[str] = None
     employee_id: Optional[str] = None
     id: int
     username: str

@@ -913,7 +913,7 @@
       const user = userManagementUsers.find(item => item.id === userId);
       if (!user || (role === 'HR' && user.role === 'Admin')) return;
       editUserTargetId = userId;
-      document.getElementById('editUserName').value = user.username;
+      document.getElementById('editUserName').value = user.display_name || user.full_name || user.username;
       document.getElementById('editUserEmail').value = user.email;
       document.getElementById('editUserWeekoff').value = user.weekoff_day || '';
       document.getElementById('editUserError').textContent = '';
@@ -959,6 +959,7 @@
       if (userManagementSearchQuery) {
         users = users.filter(user =>
           String(user.employee_id || '').toLowerCase().includes(userManagementSearchQuery) ||
+          String(user.display_name || user.full_name || '').toLowerCase().includes(userManagementSearchQuery) ||
           String(user.username || '').toLowerCase().includes(userManagementSearchQuery) ||
           String(user.email || '').toLowerCase().includes(userManagementSearchQuery)
         );
@@ -966,7 +967,7 @@
       tbody.innerHTML = users.map(u => `
         <tr>
           <td class="um-employee-id">${escapeOutletText(u.employee_id || 'Not assigned')}</td>
-          <td>${escapeOutletText(u.username)}</td>
+          <td>${escapeOutletText(u.display_name || u.full_name || u.username)}</td>
           <td>${escapeOutletText(u.email)}</td>
           <td>${userRoleDropdown(u)}${['BrandPartner','BrandManager'].includes(u.role) ? `<button type="button" class="um-brand-edit" onclick="changeUserRole(${u.id},this.parentElement.querySelector('select'))">Choose brands</button>` : ''}</td>
           <td>${userOutletDropdown(u)}</td>

@@ -2332,6 +2332,7 @@ def serialize_user_with_brands(user: models.User, db: Session = None) -> dict:
     card = db.query(models.IdentityCard).filter(models.IdentityCard.user_id == user.id).first() if db is not None else None
     return {
         "employee_id": card.employee_id if card else None,
+        "display_name": (card.employee_name if card else None) or user.full_name or user.username,
         "id": user.id,
         "username": user.username,
         "email": user.email,
@@ -2855,8 +2856,10 @@ def list_users_for_admin(
     current_user: models.User = Depends(auth.require_roles("Admin")),
 ):
     users = db.query(models.User).order_by(models.User.username).all()
-    employee_ids = dict(db.query(models.IdentityCard.user_id, models.IdentityCard.employee_id).all())
-    return [{**serialize_user_with_brands(u), "employee_id": employee_ids.get(u.id)} for u in users]
+    cards = {user_id: (employee_id, name) for user_id, employee_id, name in db.query(
+        models.IdentityCard.user_id, models.IdentityCard.employee_id, models.IdentityCard.employee_name).all()}
+    return [{**serialize_user_with_brands(u), "employee_id": cards.get(u.id, (None, None))[0],
+             "display_name": cards.get(u.id, (None, None))[1] or u.full_name or u.username} for u in users]
 
 
 USER_MANAGEMENT_ROLES = sorted(VALID_ROLES)
@@ -2987,6 +2990,10 @@ def update_user_details(
     # Rename the existing account in place. Attendance and other linked records
     # retain this user's permanent ID; reports resolve its current username.
     target_user.username = username
+    target_user.full_name = username
+    card = db.get(models.IdentityCard, user_id)
+    if card is not None:
+        card.employee_name = username
     if target_user.email != email:
         target_user.reset_token = None
         target_user.reset_token_expires = None
