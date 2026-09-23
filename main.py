@@ -584,7 +584,7 @@ async def handle_unexpected_error(request: Request, exc: Exception):
 # "static" folder sitting next to this file.
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-VALID_ROLES = ["Accounts","AccountsManager","ACTechnicianA","ACTechnicianB","Admin","Assistant","AsstSalesManager","BrandManager","BrandPartner","Cashier","CategoryManager","CEO","CustomerCare","Director","Employee","AC Helper","HR","ITEngineer","Loader","LogisticManager","MISExecutive","Owner","SalesExecutive","ServiceHead","ServiceManager","SupportingStaff","Supervisor","Other"]
+VALID_ROLES = ["Accounts","AccountsManager","ACTechnicianA","ACTechnicianB","Admin","Assistant","AsstSalesManager","BrandManager","BrandPartner","Cashier","CategoryManager","CEO","CustomerCare","Director","Employee","AC Helper","HR","ITEngineer","Loader","LogisticManager","MISExecutive","Owner","SalesExecutive","ServiceCoordinator","ServiceHead","ServiceManager","SupportingStaff","Supervisor","Other"]
 
 
 def normalize_category_code(raw_value: Optional[str]) -> Optional[str]:
@@ -2680,8 +2680,10 @@ def attendance_admin_summary(
     if current_user.role == "CategoryManager":
         user_query = filter_manager_employees(user_query, emp_category)
     users = filter_employee_category(user_query, emp_category).all()
-    profile_names = dict(db.query(models.IdentityCard.user_id, models.IdentityCard.employee_name).filter(
-        models.IdentityCard.user_id.in_([user.id for user in users] or [-1])).all())
+    profile_rows = db.query(models.IdentityCard.user_id, models.IdentityCard.employee_name, models.IdentityCard.employee_id).filter(
+        models.IdentityCard.user_id.in_([user.id for user in users] or [-1])).all()
+    profile_names = {user_id: name for user_id, name, employee_id in profile_rows}
+    employee_ids = {user_id: employee_id for user_id, name, employee_id in profile_rows}
     brand_names_by_user = defaultdict(list)
     for user_id, brand_name in db.query(models.UserBrand.user_id, models.Brand.name).join(
         models.Brand, models.Brand.id == models.UserBrand.brand_id,
@@ -2796,6 +2798,7 @@ def attendance_admin_summary(
         location_summary = {"current_distance_from_store_m": distance,
                             "last_location_at": last_at, "location_tracking_status": tracking_status}
         employee_summary = {"role": user.role,
+                            "employee_id": employee_ids.get(user.id),
                             "display_name": profile_names.get(user.id) or user.full_name or user.username,
                             "email": user.email,
                             "brand_names": brand_names_by_user[user.id],
