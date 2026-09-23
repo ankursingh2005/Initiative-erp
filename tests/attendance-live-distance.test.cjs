@@ -23,3 +23,17 @@ test('distance stays visible without signal-status badges',()=>{
   assert.equal(context.liveDistanceHtml({current_distance_from_store_m:42,location_tracking_status:'Inactive'}),'<span class="live-distance">42 m</span>');
   assert.equal(context.liveDistanceHtml({current_distance_from_store_m:42,location_tracking_status:'Completed'}),'<span class="live-distance">42 m</span>');
 });
+
+test('live location upload rejects inaccurate and stale fixes',async()=>{
+  const page=fs.readFileSync('static/attendance.html','utf8');
+  const calls=[],now=Date.now();
+  const context={Date,Number,lastLocationUploadAt:0,currentAttendance:()=>({at:'saved'}),localStorage:{getItem:()=> 'token'},fetch:async(url,options)=>{calls.push(JSON.parse(options.body));return {ok:true}}};
+  vm.createContext(context);
+  const start=page.indexOf('async function uploadWorkingLocation(');
+  vm.runInContext(page.slice(start,page.indexOf('\n',start)),context);
+  for(const [accuracy,timestamp] of [[7000,now],[null,now],[0,now],[10,now-180000]])await context.uploadWorkingLocation({timestamp,coords:{latitude:26,longitude:80,accuracy}},7326);
+  assert.equal(calls.length,0);
+  await context.uploadWorkingLocation({timestamp:now,coords:{latitude:26,longitude:80,accuracy:10}},12);
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].captured_at,new Date(now).toISOString());
+});

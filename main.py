@@ -2594,6 +2594,8 @@ def save_attendance_location(
         raise HTTPException(status_code=409, detail="Live location requires a current punch-in session")
     if not math.isfinite(point.latitude) or not math.isfinite(point.longitude) or not -90 <= point.latitude <= 90 or not -180 <= point.longitude <= 180:
         raise HTTPException(status_code=422, detail="Invalid GPS coordinates")
+    if point.accuracy_m is None or not math.isfinite(point.accuracy_m) or not 0 < point.accuracy_m <= 100:
+        raise HTTPException(status_code=422, detail="Live GPS accuracy must be within 100 metres. Waiting for a precise location.")
     store = db.query(models.Store).filter(models.Store.id == record.store_id).first()
     if not store or store.latitude is None or store.longitude is None:
         raise HTTPException(status_code=400, detail="Assigned outlet has no GPS coordinates")
@@ -2755,7 +2757,8 @@ def attendance_admin_summary(
             models.AttendanceLocationPoint.captured_at >= range_start_dt,
             models.AttendanceLocationPoint.captured_at < range_end_dt,
         ).order_by(models.AttendanceLocationPoint.captured_at, models.AttendanceLocationPoint.id).all()
-        points = [point for point in points if any(
+        points = [point for point in points if point.accuracy_m is not None
+            and math.isfinite(point.accuracy_m) and 0 < point.accuracy_m <= 100 and any(
             record.checkin_at and record.checkin_at <= point.captured_at
             and (not record.checkout_at or point.captured_at <= record.checkout_at)
             for record in user_records
@@ -2779,6 +2782,16 @@ def attendance_admin_summary(
             outlet_name = outlet.name if outlet else None
             outlet_abbreviation = outlet_abbreviations.get(
                 (outlet_name or "").strip().lower(), (outlet.code or outlet.name) if outlet else "\u2014")
+        elif latest_record and outlet and outlet.latitude is not None and outlet.longitude is not None:
+            latitude, longitude = latest_record.checkin_latitude, latest_record.checkin_longitude
+            if latest_point and latest_point.captured_at >= latest_record.checkin_at:
+                latitude, longitude = latest_point.latitude, latest_point.longitude
+            if latest_record.checkout_at:
+                latitude, longitude = latest_record.checkout_latitude, latest_record.checkout_longitude
+            if latitude is not None and longitude is not None:
+                distance = round(attendance_distance(latitude, longitude, outlet), 1)
+            elif latest_record.store_id != outlet.id:
+                distance = None
         location_summary = {"current_distance_from_store_m": distance,
                             "last_location_at": last_at, "location_tracking_status": tracking_status}
         employee_summary = {"role": user.role,
