@@ -55,6 +55,21 @@ class AttendanceOutletTests(unittest.TestCase):
         profile = main.attendance_user_history(self.employee.id, db=self.db, current_user=self.actor)
         self.assertEqual(profile['designation'], 'Category Manager')
 
+    def test_brand_role_requires_valid_brands_and_saves_atomically(self):
+        self.employee.role = 'Employee'
+        brand = models.Brand(name='Test Brand')
+        self.db.add(brand)
+        self.db.commit()
+        for payload in ({'role': 'BrandPartner'}, {'role': 'BrandPartner', 'brand_ids': [999999]}):
+            response = self.client.patch(f'/users/{self.employee.id}/role', json=payload)
+            self.assertEqual(response.status_code, 400)
+            self.db.refresh(self.employee)
+            self.assertEqual(self.employee.role, 'Employee')
+        response = self.client.patch(f'/users/{self.employee.id}/role', json={'role': 'BrandPartner', 'brand_ids': [brand.id]})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()['brand_ids'], [brand.id])
+        self.assertEqual(response.json()['role'], 'BrandPartner')
+
     def tearDown(self):
         self.client.close()
         self.db.close()

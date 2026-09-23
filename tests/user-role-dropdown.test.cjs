@@ -25,3 +25,19 @@ test('changing own role updates stored role and reloads navigation',async()=>{
   await t.context.changeUserRole(1,{value:'ACTechnicianB'});
   assert.equal(stored,'ACTechnicianB');assert.equal(reloaded,true);
 });
+
+test('brand roles save selected brands and role in one request',async()=>{
+  for(const next of ['BrandPartner','BrandManager']){
+    const t=setup();let requests=0;
+    t.context.chooseRoleBrands=async()=>[2,5];
+    t.context.umFetch=async(path,options)=>{requests++;assert.deepEqual(JSON.parse(options.body),{role:next,brand_ids:[2,5]});return{ok:true,json:async()=>({role:next,brand_ids:[2,5]})}};
+    await t.context.changeUserRole(1,{value:next});
+    assert.equal(requests,1);assert.equal(t.user.role,next);assert.deepEqual(t.user.brand_ids,[2,5]);
+  }
+});
+test('cancelling brand selection never saves the role',async()=>{
+  const t=setup(),select={value:'BrandPartner'};let called=false;
+  t.context.chooseRoleBrands=async()=>null;t.context.umFetch=async()=>{called=true};
+  await t.context.changeUserRole(1,select);
+  assert.equal(called,false);assert.equal(t.user.role,'Employee');assert.equal(select.value,'Employee');assert.equal(t.context.roleUpdates.size,0);
+});

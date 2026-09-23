@@ -405,6 +405,15 @@
     #editUserDialog .btn-primary-modal:disabled { opacity:.6; cursor:wait; }
     #editUserDialog button:focus-visible { outline:3px solid #9dbdff; outline-offset:2px; }
     @media(max-width:480px) { #editUserDialog .edit-user-header,#editUserDialog .edit-user-body { padding:20px; } #editUserDialog .modal-actions { padding:16px 20px; } }
+
+    .um-brand-edit{display:block;margin-top:5px;padding:3px 0;background:transparent;color:var(--brand);font-size:11px;text-decoration:underline;text-underline-offset:3px}
+    .um-brand-dialog{width:min(460px,calc(100vw - 28px));max-height:85dvh;padding:0;border:1px solid #dfe6f5;border-top:4px solid #155eef;border-radius:18px;box-shadow:0 24px 80px #16244940;color:var(--ink);font:inherit}
+    .um-brand-dialog::backdrop{background:#10182880;backdrop-filter:blur(3px)}
+    .um-brand-dialog header{padding:20px;background:linear-gradient(110deg,#edf3ff,#f5f0ff)}
+    .um-brand-dialog h3{margin:0;font-size:18px}.um-brand-dialog header p{margin:6px 0 0;font-size:12px;color:var(--muted)}
+    .um-brand-body{padding:18px 20px}.um-brand-search{display:block;font-size:12px;font-weight:700}.um-brand-search input{display:block;width:100%;margin:7px 0 12px;padding:11px;border:1px solid #d7dfed;border-radius:9px;font:inherit}
+    .um-brand-list{max-height:34dvh;overflow:auto;display:grid;gap:6px}.um-brand-list label{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid #e4eaf5;border-radius:8px;font-size:13px;cursor:pointer}.um-brand-list label[hidden]{display:none}.um-brand-list label:has(input:checked){background:#edf3ff;border-color:#a9c4fa}.um-brand-list input{width:17px;height:17px;accent-color:#155eef}
+    .um-brand-error{color:#b42318;font-size:12px}.um-brand-error:empty{display:none}.um-brand-dialog footer{display:flex;justify-content:flex-end;gap:10px;padding:16px 20px;background:#f8faff;border-top:1px solid #e4eaf5}.um-brand-dialog footer button{min-height:42px;font-size:12px}
   </style>
 </head>
 <body>
@@ -846,21 +855,40 @@
       const options = roles.map(value => '<option value="'+escapeOutletText(value)+'" '+(value===user.role?'selected':'')+'>'+escapeOutletText(value.replace(/([a-z])([A-Z])/g,'$1 $2').replace(/^ACTechnician/,'AC Technician'))+'</option>').join('');
       return '<select class="um-outlet-select" aria-label="Change role for '+escapeOutletText(user.username)+'" onchange="changeUserRole('+user.id+', this)" '+(!['Admin','HR'].includes(role)||!userManagementRoles.length||roleUpdates.has(user.id)?'disabled':'')+'>'+options+'</select>';
     }
+    async function chooseRoleBrands(user, nextRole) {
+      const response=await umFetch('/brands');
+      if(!response?.ok)throw new Error('Unable to load brands. Please try again.');
+      const brands=(await response.json()).sort((a,b)=>a.name.localeCompare(b.name));
+      if(!brands.length)throw new Error('No brands are available. Add a brand before assigning this role.');
+      return new Promise(resolve=>{
+        const dialog=document.createElement('dialog');dialog.className='um-brand-dialog';dialog.setAttribute('aria-labelledby','roleBrandTitle');
+        dialog.innerHTML='<form><header><h3 id="roleBrandTitle">Choose brands</h3><p>'+escapeOutletText(user.username)+' &middot; '+(nextRole==='BrandPartner'?'Brand Partner':'Brand Manager')+'</p></header><div class="um-brand-body"><label class="um-brand-search">Search brands<input type="search" placeholder="Search by brand name" autocomplete="off"></label><div class="um-brand-list">'+brands.map(brand=>'<label data-brand-name="'+escapeOutletText(brand.name.toLowerCase())+'"><input type="checkbox" value="'+brand.id+'" '+((user.brand_ids||[]).includes(brand.id)?'checked':'')+'><span>'+escapeOutletText(brand.name)+'</span></label>').join('')+'</div><p class="um-brand-error" role="status"></p></div><footer><button type="button" class="btn-light">Cancel</button><button type="submit" class="btn-primary-modal">Save role &amp; brands</button></footer></form>';
+        const finish=value=>{dialog.remove();resolve(value)};
+        dialog.addEventListener('cancel',event=>{event.preventDefault();finish(null)});
+        dialog.querySelector('.btn-light').onclick=()=>finish(null);
+        dialog.querySelector('[type="search"]').oninput=event=>{const query=event.target.value.trim().toLowerCase();dialog.querySelectorAll('[data-brand-name]').forEach(label=>label.hidden=!label.dataset.brandName.includes(query))};
+        dialog.querySelector('form').onsubmit=event=>{event.preventDefault();const ids=[...dialog.querySelectorAll('[type="checkbox"]:checked')].map(input=>Number(input.value));if(!ids.length){dialog.querySelector('.um-brand-error').textContent='Select at least one brand.';return}finish(ids)};
+        document.body.appendChild(dialog);dialog.showModal();
+      });
+    }
     async function changeUserRole(userId, select) {
       const user = userManagementUsers.find(item => item.id === userId);
-      if (!user || roleUpdates.has(userId) || select.value === user.role) return;
+      if (!user || roleUpdates.has(userId) || (select.value === user.role && !['BrandPartner','BrandManager'].includes(select.value))) return;
       const previous = user.role, next = select.value;
       const msg = document.getElementById('userManagementMsg');
       msg.classList.remove('success'); msg.textContent = 'Updating role...';
       roleUpdates.add(userId); select.disabled = true;
       try {
+        const payload={role:next};
+        if(['BrandPartner','BrandManager'].includes(next)){msg.textContent='Choose brands to complete the role change.';const ids=await chooseRoleBrands(user,next);if(ids===null){select.value=previous;msg.textContent='Role change cancelled.';return}payload.brand_ids=ids}
+        msg.textContent='Updating role and assignments...';
         const response = await umFetch('/api/users/'+userId+'/role', {
-          method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({role:next})
+          method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)
         });
         if (!response) { select.value = previous; return; }
         const data = await response.json().catch(()=>({}));
         if (!response.ok) throw new Error(typeof data.detail==='string'?data.detail:'Unable to change role');
-        user.role = data.role;
+        Object.assign(user, data);
         msg.classList.add('success'); msg.textContent = user.username+' is now assigned the '+data.role+' role.';
         if (userId === userManagementActorId) {
           localStorage.setItem('role', data.role);
@@ -940,7 +968,7 @@
           <td class="um-employee-id">${escapeOutletText(u.employee_id || 'Not assigned')}</td>
           <td>${escapeOutletText(u.username)}</td>
           <td>${escapeOutletText(u.email)}</td>
-          <td>${userRoleDropdown(u)}</td>
+          <td>${userRoleDropdown(u)}${['BrandPartner','BrandManager'].includes(u.role) ? `<button type="button" class="um-brand-edit" onclick="changeUserRole(${u.id},this.parentElement.querySelector('select'))">Choose brands</button>` : ''}</td>
           <td>${userOutletDropdown(u)}</td>
           <td>${u.status}</td>
           <td>${formatDateShort(u.created_date)}</td>

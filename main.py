@@ -2902,6 +2902,16 @@ def update_user_role(
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(404, "User not found")
+    if payload.role in {"BrandPartner", "BrandManager"}:
+        brand_ids = sorted(set(payload.brand_ids or []))
+        if not brand_ids:
+            raise HTTPException(400, "Select at least one brand to complete this role change")
+        valid_ids = {brand_id for (brand_id,) in db.query(models.Brand.id).filter(models.Brand.id.in_(brand_ids)).all()}
+        if valid_ids != set(brand_ids):
+            raise HTTPException(400, "One or more selected brands no longer exist")
+        db.query(models.UserBrand).filter(models.UserBrand.user_id == user_id).delete(synchronize_session=False)
+        for brand_id in brand_ids:
+            db.add(models.UserBrand(user_id=user_id, brand_id=brand_id))
     user.role = payload.role
     card = assign_employee_id(db, user)
     card.designation = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", payload.role)
