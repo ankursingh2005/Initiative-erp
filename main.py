@@ -523,6 +523,10 @@ def ensure_default_master_data():
 ensure_default_branches()
 ensure_default_master_data()
 
+from identity_cards import assign_employee_id, ensure_employee_ids
+with SessionLocal() as employee_id_db:
+    ensure_employee_ids(employee_id_db)
+
 app = FastAPI(title="IDSPL Scheme Management ERP")
 
 
@@ -1986,13 +1990,17 @@ def signup(user: schemas.UserSignup, db: Session = Depends(get_db)):
         status="Active",
     )
     db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
-
-    if user.role in ("BrandManager", "BrandPartner", "CategoryManager"):
-        for brand_id in user.brand_ids:
-            db.add(models.UserBrand(user_id=db_user.id, brand_id=brand_id))
+    try:
+        db.flush()
+        assign_employee_id(db, db_user)
+        if user.role in ("BrandManager", "BrandPartner", "CategoryManager"):
+            for brand_id in user.brand_ids:
+                db.add(models.UserBrand(user_id=db_user.id, brand_id=brand_id))
         db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Account registration conflicted with another request. Please try again.")
+    db.refresh(db_user)
 
     return db_user
 

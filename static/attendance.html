@@ -398,6 +398,11 @@
 <style>
 .personal-attendance .own-profile-button{display:block;min-height:28px;margin-top:2px;padding:3px 0;background:transparent;color:#245bb5;font-size:10px;font-weight:700;text-align:left;text-decoration:underline;text-underline-offset:3px}
 </style>
+<style>
+.employee-attendance .employee-outlet{display:block;white-space:nowrap;min-width:0}
+.employee-attendance .employee-outlet .outlet-line{display:inline-block;white-space:nowrap;font-size:11px;line-height:1.5;font-weight:800}
+.employee-attendance .employee-outlet strong{font-size:inherit;overflow-wrap:normal;white-space:nowrap}
+</style>
 </head>
 <body>
 <header class="top"><a class="brand" href="/home"><span>Initiative ERP</span><b class="page-chip">Attendance</b></a><div class="top-actions"><a class="back" href="/home" title="Back to Home"><span aria-hidden="true">&#8592;</span> Back</a></div></header>
@@ -647,14 +652,19 @@ async function openAdminRecord(row){
   const panel=row.closest('.panel');
   return openEmployeeAttendance(row.dataset.userId,row.dataset.username||row.children[0].textContent.trim(),panel?.querySelector('.admin-date-filter')?.value||today);
 }
+function fitAttendanceOutlet(outlet){
+  const line=outlet.querySelector('.outlet-line');
+  const fit=()=>{if(!outlet.isConnected)return;const style=getComputedStyle(outlet),width=outlet.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight);if(width<=0)return;line.style.fontSize='11px';const natural=line.getBoundingClientRect().width;if(natural>width)line.style.fontSize=(11*width/natural*.99)+'px'};
+  const observer=new ResizeObserver(fit);observer.observe(outlet);fit();document.fonts?.ready.then(fit);return observer;
+}
 async function openEmployeeAttendance(employeeUserId,name,date=today){
   const userId=Number(employeeUserId);
   const instantDetail='<div class="selfie-gallery"><div class="selfie-missing">Loading attendance images...</div></div>';
   const modal=document.createElement('div');modal.className='record-modal show employee-attendance';modal.dataset.username=name;modal.innerHTML='<div class="record-dialog"><button type="button" class="record-close modal-top-close" aria-label="Close attendance details">&#10005; Close</button><h2>'+safeText(name)+'</h2><label>Attendance date <select class="record-date" aria-label="Select attendance date" disabled><option>'+safeText(date)+'</option></select></label><div class="record-detail">'+instantDetail+'</div></div>';document.body.appendChild(modal);
   const detail=modal.querySelector('.record-detail'),select=modal.querySelector('.record-date');
-  let detailRequest=0;
+  let detailRequest=0,outletResizeObserver;
   async function loadSelected(showLoading=true){if(!select.value)return;const request=++detailRequest;try{if(showLoading)detail.innerHTML='<div class="empty">Loading attendance details...</div>';const item=await fetchSelfieRecord(select.value);if(request!==detailRequest||!modal.isConnected)return;if(!item){if(showLoading)detail.innerHTML='<div class="empty">Unable to load attendance details.</div>';return}detail.innerHTML='<div class="selfie-gallery">'+selfieTile('Punch In - '+formatTime(item.checkin_at),item.checkin_selfie)+selfieTile('Punch Out - '+formatTime(item.checkout_at),item.checkout_selfie)+'</div>';bindSelfieZoom(detail)}catch(error){if(request===detailRequest&&modal.isConnected)detail.innerHTML='<div class="empty">Unable to load this date. Select the date again to retry.</div>'}}
-  select.onchange=()=>loadSelected(true);modal.querySelector('.record-close').onclick=()=>modal.remove();modal.onclick=event=>{if(event.target===modal)modal.remove()};
+  const closeRecord=()=>{outletResizeObserver?.disconnect();modal.remove()};select.onchange=()=>loadSelected(true);modal.querySelector('.record-close').onclick=closeRecord;modal.onclick=event=>{if(event.target===modal)closeRecord()};
   // Let the browser display the popup before starting slower network work.
   await new Promise(resolve=>requestAnimationFrame(resolve));
   try {
@@ -670,7 +680,7 @@ async function openEmployeeAttendance(employeeUserId,name,date=today){
     const identity=document.createElement('div');heading.textContent=(data.display_name||data.username||'').toUpperCase();heading.before(profileCard);identity.appendChild(heading);
     const employeeId=document.createElement('div');employeeId.className='employee-id';employeeId.textContent='EMP ID: '+(data.employee_id||'Not available');identity.appendChild(employeeId);profileCard.append(avatar,identity);
     const contact=document.createElement('div');contact.className='employee-contact';contact.textContent='CONTACT NO: '+(data.contact_number||'Not available');
-    const outlet=document.createElement('div');outlet.className='employee-outlet';outlet.innerHTML='OUTLET:<strong>'+safeText(('Initiative Data System Pvt. Ltd. ('+(data.assigned_outlet||'Unassigned')+')').toUpperCase())+'</strong>';profileCard.after(contact,outlet);
+    const outlet=document.createElement('div');outlet.className='employee-outlet';outlet.innerHTML='<span class="outlet-line">OUTLET: <strong>'+safeText(('Initiative Data System Pvt. Ltd. ('+(data.assigned_outlet||'Unassigned')+')').toUpperCase())+'</strong></span>';profileCard.after(contact,outlet);outletResizeObserver=fitAttendanceOutlet(outlet);
     if(data.can_edit_profile){
       const edit=document.createElement('button');edit.type='button';edit.className='attendance-profile-edit';edit.textContent='Edit';edit.setAttribute('aria-label','Edit employee profile');modal.querySelector('.record-dialog').appendChild(edit);
       edit.onclick=()=>{

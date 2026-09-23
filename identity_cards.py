@@ -62,6 +62,21 @@ def next_employee_id(db, abbreviation):
     return f"{prefix}{number:03d}"
 
 
+def assign_employee_id(db, user):
+    """Assign a missing ID in the caller's transaction for every account role."""
+    card = db.get(models.IdentityCard, user.id)
+    if card is not None:
+        return card
+    store = db.get(models.Store, user.store_id) if user.store_id else None
+    card = models.IdentityCard(
+        user_id=user.id, employee_id=next_employee_id(db, outlet_abbreviation(store)),
+        employee_name=user.full_name or user.username,
+        designation=re.sub(r"(?<=[a-z])(?=[A-Z])", " ", user.role), mobile="")
+    db.add(card)
+    db.flush()
+    return card
+
+
 def ensure_employee_ids(db):
     """Assign stable IDs and migrate legacy IDs without touching card corrections."""
     for attempt in range(3):
@@ -69,7 +84,7 @@ def ensure_employee_ids(db):
             rows = (db.query(models.User, models.IdentityCard, models.Store)
                     .outerjoin(models.IdentityCard, models.IdentityCard.user_id == models.User.id)
                     .outerjoin(models.Store, models.Store.id == models.User.store_id)
-                    .filter(models.User.role != "BrandPartner").order_by(models.User.id).all())
+                    .order_by(models.User.id).all())
             changed = False
             for user, card, store in rows:
                 abbreviation = outlet_abbreviation(store)
