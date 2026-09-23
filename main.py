@@ -2857,6 +2857,9 @@ def update_user_role(
     if not user:
         raise HTTPException(404, "User not found")
     user.role = payload.role
+    card = assign_employee_id(db, user)
+    card.designation = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", payload.role)
+    card.designation = re.sub(r"^ACTechnician", "AC Technician", card.designation)
     db.commit()
     db.refresh(user)
     return serialize_user_with_brands(user, db)

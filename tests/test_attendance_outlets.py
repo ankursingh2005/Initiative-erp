@@ -37,6 +37,24 @@ class AttendanceOutletTests(unittest.TestCase):
         app.dependency_overrides[auth.get_current_user] = lambda: self.actor
         self.client = TestClient(app)
 
+    def test_role_update_syncs_identity_and_attendance_designation(self):
+        card = models.IdentityCard(user_id=self.employee.id, employee_id='IDS-TEST-26001',
+                                   employee_name='Saved Name', designation='Other', mobile='9876543210', photo='saved-photo')
+        self.db.add(card)
+        self.db.commit()
+        response = self.client.patch(f'/users/{self.employee.id}/role', json={'role': 'CategoryManager'})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.db.refresh(card)
+        self.assertEqual(card.designation, 'Category Manager')
+        self.assertEqual(card.employee_id, 'IDS-TEST-26001')
+        self.assertEqual(card.employee_name, 'Saved Name')
+        self.assertEqual(card.photo, 'saved-photo')
+        self.assertEqual(card.mobile, '9876543210')
+        from identity_cards import serialize
+        self.assertEqual(serialize(self.employee, card, self.stores[0])['designation'], 'Category Manager')
+        profile = main.attendance_user_history(self.employee.id, db=self.db, current_user=self.actor)
+        self.assertEqual(profile['designation'], 'Category Manager')
+
     def tearDown(self):
         self.client.close()
         self.db.close()
