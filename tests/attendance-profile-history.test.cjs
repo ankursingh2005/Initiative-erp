@@ -20,13 +20,11 @@ test('calendar preserves historical week off after schedule changes',()=>{
   assert.match(calendar,/data-date="2026-09-28" data-status="Absent"/);
 });
 
-test('dashboard labels prefer saved profile name in every category',()=>{
-  const context={};vm.createContext(context);
+test('dashboard labels prefer saved profile names and show smaller designations or brands',()=>{
+  const context={safeText:v=>String(v)};vm.createContext(context);
   const start=html.indexOf('function adminEmployeeLabel(');
   vm.runInContext(html.slice(start,html.indexOf('\n',start)),context);
-  const user={username:'MSINGH',display_name:'MAHESH PRATAP SINGH',role:'Employee',promoter_brand:'Samsung'};
-  assert.equal(context.adminEmployeeLabel(user,''),'MAHESH PRATAP SINGH');
-  assert.equal(context.adminEmployeeLabel(user,'ids_emp'),'MAHESH PRATAP SINGH / Employee');
-  assert.equal(context.adminEmployeeLabel(user,'brand_pro'),'MAHESH PRATAP SINGH / Samsung');
-  assert.equal(context.adminEmployeeLabel({username:'MSINGH'},''),'MSINGH');
+  const user={username:'MSINGH',display_name:'MAHESH PRATAP SINGH',role:'Employee'};
+  for(const category of ['', 'ids_emp'])assert.equal(context.adminEmployeeLabel(user,category),'MAHESH PRATAP SINGH<small class="admin-employee-designation"> / Employee</small>');
+  assert.equal(context.adminEmployeeLabel({...user,role:'BrandPartner',promoter_brand:'Samsung'},'brand_pro'),'MAHESH PRATAP SINGH<small class="admin-employee-designation"> / Samsung</small>');
 });

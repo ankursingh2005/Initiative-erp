@@ -17,3 +17,23 @@ test('category refresh keeps weekly-off filter and ignores older responses',asyn
   pending[0].resolve({ok:true,json:async()=>({total:99,present:99,absent:0,rows:[]})});await first;
   assert.equal(metrics[0].textContent,2);assert.equal(metrics[1].textContent,1);
 });
+
+test('repeated refresh renders small designations and brands without displaying markup',async()=>{
+  const body={innerHTML:''},metrics=[{},{},{}];
+  const panel={querySelector:s=>s==='.admin-weekoff-filter'?null:body,querySelectorAll:()=>metrics};
+  const rows=[{user_id:1,username:'Name <unsafe>',role:'Employee',designation:'Team Lead',status:'Present'}, {user_id:2,username:'Promoter',role:'BrandPartner',promoter_brand:'Haier & LG',status:'Present'}];
+  const context={URLSearchParams,localStorage:{getItem:()=> 'token'},sortAttendanceByCheckin:r=>r,
+    safeText:v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'),
+    formatTime:()=>'',liveDistanceHtml:()=>'',fetch:async()=>({ok:true,json:async()=>({total:2,present:2,absent:0,rows})})};
+  vm.createContext(context);
+  let start=html.indexOf('function adminEmployeeLabel(');
+  vm.runInContext(html.slice(start,html.indexOf('\n',start)),context);
+  vm.runInContext(html.slice(html.indexOf('async function refreshAdminOutlet('),html.indexOf('function initializeAdminDashboard(')),context);
+  for(const category of ['', 'brand_pro', '']){
+    await context.refreshAdminOutlet(panel,'','','',category);
+    assert.ok(body.innerHTML.includes('Name &lt;unsafe&gt;<small class="admin-employee-designation"> / Team Lead</small>'));
+    assert.ok(body.innerHTML.includes('Promoter<small class="admin-employee-designation"> / Haier &amp; LG</small>'));
+    assert.ok(!body.innerHTML.includes('&lt;small'));
+    assert.ok(!body.innerHTML.includes('Name <unsafe>'));
+  }
+});
