@@ -2691,10 +2691,11 @@ def attendance_admin_summary(
     if current_user.role == "CategoryManager":
         user_query = filter_manager_employees(user_query, emp_category)
     users = filter_employee_category(user_query, emp_category).all()
-    profile_rows = db.query(models.IdentityCard.user_id, models.IdentityCard.employee_name, models.IdentityCard.employee_id).filter(
+    profile_rows = db.query(models.IdentityCard.user_id, models.IdentityCard.employee_name, models.IdentityCard.employee_id, models.IdentityCard.designation).filter(
         models.IdentityCard.user_id.in_([user.id for user in users] or [-1])).all()
-    profile_names = {user_id: name for user_id, name, employee_id in profile_rows}
+    profile_names = {user_id: name for user_id, name, employee_id, designation in profile_rows}
     employee_ids = {user_id: employee_id for user_id, name, employee_id in profile_rows}
+    profile_designations = {user_id: designation for user_id, name, employee_id, designation in profile_rows}
     brand_names_by_user = defaultdict(list)
     for user_id, brand_name in db.query(models.UserBrand.user_id, models.Brand.name).join(
         models.Brand, models.Brand.id == models.UserBrand.brand_id,
@@ -2809,6 +2810,7 @@ def attendance_admin_summary(
         location_summary = {"current_distance_from_store_m": distance,
                             "last_location_at": last_at, "location_tracking_status": tracking_status}
         employee_summary = {"role": user.role,
+                            "designation": profile_designations.get(user.id) or re.sub(r"(?<=[a-z])(?=[A-Z])", " ", user.role),
                             "employee_id": employee_ids.get(user.id),
                             "display_name": profile_names.get(user.id) or user.full_name or user.username,
                             "email": user.email,
