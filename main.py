@@ -592,7 +592,7 @@ async def handle_unexpected_error(request: Request, exc: Exception):
 # "static" folder sitting next to this file.
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-VALID_ROLES = ["Accounts","AccountsManager","AC Technician A","AC Technician B","Admin","Assistant","AsstSalesManager","BrandManager","BrandPartner","Cashier","CategoryManager","CEO","CustomerCare","Director","Employee","AC Helper A", "AC Helper B","HR","ITEngineer","Loader","LogisticManager","MISExecutive","Owner","SalesExecutive","ServiceCoordinator","ServiceHead","Service Manager A", "Service Manager B","SupportingStaff","Supervisor","Other"]
+VALID_ROLES = ["Accounts","AccountsManager","AC Technician A","AC Technician B","Admin","Assistant","AsstSalesManager","BrandManager","BrandPartner","Cashier","CategoryManager","CEO","CustomerCare","Director","Employee","AC Helper A", "AC Helper B","HR","ITEngineer","Loader","LogisticManager","MISExecutive","SalesExecutive","ServiceCoordinator","ServiceHead","Service Manager A", "Service Manager B","SupportingStaff","Supervisor","Other"]
 
 
 def normalize_category_code(raw_value: Optional[str]) -> Optional[str]:
