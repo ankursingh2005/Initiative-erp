@@ -4,6 +4,13 @@ import auth
 from attendance_categories import manager_employee_visible, employee_category
 
 
+ALL_ATTENDANCE_VIEW_ROLES = {'CEO', 'Director', 'AccountsManager'}
+
+
+def can_view_all_attendance(actor):
+    return auth.has_admin_access(actor) or actor.role in ALL_ATTENDANCE_VIEW_ROLES
+
+
 def service_dashboard_category(actor):
     return {'Service Manager A': 'ac_projects', 'Service Manager B': 'ac_retails'}.get(actor.role)
 
@@ -26,7 +33,7 @@ def dashboard_category(actor, requested=None):
 
 
 def dashboard_outlet(actor, requested=None):
-    if auth.has_admin_access(actor) or service_dashboard_category(actor):
+    if can_view_all_attendance(actor) or service_dashboard_category(actor):
         return requested
     if actor.role != 'CategoryManager':
         raise HTTPException(403, 'Attendance dashboard access is not allowed')
@@ -38,6 +45,6 @@ def dashboard_outlet(actor, requested=None):
 
 
 def can_view_attendance(actor, user):
-    return user is not None and (actor.id == user.id or auth.has_admin_access(actor) or
+    return user is not None and (actor.id == user.id or can_view_all_attendance(actor) or
         (service_dashboard_category(actor) is not None and employee_category(user) == service_dashboard_category(actor)) or
         (actor.role == 'CategoryManager' and actor.store_id is not None and actor.store_id == user.store_id and manager_employee_visible(user)))

@@ -180,3 +180,26 @@ class ManagerAttendanceTests(unittest.TestCase):
                 response = self.client.get('/profile')
                 self.assertEqual(response.status_code, 200, response.text)
                 self.assertIs(response.json()['ac_project_dashboard'], allowed)
+
+
+    def test_leadership_can_view_all_outlets_details_and_exports(self):
+        for role in ('CEO', 'Director', 'AccountsManager'):
+            with self.subTest(role=role):
+                self.actor = self.users[0]
+                self.actor.role = role
+                self.db.commit()
+                response = self.client.get('/summary')
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertEqual({row['user_id'] for row in response.json()['rows']}, {user.id for user in self.users})
+                response = self.client.get('/summary?store_id='+str(self.stores[1].id))
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual({row['user_id'] for row in response.json()['rows']}, {self.users[2].id})
+                response = self.client.get('/history/'+str(self.users[2].id))
+                self.assertEqual(response.status_code, 200)
+                self.assertFalse(response.json()['can_edit_profile'])
+                self.assertEqual(self.client.get('/selfies/'+str(self.records[1].id)).status_code, 200)
+                for path in ('/api/attendance/admin-export?date=2026-09-22', '/api/attendance/monthly-export?month=2026-09', '/api/attendance/admin-user-export?user_id='+str(self.users[2].id)):
+                    response = self.client.get(path)
+                    self.assertEqual(response.status_code, 200, path)
+                    rows = list(load_workbook(BytesIO(response.content)).active.values)[1:]
+                    self.assertIn(self.users[2].id, {row[0] for row in rows})

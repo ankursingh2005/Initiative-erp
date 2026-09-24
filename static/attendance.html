@@ -570,8 +570,8 @@ render=function(){renderTodayAndSummary();populateMonths();renderSummary()};
 <script>
 function liveDistanceHtml(row){const distance=row.current_distance_from_store_m;const value=distance===null||distance===undefined?'-':Math.round(Number(distance))+' m';return '<span class="live-distance">'+value+'</span>'}
 function adminEmployeeLabel(row,category){const name=row.display_name||row.username||'';if(category==='brand_pro')return name+' / '+(row.promoter_brand||'Brand not assigned');if(category==='ids_emp')return name+' / '+(row.role||'Employee');return name}
-function hasAttendanceDashboard(){return ['Admin','Owner','HR','CategoryManager','Service Manager A','Service Manager B'].includes(localStorage.getItem('role'))}
-function attendanceDashboardTitle(){if(['Service Manager A','Service Manager B'].includes(localStorage.getItem('role')))return 'Service Manager Attendance Dashboard';return localStorage.getItem('role')==='CategoryManager'?'Manager Attendance Dashboard':'Admin Attendance Dashboard'}
+function hasAttendanceDashboard(){return ['Admin','Owner','HR','CategoryManager','Service Manager A','Service Manager B','CEO','Director','AccountsManager'].includes(localStorage.getItem('role'))}
+function attendanceDashboardTitle(){if(['CEO','Director','AccountsManager'].includes(localStorage.getItem('role')))return 'Attendance Dashboard';if(['Service Manager A','Service Manager B'].includes(localStorage.getItem('role')))return 'Service Manager Attendance Dashboard';return localStorage.getItem('role')==='CategoryManager'?'Manager Attendance Dashboard':'Admin Attendance Dashboard'}
 function showAdminLoading(){
   if(document.getElementById('adminLoading'))return;
   const panel=document.createElement('section');panel.id='adminLoading';panel.className='panel';panel.style.cssText='margin-bottom:18px;border-radius:18px;overflow:hidden';
@@ -787,7 +787,7 @@ const WEEKOFF_DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday
 })();
 
 (function addAdminWeekoffFilter(){
-  if(!['Admin','Owner','HR','CategoryManager','Service Manager A','Service Manager B'].includes(localStorage.getItem('role')))return;
+  if(!['Admin','Owner','HR','CategoryManager','Service Manager A','Service Manager B','CEO','Director','AccountsManager'].includes(localStorage.getItem('role')))return;
   const wait=setInterval(()=>{
     const panel=document.querySelector('.admin-dashboard-panel'),filters=panel?.querySelector('.admin-filters');
     if(!panel||!filters)return;
@@ -930,7 +930,7 @@ function attendanceStatusCount(status, label) {
 </script>
 <script>
 (function keepAdminDashboardAtTopOnRefresh(){
-  if(!['Admin','Owner','HR','CategoryManager','Service Manager A','Service Manager B'].includes(localStorage.getItem('role')))return;
+  if(!['Admin','Owner','HR','CategoryManager','Service Manager A','Service Manager B','CEO','Director','AccountsManager'].includes(localStorage.getItem('role')))return;
   if('scrollRestoration' in history)history.scrollRestoration='manual';
   let positioned=false;
   function positionAtTop(){
@@ -947,7 +947,7 @@ function attendanceStatusCount(status, label) {
 </script>
 <script>
 (function addAdminEmployeeSearch(){
-  if(!['Admin','Owner','HR','CategoryManager','Service Manager A','Service Manager B'].includes(localStorage.getItem('role')))return;
+  if(!['Admin','Owner','HR','CategoryManager','Service Manager A','Service Manager B','CEO','Director','AccountsManager'].includes(localStorage.getItem('role')))return;
   function install(){
     const panel=document.querySelector('.admin-dashboard-panel'),toggle=panel?.querySelector('.admin-users-toggle'),tableWrap=panel?.querySelector('table')?.parentElement;
     if(!panel||!toggle||!tableWrap||panel.querySelector('.admin-employee-search'))return false;

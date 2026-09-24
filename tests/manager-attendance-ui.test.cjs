@@ -36,3 +36,12 @@ test('Noor can reach the dashboard using profile permission without an email fie
     assert.deepEqual(requests,allowed?['/api/me','/api/attendance/admin-summary']:['/api/me']);
   }
 });
+
+test('CEO Director and Accounts Manager can open the full attendance dashboard',()=>{
+  for(const role of ['CEO','Director','AccountsManager']){
+    const context={localStorage:{getItem:()=>role}};vm.createContext(context);
+    vm.runInContext(html.slice(html.indexOf('function hasAttendanceDashboard('),html.indexOf('function showAdminLoading(')),context);
+    assert.equal(context.hasAttendanceDashboard(),true);
+    assert.equal(context.attendanceDashboardTitle(),'Attendance Dashboard');
+  }
+});

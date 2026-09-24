@@ -2668,7 +2668,7 @@ def attendance_admin_summary(
     from_date: Optional[date] = Query(None),
     to_date: Optional[date] = Query(None),
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.require_roles("Admin", "CategoryManager", "Service Manager A", "Service Manager B")),
+    current_user: models.User = Depends(auth.require_roles("Admin", "CategoryManager", "Service Manager A", "Service Manager B", "CEO", "Director", "AccountsManager")),
     weekoff_day: Optional[str] = None,
     emp_category: Optional[str] = None,
 ):
