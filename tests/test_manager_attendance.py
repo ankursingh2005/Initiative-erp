@@ -124,6 +124,8 @@ class ManagerAttendanceTests(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             row = next(item for item in response.json()['rows'] if item['user_id'] == employee.id)
             self.assertEqual(row['display_name'], 'MAHESH PRATAP SINGH')
+            self.assertEqual(row['employee_id'], 'IDS-TEST-26001')
+            self.assertEqual(row['designation'], 'Employee')
             self.assertEqual(row['email'], 'updated@example.test')
             self.assertEqual(row['username'], employee.username)
 

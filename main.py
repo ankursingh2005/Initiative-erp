@@ -2693,9 +2693,9 @@ def attendance_admin_summary(
     users = filter_employee_category(user_query, emp_category).all()
     profile_rows = db.query(models.IdentityCard.user_id, models.IdentityCard.employee_name, models.IdentityCard.employee_id, models.IdentityCard.designation).filter(
         models.IdentityCard.user_id.in_([user.id for user in users] or [-1])).all()
-    profile_names = {user_id: name for user_id, name, employee_id, designation in profile_rows}
-    employee_ids = {user_id: employee_id for user_id, name, employee_id in profile_rows}
-    profile_designations = {user_id: designation for user_id, name, employee_id, designation in profile_rows}
+    profile_names = {row.user_id: row.employee_name for row in profile_rows}
+    employee_ids = {row.user_id: row.employee_id for row in profile_rows}
+    profile_designations = {row.user_id: row.designation for row in profile_rows}
     brand_names_by_user = defaultdict(list)
     for user_id, brand_name in db.query(models.UserBrand.user_id, models.Brand.name).join(
         models.Brand, models.Brand.id == models.UserBrand.brand_id,
