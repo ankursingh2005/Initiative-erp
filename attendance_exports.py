@@ -1,6 +1,6 @@
 """Attendance downloads built from saved user IDs and attendance records."""
 from attendance_history import weekoff_on
-from attendance_access import dashboard_outlet, can_view_attendance
+from attendance_access import dashboard_outlet, dashboard_category, can_view_attendance
 import calendar
 from datetime import date, timedelta
 from io import BytesIO
@@ -108,8 +108,9 @@ def export_rows(db, start=None, end=None, user_id=None, store_id=None, weekoff_d
 @router.get('/admin-export')
 def daily_export(date: date, format: str = 'xlsx', store_id: int | None = None,
                  weekoff_day: str | None = None, status: str | None = None, emp_category: str | None = None,
-                 db: Session = Depends(get_db), actor=Depends(auth.require_roles('Admin', 'CategoryManager'))):
+                 db: Session = Depends(get_db), actor=Depends(auth.require_roles('Admin', 'CategoryManager', 'ServiceManager'))):
     store_id = dashboard_outlet(actor, store_id)
+    emp_category = dashboard_category(actor, emp_category)
     rows = export_rows(db, date, date, assigned_store_id=actor.store_id if actor.role == "CategoryManager" else None, store_id=store_id, weekoff_day=weekoff_day, status=status, emp_category=emp_category)
     return render_export(rows, format, f'attendance-{date}')
 
@@ -117,8 +118,9 @@ def daily_export(date: date, format: str = 'xlsx', store_id: int | None = None,
 @router.get('/monthly-export')
 def monthly_export(month: str, store_id: int | None = None, weekoff_day: str | None = None,
                    status: str | None = None, emp_category: str | None = None,
-                   db: Session = Depends(get_db), actor=Depends(auth.require_roles('Admin', 'CategoryManager'))):
+                   db: Session = Depends(get_db), actor=Depends(auth.require_roles('Admin', 'CategoryManager', 'ServiceManager'))):
     store_id = dashboard_outlet(actor, store_id)
+    emp_category = dashboard_category(actor, emp_category)
     try:
         start = date.fromisoformat(month + '-01')
     except ValueError:

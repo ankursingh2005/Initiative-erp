@@ -115,6 +115,7 @@ class CardUpdate(BaseModel):
     employee_name: str = Field(min_length=1, max_length=150)
     designation: str = Field(min_length=1, max_length=100)
     mobile: str = Field(default="", max_length=25)
+    dob: date | None = None
     joining_date: date | None = None
     photo: str | None = Field(default=None, max_length=4_000_000)
 
@@ -174,6 +175,7 @@ def serialize(user, card, store):
         "employee_name": card.employee_name if card else (user.full_name or user.username),
         "designation": card.designation if card else re.sub(r"(?<=[a-z])(?=[A-Z])", " ", user.role),
         "mobile": card.mobile if card else "",
+        "dob": card.dob.isoformat() if card and card.dob else None,
         "joining_date": card.joining_date.isoformat() if card and card.joining_date else None,
         "photo": card.photo if card else None,
         "role": user.role,
@@ -266,6 +268,8 @@ def save_card(user_id: int, payload: CardUpdate, response: Response,
     for name in ("employee_name", "designation", "mobile"):
         setattr(card, name, getattr(payload, name))
     card.photo = photo
+    if "dob" in payload.model_fields_set:
+        card.dob = payload.dob
     if "joining_date" in payload.model_fields_set:
         card.joining_date = payload.joining_date
     try:

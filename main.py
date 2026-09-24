@@ -1,4 +1,4 @@
-from attendance_access import dashboard_outlet, can_view_attendance
+from attendance_access import dashboard_outlet, dashboard_category, can_view_attendance
 from attendance_history import change_weekoff, weekoff_on, weekoff_history
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Query, Request
 from fastapi.staticfiles import StaticFiles
@@ -105,6 +105,7 @@ def ensure_username_not_unique():
 
 
 def ensure_database_schema():
+    ensure_column("identity_cards", "dob", "DATE")
     ensure_column("users", "weekoff_day", "VARCHAR(10)")
     ensure_column("users", "weekoff_history", "TEXT")
     ensure_username_not_unique()
@@ -2658,11 +2659,12 @@ def attendance_admin_summary(
     from_date: Optional[date] = Query(None),
     to_date: Optional[date] = Query(None),
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.require_roles("Admin", "CategoryManager")),
+    current_user: models.User = Depends(auth.require_roles("Admin", "CategoryManager", "ServiceManager")),
     weekoff_day: Optional[str] = None,
     emp_category: Optional[str] = None,
 ):
     store_id = dashboard_outlet(current_user, store_id)
+    emp_category = dashboard_category(current_user, emp_category)
     today = india_today()
     start_date = from_date or today
     end_date = to_date or today

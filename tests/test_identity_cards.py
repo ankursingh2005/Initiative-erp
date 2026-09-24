@@ -219,6 +219,21 @@ class IdentityCardTests(unittest.TestCase):
         self.assertEqual(self.put().json()['photo'], saved)
         self.assertIsNone(self.put(photo=None).json()['photo'])
 
+    def test_dob_saved_preserved_and_cleared(self):
+        response = self.put(dob='2000-02-29')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['dob'], '2000-02-29')
+        self.assertEqual(self.put().json()['dob'], '2000-02-29')
+        card = next(c for c in self.client.get('/api/identity-cards').json()['cards']
+                    if c['user_id'] == self.users[3].id)
+        self.assertEqual(card['dob'], '2000-02-29')
+        self.assertIsNone(self.put(dob=None).json()['dob'])
+
+    def test_invalid_dob_rejected(self):
+        for value in ['2025-02-29', 'not-a-date', '2026-13-01']:
+            self.assertEqual(self.put(dob=value).status_code, 422)
+
+
     def test_joining_date_saved_preserved_and_cleared(self):
         response = self.put(joining_date='2024-02-29')
         self.assertEqual(response.status_code, 200)

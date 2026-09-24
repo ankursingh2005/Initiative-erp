@@ -125,3 +125,43 @@ class ManagerAttendanceTests(unittest.TestCase):
             self.assertEqual(row['display_name'], 'MAHESH PRATAP SINGH')
             self.assertEqual(row['email'], 'updated@example.test')
             self.assertEqual(row['username'], employee.username)
+
+
+    def test_noor_service_manager_is_limited_to_ac_projects(self):
+        noor = models.User(username='Noor Akhtar', email='akhtarnoor3112@gmail.com', role='ServiceManager', status='Active', password_hash='unused')
+        project = models.User(username='Project tech', email='project@example.test', role='ACTechnicianA', status='Active', password_hash='unused', store_id=self.stores[1].id)
+        retail = models.User(username='Retail tech', email='retail@example.test', role='ACTechnicianB', status='Active', password_hash='unused')
+        other = models.User(username='Other service manager', email='other@example.test', role='ServiceManager', status='Active', password_hash='unused')
+        self.db.add_all([noor, project, retail, other])
+        self.db.flush()
+        record = models.AttendanceRecord(user_id=project.id, store_id=self.stores[1].id, attendance_date=date(2026, 9, 23), checkin_at=datetime(2026, 9, 23, 9), checkin_selfie='project-photo')
+        self.db.add(record)
+        self.db.commit()
+        self.actor = noor
+        response = self.client.get('/summary?from_date=2026-09-23&to_date=2026-09-23')
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual({row['user_id'] for row in response.json()['rows']}, {noor.id, project.id})
+        self.assertEqual(self.client.get('/history/'+str(project.id)).status_code, 200)
+        self.assertFalse(self.client.get('/history/'+str(project.id)).json()['can_edit_profile'])
+        self.assertEqual(self.client.get('/selfies/'+str(record.id)).status_code, 200)
+        for user in (retail, other, self.users[1]):
+            self.assertEqual(self.client.get('/history/'+str(user.id)).status_code, 403)
+            self.assertEqual(self.client.get('/api/attendance/admin-user-export?user_id='+str(user.id)).status_code, 403)
+        self.assertEqual(self.client.get('/selfies/'+str(self.records[0].id)).status_code, 403)
+        for path in ('/summary', '/api/attendance/admin-export?date=2026-09-23', '/api/attendance/monthly-export?month=2026-09'):
+            for category in ('ids_emp', 'brand_pro', 'ac_retails'):
+                self.assertEqual(self.client.get(path+('&' if '?' in path else '?')+'emp_category='+category).status_code, 403)
+        for path in ('/api/attendance/admin-export?date=2026-09-23', '/api/attendance/monthly-export?month=2026-09'):
+            response = self.client.get(path)
+            self.assertEqual(response.status_code, 200)
+            rows = list(load_workbook(BytesIO(response.content)).active.values)[1:]
+            self.assertTrue(rows)
+            self.assertTrue(all(row[0] in {noor.id, project.id} for row in rows))
+        self.actor = other
+        self.assertEqual(self.client.get('/summary').status_code, 403)
+        self.assertEqual(self.client.get('/history/'+str(project.id)).status_code, 403)
+        self.assertEqual(self.client.get('/api/attendance/admin-export?date=2026-09-23').status_code, 403)
+        self.actor = noor
+        noor.role = 'Employee'
+        self.db.commit()
+        self.assertEqual(self.client.get('/summary').status_code, 403)

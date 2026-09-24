@@ -88,8 +88,8 @@
 .id-back .back-company h3{font-size:18px;line-height:1.15}
 .id-back .back-company p{font-size:11px;line-height:1.45}
 .id-back .back-id{bottom:13px}
-.back-joining{font-size:10px;line-height:1.4;letter-spacing:0;color:#e5cf9e;margin-bottom:8px;white-space:nowrap}
-.back-joining b{color:#fff;font-weight:700}
+.back-dob{font-size:10px;line-height:1.4;letter-spacing:0;color:#e5cf9e;margin-bottom:8px;white-space:nowrap}
+.back-dob b{color:#fff;font-weight:700}
 
 /* Identity studio dashboard. Card artwork and print dimensions stay independent. */
 @media screen{body{background:#eef2f1}}
