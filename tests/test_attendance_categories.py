@@ -73,3 +73,23 @@ class AttendanceCategoryTests(unittest.TestCase):
                     from_date=today, to_date=today, db=self.db, current_user=self.actor,
                     emp_category=category)
                 self.assertEqual(empty['total'], 0)
+
+
+    def test_ac_helpers_belong_to_projects_and_are_visible_to_noor(self):
+        from types import SimpleNamespace
+        from attendance_access import can_view_attendance
+        from attendance_categories import filter_manager_employees, manager_employee_visible
+        today = main.india_today()
+        helper = models.User(username='Project Helper', email='helper@example.test', role='AC Helper', status='Active', password_hash='unused', store_id=self.stores[0].id)
+        self.db.add(helper)
+        self.db.commit()
+        noor = SimpleNamespace(id=-1, role='ServiceManager', email='akhtarnoor3112@gmail.com', store_id=None)
+        for actor in (self.actor, noor):
+            data = main.attendance_admin_summary(store_id=None, from_date=today, to_date=today, db=self.db, current_user=actor, emp_category='ac_projects')
+            self.assertIn(helper.id, {row['user_id'] for row in data['rows']})
+        self.assertIn(helper.id, {row[0] for row in export_rows(self.db, today, today, emp_category='ac_projects')})
+        for category in ('ids_emp', 'ac_retails', 'brand_pro'):
+            self.assertNotIn(helper.id, {row[0] for row in export_rows(self.db, today, today, emp_category=category)})
+        self.assertTrue(can_view_attendance(noor, helper))
+        self.assertFalse(manager_employee_visible(helper))
+        self.assertNotIn(helper.id, {user.id for user in filter_manager_employees(self.db.query(models.User)).all()})

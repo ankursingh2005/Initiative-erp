@@ -18,21 +18,21 @@ def filter_employee_category(query, category):
     email = func.lower(func.trim(func.coalesce(models.User.email, '')))
     assigned = email.in_([address for addresses in CATEGORY_ACCOUNTS.values() for address in addresses])
     if category == 'ids_emp':
-        return query.filter(~models.User.role.in_(['BrandPartner', 'ACTechnicianA', 'ACTechnicianB']), ~assigned)
-    roles = {'brand_pro': 'BrandPartner', 'ac_retails': 'ACTechnicianB',
-             'ac_projects': 'ACTechnicianA'}
+        return query.filter(~models.User.role.in_(['BrandPartner', 'ACTechnicianA', 'ACTechnicianB', 'AC Helper']), ~assigned)
+    roles = {'brand_pro': ('BrandPartner',), 'ac_retails': ('ACTechnicianB',),
+             'ac_projects': ('ACTechnicianA', 'AC Helper')}
     if category not in roles:
         raise HTTPException(400, 'Unknown employee category')
     return query.filter(or_(
         email.in_(CATEGORY_ACCOUNTS.get(category, ())),
-        (models.User.role == roles[category]) & ~assigned,
+        models.User.role.in_(roles[category]) & ~assigned,
     ))
 
 
 def manager_employee_visible(user):
     """Managers see IDS employees and brand promoters, excluding AC assignments."""
     excluded_emails = {email for emails in CATEGORY_ACCOUNTS.values() for email in emails}
-    return user.role not in {'ACTechnicianA', 'ACTechnicianB'} and (user.email or '').strip().lower() not in excluded_emails
+    return user.role not in {'ACTechnicianA', 'ACTechnicianB', 'AC Helper'} and (user.email or '').strip().lower() not in excluded_emails
 
 
 def filter_manager_employees(query, category=None):
@@ -40,4 +40,4 @@ def filter_manager_employees(query, category=None):
         raise HTTPException(403, 'Manager attendance is limited to IDS EMP and BRAND PRO')
     email = func.lower(func.trim(func.coalesce(models.User.email, '')))
     excluded = [address for addresses in CATEGORY_ACCOUNTS.values() for address in addresses]
-    return query.filter(~models.User.role.in_(['ACTechnicianA', 'ACTechnicianB']), ~email.in_(excluded))
+    return query.filter(~models.User.role.in_(['ACTechnicianA', 'ACTechnicianB', 'AC Helper']), ~email.in_(excluded))

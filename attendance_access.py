@@ -11,7 +11,7 @@ def is_ac_project_manager(actor):
 def ac_project_employee_visible(user):
     email = (user.email or "").strip().lower()
     assigned = {address for addresses in CATEGORY_ACCOUNTS.values() for address in addresses}
-    return email in CATEGORY_ACCOUNTS["ac_projects"] or (user.role == "ACTechnicianA" and email not in assigned)
+    return email in CATEGORY_ACCOUNTS["ac_projects"] or (user.role in {"ACTechnicianA", "AC Helper"} and email not in assigned)
 
 
 def dashboard_category(actor, requested=None):
