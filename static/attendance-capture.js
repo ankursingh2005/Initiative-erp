@@ -66,7 +66,7 @@
         if (!validGps(gps)) throw new Error('GPS reading is invalid or inaccurate. Please enable precise location and retry.');
         position = gps;
         let outlet = assignedOutlet(), distance = meters(gps.coords.latitude, gps.coords.longitude, outlets[outlet]);
-        const anywhere = ['ServiceManager','ACTechnicianA','ACTechnicianB','AC Helper','HR'].includes(profile.role);
+        const anywhere = ['Service Manager A','Service Manager B','AC Technician A','AC Technician B','AC Helper A','AC Helper B','HR'].includes(profile.role);
         const store = typeof liveStores !== 'undefined' ? liveStores.find(item=>item.id===profile.store_id) : null;
         const radius = Number(store?.geofence_radius_m) || 100;
         if (!anywhere && distance > radius) {

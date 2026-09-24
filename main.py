@@ -1,4 +1,4 @@
-from attendance_access import dashboard_outlet, dashboard_category, can_view_attendance, is_ac_project_manager
+from attendance_access import dashboard_outlet, dashboard_category, can_view_attendance, is_ac_project_manager, service_dashboard_category
 from attendance_history import change_weekoff, weekoff_on, weekoff_history
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Query, Request
 from fastapi.staticfiles import StaticFiles
@@ -527,11 +527,18 @@ ensure_default_master_data()
 
 from identity_cards import assign_employee_id, ensure_employee_ids
 with SessionLocal() as employee_id_db:
-    for helper_user in employee_id_db.query(models.User).filter(models.User.role == "Helper").all():
-        helper_user.role = "AC Helper"
-        helper_card = employee_id_db.get(models.IdentityCard, helper_user.id)
-        if helper_card:
-            helper_card.designation = "AC Helper"
+    # Rename legacy roles once; retain account IDs and saved attendance.
+    legacy_roles = {'ACTechnicianA': 'AC Technician A', 'ACTechnicianB': 'AC Technician B',
+                    'Helper': 'AC Helper A', 'AC Helper': 'AC Helper A', 'ServiceManager': 'Service Manager A'}
+    for user in employee_id_db.query(models.User).filter(models.User.role.in_(legacy_roles)).all():
+        previous_role = user.role
+        new_role = legacy_roles[previous_role]
+        if previous_role == 'ServiceManager' and (user.email or '').strip().lower() == 'cdsood@gmail.com':
+            new_role = 'Service Manager B'
+        user.role = new_role
+        card = employee_id_db.get(models.IdentityCard, user.id)
+        if card and card.designation in {previous_role, re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', previous_role)}:
+            card.designation = new_role
     employee_id_db.commit()
     ensure_employee_ids(employee_id_db)
 
@@ -585,7 +592,7 @@ async def handle_unexpected_error(request: Request, exc: Exception):
 # "static" folder sitting next to this file.
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-VALID_ROLES = ["Accounts","AccountsManager","ACTechnicianA","ACTechnicianB","Admin","Assistant","AsstSalesManager","BrandManager","BrandPartner","Cashier","CategoryManager","CEO","CustomerCare","Director","Employee","AC Helper","HR","ITEngineer","Loader","LogisticManager","MISExecutive","Owner","SalesExecutive","ServiceCoordinator","ServiceHead","ServiceManager","SupportingStaff","Supervisor","Other"]
+VALID_ROLES = ["Accounts","AccountsManager","AC Technician A","AC Technician B","Admin","Assistant","AsstSalesManager","BrandManager","BrandPartner","Cashier","CategoryManager","CEO","CustomerCare","Director","Employee","AC Helper A", "AC Helper B","HR","ITEngineer","Loader","LogisticManager","MISExecutive","Owner","SalesExecutive","ServiceCoordinator","ServiceHead","Service Manager A", "Service Manager B","SupportingStaff","Supervisor","Other"]
 
 
 def normalize_category_code(raw_value: Optional[str]) -> Optional[str]:
@@ -2352,6 +2359,7 @@ def serialize_user_with_brands(user: models.User, db: Session = None) -> dict:
 def get_my_profile(current_user: models.User = Depends(auth.get_current_user)):
     return {
         "ac_project_dashboard": is_ac_project_manager(current_user),
+        "service_dashboard_category": service_dashboard_category(current_user),
         "id": current_user.id,
         "username": current_user.username,
         "full_name": current_user.full_name,
@@ -2406,7 +2414,7 @@ def update_my_attendance_status(
     return my_attendance_status(db, current_user)
 
 
-ATTENDANCE_ANYWHERE_ROLES = {"ServiceManager", "ACTechnicianA", "ACTechnicianB", "AC Helper", "HR"}
+ATTENDANCE_ANYWHERE_ROLES = {"Service Manager A", "Service Manager B", "AC Technician A", "AC Technician B", "AC Helper A", "AC Helper B", "HR"}
 
 
 def attendance_reference_store(db, user, distance_to_store):
@@ -2660,7 +2668,7 @@ def attendance_admin_summary(
     from_date: Optional[date] = Query(None),
     to_date: Optional[date] = Query(None),
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.require_roles("Admin", "CategoryManager", "ServiceManager")),
+    current_user: models.User = Depends(auth.require_roles("Admin", "CategoryManager", "Service Manager A", "Service Manager B")),
     weekoff_day: Optional[str] = None,
     emp_category: Optional[str] = None,
 ):

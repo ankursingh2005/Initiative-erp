@@ -275,8 +275,8 @@
         <option value="">Select role</option>
         <option value="Accounts">Accounts</option>
         <option value="AccountsManager">Accounts Manager</option>
-        <option value="ACTechnicianA">AC Technician - A</option>
-        <option value="ACTechnicianB">AC Technician - B</option>
+        <option value="AC Technician A">AC Technician A</option>
+        <option value="AC Technician B">AC Technician B</option>
         <option value="Admin">Admin</option>
         <option value="Assistant">Assistant</option>
         <option value="AsstSalesManager">Asst. Sales Manager</option>
@@ -289,7 +289,8 @@
         <option value="ITEngineer">IT Engineer</option>
         <option value="CEO">CEO</option>
         <option value="Director">Director</option>
-        <option value="AC Helper">AC Helper</option>
+        <option value="AC Helper A">AC Helper A</option>
+        <option value="AC Helper B">AC Helper B</option>
         <option value="Loader">Loader</option>
         <option value="LogisticManager">Logistic Manager</option>
         <option value="MISExecutive">MIS Executive</option>
@@ -297,7 +298,8 @@
         <option value="SalesExecutive">Sales Executive</option>
         <option value="ServiceHead">Service Head</option>
         <option value="ServiceCoordinator">Service Coordinator</option>
-        <option value="ServiceManager">Service Manager</option>
+        <option value="Service Manager A">Service Manager A</option>
+        <option value="Service Manager B">Service Manager B</option>
         <option value="SupportingStaff">Supporting Staff</option>
         <option value="Supervisor">Supervisor</option>
         <option value="Other">Other</option>
@@ -441,7 +443,7 @@
 
     function onRoleChange() {
       const role = document.getElementById("role").value;
-      const canMarkFromAnywhere = ["ServiceManager", "ACTechnicianA", "ACTechnicianB", "AC Helper"].includes(role);
+      const canMarkFromAnywhere = ["Service Manager A", "Service Manager B", "AC Technician A", "AC Technician B", "AC Helper A", "AC Helper B"].includes(role);
       const outletSelect = document.getElementById("outletSelect");
       document.getElementById("outletField").style.display = canMarkFromAnywhere ? "none" : "block";
       outletSelect.required = !canMarkFromAnywhere;
@@ -518,7 +520,7 @@
       if (!password) missingFields.push(fieldLabel("Password"));
       if (!inviteCode) missingFields.push(fieldLabel("Invite Code"));
       if (!role) missingFields.push(fieldLabel("Role"));
-      if (!["ServiceManager", "ACTechnicianA", "ACTechnicianB", "AC Helper"].includes(role) && !document.getElementById("outletSelect").value) missingFields.push(fieldLabel("Assigned Outlet"));
+      if (!["Service Manager A", "Service Manager B", "AC Technician A", "AC Technician B", "AC Helper A", "AC Helper B"].includes(role) && !document.getElementById("outletSelect").value) missingFields.push(fieldLabel("Assigned Outlet"));
 
       if (role === "CategoryManager") {
         if (!selectedCategoryCodes().length) missingFields.push(fieldLabel("Category Manager Category"));
@@ -543,7 +545,7 @@
         password,
         role,
         invite_code: inviteCode,
-        store_id: ["ServiceManager", "ACTechnicianA", "ACTechnicianB", "AC Helper"].includes(role) ? null : Number(document.getElementById("outletSelect").value),
+        store_id: ["Service Manager A", "Service Manager B", "AC Technician A", "AC Technician B", "AC Helper A", "AC Helper B"].includes(role) ? null : Number(document.getElementById("outletSelect").value),
         category_code: null,
         category_codes: [],
         brand_ids: [],

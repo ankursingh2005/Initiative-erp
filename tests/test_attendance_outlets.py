@@ -101,7 +101,7 @@ class AttendanceOutletTests(unittest.TestCase):
         self.assertEqual(self.employee.store_id, self.stores[0].id)
 
     def test_admin_and_hr_can_change_roles(self):
-        for actor_role, assigned_role in [('Admin', 'ACTechnicianA'), ('HR', 'ACTechnicianB')]:
+        for actor_role, assigned_role in [('Admin', 'AC Technician A'), ('HR', 'AC Technician B')]:
             self.actor.role = actor_role
             response = self.client.patch(f'/users/{self.employee.id}/role', json={'role': assigned_role})
             self.assertEqual(response.status_code, 200, response.text)

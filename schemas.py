@@ -338,6 +338,7 @@ class MyAttendanceStatusUpdate(BaseModel):
 
 class MyProfileOut(BaseModel):
     ac_project_dashboard: bool = False
+    service_dashboard_category: Optional[str] = None
     """Returned by GET /api/me. Used by the Purchase Orders page to scope a
     Category Manager's Division and Brand dropdowns to only what's assigned
     to their account."""

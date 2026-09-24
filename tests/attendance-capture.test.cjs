@@ -42,8 +42,8 @@ async function openCamera(t,action='checkout'){
   const opening=t.context.beginAction(action);await Promise.resolve();t.resolve();await opening;
 }
 
-test('both AC technician roles can capture punches outside the outlet',async()=>{
-  for(const role of ['ACTechnicianA','ACTechnicianB','AC Helper']){
+test('all six AC roles can capture punches outside the outlet',async()=>{
+  for(const role of ['Service Manager A','Service Manager B','AC Technician A','AC Technician B','AC Helper A','AC Helper B']){
     for(const action of ['checkin','checkout']){
       const t=setup();t.context.profile.role=role;t.context.meters=()=>50000;
       await openCamera(t,action);

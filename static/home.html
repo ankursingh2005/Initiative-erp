@@ -803,7 +803,7 @@
         const brands = (user.brand_names || []).join(', ');
         return [outletLabel, brands].filter(Boolean).join(' / ') || '-';
       }
-      if (user.role === 'ServiceManager') return 'Any Outlet';
+      if (['Service Manager A','Service Manager B','AC Technician A','AC Technician B','AC Helper A','AC Helper B'].includes(user.role)) return 'Any Outlet';
       return outletLabel || '-';
     }
 

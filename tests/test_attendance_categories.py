@@ -28,40 +28,37 @@ class AttendanceCategoryTests(unittest.TestCase):
             self.assertEqual(row['brand_names'], ['LG', 'Samsung'])
             self.assertEqual(row['promoter_brand'], 'LG, Samsung')
 
-    def test_named_accounts_override_role_group_without_changing_roles(self):
+    def test_all_six_roles_follow_category_regardless_of_email(self):
+        from attendance_access import can_view_attendance
+        from types import SimpleNamespace
         today = main.india_today()
-        accounts = [
-            ('Zubair', 'akhtarnoor3112@gmail.com', 'ServiceManager'),
-            ('Chandra dutt sood', 'cdsood@gmail.com', 'ServiceManager'),
-            ('Jagriti', 'jagritiawasthi123@gmail.com', 'Other'),
-            ('Other manager', 'other-manager@example.test', 'ServiceManager'),
-        ]
-        for name, email, role in accounts:
-            self.db.add(models.User(username=name, email=email, role=role,
-                status='Active', password_hash='unused'))
+        expected = {}
+        for suffix, category in [('A', 'ac_projects'), ('B', 'ac_retails')]:
+            expected[category] = set()
+            for prefix in ['Service Manager', 'AC Technician', 'AC Helper']:
+                role = prefix + ' ' + suffix
+                user = models.User(username=role, email=role.replace(' ', '')+'@example.test', role=role, status='Active', password_hash='unused')
+                self.db.add(user)
+                self.db.flush()
+                expected[category].add(user.id)
         self.db.commit()
-        for category, expected in [('ac_projects', {'Zubair'}),
-                                   ('ac_retails', {'Chandra dutt sood', 'Jagriti'})]:
-            result = main.attendance_admin_summary(store_id=None, from_date=today, to_date=today,
-                db=self.db, current_user=self.actor, emp_category=category)
-            self.assertEqual({row['username'] for row in result['rows']}, expected)
-            self.assertEqual(result['total'], len(expected))
-            self.assertEqual({row[1] for row in export_rows(self.db, today, today, emp_category=category)}, expected)
-        ids = {row[1] for row in export_rows(self.db, today, today, emp_category='ids_emp')}
-        self.assertFalse(ids & {'Zubair', 'Chandra dutt sood', 'Jagriti'})
-        self.assertIn('Other manager', ids)
-        for name, email, role in accounts:
-            self.assertEqual(self.db.query(models.User).filter_by(email=email).one().role, role)
+        for suffix, category in [('A', 'ac_projects'), ('B', 'ac_retails')]:
+            actor = SimpleNamespace(id=-1, role='Service Manager '+suffix, email='unlisted@example.test', store_id=None)
+            data = main.attendance_admin_summary(store_id=None, from_date=today, to_date=today, db=self.db, current_user=actor)
+            self.assertEqual({row['user_id'] for row in data['rows']}, expected[category])
+            self.assertEqual({row[0] for row in export_rows(self.db, today, today, emp_category=category)}, expected[category])
+            for user in self.db.query(models.User).all():
+                self.assertEqual(can_view_attendance(actor, user), user.id in expected[category])
 
     def test_each_category_filters_counts_rows_and_exports(self):
         today = main.india_today()
         self.actor.status = 'Inactive'
-        for index, role in enumerate(['Employee', 'ACTechnicianA', 'ACTechnicianB']):
+        for index, role in enumerate(['Employee', 'AC Technician A', 'AC Technician B']):
             self.db.add(models.User(username=role, email=f'{index}@example.test', role=role,
                 status='Active', password_hash='unused', store_id=self.stores[0].id))
         self.db.commit()
         for category, username in [('ids_emp', 'Employee'), ('brand_pro', 'employee'),
-                                   ('ac_retails', 'ACTechnicianB'), ('ac_projects', 'ACTechnicianA')]:
+                                   ('ac_retails', 'AC Technician B'), ('ac_projects', 'AC Technician A')]:
             with self.subTest(category=category):
                 data = main.attendance_admin_summary(store_id=None, from_date=today, to_date=today,
                     db=self.db, current_user=self.actor, emp_category=category)
@@ -80,10 +77,10 @@ class AttendanceCategoryTests(unittest.TestCase):
         from attendance_access import can_view_attendance
         from attendance_categories import filter_manager_employees, manager_employee_visible
         today = main.india_today()
-        helper = models.User(username='Project Helper', email='helper@example.test', role='AC Helper', status='Active', password_hash='unused', store_id=self.stores[0].id)
+        helper = models.User(username='Project Helper', email='helper@example.test', role='AC Helper A', status='Active', password_hash='unused', store_id=self.stores[0].id)
         self.db.add(helper)
         self.db.commit()
-        noor = SimpleNamespace(id=-1, role='ServiceManager', email='akhtarnoor3112@gmail.com', store_id=None)
+        noor = SimpleNamespace(id=-1, role='Service Manager A', email='akhtarnoor3112@gmail.com', store_id=None)
         for actor in (self.actor, noor):
             data = main.attendance_admin_summary(store_id=None, from_date=today, to_date=today, db=self.db, current_user=actor, emp_category='ac_projects')
             self.assertIn(helper.id, {row['user_id'] for row in data['rows']})

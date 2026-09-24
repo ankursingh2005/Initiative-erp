@@ -19,7 +19,7 @@ class AnywhereAttendanceTests(unittest.TestCase):
             latitude=28, longitude=82, accuracy_m=10, distance_m=0, selfie='test-selfie')
 
     def test_both_technicians_can_punch_in_and_out_without_assignment(self):
-        for role in ('ACTechnicianA', 'ACTechnicianB', 'AC Helper'):
+        for role in ('Service Manager A', 'Service Manager B', 'AC Technician A', 'AC Technician B', 'AC Helper A', 'AC Helper B'):
             with self.subTest(role=role):
                 self.db.query(models.AttendanceRecord).delete()
                 self.employee.role, self.employee.store_id = role, None
@@ -36,7 +36,7 @@ class AnywhereAttendanceTests(unittest.TestCase):
         self.assertEqual(error.exception.status_code, 403)
 
     def test_history_skips_selfie_loading(self):
-        self.employee.role = 'ACTechnicianA'
+        self.employee.role = 'AC Technician A'
         record = main.save_attendance(self.payload(), self.db, self.employee)
         self.db.expire_all()
         rows = main.list_attendance(self.db, self.employee, scope='self', include_selfies=False)
@@ -67,7 +67,7 @@ class AnywhereAttendanceTests(unittest.TestCase):
         self.assertEqual(main.nearest_attendance_outlet(self.stores, None, None), (None, None))
 
     def test_anywhere_summary_displays_nearest_outlet_without_assignment(self):
-        self.employee.role, self.employee.store_id = 'AC Helper', None
+        self.employee.role, self.employee.store_id = 'AC Helper A', None
         record = main.save_attendance(self.payload(), self.db, self.employee)
         response = main.attendance_admin_summary(store_id=None, from_date=record.attendance_date,
             to_date=record.attendance_date, db=self.db, current_user=self.actor)
@@ -78,7 +78,7 @@ class AnywhereAttendanceTests(unittest.TestCase):
         self.assertIsNotNone(row['current_distance_from_store_m'])
 
     def test_inaccurate_live_updates_are_skipped_without_overwriting_location(self):
-        self.employee.role = 'AC Helper'
+        self.employee.role = 'AC Helper A'
         main.save_attendance(self.payload(), self.db, self.employee)
         for accuracy in (None, 0, 5000):
             point = schemas.AttendanceLocationCreate(captured_at=datetime.now(timezone.utc),

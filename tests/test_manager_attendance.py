@@ -94,8 +94,8 @@ class ManagerAttendanceTests(unittest.TestCase):
 
     def test_manager_only_sees_ids_and_brand_categories(self):
         brand = models.User(username='Promoter', email='promoter@example.test', role='BrandPartner', store_id=self.stores[0].id, status='Active', password_hash='unused')
-        ac = models.User(username='AC', email='ac@example.test', role='ACTechnicianA', store_id=self.stores[0].id, status='Active', password_hash='unused')
-        assigned = models.User(username='Assigned AC', email='akhtarnoor3112@gmail.com', role='Employee', store_id=self.stores[0].id, status='Active', password_hash='unused')
+        ac = models.User(username='AC', email='ac@example.test', role='AC Technician A', store_id=self.stores[0].id, status='Active', password_hash='unused')
+        assigned = models.User(username='Assigned AC', email='akhtarnoor3112@gmail.com', role='Service Manager A', store_id=self.stores[0].id, status='Active', password_hash='unused')
         self.db.add_all([brand, ac, assigned])
         self.db.commit()
         response = self.client.get('/summary')
@@ -129,10 +129,10 @@ class ManagerAttendanceTests(unittest.TestCase):
 
 
     def test_noor_service_manager_is_limited_to_ac_projects(self):
-        noor = models.User(username='Noor Akhtar', email='akhtarnoor3112@gmail.com', role='ServiceManager', status='Active', password_hash='unused')
-        project = models.User(username='Project tech', email='project@example.test', role='ACTechnicianA', status='Active', password_hash='unused', store_id=self.stores[1].id)
-        retail = models.User(username='Retail tech', email='retail@example.test', role='ACTechnicianB', status='Active', password_hash='unused')
-        other = models.User(username='Other service manager', email='other@example.test', role='ServiceManager', status='Active', password_hash='unused')
+        noor = models.User(username='Noor Akhtar', email='akhtarnoor3112@gmail.com', role='Service Manager A', status='Active', password_hash='unused')
+        project = models.User(username='Project tech', email='project@example.test', role='AC Technician A', status='Active', password_hash='unused', store_id=self.stores[1].id)
+        retail = models.User(username='Retail tech', email='retail@example.test', role='AC Technician B', status='Active', password_hash='unused')
+        other = models.User(username='Other service manager', email='other@example.test', role='Service Manager B', status='Active', password_hash='unused')
         self.db.add_all([noor, project, retail, other])
         self.db.flush()
         record = models.AttendanceRecord(user_id=project.id, store_id=self.stores[1].id, attendance_date=date(2026, 9, 23), checkin_at=datetime(2026, 9, 23, 9), checkin_selfie='project-photo')
@@ -159,9 +159,9 @@ class ManagerAttendanceTests(unittest.TestCase):
             self.assertTrue(rows)
             self.assertTrue(all(row[0] in {noor.id, project.id} for row in rows))
         self.actor = other
-        self.assertEqual(self.client.get('/summary').status_code, 403)
+        self.assertEqual(self.client.get('/summary').status_code, 200)
         self.assertEqual(self.client.get('/history/'+str(project.id)).status_code, 403)
-        self.assertEqual(self.client.get('/api/attendance/admin-export?date=2026-09-23').status_code, 403)
+        self.assertEqual(self.client.get('/api/attendance/admin-export?date=2026-09-23').status_code, 200)
         self.actor = noor
         noor.role = 'Employee'
         self.db.commit()
@@ -170,8 +170,8 @@ class ManagerAttendanceTests(unittest.TestCase):
 
     def test_profile_exposes_service_dashboard_permission_through_response_schema(self):
         for role, email, allowed in (
-                ('ServiceManager', 'akhtarnoor3112@gmail.com', True),
-                ('ServiceManager', 'other@example.test', False),
+                ('Service Manager A', 'akhtarnoor3112@gmail.com', True),
+                ('Service Manager A', 'other@example.test', True),
                 ('Employee', 'akhtarnoor3112@gmail.com', False)):
             with self.subTest(role=role, email=email):
                 self.actor.role = role

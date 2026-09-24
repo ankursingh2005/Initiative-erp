@@ -7,7 +7,7 @@ test('BrandPartner heading shows assigned companies and a clear unassigned fallb
   assert.equal(context.attendanceEmployeeTitle({username:'ravi pal',role:'BrandPartner',brand_names:['Samsung']}),'ravi pal (BrandPartner – Samsung)');
   assert.equal(context.attendanceEmployeeTitle({username:'ravi pal',role:'BrandPartner',brand_names:['Samsung','LG']}),'ravi pal (BrandPartner – Samsung, LG)');
   assert.equal(context.attendanceEmployeeTitle({username:'ravi pal',role:'BrandPartner'}),'ravi pal (BrandPartner)');
-  assert.equal(context.attendanceEmployeeTitle({username:'Priyanshu',role:'ACTechnicianA'}),'Priyanshu (AC Technician A)');
+  assert.equal(context.attendanceEmployeeTitle({username:'Priyanshu',role:'AC Technician A'}),'Priyanshu (AC Technician A)');
 });
 test('employee history loads by permanent ID after a rename, with older dates available',async()=>{
   const select={value:'',disabled:true},detail={after(){}},heading={before(){}},close={};

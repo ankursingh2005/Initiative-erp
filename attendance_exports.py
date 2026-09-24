@@ -108,7 +108,7 @@ def export_rows(db, start=None, end=None, user_id=None, store_id=None, weekoff_d
 @router.get('/admin-export')
 def daily_export(date: date, format: str = 'xlsx', store_id: int | None = None,
                  weekoff_day: str | None = None, status: str | None = None, emp_category: str | None = None,
-                 db: Session = Depends(get_db), actor=Depends(auth.require_roles('Admin', 'CategoryManager', 'ServiceManager'))):
+                 db: Session = Depends(get_db), actor=Depends(auth.require_roles('Admin', 'CategoryManager', 'Service Manager A', 'Service Manager B'))):
     store_id = dashboard_outlet(actor, store_id)
     emp_category = dashboard_category(actor, emp_category)
     rows = export_rows(db, date, date, assigned_store_id=actor.store_id if actor.role == "CategoryManager" else None, store_id=store_id, weekoff_day=weekoff_day, status=status, emp_category=emp_category)
@@ -118,7 +118,7 @@ def daily_export(date: date, format: str = 'xlsx', store_id: int | None = None,
 @router.get('/monthly-export')
 def monthly_export(month: str, store_id: int | None = None, weekoff_day: str | None = None,
                    status: str | None = None, emp_category: str | None = None,
-                   db: Session = Depends(get_db), actor=Depends(auth.require_roles('Admin', 'CategoryManager', 'ServiceManager'))):
+                   db: Session = Depends(get_db), actor=Depends(auth.require_roles('Admin', 'CategoryManager', 'Service Manager A', 'Service Manager B'))):
     store_id = dashboard_outlet(actor, store_id)
     emp_category = dashboard_category(actor, emp_category)
     try:
