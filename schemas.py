@@ -337,6 +337,7 @@ class MyAttendanceStatusUpdate(BaseModel):
 
 
 class MyProfileOut(BaseModel):
+    ac_project_dashboard: bool = False
     """Returned by GET /api/me. Used by the Purchase Orders page to scope a
     Category Manager's Division and Brand dropdowns to only what's assigned
     to their account."""

@@ -43,6 +43,7 @@ class ManagerAttendanceTests(unittest.TestCase):
         app = FastAPI()
         app.include_router(router)
         app.get('/summary')(main.attendance_admin_summary)
+        app.get('/profile', response_model=main.schemas.MyProfileOut)(main.get_my_profile)
         app.get('/history/{user_id}')(main.attendance_user_history)
         app.get('/selfies/{record_id}')(main.get_attendance_selfies)
         app.dependency_overrides[main.get_db] = lambda: self.db
@@ -165,3 +166,17 @@ class ManagerAttendanceTests(unittest.TestCase):
         noor.role = 'Employee'
         self.db.commit()
         self.assertEqual(self.client.get('/summary').status_code, 403)
+
+
+    def test_profile_exposes_service_dashboard_permission_through_response_schema(self):
+        for role, email, allowed in (
+                ('ServiceManager', 'akhtarnoor3112@gmail.com', True),
+                ('ServiceManager', 'other@example.test', False),
+                ('Employee', 'akhtarnoor3112@gmail.com', False)):
+            with self.subTest(role=role, email=email):
+                self.actor.role = role
+                self.actor.email = email
+                self.db.commit()
+                response = self.client.get('/profile')
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertIs(response.json()['ac_project_dashboard'], allowed)

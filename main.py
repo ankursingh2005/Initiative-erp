@@ -1,4 +1,4 @@
-from attendance_access import dashboard_outlet, dashboard_category, can_view_attendance
+from attendance_access import dashboard_outlet, dashboard_category, can_view_attendance, is_ac_project_manager
 from attendance_history import change_weekoff, weekoff_on, weekoff_history
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Query, Request
 from fastapi.staticfiles import StaticFiles
@@ -2351,6 +2351,7 @@ def serialize_user_with_brands(user: models.User, db: Session = None) -> dict:
 @app.get("/api/me", response_model=schemas.MyProfileOut)
 def get_my_profile(current_user: models.User = Depends(auth.get_current_user)):
     return {
+        "ac_project_dashboard": is_ac_project_manager(current_user),
         "id": current_user.id,
         "username": current_user.username,
         "full_name": current_user.full_name,
@@ -3044,9 +3045,9 @@ def update_user_assignments(
 def delete_user(
     user_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.require_roles("Admin")),
+    current_user: models.User = Depends(auth.require_user_management_admin),
 ):
-    """Admin-only: permanently delete a user account, regardless of what
+    """Admin and HR: permanently delete a user account, regardless of what
     they've submitted/uploaded in the past. Purchase orders require an
     owning user (that column is NOT NULL), so any the deleted user
     submitted or approved are reassigned to the admin doing the deletion,
@@ -3063,43 +3064,67 @@ def delete_user(
 
     deleted_username = target_user.username
 
-    # Purchase orders must always have a submitter, so reassign any this
-    # user submitted to the admin performing the deletion, and record who
-    # originally submitted it in processing_notes for the audit trail.
-    submitted_orders = (
-        db.query(models.PurchaseOrder)
-        .filter(models.PurchaseOrder.submitted_by_user_id == target_user.id)
-        .all()
-    )
-    for po in submitted_orders:
-        note = f"[Originally submitted by {deleted_username} - account deleted]"
-        po.processing_notes = f"{po.processing_notes}\n{note}" if po.processing_notes else note
-        po.submitted_by_user_id = current_user.id
-
-    db.query(models.PurchaseOrder).filter(models.PurchaseOrder.approved_by_user_id == target_user.id).update(
-        {"approved_by_user_id": None}
-    )
-
-    # Detach other, optional historical references so deleting the account
-    # doesn't break foreign-key constraints on records that don't strictly
-    # need an owning user (the record itself, and its data, stays intact).
-    db.query(models.SchemeAttachment).filter(models.SchemeAttachment.uploaded_by_user_id == target_user.id).update(
-        {"uploaded_by_user_id": None}
-    )
-    db.query(models.IntervalSaleUpload).filter(models.IntervalSaleUpload.uploaded_by == target_user.id).update(
-        {"uploaded_by": None}
-    )
-    db.query(models.AnalyticsUpload).filter(models.AnalyticsUpload.uploaded_by == target_user.id).update(
-        {"uploaded_by": None}
-    )
-    db.query(models.PriceListItem).filter(models.PriceListItem.updated_by_user_id == target_user.id).update(
-        {"updated_by_user_id": None}
-    )
-    db.query(models.AgeingStockUpload).filter(models.AgeingStockUpload.uploaded_by == target_user.id).update(
-        {"uploaded_by": None}
-    )
-
     try:
+        # Purchase orders must always have a submitter, so reassign any this
+        # user submitted to the admin performing the deletion, and record who
+        # originally submitted it in processing_notes for the audit trail.
+        submitted_orders = (
+            db.query(models.PurchaseOrder)
+            .filter(models.PurchaseOrder.submitted_by_user_id == target_user.id)
+            .all()
+        )
+        for po in submitted_orders:
+            note = f"[Originally submitted by {deleted_username} - account deleted]"
+            po.processing_notes = f"{po.processing_notes}\n{note}" if po.processing_notes else note
+            po.submitted_by_user_id = current_user.id
+
+        db.query(models.PurchaseOrder).filter(models.PurchaseOrder.approved_by_user_id == target_user.id).update(
+            {"approved_by_user_id": None}
+        )
+
+        # Detach other, optional historical references so deleting the account
+        # doesn't break foreign-key constraints on records that don't strictly
+        # need an owning user (the record itself, and its data, stays intact).
+        db.query(models.SchemeAttachment).filter(models.SchemeAttachment.uploaded_by_user_id == target_user.id).update(
+            {"uploaded_by_user_id": None}
+        )
+        db.query(models.IntervalSaleUpload).filter(models.IntervalSaleUpload.uploaded_by == target_user.id).update(
+            {"uploaded_by": None}
+        )
+        db.query(models.AnalyticsUpload).filter(models.AnalyticsUpload.uploaded_by == target_user.id).update(
+            {"uploaded_by": None}
+        )
+        db.query(models.PriceListItem).filter(models.PriceListItem.updated_by_user_id == target_user.id).update(
+            {"updated_by_user_id": None}
+        )
+        db.query(models.AgeingStockUpload).filter(models.AgeingStockUpload.uploaded_by == target_user.id).update(
+            {"uploaded_by": None}
+        )
+
+        # Personal account records are removed explicitly for existing databases
+        # whose foreign keys do not have ON DELETE CASCADE.
+        for model in (models.AttendanceLocationPoint, models.AttendanceRecord,
+                      models.AttendanceLeave, models.IdentityCard):
+            db.query(model).filter(model.user_id == target_user.id).delete(synchronize_session=False)
+        # Keep leave entries belonging to other employees.
+        db.query(models.AttendanceLeave).filter(models.AttendanceLeave.created_by == target_user.id).update(
+            {"created_by": current_user.id}, synchronize_session=False)
+        db.query(models.PurchaseOrder).filter(models.PurchaseOrder.verified_by_user_id == target_user.id).update(
+            {"verified_by_user_id": None}, synchronize_session=False)
+        for receipt in db.query(models.PurchaseOrderReceipt).filter(
+                models.PurchaseOrderReceipt.received_by_user_id == target_user.id).all():
+            note = f"[Originally received by {deleted_username} - account deleted]"
+            receipt.notes = f"{receipt.notes}\n{note}" if receipt.notes else note
+            receipt.received_by_user_id = current_user.id
+        db.query(models.PurchaseOrderReceipt).filter(models.PurchaseOrderReceipt.voided_by_user_id == target_user.id).update(
+            {"voided_by_user_id": None}, synchronize_session=False)
+        # EMS is optional; clean its employee records only when its tables exist.
+        import ems_models
+        existing_tables = set(inspect(db.connection()).get_table_names())
+        for model in (ems_models.EMSLeaveRequest, ems_models.EMSEarning, ems_models.EMSPayroll):
+            if model.__tablename__ in existing_tables:
+                db.query(model).filter(model.user_id == target_user.id).delete(synchronize_session=False)
+
         db.delete(target_user)
         db.commit()
     except IntegrityError:

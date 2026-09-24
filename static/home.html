@@ -640,7 +640,7 @@
   <div id="deleteUserModal" style="position:fixed; inset:0; z-index:60; display:none; align-items:center; justify-content:center; background:rgba(16,24,40,.55); backdrop-filter:blur(3px);" onclick="if (event.target === this) closeDeleteUserModal()">
     <div class="modal-card" style="max-width:380px;">
       <h3>Delete account</h3>
-      <p>This permanently deletes <strong id="deleteUserUsername"></strong>'s account. This can't be undone. Type <strong>DELETE</strong> below to confirm.</p>
+      <p>This permanently deletes <strong id="deleteUserUsername"></strong>'s account, attendance, identity card, and personal EMS records. Purchase orders and receipts are retained. This can't be undone. Type <strong>DELETE</strong> below to confirm.</p>
       <div class="field">
         <input id="deleteUserConfirmInput" type="text" placeholder="Type DELETE to confirm" autocomplete="off" />
       </div>
@@ -976,7 +976,7 @@
           <td><div class="um-actions">
             ${['Admin','HR'].includes(role) && !(role === 'HR' && u.role === 'Admin') ? `<button type="button" class="um-reset-btn" aria-label="Edit details for ${escapeOutletText(u.username)}" onclick="openEditUser(${u.id})">Edit</button>` : ''}
             <button type="button" class="um-reset-btn" onclick="openResetPasswordModal(${u.id})">Reset Password</button>
-            <button type="button" class="um-delete-btn" onclick="openDeleteUserModal(${u.id})" ${(u.id === userManagementActorId || (role === 'HR' && u.role === 'Admin')) ? 'disabled' : ''}>Delete</button>
+            <button type="button" class="um-delete-btn" onclick="openDeleteUserModal(${u.id})" ${u.id === userManagementActorId ? 'disabled' : ''}>Delete</button>
           </div></td>
         </tr>
       `).join('') || `<tr><td colspan="8" class="empty">${userManagementSearchQuery ? 'No users match this EMP ID, username or email' : `No ${userManagementRoleFilter === 'ALL' ? '' : userManagementRoleFilter + ' '}accounts found`}</td></tr>`;
