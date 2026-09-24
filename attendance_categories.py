@@ -3,7 +3,7 @@ from fastapi import HTTPException
 import models
 
 PROJECT_ROLES = ('Service Manager A', 'AC Technician A', 'AC Helper A')
-RETAIL_ROLES = ('Service Manager B', 'AC Technician B', 'AC Helper B')
+RETAIL_ROLES = ('Service Manager B', 'AC Technician B', 'AC Helper B', 'ServiceCoordinator')
 AC_ROLES = PROJECT_ROLES + RETAIL_ROLES
 
 
