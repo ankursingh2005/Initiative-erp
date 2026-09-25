@@ -232,6 +232,8 @@ def ensure_default_branches():
             {"name": "Ashiyana", "code": "BR003", "city": "Lucknow", "status": "Active", "latitude": 26.79601399706687, "longitude": 80.9208545762198, "geofence_radius_m": 100},
             {"name": "Hazratganj", "code": "BR004", "city": "Lucknow", "status": "Active", "latitude": 26.84924030483742, "longitude": 80.94773860240677, "geofence_radius_m": 100},
             {"name": "Vikas Nagar", "code": "BR005", "city": "Lucknow", "status": "Active", "latitude": 26.90188397262733, "longitude": 80.95513690261241, "geofence_radius_m": 100},
+            {"name": "Warehouse", "code": "WH", "city": "Lucknow", "status": "Active", "latitude": 26.779149508725354, "longitude": 80.88470873166187, "geofence_radius_m": 100},
+            {"name": "Head Office", "code": "HO", "city": "Lucknow", "status": "Active", "latitude": 26.84904218332385, "longitude": 80.94789353821966, "geofence_radius_m": 100},
         ]
         if db.query(models.Store).count() == 0:
             for branch in default_branches:
@@ -239,10 +241,19 @@ def ensure_default_branches():
         else:
             for branch in default_branches:
                 store = db.query(models.Store).filter(models.Store.code == branch["code"]).first()
-                if store and (not store.latitude or not store.longitude):
+                if not store:
+                    store = db.query(models.Store).filter(func.lower(models.Store.name) == branch["name"].lower()).first()
+                if not store:
+                    db.add(models.Store(**branch))
+                    continue
+                store.name = store.name or branch["name"]
+                store.code = store.code or branch["code"]
+                store.city = store.city or branch["city"]
+                store.status = "Active"
+                if not store.latitude or not store.longitude:
                     store.latitude = branch["latitude"]
                     store.longitude = branch["longitude"]
-                    store.geofence_radius_m = store.geofence_radius_m or 100
+                store.geofence_radius_m = store.geofence_radius_m or branch["geofence_radius_m"]
         db.commit()
 
 
