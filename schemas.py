@@ -430,6 +430,7 @@ class AttendanceOutletUpdate(BaseModel):
 class UserRoleUpdate(BaseModel):
     role: str = Field(min_length=1, max_length=50)
     brand_ids: Optional[List[int]] = None
+    brand_name_other: Optional[str] = Field(default=None, max_length=100)
 
 
 class UserDetailsUpdate(BaseModel):

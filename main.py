@@ -428,7 +428,7 @@ def ensure_default_master_data():
             "MH": [
                 "Apple", "Google", "iQOO", "Motorola", "Nothing", "OnePlus", "Oppo",
                 "Realme", "Readmi", "Samsung", "Vivo", "Philips", "Lenovo Tablet",
-                "Samsung Tablet", "Xiaomi Tablet",
+                "Samsung Tablet", "Xiaomi Tablet", "TVS", "HDB",
             ],
             "IT": [
                 "Apple iMac", "Apple iPad", "Apple MacBook", "Dell", "HP", "Lenovo",
@@ -1967,6 +1967,19 @@ def offline_page():
 # AUTH: SIGNUP / LOGIN / CURRENT USER
 # ============================================================
 
+def get_or_create_brand_by_name(db: Session, name: str) -> models.Brand:
+    clean_name = re.sub(r"\s+", " ", (name or "").strip())
+    if not clean_name:
+        raise HTTPException(status_code=400, detail="Enter a brand name")
+    existing = db.query(models.Brand).filter(func.lower(models.Brand.name) == clean_name.lower()).first()
+    if existing:
+        return existing
+    brand = models.Brand(name=clean_name, subcategory_id=None, is_seeded_default=False)
+    db.add(brand)
+    db.flush()
+    return brand
+
+
 @app.post("/auth/signup", response_model=schemas.UserOut)
 def signup(user: schemas.UserSignup, db: Session = Depends(get_db)):
     # Admin retains its separate invite code; all other roles use the universal code.
@@ -2009,7 +2022,10 @@ def signup(user: schemas.UserSignup, db: Session = Depends(get_db)):
         db.flush()
         assign_employee_id(db, db_user)
         if user.role in ("BrandManager", "BrandPartner", "CategoryManager"):
-            for brand_id in user.brand_ids:
+            brand_ids = list(user.brand_ids or [])
+            if user.brand_name_other:
+                brand_ids.append(get_or_create_brand_by_name(db, user.brand_name_other).id)
+            for brand_id in sorted(set(brand_ids)):
                 db.add(models.UserBrand(user_id=db_user.id, brand_id=brand_id))
         db.commit()
     except IntegrityError:
@@ -2355,6 +2371,11 @@ def serialize_user_with_brands(user: models.User, db: Session = None) -> dict:
     }
 
 
+def role_display_name(role: str) -> str:
+    label = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", role or "")
+    return re.sub(r"^ACTechnician", "AC Technician", label)
+
+
 @app.get("/api/me", response_model=schemas.MyProfileOut)
 def get_my_profile(current_user: models.User = Depends(auth.get_current_user)):
     return {
@@ -2534,7 +2555,7 @@ def attendance_user_history(
     return {"user_id": user.id, "username": user.username, "role": user.role,
             "employee_id": card.employee_id if card else None,
             "display_name": card.employee_name if card else user.full_name or user.username,
-            "designation": card.designation if card else re.sub(r"(?<=[a-z])(?=[A-Z])", " ", user.role),
+            "designation": role_display_name(user.role),
             "can_edit_profile": current_user.id == user.id or current_user.role in {"Admin", "HR", "Owner"},
             "email": user.email,
             "contact_number": card.mobile if card else None,
@@ -2695,7 +2716,6 @@ def attendance_admin_summary(
         models.IdentityCard.user_id.in_([user.id for user in users] or [-1])).all()
     profile_names = {row.user_id: row.employee_name for row in profile_rows}
     employee_ids = {row.user_id: row.employee_id for row in profile_rows}
-    profile_designations = {row.user_id: row.designation for row in profile_rows}
     brand_names_by_user = defaultdict(list)
     for user_id, brand_name in db.query(models.UserBrand.user_id, models.Brand.name).join(
         models.Brand, models.Brand.id == models.UserBrand.brand_id,
@@ -2810,7 +2830,7 @@ def attendance_admin_summary(
         location_summary = {"current_distance_from_store_m": distance,
                             "last_location_at": last_at, "location_tracking_status": tracking_status}
         employee_summary = {"role": user.role,
-                            "designation": profile_designations.get(user.id) or re.sub(r"(?<=[a-z])(?=[A-Z])", " ", user.role),
+                            "designation": role_display_name(user.role),
                             "employee_id": employee_ids.get(user.id),
                             "display_name": profile_names.get(user.id) or user.full_name or user.username,
                             "email": user.email,
@@ -2923,18 +2943,22 @@ def update_user_role(
         raise HTTPException(404, "User not found")
     if payload.role in {"BrandPartner", "BrandManager"}:
         brand_ids = sorted(set(payload.brand_ids or []))
-        if not brand_ids:
+        custom_brand_name = (payload.brand_name_other or "").strip()
+        if not brand_ids and not custom_brand_name:
             raise HTTPException(400, "Select at least one brand to complete this role change")
-        valid_ids = {brand_id for (brand_id,) in db.query(models.Brand.id).filter(models.Brand.id.in_(brand_ids)).all()}
-        if valid_ids != set(brand_ids):
-            raise HTTPException(400, "One or more selected brands no longer exist")
+        if brand_ids:
+            valid_ids = {brand_id for (brand_id,) in db.query(models.Brand.id).filter(models.Brand.id.in_(brand_ids)).all()}
+            if valid_ids != set(brand_ids):
+                raise HTTPException(400, "One or more selected brands no longer exist")
+        if custom_brand_name:
+            brand_ids.append(get_or_create_brand_by_name(db, custom_brand_name).id)
+            brand_ids = sorted(set(brand_ids))
         db.query(models.UserBrand).filter(models.UserBrand.user_id == user_id).delete(synchronize_session=False)
         for brand_id in brand_ids:
             db.add(models.UserBrand(user_id=user_id, brand_id=brand_id))
     user.role = payload.role
     card = assign_employee_id(db, user)
-    card.designation = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", payload.role)
-    card.designation = re.sub(r"^ACTechnician", "AC Technician", card.designation)
+    card.designation = role_display_name(payload.role)
     db.commit()
     db.refresh(user)
     return serialize_user_with_brands(user, db)

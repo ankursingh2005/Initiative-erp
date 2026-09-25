@@ -70,6 +70,20 @@ class AttendanceOutletTests(unittest.TestCase):
         self.assertEqual(response.json()['brand_ids'], [brand.id])
         self.assertEqual(response.json()['role'], 'BrandPartner')
 
+    def test_brand_role_can_create_other_brand(self):
+        response = self.client.patch(
+            f'/users/{self.employee.id}/role',
+            json={'role': 'BrandManager', 'brand_name_other': '  Custom Finance Brand  '},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        brand = self.db.query(models.Brand).filter_by(name='Custom Finance Brand').one()
+        self.assertEqual(response.json()['brand_ids'], [brand.id])
+        self.assertEqual(
+            self.db.query(models.UserBrand).filter_by(user_id=self.employee.id, brand_id=brand.id).count(),
+            1,
+        )
+        self.assertEqual(response.json()['role'], 'BrandManager')
+
     def tearDown(self):
         self.client.close()
         self.db.close()

@@ -55,3 +55,15 @@ class SignupRoleTests(unittest.TestCase):
                     main.signup(self.payload(role, code), self.db)
                 self.assertEqual(error.exception.status_code, status)
         self.assertEqual(self.db.query(models.User).count(), 0)
+
+    @patch.dict('os.environ', {'SIGNUP_CODE_UNIVERSAL': 'Initiative@Universal'})
+    @patch.object(main.auth, 'hash_password', return_value='test-hash')
+    def test_signup_other_brand_creates_and_assigns_brand(self, _hash):
+        payload = self.payload('BrandPartner')
+        payload.brand_name_other = '  New Test Brand  '
+        user = main.signup(payload, self.db)
+        brand = self.db.query(models.Brand).filter_by(name='New Test Brand').one()
+        self.assertEqual(
+            self.db.query(models.UserBrand).filter_by(user_id=user.id, brand_id=brand.id).count(),
+            1,
+        )
