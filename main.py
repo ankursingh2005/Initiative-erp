@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, RedirectResp
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session, defer
 from sqlalchemy import inspect, text, func, or_
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from typing import List, Optional
 from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, date, timedelta, timezone
@@ -53,7 +53,12 @@ import auth
 from database import engine, get_db, Base, SessionLocal
 
 # Creates all tables in the database if they don't already exist
-Base.metadata.create_all(bind=engine)
+DATABASE_READY = True
+try:
+    Base.metadata.create_all(bind=engine)
+except SQLAlchemyError:
+    DATABASE_READY = False
+    logger.exception("Database initialization failed. Check Render DATABASE_URL and database status.")
 
 
 def ensure_column(table_name: str, column_name: str, column_def: str):
@@ -211,7 +216,12 @@ def ensure_database_schema():
     ensure_column("ageing_stock_items", "model_no", "VARCHAR(150)")
 
 
-ensure_database_schema()
+if DATABASE_READY:
+    try:
+        ensure_database_schema()
+    except SQLAlchemyError:
+        DATABASE_READY = False
+        logger.exception("Database schema migration failed. Check Render DATABASE_URL and database status.")
 
 
 def ensure_default_branches():
@@ -524,25 +534,35 @@ def ensure_default_master_data():
             db.commit()
 
 
-ensure_default_branches()
-ensure_default_master_data()
+if DATABASE_READY:
+    try:
+        ensure_default_branches()
+        ensure_default_master_data()
+    except SQLAlchemyError:
+        DATABASE_READY = False
+        logger.exception("Default data seeding failed. Check Render DATABASE_URL and database status.")
 
 from identity_cards import assign_employee_id, ensure_employee_ids
-with SessionLocal() as employee_id_db:
-    # Rename legacy roles once; retain account IDs and saved attendance.
-    legacy_roles = {'ACTechnicianA': 'AC Technician A', 'ACTechnicianB': 'AC Technician B',
-                    'Helper': 'AC Helper A', 'AC Helper': 'AC Helper A', 'ServiceManager': 'Service Manager A'}
-    for user in employee_id_db.query(models.User).filter(models.User.role.in_(legacy_roles)).all():
-        previous_role = user.role
-        new_role = legacy_roles[previous_role]
-        if previous_role == 'ServiceManager' and (user.email or '').strip().lower() == 'cdsood@gmail.com':
-            new_role = 'Service Manager B'
-        user.role = new_role
-        card = employee_id_db.get(models.IdentityCard, user.id)
-        if card and card.designation in {previous_role, re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', previous_role)}:
-            card.designation = new_role
-    employee_id_db.commit()
-    ensure_employee_ids(employee_id_db)
+if DATABASE_READY:
+    try:
+        with SessionLocal() as employee_id_db:
+            # Rename legacy roles once; retain account IDs and saved attendance.
+            legacy_roles = {'ACTechnicianA': 'AC Technician A', 'ACTechnicianB': 'AC Technician B',
+                            'Helper': 'AC Helper A', 'AC Helper': 'AC Helper A', 'ServiceManager': 'Service Manager A'}
+            for user in employee_id_db.query(models.User).filter(models.User.role.in_(legacy_roles)).all():
+                previous_role = user.role
+                new_role = legacy_roles[previous_role]
+                if previous_role == 'ServiceManager' and (user.email or '').strip().lower() == 'cdsood@gmail.com':
+                    new_role = 'Service Manager B'
+                user.role = new_role
+                card = employee_id_db.get(models.IdentityCard, user.id)
+                if card and card.designation in {previous_role, re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', previous_role)}:
+                    card.designation = new_role
+            employee_id_db.commit()
+            ensure_employee_ids(employee_id_db)
+    except SQLAlchemyError:
+        DATABASE_READY = False
+        logger.exception("Employee ID startup maintenance failed. Check Render DATABASE_URL and database status.")
 
 app = FastAPI(title="IDSPL Scheme Management ERP")
 
