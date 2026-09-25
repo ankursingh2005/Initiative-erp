@@ -14,6 +14,7 @@ from io import BytesIO, StringIO
 from collections import defaultdict
 import csv
 import json
+import logging
 import os
 import re
 import difflib
@@ -25,6 +26,7 @@ import base64
 import math
 
 INDIA_TZ = timezone(timedelta(hours=5, minutes=30))
+logger = logging.getLogger(__name__)
 
 
 def india_datetime(value: datetime) -> datetime:
@@ -582,10 +584,17 @@ async def brand_promotor_limited_access(request: Request, call_next):
 @app.exception_handler(Exception)
 async def handle_unexpected_error(request: Request, exc: Exception):
     """Any error we didn't explicitly raise as an HTTPException still comes
-    back as JSON (with a real message) instead of a raw text/HTML 500 page.
+    back as JSON instead of a raw text/HTML 500 page.
     A non-JSON error body is what makes the frontend show a generic
-    'Request failed' / 'Failed to fetch' with no useful detail."""
-    return JSONResponse(status_code=500, content={"detail": f"{type(exc).__name__}: {exc}"})
+    'Request failed' / 'Failed to fetch' with no useful detail. The full
+    exception is logged on the server, but the browser gets a safe message so
+    database hostnames, passwords, SQL and driver internals are never exposed
+    to users."""
+    logger.exception("Unhandled request error on %s %s", request.method, request.url.path, exc_info=exc)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Server is temporarily unable to complete this request. Please try again shortly."},
+    )
 
 
 # Serves the login.html / signup.html / dashboard.html pages from the
