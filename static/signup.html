@@ -343,6 +343,10 @@
     // Do not restore another person's signup details when this page is opened
     // again through browser history on a shared device.
     let signupFieldTouched = false;
+    function clearSavedLoginSession() {
+      ['token', 'role', 'username'].forEach(key => localStorage.removeItem(key));
+      sessionStorage.removeItem('showLoginSuccess');
+    }
     function clearPreviousSignupCredentials() {
       if (signupFieldTouched) return;
       ['username', 'email', 'password', 'inviteCode'].forEach(id => {
@@ -356,6 +360,7 @@
       });
     });
     window.addEventListener('pageshow', () => {
+      clearSavedLoginSession();
       signupFieldTouched = false;
       clearPreviousSignupCredentials();
       const inviteInput = document.getElementById('inviteCode'), inviteToggle = document.getElementById('inviteCodeToggle');
@@ -575,11 +580,9 @@
           msg.textContent = data.detail || "Signup failed";
           return;
         }
-        localStorage.setItem('token', data.access_token);
-        localStorage.setItem('role', data.role);
-        localStorage.setItem('username', data.username);
-        sessionStorage.setItem('showLoginSuccess', '1');
-        window.location.replace(appUrl(data.role === 'BrandPartner' ? '/attendance' : '/home'));
+        clearSavedLoginSession();
+        sessionStorage.setItem('authMessage', 'Account created successfully. Please sign in with your new user ID and password.');
+        window.location.replace(appUrl('/login'));
       } catch (error) {
         msg.textContent = "Unable to create the account. Check your connection and try again.";
       } finally {
