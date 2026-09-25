@@ -323,7 +323,11 @@
 
     const authMessage = sessionStorage.getItem('authMessage');
     if (authMessage) {
-      document.getElementById('msg').textContent = authMessage;
+      const message = document.getElementById('msg');
+      message.textContent = authMessage;
+      if (/successfully created|account created/i.test(authMessage)) {
+        message.classList.add('success');
+      }
       sessionStorage.removeItem('authMessage');
     }
 

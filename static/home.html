@@ -723,7 +723,7 @@
         cache: 'no-store',
         headers: { ...(options.headers || {}), 'Cache-Control': 'no-cache', Authorization: 'Bearer ' + token }
       });
-      if (response.status === 401) { logout(); return null; }
+      if (response.status === 401 && !url.includes('/auth/verify-password')) { logout(); return null; }
       return response;
     }
 
@@ -1182,7 +1182,7 @@
         if (!response) return;
         const data = await response.json().catch(() => ({}));
         if (!response.ok) {
-          err.textContent = data.detail || 'Incorrect password';
+          err.textContent = response.status === 401 ? 'Wrong password' : (data.detail || 'Unable to verify password');
           err.style.display = 'block';
           return;
         }

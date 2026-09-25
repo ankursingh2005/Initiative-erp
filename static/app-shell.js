@@ -14,8 +14,8 @@
   window.fetch=async function(resource,options){
     const response=await originalFetch(url(resource),options);
     const requestUrl=typeof resource==='string'?resource:(resource?.url||'');
-    const isLoginRequest=requestUrl.includes('/auth/login');
-    if((response.status===401||response.status===410)&&!isLoginRequest&&!redirecting){
+    const skipAuthRedirect=requestUrl.includes('/auth/login')||requestUrl.includes('/auth/verify-password');
+    if((response.status===401||response.status===410)&&!skipAuthRedirect&&!redirecting){
       redirecting=true;['token','role','username'].forEach(key=>localStorage.removeItem(key));
       sessionStorage.setItem('authMessage','Your session expired. Please sign in again.');
       location.replace(url('/login'));
