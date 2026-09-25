@@ -590,7 +590,7 @@ async def handle_unexpected_error(request: Request, exc: Exception):
     exception is logged on the server, but the browser gets a safe message so
     database hostnames, passwords, SQL and driver internals are never exposed
     to users."""
-    logger.exception("Unhandled request error on %s %s", request.method, request.url.path, exc_info=exc)
+    logger.exception("Unhandled request error on %s %s", request.method, request.url.path)
     return JSONResponse(
         status_code=500,
         content={"detail": "Server is temporarily unable to complete this request. Please try again shortly."},
