@@ -571,7 +571,7 @@ render=function(){renderTodayAndSummary();populateMonths();renderSummary()};
 <script>
 function liveDistanceHtml(row){const distance=row.current_distance_from_store_m;const value=distance===null||distance===undefined?'-':Math.round(Number(distance))+' m';return '<span class="live-distance">'+value+'</span>'}
 function adminEmployeeLabel(row,category){const name=row.display_name||row.username||'';const designation=row.role==='BrandPartner'?(row.promoter_brand||(row.brand_names||[]).join(', ')||'Brand not assigned'):(row.designation||String(row.role||'Employee').replace(/([a-z])([A-Z])/g,'$1 $2'));return safeText(name)+'<small class="admin-employee-designation"> / '+safeText(designation)+'</small>'}
-function repairAdminEmployeeLabels(root=document){root.querySelectorAll('tbody tr.admin-row td:first-child').forEach(cell=>{const text=cell.textContent||'',marker='<small class="admin-employee-designation"> / ',end='</small>';const start=text.toLowerCase().indexOf(marker);if(start<0)return;const finish=text.toLowerCase().indexOf(end,start);const name=text.slice(0,start).trim(),designation=text.slice(start+marker.length,finish>=0?finish:undefined).trim();cell.innerHTML=safeText(name)+'<small class="admin-employee-designation"> / '+safeText(designation)+'</small>'})}
+function repairAdminEmployeeLabels(root=document){root.querySelectorAll('tr.admin-row td:first-child, tbody tr.admin-row td:first-child').forEach(cell=>{const text=cell.textContent||'',match=text.match(/^(.*?)<\s*small\b[^>]*admin-employee-designation[^>]*>\s*\/\s*(.*?)<\s*\/\s*small\s*>/i);if(!match)return;cell.innerHTML=safeText(match[1].trim())+'<small class="admin-employee-designation"> / '+safeText(match[2].trim())+'</small>'})}
 function hasAttendanceDashboard(){return ['Admin','Owner','HR','CategoryManager','Service Manager A','Service Manager B','CEO','Director','AccountsManager'].includes(localStorage.getItem('role'))}
 function attendanceDashboardTitle(){if(['CEO','Director','AccountsManager'].includes(localStorage.getItem('role')))return 'Attendance Dashboard';if(['Service Manager A','Service Manager B'].includes(localStorage.getItem('role')))return 'Service Manager Attendance Dashboard';return localStorage.getItem('role')==='CategoryManager'?'Manager Attendance Dashboard':'Admin Attendance Dashboard'}
 function showAdminLoading(){
@@ -977,7 +977,7 @@ function attendanceStatusCount(status, label) {
     }
     input.addEventListener('input',applySearch);
     panel.querySelector('.summary')?.addEventListener('click',()=>setTimeout(applySearch,0));
-    new MutationObserver(()=>{if(input.value.trim())applySearch()}).observe(panel.querySelector('tbody'),{childList:true});
+    new MutationObserver(()=>{repairAdminEmployeeLabels(panel.querySelector('tbody'));if(input.value.trim())applySearch()}).observe(panel.querySelector('tbody'),{childList:true});
     return true;
   }
   if(!install()){const wait=setInterval(()=>{if(install())clearInterval(wait)},250);setTimeout(()=>clearInterval(wait),15000)}

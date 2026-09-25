@@ -42,11 +42,11 @@ test('repeated refresh renders small designations and brands without displaying 
 });
 
 test('escaped employee label markup is repaired into small designation node',()=>{
-  const cell={textContent:'Name <small class="admin-employee-designation"> / Team Lead</small>',innerHTML:''};
+  const cell={textContent:'SAMEER<SMALL CLASS="ADMIN-EMPLOYEE-DESIGNATION"> / SALES EXECUTIVE</SMALL>',innerHTML:''};
   const context={safeText:v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')};
   vm.createContext(context);
   const start=html.indexOf('function adminEmployeeLabel(');
   vm.runInContext(html.slice(start,html.indexOf('function hasAttendanceDashboard()',start)),context);
   context.repairAdminEmployeeLabels({querySelectorAll:()=>[cell]});
-  assert.equal(cell.innerHTML,'Name<small class="admin-employee-designation"> / Team Lead</small>');
+  assert.equal(cell.innerHTML,'SAMEER<small class="admin-employee-designation"> / SALES EXECUTIVE</small>');
 });
