@@ -2387,6 +2387,28 @@ def create_store(store: schemas.StoreCreate, db: Session = Depends(get_db)):
 
 @app.get("/stores", response_model=List[schemas.StoreOut])
 def list_stores(db: Session = Depends(get_db)):
+    required_stores = [
+        {"name": "Warehouse", "code": "WH", "city": "Lucknow", "status": "Active", "latitude": 26.779149508725354, "longitude": 80.88470873166187, "geofence_radius_m": 100},
+        {"name": "Head Office", "code": "HO", "city": "Lucknow", "status": "Active", "latitude": 26.84904218332385, "longitude": 80.94789353821966, "geofence_radius_m": 100},
+    ]
+    changed = False
+    for item in required_stores:
+        store = db.query(models.Store).filter(models.Store.code == item["code"]).first()
+        if not store:
+            store = db.query(models.Store).filter(func.lower(models.Store.name) == item["name"].lower()).first()
+        if not store:
+            db.add(models.Store(**item))
+            changed = True
+            continue
+        if store.status != "Active":
+            store.status = "Active"
+            changed = True
+        for field in ("code", "city", "latitude", "longitude", "geofence_radius_m"):
+            if not getattr(store, field):
+                setattr(store, field, item[field])
+                changed = True
+    if changed:
+        db.commit()
     return db.query(models.Store).order_by(models.Store.code, models.Store.name).all()
 
 
