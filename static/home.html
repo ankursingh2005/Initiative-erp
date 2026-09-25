@@ -876,9 +876,12 @@
         const finish=value=>{dialog.remove();resolve(value)};
         dialog.addEventListener('cancel',event=>{event.preventDefault();finish(null)});
         dialog.querySelector('.btn-light').onclick=()=>finish(null);
-        dialog.querySelector('[type="search"]').oninput=event=>{const query=event.target.value.trim().toLowerCase();dialog.querySelectorAll('[data-brand-name]').forEach(label=>label.hidden=!label.dataset.brandName.includes(query))};
+        const searchInput=dialog.querySelector('[type="search"]'),brandList=dialog.querySelector('.um-brand-list');
+        function filterBrandList(query){query=String(query||'').trim().toLowerCase();let visible=0;dialog.querySelectorAll('[data-brand-name]').forEach(label=>{const match=!query||label.dataset.brandName.includes(query);label.hidden=!match;if(match)visible++});let empty=brandList.querySelector('.um-brand-no-match');if(!empty){empty=document.createElement('p');empty.className='empty um-brand-no-match';brandList.appendChild(empty)}empty.hidden=visible>0||!query;empty.textContent='No saved brand matches "'+(query||'')+'". Use Other to create it.'}
+        searchInput.oninput=event=>filterBrandList(event.target.value);
         const otherCheck=dialog.querySelector('[value="__other__"]'),otherBox=dialog.querySelector('.um-brand-other'),otherName=otherBox.querySelector('input');
-        otherCheck.onchange=()=>{otherBox.hidden=!otherCheck.checked;if(otherCheck.checked)otherName.focus()};
+        otherCheck.onchange=()=>{otherBox.hidden=!otherCheck.checked;if(otherCheck.checked){otherName.focus();filterBrandList(otherName.value)}else filterBrandList(searchInput.value)};
+        otherName.oninput=()=>{searchInput.value=otherName.value;filterBrandList(otherName.value)};
         dialog.querySelector('form').onsubmit=event=>{event.preventDefault();const ids=[...dialog.querySelectorAll('[type="checkbox"]:checked')].map(input=>input.value).filter(value=>value!=='__other__').map(Number);const other=otherCheck.checked?otherName.value.trim():'';if(!ids.length&&!other){dialog.querySelector('.um-brand-error').textContent=otherCheck.checked?'Enter the new brand name.':'Select at least one brand.';return}finish({brand_ids:ids,brand_name_other:other||null})};
         document.body.appendChild(dialog);dialog.showModal();
       });
