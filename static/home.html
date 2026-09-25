@@ -369,6 +369,8 @@
     .um-delete-btn:disabled { background: var(--line); color: var(--muted); cursor: not-allowed; }
     .um-msg { min-height: 18px; margin-top: 10px; font-size: 13px; color: #c0392b; }
     .um-msg.success { color: #0f7d52; }
+    .um-toast{position:fixed;right:22px;bottom:22px;z-index:90;max-width:min(380px,calc(100vw - 32px));padding:14px 18px;border-radius:12px;background:#067647;color:#fff;box-shadow:0 18px 45px #10182835;font-size:14px;font-weight:800;transform:translateY(18px);opacity:0;pointer-events:none;transition:opacity .22s ease,transform .22s ease}
+    .um-toast.show{opacity:1;transform:translateY(0)}
 
     /* Shared modal field styling, used by the Reset Password modal below */
     .modal-card .field { text-align: left; margin-bottom: 14px; }
@@ -856,6 +858,14 @@
       const options = roles.map(value => '<option value="'+escapeOutletText(value)+'" '+(value===user.role?'selected':'')+'>'+escapeOutletText(value.replace(/([a-z])([A-Z])/g,'$1 $2').replace(/^ACTechnician/,'AC Technician'))+'</option>').join('');
       return '<select class="um-outlet-select" aria-label="Change role for '+escapeOutletText(user.username)+'" onchange="changeUserRole('+user.id+', this)" '+(!['Admin','HR'].includes(role)||!userManagementRoles.length||roleUpdates.has(user.id)?'disabled':'')+'>'+options+'</select>';
     }
+    let userManagementToastTimer=null;
+    function showUserManagementToast(text) {
+      let toast=document.getElementById('userManagementToast');
+      if(!toast){toast=document.createElement('div');toast.id='userManagementToast';toast.className='um-toast';toast.setAttribute('role','status');document.body.appendChild(toast)}
+      toast.textContent=text;toast.classList.add('show');
+      clearTimeout(userManagementToastTimer);
+      userManagementToastTimer=setTimeout(()=>toast.classList.remove('show'),3000);
+    }
     async function chooseRoleBrands(user, nextRole) {
       const response=await umFetch('/brands');
       if(!response?.ok)throw new Error('Unable to load brands. Please try again.');
@@ -891,7 +901,9 @@
         const data = await response.json().catch(()=>({}));
         if (!response.ok) throw new Error(typeof data.detail==='string'?data.detail:'Unable to change role');
         Object.assign(user, data);
-        msg.classList.add('success'); msg.textContent = user.username+' is now assigned the '+data.role+' role.';
+        const successText=user.username+' is now assigned the '+data.role+' role.';
+        msg.classList.add('success'); msg.textContent = successText;
+        showUserManagementToast(successText);
         if (userId === userManagementActorId) {
           localStorage.setItem('role', data.role);
           location.reload();

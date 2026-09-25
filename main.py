@@ -2230,6 +2230,10 @@ def list_brands(
     category_id: Optional[int] = None,
     db: Session = Depends(get_db),
 ):
+    if subcategory_id is None and category_id is None:
+        for brand_name in ("TVS", "HDB"):
+            get_or_create_brand_by_name(db, brand_name)
+        db.commit()
     query = db.query(models.Brand)
     if subcategory_id is not None:
         query = query.filter(models.Brand.subcategory_id == subcategory_id)
