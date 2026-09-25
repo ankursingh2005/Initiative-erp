@@ -581,7 +581,7 @@
           return;
         }
         clearSavedLoginSession();
-        sessionStorage.setItem('authMessage', 'Account created successfully. Please sign in with your new user ID and password.');
+        sessionStorage.setItem('authMessage', 'Successfully created. Now login with your new user ID and password.');
         window.location.replace(appUrl('/login'));
       } catch (error) {
         msg.textContent = "Unable to create the account. Check your connection and try again.";
