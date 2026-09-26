@@ -195,6 +195,7 @@ def ensure_database_schema():
     ensure_column("users", "store_id", "INTEGER")
     ensure_column("users", "category_code", "VARCHAR(20)")
     ensure_column("users", "status", "VARCHAR(20)")
+    ensure_column("users", "session_version", "INTEGER DEFAULT 1")
     ensure_column("users", "created_date", "TIMESTAMP")
     ensure_column("users", "reset_token", "VARCHAR(100)")
     ensure_column("users", "reset_token_expires", "TIMESTAMP")
@@ -636,21 +637,41 @@ VALID_ROLES = ["Accounts","AccountsManager","AC Technician A","AC Technician B",
 
 
 def normalize_category_code(raw_value: Optional[str]) -> Optional[str]:
-    value = (raw_value or "").strip().upper()
-    if not value:
-      return None
+    codes = normalize_category_codes(raw_value)
+    return ",".join(codes) if codes else None
+
+
+def normalize_category_codes(raw_value) -> List[str]:
+    if isinstance(raw_value, (list, tuple, set)):
+        pieces = [str(item).strip().upper() for item in raw_value]
+    else:
+        pieces = [item.strip().upper() for item in str(raw_value or "").split(",")]
+    values = [value for value in pieces if value]
+    if not values:
+      return []
     mapping = {
         "HA": "HA",
         "HE": "HE",
         "IT": "IT",
         "MOBILE": "MH",
         "MH": "MH",
+        "ACCESSORIES": "ASC",
+        "ASC": "ASC",
         "OTHER": "OTH",
         "OTH": "OTH",
     }
-    if value in mapping:
-        return mapping[value]
-    raise HTTPException(status_code=400, detail="category_code must be one of: HA, HE, IT, MOBILE, OTHER")
+    normalized = []
+    for value in values:
+        if value not in mapping:
+            raise HTTPException(status_code=400, detail="category_code must be one or more of: HA, HE, IT, MOBILE, ASC, OTHER")
+        code = mapping[value]
+        if code not in normalized:
+            normalized.append(code)
+    return normalized
+
+
+def user_category_codes(user: models.User) -> List[str]:
+    return normalize_category_codes(getattr(user, "category_code", None))
 
 
 def normalize_reward_type(raw_value: str) -> str:
@@ -1163,14 +1184,14 @@ def _get_price_list_access_scope(current_user: models.User, db: Session):
         brand_ids = [user_brand.brand_id for user_brand in (getattr(current_user, "brands", []) or [])]
         return {"brand_ids": brand_ids}
     if current_user.role == "CategoryManager":
-        category_code = (current_user.category_code or "").strip().upper()
-        if not category_code:
+        category_codes = user_category_codes(current_user)
+        if not category_codes:
             return {"brand_ids": []}
         brand_rows = (
             db.query(models.Brand.id)
             .join(models.SubCategory, models.Brand.subcategory_id == models.SubCategory.id)
             .join(models.Category, models.SubCategory.category_id == models.Category.id)
-            .filter(func.upper(models.Category.code) == category_code)
+            .filter(func.upper(models.Category.code).in_(category_codes))
             .all()
         )
         return {"brand_ids": [brand_id for (brand_id,) in brand_rows]}
@@ -2047,6 +2068,7 @@ def signup(user: schemas.UserSignup, db: Session = Depends(get_db)):
             raise HTTPException(status_code=400, detail="Select an active outlet")
 
     category_roles = {"CategoryManager"}
+    category_codes = normalize_category_codes(user.category_codes or user.category_code) if user.role in category_roles else []
     db_user = models.User(
         username=user.username,
         email=user.email,
@@ -2054,7 +2076,7 @@ def signup(user: schemas.UserSignup, db: Session = Depends(get_db)):
         full_name=user.full_name,
         role=user.role,
         store_id=user.store_id,
-        category_code=normalize_category_code(user.category_code) if user.role in category_roles else None,
+        category_code=",".join(category_codes) if category_codes else None,
         status="Active",
     )
     db.add(db_user)
@@ -2089,7 +2111,11 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     if user.status != "Active":
         raise HTTPException(status_code=403, detail="This account is not active")
 
-    token = auth.create_access_token({"user_id": user.id, "role": user.role})
+    token = auth.create_access_token({
+        "user_id": user.id,
+        "role": user.role,
+        "session_version": user.session_version or 1,
+    })
     return {
         "access_token": token,
         "token_type": "bearer",
@@ -2127,12 +2153,13 @@ def get_sales_for_user(db: Session, current_user: models.User):
     if current_user.role == "StoreManager":
         return db.query(models.Sale).filter(models.Sale.store_id == current_user.store_id).all()
     if current_user.role == "CategoryManager":
-        if not current_user.category_code:
+        category_codes = user_category_codes(current_user)
+        if not category_codes:
             return []
         return (
             db.query(models.Sale)
             .join(models.Category, models.Sale.category_id == models.Category.id)
-            .filter(models.Category.code == current_user.category_code)
+            .filter(models.Category.code.in_(category_codes))
             .all()
         )
     if current_user.role in ("BrandManager", "BrandPartner"):
@@ -2163,13 +2190,14 @@ def get_claims_for_user(db: Session, current_user: models.User):
         )
 
     if current_user.role == "CategoryManager":
-        if not current_user.category_code:
+        category_codes = user_category_codes(current_user)
+        if not category_codes:
             return []
         return (
             db.query(models.ClaimHeader)
             .join(models.Sale, models.ClaimHeader.sale_id == models.Sale.id)
             .join(models.Category, models.Sale.category_id == models.Category.id)
-            .filter(models.Category.code == current_user.category_code)
+            .filter(models.Category.code.in_(category_codes))
             .all()
         )
 
@@ -2184,10 +2212,11 @@ def can_user_access_sale(db: Session, current_user: models.User, sale: models.Sa
         return current_user.store_id is not None and sale.store_id == current_user.store_id
 
     if current_user.role == "CategoryManager":
-        if not current_user.category_code:
+        category_codes = user_category_codes(current_user)
+        if not category_codes:
             return False
         sale_category = db.query(models.Category).filter(models.Category.id == sale.category_id).first()
-        return bool(sale_category and sale_category.code == current_user.category_code)
+        return bool(sale_category and sale_category.code in category_codes)
 
     if current_user.role in ("BrandManager", "BrandPartner"):
         brand_ids = [ub.brand_id for ub in current_user.brands]
@@ -2984,6 +3013,7 @@ def update_attendance_outlet(
     if store.latitude is None or store.longitude is None:
         raise HTTPException(400, "Selected outlet needs GPS coordinates before attendance can be assigned")
     user.store_id = store.id
+    user.session_version = (user.session_version or 1) + 1
     db.commit()
     db.refresh(user)
     return serialize_user_with_brands(user, db)
@@ -3007,6 +3037,14 @@ def update_user_role(
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(404, "User not found")
+    if payload.role == "CategoryManager":
+        codes = normalize_category_codes(payload.category_codes if payload.category_codes is not None else payload.category_code)
+        if not codes:
+            raise HTTPException(400, "Select at least one category to complete this role change")
+        user.category_code = ",".join(codes)
+        db.query(models.UserBrand).filter(models.UserBrand.user_id == user_id).delete(synchronize_session=False)
+    else:
+        user.category_code = None
     if payload.role in {"BrandPartner", "BrandManager"}:
         brand_ids = sorted(set(payload.brand_ids or []))
         custom_brand_name = (payload.brand_name_other or "").strip()
@@ -3022,7 +3060,10 @@ def update_user_role(
         db.query(models.UserBrand).filter(models.UserBrand.user_id == user_id).delete(synchronize_session=False)
         for brand_id in brand_ids:
             db.add(models.UserBrand(user_id=user_id, brand_id=brand_id))
+    elif payload.role != "CategoryManager":
+        db.query(models.UserBrand).filter(models.UserBrand.user_id == user_id).delete(synchronize_session=False)
     user.role = payload.role
+    user.session_version = (user.session_version or 1) + 1
     card = assign_employee_id(db, user)
     card.designation = role_display_name(payload.role)
     db.commit()
@@ -3063,6 +3104,7 @@ def admin_reset_user_password(
         raise HTTPException(status_code=400, detail="New password must be at least 4 characters")
 
     target_user.password_hash = auth.hash_password(new_password)
+    target_user.session_version = (target_user.session_version or 1) + 1
     target_user.reset_token = None
     target_user.reset_token_expires = None
     db.commit()
@@ -3103,6 +3145,7 @@ def update_user_details(
     if target_user.email != email:
         target_user.reset_token = None
         target_user.reset_token_expires = None
+        target_user.session_version = (target_user.session_version or 1) + 1
     target_user.email = email
     change_weekoff(target_user, weekoff)
     try:
@@ -3129,8 +3172,9 @@ def update_user_assignments(
 
     if payload.store_id is not None:
         target_user.store_id = payload.store_id
-    if payload.category_code is not None:
-        target_user.category_code = normalize_category_code(payload.category_code)
+    if payload.category_codes is not None or payload.category_code is not None:
+        codes = normalize_category_codes(payload.category_codes if payload.category_codes is not None else payload.category_code)
+        target_user.category_code = ",".join(codes) if codes else None
     if payload.brand_ids is not None:
         db.query(models.UserBrand).filter(models.UserBrand.user_id == target_user.id).delete()
         for brand_id in payload.brand_ids:
@@ -4350,10 +4394,11 @@ def create_sale(
             raise HTTPException(status_code=403, detail="You can only create sales for your assigned branch")
 
     if current_user.role == "CategoryManager":
-        if not current_user.category_code:
+        category_codes = user_category_codes(current_user)
+        if not category_codes:
             raise HTTPException(status_code=403, detail="You are not assigned to a category")
         sale_category = db.query(models.Category).filter(models.Category.id == sale.category_id).first()
-        if not sale_category or sale_category.code != current_user.category_code:
+        if not sale_category or sale_category.code not in category_codes:
             raise HTTPException(status_code=403, detail="You can only create sales for your assigned category")
 
     if current_user.role in {"BrandManager", "BrandPartner", "Scheme Manager"}:
@@ -4434,8 +4479,9 @@ def update_sale(
     if current_user.role == "CategoryManager":
         if not can_user_access_sale(db, current_user, db_sale):
             raise HTTPException(status_code=403, detail="You can only edit sales in your access scope")
+        category_codes = user_category_codes(current_user)
         sale_category = db.query(models.Category).filter(models.Category.id == sale.category_id).first()
-        if not sale_category or sale_category.code != current_user.category_code:
+        if not sale_category or sale_category.code not in category_codes:
             raise HTTPException(status_code=403, detail="You can only edit sales into your assigned category")
 
     duplicate_invoice = (

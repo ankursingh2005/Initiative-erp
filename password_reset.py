@@ -106,7 +106,12 @@ def confirm_reset(payload, db):
         raise HTTPException(400, INVALID_CODE)
     password_hash = auth.hash_password(payload.new_password)
     # Consume once; an old request cannot overwrite a newer reset or admin reset.
-    changed = challenge.filter(models.User.reset_token_expires > datetime.utcnow()).update({models.User.password_hash: password_hash, models.User.reset_token: None, models.User.reset_token_expires: None}, synchronize_session=False)
+    changed = challenge.filter(models.User.reset_token_expires > datetime.utcnow()).update({
+        models.User.password_hash: password_hash,
+        models.User.session_version: func.coalesce(models.User.session_version, 1) + 1,
+        models.User.reset_token: None,
+        models.User.reset_token_expires: None,
+    }, synchronize_session=False)
     db.commit()
     if not changed:
         raise HTTPException(400, INVALID_CODE)

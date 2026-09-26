@@ -20,6 +20,22 @@ test('calendar preserves historical week off after schedule changes',()=>{
   assert.match(calendar,/data-date="2026-09-28" data-status="Absent"/);
 });
 
+test('calendar uses real month lengths and weekday offsets',()=>{
+  const context={};vm.createContext(context);
+  const start=html.indexOf('function monthlyAttendanceCalendar(');
+  vm.runInContext(html.slice(start,html.indexOf('async function openAdminRecord(',start)),context);
+  const september=context.monthlyAttendanceCalendar({history:[]},'2026-09','2026-09-30');
+  assert.equal((september.match(/class="calendar-day/g)||[]).length,30);
+  assert.equal((september.match(/class="calendar-empty/g)||[]).length,5);
+  assert.match(september,/class="calendar-empty" aria-hidden="true"><\/span><span class="calendar-empty" aria-hidden="true"><\/span><button type="button" class="calendar-day absent" data-date="2026-09-01"/);
+  const october=context.monthlyAttendanceCalendar({history:[]},'2026-10','2026-10-31');
+  assert.equal((october.match(/class="calendar-day/g)||[]).length,31);
+  assert.match(october,/data-date="2026-10-31"/);
+  const february=context.monthlyAttendanceCalendar({history:[]},'2028-02','2028-02-29');
+  assert.equal((february.match(/class="calendar-day/g)||[]).length,29);
+  assert.match(february,/data-date="2028-02-29"/);
+});
+
 test('dashboard labels prefer saved profile names and show smaller designations or brands',()=>{
   const context={safeText:v=>String(v)};vm.createContext(context);
   const start=html.indexOf('function adminEmployeeLabel(');

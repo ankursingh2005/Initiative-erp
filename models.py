@@ -370,6 +370,7 @@ class User(Base):
     store_id = Column(Integer, ForeignKey("stores.id"), nullable=True)  # used when role = StoreManager
     category_code = Column(String(20), nullable=True)  # used when role = CategoryManager
     status = Column(String(20), default="Active")
+    session_version = Column(Integer, nullable=False, default=1)
     # Employee-selected recurring weekly holiday (Monday-Sunday).
     weekoff_day = Column(String(10), nullable=True)
     weekoff_history = Column(Text, nullable=True)

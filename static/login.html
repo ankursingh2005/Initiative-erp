@@ -307,13 +307,9 @@
       return path.startsWith('/') ? `${appBasePath}${path}` : `${appBasePath}/${path}`;
     }
 
-    // Opening an existing installed shortcut may still start at /login. If a
-    // saved session exists, continue directly without showing the login form.
-    const savedToken = localStorage.getItem('token');
-    const savedRole = localStorage.getItem('role');
-    if (savedToken) {
-      window.location.replace(appUrl(savedRole === 'BrandPartner' ? '/attendance' : '/home'));
-    }
+    // Login is the shared-device boundary: opening it always clears the
+    // previous person's saved session so the next user must sign in fresh.
+    ['token', 'role', 'username'].forEach(key => localStorage.removeItem(key));
 
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
@@ -441,6 +437,7 @@
         localStorage.setItem('token', data.access_token);
         localStorage.setItem('role', data.role);
         localStorage.setItem('username', data.username);
+        sessionStorage.setItem('activeLoginSession', '1');
         sessionStorage.setItem('showLoginSuccess', '1');
         window.location.replace(appUrl(data.role === 'BrandPartner' ? '/attendance' : '/home'));
       } catch (error) {

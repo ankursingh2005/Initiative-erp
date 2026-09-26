@@ -321,6 +321,8 @@
           <label class="category-check"><input type="checkbox" value="HE" onchange="updateCategoryChecks()"><span>HE</span></label>
           <label class="category-check"><input type="checkbox" value="IT" onchange="updateCategoryChecks()"><span>IT</span></label>
           <label class="category-check"><input type="checkbox" value="MH" onchange="updateCategoryChecks()"><span>Mobile</span></label>
+          <label class="category-check"><input type="checkbox" value="ASC" onchange="updateCategoryChecks()"><span>Accessories</span></label>
+          <label class="category-check"><input type="checkbox" value="OTH" onchange="updateCategoryChecks()"><span>Other</span></label>
         </div>
         <div id="categorySummary" class="selected-list">No categories selected.</div>
         <p class="helper">Select one or more categories. Choose All Categories for complete category responsibility.</p>
@@ -473,7 +475,7 @@
 
     function selectedCategoryCodes() {
       const all = document.querySelector('#categoryChecks input[value="ALL"]');
-      if (all?.checked) return ['HA', 'HE', 'IT', 'MH'];
+      if (all?.checked) return ['HA', 'HE', 'IT', 'MH', 'ASC', 'OTH'];
       return Array.from(document.querySelectorAll('#categoryChecks input:not([value="ALL"]):checked')).map(input => input.value);
     }
 
@@ -482,7 +484,7 @@
       const individual = Array.from(document.querySelectorAll('#categoryChecks input:not([value="ALL"])'));
       all.checked = individual.length > 0 && individual.every(input => input.checked);
       const selected = selectedCategoryCodes();
-      document.getElementById('categorySummary').textContent = selected.length === 4 ? 'Selected: All Categories' : selected.length ? `Selected: ${selected.join(', ')}` : 'No categories selected.';
+      document.getElementById('categorySummary').textContent = selected.length === 6 ? 'Selected: All Categories' : selected.length ? `Selected: ${selected.join(', ')}` : 'No categories selected.';
     }
 
     function toggleAllCategories(allCheckbox) {

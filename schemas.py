@@ -420,6 +420,7 @@ class UserAssignmentUpdate(BaseModel):
     (typically a CategoryManager) can see on the Purchase Orders page."""
     store_id: Optional[int] = None
     category_code: Optional[str] = None
+    category_codes: Optional[List[str]] = None
     brand_ids: Optional[List[int]] = None
 
 
@@ -429,6 +430,8 @@ class AttendanceOutletUpdate(BaseModel):
 
 class UserRoleUpdate(BaseModel):
     role: str = Field(min_length=1, max_length=50)
+    category_code: Optional[str] = None
+    category_codes: Optional[List[str]] = None
     brand_ids: Optional[List[int]] = None
     brand_name_other: Optional[str] = Field(default=None, max_length=100)
 

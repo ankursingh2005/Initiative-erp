@@ -798,7 +798,7 @@
       const outletCode = outletCodes[outletName.toLowerCase()] || user.outlet_code || '';
       const outletLabel = outletCode || outletName;
       if (user.role === 'CategoryManager') {
-        const labels = { HA: 'HA', HE: 'HE', IT: 'IT', MH: 'Mobile' };
+        const labels = { HA: 'HA', HE: 'HE', IT: 'IT', MH: 'Mobile', ASC: 'Accessories', OTH: 'Other' };
         const categories = String(user.category_code || '').split(',').map(code => labels[code.trim()] || code.trim()).filter(Boolean).join(', ');
         return [outletLabel, categories].filter(Boolean).join(' / ') || '-';
       }
@@ -886,9 +886,30 @@
         document.body.appendChild(dialog);dialog.showModal();
       });
     }
+    async function chooseRoleCategories(user) {
+      const response=await umFetch('/categories');
+      if(!response?.ok)throw new Error('Unable to load categories. Please try again.');
+      const categories=(await response.json()).sort((a,b)=>String(a.name).localeCompare(String(b.name)));
+      const current=new Set(String(user.category_code||'').split(',').map(code=>code.trim()).filter(Boolean));
+      return new Promise(resolve=>{
+        const dialog=document.createElement('dialog');dialog.className='um-brand-dialog';dialog.setAttribute('aria-labelledby','roleCategoryTitle');
+        dialog.innerHTML='<form><header><h3 id="roleCategoryTitle">Choose categories</h3><p>'+escapeOutletText(user.username)+' &middot; Category Manager</p></header><div class="um-brand-body"><label class="um-brand-custom"><input type="checkbox" value="ALL"><span>All categories</span></label><div class="um-brand-list">'+categories.map(category=>'<label data-category-code="'+escapeOutletText(category.code)+'"><input type="checkbox" value="'+escapeOutletText(category.code)+'" '+(current.has(category.code)?'checked':'')+'><span>'+escapeOutletText(category.name)+' ('+escapeOutletText(category.code)+')</span></label>').join('')+'</div><p class="um-brand-error" role="status"></p></div><footer><button type="button" class="btn-light">Cancel</button><button type="submit" class="btn-primary-modal">Save role &amp; categories</button></footer></form>';
+        const finish=value=>{dialog.remove();resolve(value)};
+        dialog.addEventListener('cancel',event=>{event.preventDefault();finish(null)});
+        dialog.querySelector('.btn-light').onclick=()=>finish(null);
+        const all=dialog.querySelector('[value="ALL"]');
+        const boxes=[...dialog.querySelectorAll('.um-brand-list input[type="checkbox"]')];
+        function syncAll(){all.checked=boxes.length>0&&boxes.every(input=>input.checked)}
+        all.onchange=()=>{boxes.forEach(input=>{input.checked=all.checked})};
+        boxes.forEach(input=>input.onchange=syncAll);
+        syncAll();
+        dialog.querySelector('form').onsubmit=event=>{event.preventDefault();const codes=boxes.filter(input=>input.checked).map(input=>input.value);if(!codes.length){dialog.querySelector('.um-brand-error').textContent='Select at least one category.';return}finish({category_codes:codes,category_code:codes.join(',')})};
+        document.body.appendChild(dialog);dialog.showModal();
+      });
+    }
     async function changeUserRole(userId, select) {
       const user = userManagementUsers.find(item => item.id === userId);
-      if (!user || roleUpdates.has(userId) || (select.value === user.role && !['BrandPartner','BrandManager'].includes(select.value))) return;
+      if (!user || roleUpdates.has(userId) || (select.value === user.role && !['BrandPartner','BrandManager','CategoryManager'].includes(select.value))) return;
       const previous = user.role, next = select.value;
       const msg = document.getElementById('userManagementMsg');
       msg.classList.remove('success'); msg.textContent = 'Updating role...';
@@ -896,6 +917,7 @@
       try {
         const payload={role:next};
         if(['BrandPartner','BrandManager'].includes(next)){msg.textContent='Choose brands to complete the role change.';const selection=await chooseRoleBrands(user,next);if(selection===null){select.value=previous;msg.textContent='Role change cancelled.';return}if(Array.isArray(selection))payload.brand_ids=selection;else Object.assign(payload,selection)}
+        if(next==='CategoryManager'){msg.textContent='Choose categories to complete the role change.';const selection=await chooseRoleCategories(user);if(selection===null){select.value=previous;msg.textContent='Role change cancelled.';return}Object.assign(payload,selection)}
         msg.textContent='Updating role and assignments...';
         const response = await umFetch('/api/users/'+userId+'/role', {
           method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)
