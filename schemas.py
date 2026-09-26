@@ -336,6 +336,10 @@ class MyAttendanceStatusUpdate(BaseModel):
     on_leave: bool
 
 
+class AdminAttendanceStatusUpdate(BaseModel):
+    status: str = Field(pattern="^Absent$")
+
+
 class MyProfileOut(BaseModel):
     ac_project_dashboard: bool = False
     service_dashboard_category: Optional[str] = None

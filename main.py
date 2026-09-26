@@ -2668,6 +2668,64 @@ def attendance_user_history(
     ]}
 
 
+def clear_attendance_for_date(db: Session, user_id: int, attendance_date: date) -> int:
+    start_dt = datetime.combine(attendance_date, datetime.min.time())
+    end_dt = start_dt + timedelta(days=1)
+    deleted_records = db.query(models.AttendanceRecord).filter(
+        models.AttendanceRecord.user_id == user_id,
+        models.AttendanceRecord.attendance_date == attendance_date,
+    ).delete(synchronize_session=False)
+    db.query(models.AttendanceLocationPoint).filter(
+        models.AttendanceLocationPoint.user_id == user_id,
+        models.AttendanceLocationPoint.captured_at >= start_dt,
+        models.AttendanceLocationPoint.captured_at < end_dt,
+    ).delete(synchronize_session=False)
+    return deleted_records
+
+
+@app.delete("/api/attendance/users/{user_id}/dates/{attendance_date}")
+def admin_delete_attendance_date(
+    user_id: int,
+    attendance_date: date,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_roles("Admin")),
+):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    deleted_records = clear_attendance_for_date(db, user_id, attendance_date)
+    db.commit()
+    return {"user_id": user_id, "attendance_date": attendance_date, "deleted_records": deleted_records}
+
+
+@app.patch("/api/attendance/users/{user_id}/dates/{attendance_date}/status")
+def admin_update_attendance_date_status(
+    user_id: int,
+    attendance_date: date,
+    payload: schemas.AdminAttendanceStatusUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_roles("Admin")),
+):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if payload.status != "Absent":
+        raise HTTPException(status_code=400, detail="Only Absent can be set manually")
+    deleted_records = clear_attendance_for_date(db, user_id, attendance_date)
+    deleted_leaves = db.query(models.AttendanceLeave).filter(
+        models.AttendanceLeave.user_id == user_id,
+        models.AttendanceLeave.leave_date == attendance_date,
+    ).delete(synchronize_session=False)
+    db.commit()
+    return {
+        "user_id": user_id,
+        "attendance_date": attendance_date,
+        "status": "Absent",
+        "deleted_records": deleted_records,
+        "deleted_leaves": deleted_leaves,
+    }
+
+
 @app.get("/api/attendance/{record_id}/selfies")
 def get_attendance_selfies(
     record_id: int,
