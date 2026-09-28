@@ -89,9 +89,11 @@ for selection, sheets in [('sales', ['Sales Incentive']), ('non-sales', ['Non-sa
                     assert exported['Non-sales Incentive'][column+'2'].alignment.horizontal == 'right'
                     assert exported['Non-sales Incentive'][column+'3'].alignment.horizontal == 'right'
             if 'Sales Incentive' in sheets:
-                assert exported['Sales Incentive']['C3'].value == 85
-                assert exported['Sales Incentive'].max_column == 3
-                assert [c.value for c in exported['Sales Incentive'][2]] == ['Outlet', 'Category Group', 'Exact Incentive']
+                assert exported['Sales Incentive']['C3'].value == 100
+                assert exported['Sales Incentive']['D3'].value == .85
+                assert exported['Sales Incentive']['E3'].value == 85
+                assert exported['Sales Incentive'].max_column == 5
+                assert [c.value for c in exported['Sales Incentive'][2]] == ['Outlet', 'Category Group', 'Total Incentive', 'Applied Percentage', 'Exact Incentive']
         else:
             assert response.content.startswith(b'%PDF')
 print('Individual and combined Excel/PDF exports passed.')

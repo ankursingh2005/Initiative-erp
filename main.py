@@ -1166,6 +1166,673 @@ def incentive_page():
     return FileResponse("static/incentive.html")
 
 
+INCENTIVE_ACCESS_ROLES = ("Admin", "Owner", "HR", "Accounts", "MISExecutive")
+INCENTIVE_CATEGORIES = ["HA", "HE", "MOB", "COM", "DC", "ACC"]
+INCENTIVE_OUTLETS = {"ALM", "ASH", "HZT", "GNG", "VKN"}
+IDS_FUND_SHARES = {"MOB": 30, "COM": 20, "DC": 25, "HA": 20, "HE": 25, "ACC COM": 25, "ACC": 25}
+INCENTIVE_APPLIED_RATE_HEADERS = {
+    "appliedpercentage", "appliedpercent", "appliedpct", "appliedrate", "applied",
+    "applypercentage", "applypercent", "applypct", "applyrate", "apply",
+    "applicablepercentage", "applicablepercent", "applicablepct", "applicable",
+    "percentage", "percent", "pct", "rate", "incentivepercentage", "incentivepercent",
+    "incentivepct", "exactpercentage", "exactpercent", "payoutpercentage", "payoutpercent",
+    "payoutpct", "paypercentage", "paypercent", "paypct", "payrate",
+    "eligiblepercentage", "eligiblepercent", "eligiblepct", "eligibilitypercentage",
+}
+INCENTIVE_EXACT_AMOUNT_HEADERS = {
+    "exactincentive", "exactamount", "salesincentive", "incentiveamount", "netincentive",
+    "payableincentive", "finalincentive", "actualincentive", "paidincentive",
+    "payoutamount", "payamount", "netpayable", "finalamount", "actualamount",
+}
+SALES_INCENTIVE_RULES = [
+    {"outlet": "ALM", "group": "HA + HE", "categories": {"HA", "HE"}, "applied_rate": 85},
+    {"outlet": "ALM", "group": "MOB + DC + ACC", "categories": {"MOB", "DC", "ACC", "ACC COM"}, "applied_rate": 13},
+    {"outlet": "ALM", "group": "COM", "categories": {"COM"}, "applied_rate": 78},
+    {"outlet": "ASH", "group": "ALL", "categories": None, "applied_rate": 100},
+    {"outlet": "GNG", "group": "ALL", "categories": None, "applied_rate": 52},
+    {"outlet": "HZT", "group": "HA + HE", "categories": {"HA", "HE"}, "applied_rate": 65},
+    {"outlet": "HZT", "group": "MOB + COM + DC + ACC", "categories": {"MOB", "COM", "DC", "ACC", "ACC COM"}, "applied_rate": 60},
+    {"outlet": "VKN", "group": "ALL", "categories": None, "applied_rate": 55},
+]
+NON_SALES_ALLOCATIONS = [
+    ("Accounts", 35),
+    ("Ware House", None),
+    ("Customer Care", 12),
+    ("Support", 15),
+    ("HO", None),
+]
+
+
+def _incentive_header(text_value) -> str:
+    return re.sub(r"[^a-z0-9]+", "", str(text_value or "").strip().lower())
+
+
+def _incentive_outlet_short_name(value) -> str:
+    text_value = re.sub(r"\s+", " ", str(value or "").strip()).upper()
+    aliases = {
+        "ALAMBAGH": "ALM", "ALM": "ALM",
+        "ASHIYANA": "ASH", "ASH": "ASH",
+        "HAZRATGANJ": "HZT", "HAZARATGANJ": "HZT", "HZT": "HZT", "HTZ": "HZT",
+        "GOMTINAGAR": "GNG", "GOMTI NAGAR": "GNG", "GNG": "GNG",
+        "VIKAS NAGAR": "VKN", "VIKASNAGAR": "VKN", "VKN": "VKN",
+        "WAREHOUSE": "MWH", "MWH": "MWH",
+    }
+    compact = text_value.replace(" ", "")
+    if any(token in text_value for token in ("SUM ALL", "GRAND TOTAL", "TOTAL BRAN", "ALL BRAN", "ALL OUTLET")):
+        return "ALL"
+    if "ALAMBAGH" in text_value or re.search(r"\bALM\b", text_value):
+        return "ALM"
+    if "ASHIYANA" in text_value or "AASHIYANA" in text_value or re.search(r"\bASH\b", text_value):
+        return "ASH"
+    if "HAZRAT" in text_value or re.search(r"\bH[ZT]{2}\b", text_value):
+        return "HZT"
+    if "GOMTI" in text_value or re.search(r"\bGNG\b", text_value):
+        return "GNG"
+    if "VIKAS" in text_value or re.search(r"\bVKN\b", text_value):
+        return "VKN"
+    if "WARE" in text_value or re.search(r"\bMWH\b", text_value):
+        return "MWH"
+    return aliases.get(text_value) or aliases.get(compact) or text_value[:12] or "OTHER"
+
+
+def _incentive_category(value) -> Optional[str]:
+    text_value = re.sub(r"\s+", " ", str(value or "").strip().upper())
+    compact = text_value.replace(" ", "")
+    if not text_value:
+        return None
+    if "ACCCOM" in compact or "ACCCOM" in text_value.replace(" ", ""):
+        return "ACC COM"
+    if text_value in {"HA", "HE", "MOB", "COM", "DC", "ACC"}:
+        return text_value
+    for key in ("MOB", "COM", "HA", "HE", "DC", "ACC"):
+        if re.search(rf"\b{key}\b", text_value):
+            return key
+    return None
+
+
+def _incentive_number(value) -> Optional[float]:
+    if value is None or value == "":
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    text_value = str(value).strip()
+    if not text_value:
+        return None
+    negative = text_value.startswith("(") and text_value.endswith(")")
+    text_value = re.sub(r"[^0-9.\-]", "", text_value)
+    if text_value in {"", "-", "."}:
+        return None
+    try:
+        number = float(text_value)
+        return -number if negative else number
+    except ValueError:
+        return None
+
+
+def _incentive_rate(value) -> Optional[float]:
+    number = _incentive_number(value)
+    if number is None:
+        return None
+    if 0 <= number <= 1:
+        return round(number * 100, 4)
+    return round(number, 4)
+
+
+def _is_incentive_summary_row(row: dict) -> bool:
+    outlet = _incentive_outlet_short_name(row.get("outlet"))
+    category = _incentive_category(row.get("category")) or str(row.get("category") or "").strip().upper()
+    return outlet in {"ALL", "OTHER"} or category in {"ALL", "TOTAL", "GRAND TOTAL"}
+
+
+def _is_incentive_outlet(value) -> bool:
+    return _incentive_outlet_short_name(value) in INCENTIVE_OUTLETS
+
+
+def _prefer_incentive_detail_rows(rows: list[dict]) -> list[dict]:
+    detail_rows = [row for row in rows if not _is_incentive_summary_row(row)]
+    return detail_rows or rows
+
+
+def parse_incentive_upload(file: UploadFile) -> list[dict]:
+    filename = (file.filename or "").lower()
+    raw = file.file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+    if filename.endswith((".xlsx", ".xlsm")):
+        workbook = load_workbook(BytesIO(raw), data_only=True, read_only=True)
+        rows = []
+        for sheet in workbook.worksheets:
+            values = [[cell for cell in row] for row in sheet.iter_rows(values_only=True)]
+            rows.extend(_parse_incentive_sheet(values, sheet.title))
+        workbook.close()
+        rows = _prefer_incentive_detail_rows(rows)
+        if not rows:
+            raise HTTPException(status_code=400, detail="No outlet/category/sales rows found in this workbook")
+        return rows
+    if filename.endswith(".pdf"):
+        try:
+            from pypdf import PdfReader
+            text_value = "\n".join(page.extract_text() or "" for page in PdfReader(BytesIO(raw)).pages)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail="Unable to read this PDF. Upload a text-based PDF or Excel file.") from exc
+        rows = _parse_incentive_text(text_value)
+        rows = _prefer_incentive_detail_rows(rows)
+        if not rows:
+            raise HTTPException(status_code=400, detail="No outlet/category/sales rows found in this PDF")
+        return rows
+    raise HTTPException(status_code=400, detail="Upload an Excel (.xlsx/.xlsm) or text-based PDF file")
+
+
+def _parse_incentive_sheet(sheet_rows: list[list], sheet_name: str) -> list[dict]:
+    parsed = []
+    seen = set()
+    current_outlet = None
+    fallback_category_idx = None
+    fallback_sales_idx = None
+    fallback_rate_idx = None
+    fallback_exact_idx = None
+    normalized_rows = [[cell if cell is not None else "" for cell in row] for row in sheet_rows]
+    def add_row(row):
+        key = (
+            row["month"], row["outlet"], row["category"], row["total_sales"],
+            row.get("applied_rate"), row.get("exact_incentive"),
+        )
+        if key not in seen:
+            seen.add(key)
+            parsed.append(row)
+    for index, row in enumerate(normalized_rows):
+        headers = [_incentive_header(cell) for cell in row]
+        outlet_idx = next((i for i, h in enumerate(headers) if h in {"outlet", "outlets", "branch", "location", "store"}), None)
+        category_idx = next((i for i, h in enumerate(headers) if h in {"category", "cat", "division", "group", "categorygroup", "productgroup", "department", "section"}), None)
+        sales_idx = next((i for i, h in enumerate(headers) if h in {"sale", "sales", "totalsale", "totalsales", "salesamt", "saleamount", "amount", "total", "netsale", "netsales", "salesvalue"}), None)
+        rate_idx = next((i for i, h in enumerate(headers) if h in INCENTIVE_APPLIED_RATE_HEADERS), None)
+        exact_idx = next((i for i, h in enumerate(headers) if h in INCENTIVE_EXACT_AMOUNT_HEADERS), None)
+        month_idx = next((i for i, h in enumerate(headers) if h in {"month", "period"}), None)
+        if category_idx is not None and fallback_category_idx is None:
+            fallback_category_idx = category_idx
+        if sales_idx is not None and fallback_sales_idx is None:
+            fallback_sales_idx = sales_idx
+        if rate_idx is not None and fallback_rate_idx is None:
+            fallback_rate_idx = rate_idx
+        if exact_idx is not None and fallback_exact_idx is None:
+            fallback_exact_idx = exact_idx
+        if outlet_idx is not None and sales_idx is not None:
+            for data_row in normalized_rows[index + 1:]:
+                data_headers = [_incentive_header(cell) for cell in data_row]
+                if data_headers == headers:
+                    continue
+                outlet = data_row[outlet_idx] if outlet_idx < len(data_row) else ""
+                sale = _incentive_number(data_row[sales_idx] if sales_idx < len(data_row) else None)
+                if outlet and sale is None:
+                    outlet_code = _incentive_outlet_short_name(outlet)
+                    if outlet_code not in {"ALL", "OTHER"} and not _incentive_category(outlet):
+                        current_outlet = outlet_code
+                    continue
+                if sale is None:
+                    continue
+                outlet_code = _incentive_outlet_short_name(outlet) if outlet else current_outlet
+                outlet_category = _incentive_category(outlet)
+                if not outlet_code:
+                    continue
+                if outlet and outlet_code in INCENTIVE_OUTLETS:
+                    current_outlet = outlet_code
+                elif outlet and outlet_category and current_outlet:
+                    outlet_code = current_outlet
+                elif outlet and outlet_category:
+                    continue
+                elif outlet and outlet_code not in {"ALL", "OTHER"} and not outlet_category:
+                    current_outlet = outlet_code
+                category = (
+                    outlet_category if outlet_category and outlet_code == current_outlet
+                    else _incentive_category(data_row[category_idx] if category_idx is not None and category_idx < len(data_row) else None)
+                    or "ALL"
+                )
+                month = data_row[month_idx] if month_idx is not None and month_idx < len(data_row) else ""
+                parsed_row = {"month": str(month or ""), "outlet": outlet_code, "category": category, "total_sales": sale}
+                if rate_idx is not None:
+                    parsed_row["applied_rate"] = _incentive_rate(data_row[rate_idx] if rate_idx < len(data_row) else None)
+                if exact_idx is not None:
+                    parsed_row["exact_incentive"] = _incentive_number(data_row[exact_idx] if exact_idx < len(data_row) else None)
+                add_row(parsed_row)
+        category_columns = [(i, _incentive_category(cell)) for i, cell in enumerate(row)]
+        category_columns = [(i, cat) for i, cat in category_columns if cat]
+        first_header = headers[0] if headers else ""
+        if category_columns and first_header in {"outlet", "outlets", "branch", "location", "store", ""}:
+            for data_row in normalized_rows[index + 1:]:
+                outlet = data_row[0] if data_row else ""
+                if not outlet:
+                    continue
+                for col_idx, category in category_columns:
+                    sale = _incentive_number(data_row[col_idx] if col_idx < len(data_row) else None)
+                    if sale is not None:
+                        add_row({"month": "", "outlet": _incentive_outlet_short_name(outlet), "category": category, "total_sales": sale})
+    current_outlet = None
+    for row in normalized_rows:
+        non_empty = [cell for cell in row if str(cell or "").strip()]
+        if len(non_empty) == 1 and _incentive_number(non_empty[0]) is None:
+            maybe_outlet = _incentive_outlet_short_name(non_empty[0])
+            if maybe_outlet != "OTHER":
+                current_outlet = maybe_outlet
+                continue
+        if current_outlet:
+            category = (
+                _incentive_category(row[fallback_category_idx])
+                if fallback_category_idx is not None and fallback_category_idx < len(row)
+                else None
+            )
+            category = category or next((_incentive_category(cell) for cell in row if _incentive_category(cell)), None)
+            sale = (
+                _incentive_number(row[fallback_sales_idx])
+                if fallback_sales_idx is not None and fallback_sales_idx < len(row)
+                else None
+            )
+            sale = sale if sale is not None else next((_incentive_number(cell) for cell in reversed(row) if _incentive_number(cell) is not None), None)
+            if category and sale is not None:
+                parsed_row = {"month": "", "outlet": current_outlet, "category": category, "total_sales": sale}
+                if fallback_rate_idx is not None:
+                    parsed_row["applied_rate"] = _incentive_rate(row[fallback_rate_idx] if fallback_rate_idx < len(row) else None)
+                if fallback_exact_idx is not None:
+                    parsed_row["exact_incentive"] = _incentive_number(row[fallback_exact_idx] if fallback_exact_idx < len(row) else None)
+                add_row(parsed_row)
+    if parsed:
+        return parsed
+    return []
+
+
+def _parse_incentive_text(text_value: str) -> list[dict]:
+    rows = []
+    for line in text_value.splitlines():
+        category = _incentive_category(line)
+        numbers = [_incentive_number(value) for value in re.findall(r"\(?-?[\d,]+(?:\.\d+)?\)?", line)]
+        numbers = [value for value in numbers if value is not None]
+        outlet = next((_incentive_outlet_short_name(token) for token in re.findall(r"[A-Za-z][A-Za-z ]{1,25}", line)
+                       if _incentive_outlet_short_name(token) != "OTHER"), None)
+        if outlet and category and numbers:
+            rows.append({"month": "", "outlet": outlet, "category": category, "total_sales": numbers[-1]})
+    return rows
+
+
+def _incentive_calc(total_sales: float, profit_rate: float, incentive_rate: float) -> dict:
+    avg_profit = round(total_sales * profit_rate / 100, 2)
+    total_incentive = round(avg_profit * incentive_rate / 100, 2)
+    return {"total_sales": round(total_sales, 2), "avg_profit": avg_profit, "total_incentive": total_incentive}
+
+
+def build_sales_incentive_summary(grouped_totals: dict, outlet_totals: dict, profit_rate: float, incentive_rate: float) -> list[dict]:
+    rows = []
+    for rule in SALES_INCENTIVE_RULES:
+        outlet = rule["outlet"]
+        categories = rule["categories"]
+        if outlet not in outlet_totals:
+            continue
+        if categories is None:
+            total_sales = sum(total for (row_outlet, _), total in grouped_totals.items() if row_outlet == outlet)
+        else:
+            total_sales = sum(grouped_totals.get((outlet, category), 0) for category in categories)
+        if not total_sales:
+            continue
+        amounts = _incentive_calc(total_sales, profit_rate, incentive_rate)
+        applied_rate = rule["applied_rate"]
+        rows.append({
+            "outlet": outlet,
+            "group": rule["group"],
+            **amounts,
+            "applied_rate": applied_rate,
+            "exact_incentive": round(amounts["total_incentive"] * applied_rate / 100, 2),
+        })
+    return rows
+
+
+def ids_fund_amounts(total_sales: float, incentive_rate: float, fund_rate: float) -> dict:
+    total_incentive = round((total_sales or 0) * incentive_rate / 100, 2)
+    ids_fund = round(total_incentive * fund_rate / 100, 2)
+    return {"total_sales": round(total_sales or 0, 2), "total_incentive": total_incentive, "ids_fund": ids_fund}
+
+
+def _ids_incentive_rate(outlet: str, category: str) -> Optional[float]:
+    outlet_code = _incentive_outlet_short_name(outlet)
+    category = _incentive_category(category)
+    if not category:
+        return None
+    if category == "MOB":
+        return .125
+    if category in {"COM", "HA", "HE", "DC"}:
+        return .25
+    if category in {"ACC", "ACC COM"}:
+        if outlet_code == "HZT":
+            return .5 if category == "ACC" else .25
+        if outlet_code in {"ALM", "ASH", "GNG", "VKN"}:
+            return 1
+        return 1
+    return None
+
+
+def build_ids_fund_report(rows: list[dict]) -> dict:
+    grouped = defaultdict(float)
+    for row in rows:
+        outlet = _incentive_outlet_short_name(row.get("outlet"))
+        category = _incentive_category(row.get("category"))
+        if outlet in INCENTIVE_OUTLETS and category:
+            grouped[(outlet, category)] += float(row.get("total_sales") or 0)
+    report_rows, by_outlet = [], defaultdict(lambda: {"total_sales": 0, "total_incentive": 0, "ids_fund": 0, "pending": False})
+    pending_rows = 0
+    for (outlet, category), total_sales in sorted(grouped.items()):
+        incentive_rate = _ids_incentive_rate(outlet, category)
+        fund_rate = IDS_FUND_SHARES.get(category)
+        if incentive_rate is None or fund_rate is None:
+            amounts = {"total_sales": round(total_sales, 2), "total_incentive": None, "ids_fund": None}
+            pending_rows += 1
+            by_outlet[outlet]["pending"] = True
+        else:
+            amounts = ids_fund_amounts(total_sales, incentive_rate, fund_rate)
+            by_outlet[outlet]["total_incentive"] += amounts["total_incentive"]
+            by_outlet[outlet]["ids_fund"] += amounts["ids_fund"]
+        by_outlet[outlet]["total_sales"] += round(total_sales, 2)
+        report_rows.append({"outlet": outlet, "category": category, "incentive_rate": incentive_rate, "fund_rate": fund_rate, **amounts})
+    summary = []
+    for outlet, values in sorted(by_outlet.items()):
+        summary.append({
+            "outlet": outlet,
+            "total_sales": round(values["total_sales"], 2),
+            "total_incentive": None if values["pending"] else round(values["total_incentive"], 2),
+            "ids_fund": None if values["pending"] else round(values["ids_fund"], 2),
+        })
+    totals_pending = pending_rows > 0
+    totals = {
+        "total_sales": round(sum(row["total_sales"] for row in summary), 2),
+        "total_incentive": None if totals_pending else round(sum(row["total_incentive"] or 0 for row in summary), 2),
+        "ids_fund": None if totals_pending else round(sum(row["ids_fund"] or 0 for row in summary), 2),
+    }
+    insufficient_data = bool(rows and not report_rows)
+    non_sales_report = build_non_sales_report(summary)
+    non_sales_report["insufficient_data"] = insufficient_data
+    return {"version": 3, "rows": report_rows, "summary": summary, "totals": totals, "pending_rows": pending_rows,
+            "insufficient_data": insufficient_data, "non_sales_report": non_sales_report}
+
+
+def build_non_sales_report(summary: list[dict]) -> dict:
+    required = ["ALM", "ASH", "HZT", "GNG", "VKN"]
+    by_outlet = {row.get("outlet"): row.get("ids_fund") for row in summary}
+    extra_outlets = [row.get("outlet") for row in summary if row.get("outlet") not in required and row.get("ids_fund") is not None]
+    rows = []
+    totals = [0, 0, 0, 0, 0]
+    for outlet in [*required, *extra_outlets]:
+        ho_rate = 15 if outlet == "ALM" else 10
+        rates = [35, None, 12, 15, ho_rate]
+        fund = by_outlet.get(outlet)
+        if fund is None:
+            rows.append({"outlet": outlet, "location": outlet, "ids_fund": None, "rates": rates, "values": [None, None, None, None, None]})
+            continue
+        fund = float(fund)
+        values = [round(fund * .35), None, round(fund * .12), round(fund * .15), round(fund * ho_rate / 100)]
+        rows.append({"outlet": outlet, "location": outlet, "ids_fund": fund, "rates": rates, "values": values})
+        for idx, value in enumerate(values):
+            if value is not None:
+                totals[idx] += value
+    available_funds = [float(row.get("ids_fund")) for row in summary if row.get("ids_fund") is not None]
+    combined = round(sum(available_funds), 2) if available_funds else None
+    warehouse = round(combined * .16, 2) if combined is not None else None
+    rows.append({"outlet": "MWH", "location": "Ware House", "ids_fund": combined, "rates": [None, 16, None, None, None],
+                 "values": [None, warehouse, None, None, None]})
+    totals[1] = warehouse
+    return {"rows": rows, "totals": totals}
+
+
+def calculate_incentive_report(file: UploadFile, profit_rate: float, incentive_rate: float) -> dict:
+    source_rows = parse_incentive_upload(file)
+    outlet_totals, category_totals, grouped_totals = defaultdict(float), defaultdict(float), defaultdict(float)
+    for row in source_rows:
+        outlet = _incentive_outlet_short_name(row.get("outlet"))
+        if outlet not in INCENTIVE_OUTLETS:
+            continue
+        category = _incentive_category(row.get("category")) or "ALL"
+        amount = float(row.get("total_sales") or 0)
+        outlet_totals[outlet] += amount
+        if category in INCENTIVE_CATEGORIES:
+            category_totals[(outlet, category)] += amount
+        grouped_totals[(outlet, category)] += amount
+    summary = [{"outlet": outlet, **_incentive_calc(total, profit_rate, incentive_rate)}
+               for outlet, total in sorted(outlet_totals.items())]
+    category_summary = []
+    for outlet in sorted(outlet_totals):
+        cats = {}
+        for category in INCENTIVE_CATEGORIES:
+            cats[category] = _incentive_calc(category_totals.get((outlet, category), 0), profit_rate, incentive_rate)
+        cats["total"] = _incentive_calc(sum(category_totals.get((outlet, category), 0) for category in INCENTIVE_CATEGORIES), profit_rate, incentive_rate)
+        category_summary.append({"outlet": outlet, "categories": cats, "total": cats["total"]})
+    grouped_summary = [{"outlet": outlet, "group": group, **_incentive_calc(total, profit_rate, incentive_rate)}
+                       for (outlet, group), total in sorted(grouped_totals.items())]
+    exact_summary = build_sales_incentive_summary(grouped_totals, outlet_totals, profit_rate, incentive_rate)
+    totals = _incentive_calc(sum(outlet_totals.values()), profit_rate, incentive_rate)
+    return {"report_version": 7, "totals": totals, "summary": summary, "category_summary": category_summary,
+            "grouped_summary": grouped_summary, "exact_summary": exact_summary,
+            "ids_fund_report": build_ids_fund_report(source_rows)}
+
+
+@app.post("/api/incentive/calculate")
+def calculate_incentive_endpoint(
+    file: UploadFile = File(...),
+    profit_rate: float = Form(7),
+    incentive_rate: float = Form(2.5),
+    current_user: models.User = Depends(auth.require_roles(*INCENTIVE_ACCESS_ROLES)),
+):
+    return calculate_incentive_report(file, profit_rate, incentive_rate)
+
+
+def _write_rows(sheet, headers, rows):
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    header_row = sheet.max_row + 1
+    sheet.append(headers)
+    for row in rows:
+        sheet.append(row)
+    for cell in sheet[header_row]:
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor="17365D")
+        cell.alignment = Alignment(horizontal="center")
+    for row in sheet.iter_rows():
+        for cell in row:
+            cell.border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
+            if isinstance(cell.value, (int, float)):
+                cell.number_format = '#,##0.00'
+                cell.alignment = Alignment(horizontal="right")
+
+
+def build_incentive_workbook(report: dict) -> bytes:
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "Outlet Summary"
+    _write_rows(sheet, ["Outlet", "Total Sales", "AVG Profit", "Total Incentive"],
+                [[r["outlet"], r["total_sales"], r["avg_profit"], r["total_incentive"]] for r in report["summary"]])
+    category_sheet = book.create_sheet("Category Incentive")
+    _write_rows(category_sheet, ["Outlet", "Category", "AVG Profit", "Total Incentive"],
+                [[r["outlet"], category, r["categories"][category]["avg_profit"], r["categories"][category]["total_incentive"]]
+                 for r in report["category_summary"] for category in INCENTIVE_CATEGORIES])
+    group_sheet = book.create_sheet("Grouped Incentive")
+    _write_rows(group_sheet, ["Outlet", "Category Group", "Total Sales", "AVG Profit", "Total Incentive"],
+                [[r["outlet"], r["group"], r["total_sales"], r["avg_profit"], r["total_incentive"]] for r in report["grouped_summary"]])
+    exact_sheet = book.create_sheet("Sales Incentive")
+    _write_rows(exact_sheet, ["Outlet", "Category Group", "Total Incentive", "Applied Rate", "Exact Incentive"],
+                [[r["outlet"], r["group"], r["total_incentive"], None if r["applied_rate"] is None else r["applied_rate"] / 100, r["exact_incentive"]]
+                 for r in report["exact_summary"]])
+    fund_sheet = book.create_sheet("IDS Fund")
+    fund_sheet.append(["IDS Fund Report"])
+    fund_sheet.append(["Total Incentive = category sales x outlet/category rate. IDS Fund = Total Incentive x fund share."])
+    fund_sheet.append([])
+    _write_rows(fund_sheet, ["Outlet", "Category", "Total Sales", "Incentive Rate", "Total Incentive", "Fund Share", "IDS Fund"], [])
+    start = 5
+    for row_index, row in enumerate(report["ids_fund_report"]["rows"], start):
+        fund_sheet.cell(row_index, 1, row["outlet"])
+        fund_sheet.cell(row_index, 2, row["category"])
+        fund_sheet.cell(row_index, 3, row["total_sales"])
+        fund_sheet.cell(row_index, 4, None if row["incentive_rate"] is None else row["incentive_rate"] / 100)
+        fund_sheet.cell(row_index, 5, f'=IF(ISNUMBER(D{row_index}),ROUND(C{row_index}*D{row_index},2),"Pending")')
+        fund_sheet.cell(row_index, 6, None if row["fund_rate"] is None else row["fund_rate"] / 100)
+        fund_sheet.cell(row_index, 7, f'=IF(AND(ISNUMBER(E{row_index}),ISNUMBER(F{row_index})),ROUND(E{row_index}*F{row_index},2),"Pending")')
+    end = fund_sheet.max_row
+    total_row = end + 1
+    fund_sheet.cell(total_row, 1, "GRAND TOTAL")
+    fund_sheet.cell(total_row, 3, f"=SUM(C{start}:C{end})")
+    fund_sheet.cell(total_row, 5, f'=IF(COUNT(E{start}:E{end})=ROWS(E{start}:E{end}),SUM(E{start}:E{end}),"Pending")')
+    fund_sheet.cell(total_row, 7, f'=IF(COUNT(G{start}:G{end})=ROWS(G{start}:G{end}),SUM(G{start}:G{end}),"Pending")')
+    outlet_fund = book.create_sheet("IDS Fund Outlet Summary")
+    outlet_fund.append(["IDS Fund Outlet Summary"])
+    outlet_fund.append(["Outlet", "IDS Fund"])
+    for index, row in enumerate(report["ids_fund_report"]["summary"], 3):
+        outlet_fund.cell(index, 1, row["outlet"])
+        matches = [idx for idx in range(start, end + 1) if fund_sheet.cell(idx, 1).value == row["outlet"]]
+        outlet_fund.cell(index, 2, "=" + "+".join(f"'IDS Fund'!G{idx}" for idx in matches) if matches else row["ids_fund"])
+    outlet_total_row = len(report["ids_fund_report"]["summary"]) + 3
+    outlet_fund.cell(outlet_total_row, 1, "GRAND TOTAL")
+    outlet_fund.cell(outlet_total_row, 2, f"=SUM(B3:B{outlet_total_row - 1})")
+    staff = book.create_sheet("Non-sales Staff Incentive")
+    staff.append(["Location", "IDS Fund", "Accounts", "Ware House", "Customer Care", "Support", "HO"])
+    for col in range(1, 8):
+        staff.cell(1, col).font = Font(bold=True, color="FFFFFF")
+        staff.cell(1, col).fill = PatternFill("solid", fgColor="17365D")
+    fund_by_outlet = {row["outlet"]: row for row in report["ids_fund_report"]["summary"]}
+    fund_summary = [fund_by_outlet.get(outlet, {"outlet": outlet, "ids_fund": None}) for outlet in ["ALM", "ASH", "HZT", "GNG", "VKN"]]
+    for idx, row in enumerate(fund_summary, 2):
+        staff.cell(idx, 1, row["outlet"])
+        staff.cell(idx, 2, f"='IDS Fund Outlet Summary'!B{idx + 1}")
+        staff.cell(idx, 3, .35)
+        staff.cell(idx, 5, .12)
+        staff.cell(idx, 6, .15)
+        staff.cell(idx, 7, .15 if row["outlet"] == "ALM" else .10)
+        for column in (3, 5, 6, 7):
+            staff.cell(idx, column).number_format = "0%"
+    mwh_row = 7
+    staff.cell(mwh_row, 1, "MWH")
+    staff.cell(mwh_row, 2, f"=IF(COUNT(B2:B{mwh_row - 1})=5,SUM(B2:B{mwh_row - 1}),\"Pending\")")
+    staff.cell(mwh_row, 4, .16)
+    staff.cell(mwh_row, 4).number_format = "0%"
+    calc_start = 11
+    for idx, row in enumerate(fund_summary, calc_start):
+        src = idx - calc_start + 2
+        staff.cell(idx, 1, row["outlet"])
+        staff.cell(idx, 2, f"=B{src}")
+        staff.cell(idx, 3, f'=IF(ISNUMBER(B{src}),ROUND(B{src}*C{src},0),"Pending")')
+        staff.cell(idx, 5, f'=IF(ISNUMBER(B{src}),ROUND(B{src}*E{src},0),"Pending")')
+        staff.cell(idx, 6, f'=IF(ISNUMBER(B{src}),ROUND(B{src}*F{src},0),"Pending")')
+        staff.cell(idx, 7, f'=IF(ISNUMBER(B{src}),ROUND(B{src}*G{src},0),"Pending")')
+    warehouse_calc = calc_start + len(fund_summary)
+    staff.cell(warehouse_calc, 1, "MWH")
+    staff.cell(warehouse_calc, 4, f'=IF(ISNUMBER(B{mwh_row}),ROUND(B{mwh_row}*D{mwh_row},2),"Pending")')
+    total_calc = warehouse_calc + 2
+    staff.cell(total_calc, 1, "Central Service")
+    staff.cell(total_calc, 3, f"=SUM(C{calc_start}:C{warehouse_calc - 1})")
+    staff.cell(total_calc, 4, f"=D{warehouse_calc}")
+    staff.cell(total_calc, 5, f"=SUM(E{calc_start}:E{warehouse_calc - 1})")
+    staff.cell(total_calc, 6, f"=SUM(F{calc_start}:F{warehouse_calc - 1})")
+    staff.cell(total_calc - 1, 7, f"=SUM(G{calc_start}:G{warehouse_calc - 1})")
+    staff.cell(total_calc, 7, f"=G{total_calc - 1}")
+    for row in fund_sheet.iter_rows(min_row=5, max_row=total_row):
+        for cell in row:
+            cell.border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
+            if cell.column in {4, 6} and isinstance(cell.value, (int, float)):
+                cell.number_format = "0.00%"
+            elif cell.column in {3, 5, 7}:
+                cell.number_format = '#,##0.00'
+                cell.alignment = Alignment(horizontal="right")
+    for ws in book.worksheets:
+        for col in range(1, ws.max_column + 1):
+            ws.column_dimensions[get_column_letter(col)].width = 18
+    output = BytesIO()
+    book.save(output)
+    return output.getvalue()
+
+
+@app.post("/api/incentive/export")
+def export_incentive_report(
+    file: UploadFile = File(...),
+    profit_rate: float = Form(7),
+    incentive_rate: float = Form(2.5),
+    current_user: models.User = Depends(auth.require_roles(*INCENTIVE_ACCESS_ROLES)),
+):
+    content = build_incentive_workbook(calculate_incentive_report(file, profit_rate, incentive_rate))
+    return Response(content, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": 'attachment; filename="Outlet_Incentive_Report.xlsx"'})
+
+
+def _selected_incentive_workbook(report: dict, selection: str) -> bytes:
+    from openpyxl import Workbook
+    book = Workbook()
+    book.remove(book.active)
+    if selection in {"sales", "both"}:
+        ws = book.create_sheet("Sales Incentive")
+        ws.append(["Sales Incentive"])
+        _write_rows(ws, ["Outlet", "Category Group", "Total Incentive", "Applied Percentage", "Exact Incentive"],
+                    [[r["outlet"], r["group"], r["total_incentive"], None if r["applied_rate"] is None else r["applied_rate"] / 100, r["exact_incentive"]]
+                     for r in report["exact_summary"]])
+    if selection in {"non-sales", "both"}:
+        ws = book.create_sheet("Non-sales Incentive")
+        ws.append(["Non-sales Incentive"])
+        ns = report["ids_fund_report"]["non_sales_report"]
+        _write_rows(ws, ["Location", "IDS Fund", "Accounts", "Ware House", "Customer Care", "Support", "HO"],
+                    [[r["outlet"], r["ids_fund"], *r["values"]] for r in ns["rows"]])
+    output = BytesIO()
+    book.save(output)
+    return output.getvalue()
+
+
+def _selected_incentive_pdf(report: dict, selection: str) -> bytes:
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet
+    output = BytesIO()
+    story, styles = [], getSampleStyleSheet()
+    if selection in {"sales", "both"}:
+        story.append(Paragraph("Sales Incentive", styles["Title"]))
+        data = [["Outlet", "Category Group", "Total Incentive", "Applied Percentage", "Exact Incentive"]] + [
+            [r["outlet"], r["group"], r["total_incentive"], "Need Detail" if r["applied_rate"] is None else f'{r["applied_rate"]}%', "Need Detail" if r["exact_incentive"] is None else r["exact_incentive"]]
+            for r in report["exact_summary"]
+        ]
+        story.extend([Table(data), Spacer(1, 14)])
+    if selection in {"non-sales", "both"}:
+        story.append(Paragraph("Non-sales Incentive", styles["Title"]))
+        ns = report["ids_fund_report"]["non_sales_report"]
+        data = [["Location", "IDS Fund", "Accounts", "Ware House", "Customer Care", "Support", "HO"]] + [[r["outlet"], r["ids_fund"], *r["values"]] for r in ns["rows"]]
+        story.append(Table(data))
+    for item in story:
+        if isinstance(item, Table):
+            item.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .25, colors.grey), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#17365D")), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white)]))
+    SimpleDocTemplate(output, pagesize=landscape(A4)).build(story)
+    return output.getvalue()
+
+
+@app.post("/api/incentive/selected-export")
+def export_selected_incentives(
+    file: UploadFile = File(...),
+    profit_rate: float = Form(7),
+    incentive_rate: float = Form(2.5),
+    selection: str = Query("both", pattern="^(sales|non-sales|both)$"),
+    format: str = Query("xlsx", pattern="^(xlsx|pdf)$"),
+    current_user: models.User = Depends(auth.require_roles(*INCENTIVE_ACCESS_ROLES)),
+):
+    report = calculate_incentive_report(file, profit_rate, incentive_rate)
+    content = _selected_incentive_pdf(report, selection) if format == "pdf" else _selected_incentive_workbook(report, selection)
+    return Response(content, media_type="application/pdf" if format == "pdf" else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f'attachment; filename="Incentive_{selection}.{format}"'})
+
+
+@app.post("/api/incentive/exact-export")
+def export_exact_incentive_report(
+    file: UploadFile = File(...),
+    profit_rate: float = Form(7),
+    incentive_rate: float = Form(2.5),
+    format: str = Query("xlsx", pattern="^(xlsx|pdf)$"),
+    current_user: models.User = Depends(auth.require_roles(*INCENTIVE_ACCESS_ROLES)),
+):
+    report = calculate_incentive_report(file, profit_rate, incentive_rate)
+    selection_report = {**report, "ids_fund_report": {"non_sales_report": {"rows": [], "totals": []}}}
+    content = _selected_incentive_pdf(selection_report, "sales") if format == "pdf" else _selected_incentive_workbook(selection_report, "sales")
+    return Response(content, media_type="application/pdf" if format == "pdf" else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f'attachment; filename="Exact_Incentive_Report.{format}"'})
+
+
 @app.get("/identity-card")
 @app.get("/identity-card.html")
 @app.get("/identity_card.html")

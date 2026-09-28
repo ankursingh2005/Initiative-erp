@@ -35,15 +35,15 @@ assert.match(elements.nonSalesValues.innerHTML,/Click Calculate/);
 
 for(const id of ['salesIncentive','nonSalesIncentive','remainingIncentive'])elements[id]={textContent:''};
 vm.runInContext(html.slice(html.indexOf('  function renderIncentiveBalances('),html.indexOf('  function categoryCell(')),context);
-const balances={totals:{total_incentive:99999},exact_summary:[{outlet:'ALM',exact_incentive:4018.25},{outlet:'ASH',group:'ALL',total_incentive:100,exact_incentive:50}],grouped_summary:[{total_incentive:30000.12},{total_incentive:40000.23}],ids_fund_report:{version:3,totals:{ids_fund:23371},non_sales_report:{totals:[1,2,3,4,5]}}};
+const balances={totals:{total_incentive:99999},exact_summary:[{outlet:'ALM',total_incentive:4018.25,exact_incentive:4018.25},{outlet:'ASH',group:'ALL',total_incentive:100,exact_incentive:50}],grouped_summary:[{total_incentive:30000.12},{total_incentive:40000.23}],ids_fund_report:{version:3,totals:{ids_fund:23371},non_sales_report:{totals:[1,2,3,4,5]}}};
 context.renderIncentiveBalances(balances);
-assert.equal(elements.salesIncentive.textContent,'4118.25');
+assert.equal(elements.salesIncentive.textContent,'4068.25');
 assert.equal(elements.nonSalesIncentive.textContent,'23371.00');
-assert.equal(elements.remainingIncentive.textContent,'42511.10');
+assert.equal(elements.remainingIncentive.textContent,'42561.10');
 balances.exact_summary[0].exact_incentive=null;
 context.renderIncentiveBalances(balances);
-assert.equal(elements.salesIncentive.textContent,'Pending');
-assert.equal(elements.remainingIncentive.textContent,'Pending');
+assert.equal(elements.salesIncentive.textContent,'4068.25');
+assert.equal(elements.remainingIncentive.textContent,'42561.10');
 balances.exact_summary=[{exact_incentive:0}];
 balances.grouped_summary=[{total_incentive:0}];
 context.renderIncentiveBalances(balances);
@@ -51,12 +51,26 @@ assert.equal(elements.salesIncentive.textContent,'0.00');
 assert.equal(elements.remainingIncentive.textContent,'-23371.00');
 balances.ids_fund_report.version=1;
 context.renderIncentiveBalances(balances);
-assert.equal(elements.nonSalesIncentive.textContent,'Pending');
-assert.equal(elements.remainingIncentive.textContent,'Pending');
+assert.equal(elements.nonSalesIncentive.textContent,'Need Detail');
+assert.equal(elements.remainingIncentive.textContent,'Need Detail');
+balances.ids_fund_report={version:3,totals:{ids_fund:null}};
+context.renderIncentiveBalances(balances);
+assert.equal(elements.nonSalesIncentive.textContent,'0.00');
 context.renderIncentiveBalances({});
-assert.equal(elements.salesIncentive.textContent,'Pending');
+assert.equal(elements.salesIncentive.textContent,'Need Detail');
 assert.match(html,/renderIdsFund\(data.ids_fund_report\);renderIncentiveBalances\(data\);/);
+assert.doesNotMatch(html,/Pending/);
 console.log('Incentive cards: exact totals, IDS Fund source, group-wise remainder, pending and zero values passed.');
+
+for(const id of ['exactRows','exactReport','remainingRows','remainingReport'])elements[id]={innerHTML:'',hidden:true};
+vm.runInContext(html.slice(html.indexOf('  function renderExactIncentive('),html.indexOf('  async function calculate(')),context);
+context.renderExactIncentive([{outlet:'ALM',group:'ACC',total_incentive:175,applied_rate:null,exact_incentive:null}]);
+assert.equal(elements.exactReport.hidden,false);
+assert.match(elements.exactRows.innerHTML,/175.00/);
+assert.doesNotMatch(elements.exactRows.innerHTML,/Pending/);
+assert.doesNotMatch(elements.remainingRows.innerHTML,/Pending/);
+console.log('Exact incentive table fills saved null exact values from total incentive.');
+
 for(const id of ['outletSummaryReport','categoryReport','groupedReport','exactReport','remainingReport','idsFundReport','idsOutletReport','nonSalesReport','salesCard','nonSalesCard','incentiveSelection','showAllReports','nonSalesRateHeading','nonSalesRateTable']){
   elements[id]={hidden:false,setAttribute(name,value){this[name]=value},getAttribute(name){return this[name]},scrollIntoView(){}};
 }
