@@ -1,5 +1,4 @@
 import os
-from datetime import datetime, timedelta
 import bcrypt
 from jose import JWTError, jwt
 from fastapi import Depends, HTTPException, status
@@ -15,10 +14,9 @@ import models
 # --------------------------------------------------------------------
 SECRET_KEY = os.getenv("SECRET_KEY", "CHANGE_THIS_TO_A_LONG_RANDOM_SECRET_BEFORE_GOING_LIVE")
 ALGORITHM = "HS256"
-# Installed mobile users should not have to sign in every workday. Keep the
-# duration configurable for deployments while defaulting to one year. A user
-# can still be revoked immediately by setting their account status inactive.
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", str(60 * 24 * 365)))
+# Installed users should stay signed in until they explicitly log out. A user
+# can still be revoked immediately by setting their account status inactive or
+# by changing their session version.
 
 # This tells FastAPI's /docs page where to send username/password to get a token.
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
@@ -42,8 +40,6 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def create_access_token(data: dict):
     to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
