@@ -17,7 +17,7 @@ import models
 from database import get_db
 
 router = APIRouter(prefix="/api/identity-cards", tags=["Identity cards"])
-MANAGERS = {"Admin", "Owner", "HR"}
+MANAGERS = {"Admin", "Owner", "HR", "CEO", "Director"}
 OUTLET_ABBREVIATIONS = {
     "hazratganj": "HZT", "alambagh": "ALM", "ashiyana": "ASH",
     "gomtinagar": "GNG", "gomti nagar": "GNG", "vikas nagar": "VKN",

@@ -20,3 +20,8 @@ test('all purchase order API handlers have the strict permission dependency',()=
   assert.ok(routes.length>=7);
   for(const line of routes)assert.match(line,/Depends\(auth.require_purchase_order_access\)/);
 });
+test('CEO and Director can open requested project pages',()=>{
+  const source=fs.readFileSync('static/app-shell.js','utf8');
+  assert.match(source,/executiveRoutes=\['\/identity-card','\/identity_card','\/daily-profitability','\/ageing-stock'\]/);
+  assert.match(source,/\['CEO','Director'\]\.includes\(role\)&&executiveRoutes\.includes\(route\)/);
+});

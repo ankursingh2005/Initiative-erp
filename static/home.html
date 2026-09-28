@@ -86,6 +86,7 @@
     .nav-item.active svg { color: var(--nav-color, var(--brand-dark)); }
     .nav-item.n-scheme,.nav-item.n-po,.nav-item.n-ai,.nav-item.n-dp,.nav-item.n-price,.nav-item.n-age,.nav-item.n-calc,.nav-item.n-incentive { display:none; }
     :is(.role-Admin,.role-Owner,.role-HR,.role-MISExecutive,.role-Accounts) .nav-item:is(.n-scheme,.n-po,.n-ai,.n-dp,.n-price,.n-age,.n-calc,.n-incentive) { display:flex; }
+    :is(.role-CEO,.role-Director) .nav-item:is(.n-dp,.n-age) { display:flex; }
     :is(.role-CategoryManager,.role-BrandManager) .nav-item.n-scheme { display:flex; }
 
     html:not(.role-Admin):not(.role-HR):not(.role-MISExecutive):not(.role-Accounts) .nav-item.n-po { display:none; }
