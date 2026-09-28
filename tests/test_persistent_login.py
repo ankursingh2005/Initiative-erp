@@ -19,6 +19,12 @@ class PersistentLoginTests(unittest.TestCase):
 
         self.assertNotIn("activeLoginSession", html)
 
+    def test_login_page_resumes_existing_saved_session(self):
+        html = Path("static/login.html").read_text(encoding="utf-8")
+
+        self.assertIn("resumeExistingSession", html)
+        self.assertNotIn("['token', 'role', 'username'].forEach(key => localStorage.removeItem(key));", html)
+
 
 if __name__ == "__main__":
     unittest.main()

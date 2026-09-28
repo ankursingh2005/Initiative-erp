@@ -307,9 +307,24 @@
       return path.startsWith('/') ? `${appBasePath}${path}` : `${appBasePath}/${path}`;
     }
 
-    // Login is the shared-device boundary: opening it always clears the
-    // previous person's saved session so the next user must sign in fresh.
-    ['token', 'role', 'username'].forEach(key => localStorage.removeItem(key));
+    async function resumeExistingSession() {
+      const savedToken = localStorage.getItem('token');
+      if (!savedToken) return;
+      try {
+        const response = await fetch(appUrl('/api/me'), {
+          headers: { Authorization: 'Bearer ' + savedToken }
+        });
+        if (!response.ok) return;
+        const user = await response.json();
+        const role = user.role || localStorage.getItem('role') || '';
+        localStorage.setItem('role', role);
+        localStorage.setItem('username', user.username || localStorage.getItem('username') || '');
+        window.location.replace(appUrl(role === 'BrandPartner' ? '/attendance' : '/home'));
+      } catch (error) {
+        // Stay on the login page when offline or the server is temporarily unavailable.
+      }
+    }
+    resumeExistingSession();
 
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
