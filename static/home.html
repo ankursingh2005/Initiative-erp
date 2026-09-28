@@ -321,6 +321,14 @@
     }
     .um-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; cursor: pointer; }
     .um-header-text { flex: 1; min-width: 0; }
+    .um-header-actions { display:flex; align-items:flex-start; gap:10px; flex-shrink:0; }
+    .um-download { position:relative; }
+    .um-download-btn { min-height:38px; padding:8px 13px; border:1px solid #cdd7ea; border-radius:9px; background:#fff; color:var(--ink); font:inherit; font-size:12px; font-weight:800; cursor:pointer; }
+    .um-download-btn:hover { border-color:var(--um); color:var(--um-dark); background:var(--um-soft); }
+    .um-download-menu { position:absolute; top:calc(100% + 6px); right:0; z-index:5; min-width:138px; padding:6px; border:1px solid var(--line); border-radius:10px; background:#fff; box-shadow:0 16px 34px rgba(16,24,40,.18); }
+    .um-download-menu[hidden] { display:none; }
+    .um-download-menu button { display:block; width:100%; min-height:36px; padding:8px 10px; border:0; border-radius:7px; background:#fff; color:var(--ink); text-align:left; font:inherit; font-size:12px; font-weight:800; cursor:pointer; }
+    .um-download-menu button:hover { background:var(--um-soft); color:var(--um-dark); }
     .um-card h2 { margin: 0 0 4px; font-size: 18px; letter-spacing: -0.01em; color: var(--ink); }
     .um-card > .um-header .um-header-text > p { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.5; }
     .um-locked-hint {
@@ -554,7 +562,16 @@
             <h2>User Management</h2>
             <p>Since account-recovery email isn't configured on this system, a user who forgets their password should contact you to have it reset here. This also shows every account that has been registered.</p>
           </div>
-          <svg id="umChevron" class="um-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg>
+          <div class="um-header-actions">
+            <div class="um-download" onclick="event.stopPropagation()">
+              <button type="button" class="um-download-btn" onclick="toggleUserDownloadMenu()">Download</button>
+              <div id="umDownloadMenu" class="um-download-menu" hidden>
+                <button type="button" onclick="downloadUserManagement('xlsx')">Excel</button>
+                <button type="button" onclick="downloadUserManagement('pdf')">PDF</button>
+              </div>
+            </div>
+            <svg id="umChevron" class="um-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg>
+          </div>
         </div>
         <div id="umLockedHint" class="um-locked-hint" onclick="handleUserManagementClick(event)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>
@@ -741,6 +758,54 @@
     let userManagementRoles = [], userManagementActorId = null;
     let userManagementRoleFilter = 'ALL';
     let userManagementSearchQuery = '';
+    let pendingUserManagementDownload = null;
+
+    function toggleUserDownloadMenu(forceOpen) {
+      const menu = document.getElementById('umDownloadMenu');
+      if (!menu) return;
+      menu.hidden = typeof forceOpen === 'boolean' ? !forceOpen : !menu.hidden;
+    }
+
+    document.addEventListener('click', event => {
+      if (!event.target.closest?.('.um-download')) toggleUserDownloadMenu(false);
+    });
+
+    async function downloadUserManagement(format, verified = false) {
+      toggleUserDownloadMenu(false);
+      const detail = document.getElementById('umDetail');
+      if (!verified && detail?.style.display === 'none') {
+        pendingUserManagementDownload = format;
+        openUmPasswordModal();
+        return;
+      }
+      const msg = document.getElementById('userManagementMsg');
+      msg.classList.remove('success');
+      msg.textContent = 'Preparing user details download...';
+      try {
+        const response = await umFetch('/api/users/export?format=' + encodeURIComponent(format));
+        if (!response) return;
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          throw new Error(data.detail || 'Unable to download user details');
+        }
+        const blob = await response.blob();
+        const link = document.createElement('a');
+        const objectUrl = URL.createObjectURL(blob);
+        const disposition = response.headers.get('content-disposition') || '';
+        const filename = disposition.match(/filename="?([^";]+)"?/i)?.[1] || ('user_details.' + (format === 'pdf' ? 'pdf' : 'xlsx'));
+        link.href = objectUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(objectUrl);
+        msg.classList.add('success');
+        msg.textContent = 'User details downloaded.';
+      } catch (error) {
+        msg.classList.remove('success');
+        msg.textContent = error.message || 'Unable to download user details. Please try again.';
+      }
+    }
 
     async function loadUserManagement() {
       try {
@@ -1179,6 +1244,7 @@
       setTimeout(() => document.getElementById('umPasswordInput').focus(), 50);
     }
     function closeUmPasswordModal() {
+      pendingUserManagementDownload = null;
       document.getElementById('umPasswordModal').style.display = 'none';
     }
     async function confirmUmPassword() {
@@ -1208,9 +1274,13 @@
           err.style.display = 'block';
           return;
         }
+        const requestedDownload = pendingUserManagementDownload;
         closeUmPasswordModal();
         await loadUserManagement();
         showUmDetail();
+        if (requestedDownload) {
+          await downloadUserManagement(requestedDownload, true);
+        }
       } finally {
         btn.disabled = false;
       }

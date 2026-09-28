@@ -403,6 +403,7 @@ class AttendanceLocationCreate(BaseModel):
 class UserAdminOut(BaseModel):
     display_name: Optional[str] = None
     employee_id: Optional[str] = None
+    contact_no: Optional[str] = None
     id: int
     username: str
     email: str

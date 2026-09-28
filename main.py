@@ -2449,8 +2449,16 @@ def list_stores(db: Session = Depends(get_db)):
 
 def serialize_user_with_brands(user: models.User, db: Session = None) -> dict:
     card = db.query(models.IdentityCard).filter(models.IdentityCard.user_id == user.id).first() if db is not None else None
+    store = db.query(models.Store).filter(models.Store.id == user.store_id).first() if db is not None and user.store_id else None
+    brand_names = []
+    if db is not None:
+        brand_names = [name for (name,) in db.query(models.Brand.name)
+                       .join(models.UserBrand, models.UserBrand.brand_id == models.Brand.id)
+                       .filter(models.UserBrand.user_id == user.id)
+                       .order_by(models.Brand.name).all()]
     return {
         "employee_id": card.employee_id if card else None,
+        "contact_no": card.mobile if card else None,
         "display_name": (card.employee_name if card else None) or user.full_name or user.username,
         "id": user.id,
         "username": user.username,
@@ -2460,6 +2468,9 @@ def serialize_user_with_brands(user: models.User, db: Session = None) -> dict:
         "store_id": user.store_id,
         "category_code": user.category_code,
         "brand_ids": [ub.brand_id for ub in user.brands],
+        "brand_names": brand_names,
+        "outlet_name": store.name if store else None,
+        "outlet_code": store.code if store else None,
         "status": user.status,
         "weekoff_day": user.weekoff_day,
         "created_date": user.created_date,
@@ -2469,6 +2480,91 @@ def serialize_user_with_brands(user: models.User, db: Session = None) -> dict:
 def role_display_name(role: str) -> str:
     label = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", role or "")
     return re.sub(r"^ACTechnician", "AC Technician", label)
+
+
+def user_export_role_label(user_data: dict) -> str:
+    if user_data.get("role") == "BrandPartner":
+        brands = ", ".join(user_data.get("brand_names") or [])
+        return f"{brands or 'Brand Promoter'} (ISP)"
+    return role_display_name(user_data.get("role") or "")
+
+
+def build_user_export_rows(db: Session) -> list[dict]:
+    users = db.query(models.User).order_by(models.User.username, models.User.email).all()
+    rows = []
+    for user in users:
+        data = serialize_user_with_brands(user, db)
+        rows.append({
+            "employee_id": data.get("employee_id") or "Not assigned",
+            "username": data.get("username") or "",
+            "email": data.get("email") or "",
+            "role": user_export_role_label(data),
+            "outlet": data.get("outlet_name") or data.get("outlet_code") or "-",
+            "contact_no": data.get("contact_no") or "-",
+        })
+    return rows
+
+
+def export_users_excel(rows: list[dict]) -> bytes:
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    headers = ["EMP ID", "Username", "Email", "Role", "Outlet", "Contact No"]
+    keys = ["employee_id", "username", "email", "role", "outlet", "contact_no"]
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Users"
+    sheet.append(headers)
+    for row in rows:
+        sheet.append([row[key] for key in keys])
+    header_fill = PatternFill("solid", fgColor="111827")
+    for cell in sheet[1]:
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal="center")
+    for column_cells in sheet.columns:
+        max_length = max(len(str(cell.value or "")) for cell in column_cells)
+        sheet.column_dimensions[get_column_letter(column_cells[0].column)].width = min(max(max_length + 3, 14), 42)
+    output = BytesIO()
+    workbook.save(output)
+    return output.getvalue()
+
+
+def export_users_pdf(rows: list[dict]) -> bytes:
+    from html import escape
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+
+    headers = ["EMP ID", "Username", "Email", "Role", "Outlet", "Contact No"]
+    keys = ["employee_id", "username", "email", "role", "outlet", "contact_no"]
+    output = BytesIO()
+    styles = getSampleStyleSheet()
+    body = styles["BodyText"]
+    body.fontSize = 8
+    body.leading = 10
+    table_data = [[Paragraph(escape(value), body) for value in headers]]
+    for row in rows:
+        table_data.append([Paragraph(escape(str(row[key] or "")), body) for key in keys])
+    table = Table(table_data, colWidths=[72, 105, 150, 130, 100, 90], repeatRows=1)
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#111827")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#D0D5DD")),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F8FAFC")]),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+    ]))
+    doc = SimpleDocTemplate(output, pagesize=landscape(A4), leftMargin=24, rightMargin=24, topMargin=24, bottomMargin=24)
+    doc.build([Paragraph("User Details", styles["Title"]), Spacer(1, 10), table])
+    return output.getvalue()
 
 
 @app.get("/api/me", response_model=schemas.MyProfileOut)
@@ -3042,13 +3138,36 @@ def attendance_admin_summary(
 @app.get("/api/users", response_model=List[schemas.UserAdminOut])
 def list_users_for_admin(
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.require_roles("Admin")),
+    current_user: models.User = Depends(auth.require_user_management_admin),
 ):
     users = db.query(models.User).order_by(models.User.username).all()
     cards = {user_id: (employee_id, name) for user_id, employee_id, name in db.query(
         models.IdentityCard.user_id, models.IdentityCard.employee_id, models.IdentityCard.employee_name).all()}
     return [{**serialize_user_with_brands(u), "employee_id": cards.get(u.id, (None, None))[0],
              "display_name": cards.get(u.id, (None, None))[1] or u.full_name or u.username} for u in users]
+
+
+@app.get("/api/users/export")
+def export_users_for_admin(
+    format: str = Query("xlsx", pattern="^(xlsx|pdf)$"),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_user_management_admin),
+):
+    rows = build_user_export_rows(db)
+    stamp = datetime.now(INDIA_TZ).strftime("%Y%m%d")
+    if format == "pdf":
+        content = export_users_pdf(rows)
+        media_type = "application/pdf"
+        filename = f"user_details_{stamp}.pdf"
+    else:
+        content = export_users_excel(rows)
+        media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        filename = f"user_details_{stamp}.xlsx"
+    return Response(
+        content,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 USER_MANAGEMENT_ROLES = sorted(VALID_ROLES)
@@ -3132,7 +3251,7 @@ def update_user_role(
 @app.get("/api/users/count", response_model=schemas.UserCountOut)
 def count_registered_users(
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.require_roles("Admin")),
+    current_user: models.User = Depends(auth.require_user_management_admin),
 ):
     """Total number of accounts registered on this system, plus a
     breakdown by role, shown on the Admin dashboard."""
