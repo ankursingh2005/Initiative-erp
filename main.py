@@ -3417,6 +3417,7 @@ def attendance_user_history(
             "can_edit_profile": current_user.id == user.id or current_user.role in {"Admin", "HR", "Owner"},
             "email": user.email,
             "contact_number": card.mobile if card else None,
+            "dob": card.dob if card and card.dob else None,
             "profile_photo": card.photo if card else None,
             "assigned_outlet": outlet.name if outlet else None,
             "weekoff_day": user.weekoff_day,

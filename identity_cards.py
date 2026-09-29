@@ -190,6 +190,7 @@ class AttendanceProfileUpdate(BaseModel):
     name: str = Field(min_length=1, max_length=150)
     email: str = Field(min_length=3, max_length=150)
     mobile: str = Field(default="", max_length=25)
+    dob: date | None = None
     photo: str | None = Field(default=None, max_length=4_000_000)
 
 
@@ -217,9 +218,11 @@ def update_attendance_profile(user_id: int, payload: AttendanceProfileUpdate,
     if not card:
         store = db.get(models.Store, user.store_id) if user.store_id else None
         card = models.IdentityCard(user_id=user_id, employee_id=next_employee_id(db, outlet_abbreviation(store)),
-                                   employee_name=name, designation=user.role, mobile=mobile)
+                                   employee_name=name, designation=user.role, mobile=mobile, dob=payload.dob)
         db.add(card)
     card.employee_name, card.mobile = name, mobile
+    if "dob" in payload.model_fields_set:
+        card.dob = payload.dob
     user.full_name = name
     if user.email != email:
         user.email = email
@@ -231,7 +234,8 @@ def update_attendance_profile(user_id: int, payload: AttendanceProfileUpdate,
     except IntegrityError:
         db.rollback()
         raise HTTPException(409, "Email or employee ID is already in use. Reload and try again.")
-    return {"name": name, "email": user.email, "contact_number": mobile, "profile_photo": card.photo, "employee_id": card.employee_id}
+    return {"name": name, "email": user.email, "contact_number": mobile, "dob": card.dob.isoformat() if card.dob else None,
+            "profile_photo": card.photo, "employee_id": card.employee_id}
 
 
 @router.get("")

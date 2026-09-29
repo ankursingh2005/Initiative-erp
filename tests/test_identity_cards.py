@@ -108,7 +108,13 @@ class IdentityCardTests(unittest.TestCase):
         self.db.flush()
         user_id = user.id
         card = assign_employee_id(self.db, user)
-        self.assertRegex(card.employee_id, r'^IDS-26[0-9]{3,}
+        self.assertRegex(card.employee_id, r'^IDS-26[0-9]{3,}$')
+        self.assertEqual(assign_employee_id(self.db, user).employee_id, card.employee_id)
+        self.db.rollback()
+        self.assertIsNone(self.db.get(models.User, user_id))
+        self.assertIsNone(self.db.get(models.IdentityCard, user_id))
+
+    def test_database_rejects_duplicate_employee_id(self):
         self.client.get('/api/identity-cards')
         first = self.db.get(models.IdentityCard, self.users[3].id)
         second = self.db.get(models.IdentityCard, self.users[5].id)
@@ -229,144 +235,22 @@ class IdentityCardTests(unittest.TestCase):
         self.assertEqual(card['dob'], '2000-02-29')
         self.assertIsNone(self.put(dob=None).json()['dob'])
 
+    def test_attendance_profile_saves_dob(self):
+        response = self.client.patch(f'/api/identity-cards/profile/{self.users[3].id}', json={
+            'name': 'Attendance Name',
+            'email': 'attendance@example.test',
+            'mobile': '9876543210',
+            'dob': '1999-12-31',
+        })
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()['dob'], '1999-12-31')
+        card = self.db.get(models.IdentityCard, self.users[3].id)
+        self.assertEqual(card.dob.isoformat(), '1999-12-31')
+
     def test_invalid_dob_rejected(self):
         for value in ['2025-02-29', 'not-a-date', '2026-13-01']:
             self.assertEqual(self.put(dob=value).status_code, 422)
 
-
-    def test_joining_date_saved_preserved_and_cleared(self):
-        response = self.put(joining_date='2024-02-29')
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()['joining_date'], '2024-02-29')
-        self.assertEqual(self.put().json()['joining_date'], '2024-02-29')
-        card = next(c for c in self.client.get('/api/identity-cards').json()['cards']
-                    if c['user_id'] == self.users[3].id)
-        self.assertEqual(card['joining_date'], '2024-02-29')
-        self.assertIsNone(self.put(joining_date=None).json()['joining_date'])
-
-    def test_invalid_joining_date_rejected(self):
-        for value in ['2025-02-29', 'not-a-date', '2026-13-01']:
-            self.assertEqual(self.put(joining_date=value).status_code, 422)
-
-
-if __name__ == '__main__':
-    unittest.main()
-)
-        self.assertEqual(assign_employee_id(self.db, user).employee_id, card.employee_id)
-        self.db.rollback()
-        self.assertIsNone(self.db.get(models.User, user_id))
-        self.assertIsNone(self.db.get(models.IdentityCard, user_id))
-
-    def test_database_rejects_duplicate_employee_id(self):
-        self.client.get('/api/identity-cards')
-        first = self.db.get(models.IdentityCard, self.users[3].id)
-        second = self.db.get(models.IdentityCard, self.users[5].id)
-        second.employee_id = first.employee_id
-        with self.assertRaises(IntegrityError):
-            self.db.commit()
-        self.db.rollback()
-
-    def test_deleted_highest_serial_is_not_reused(self):
-        self.client.get('/api/identity-cards')
-        last = self.users[5]
-        self.db.delete(self.db.get(models.IdentityCard, last.id))
-        self.db.delete(last)
-        self.db.commit()
-        newcomer = models.User(username='replacement', email='replacement@example.test', role='Employee', password_hash='x', store_id=self.hzt.id)
-        self.db.add(newcomer)
-        self.db.commit()
-        self.client.get('/api/identity-cards')
-        self.assertEqual(self.db.get(models.IdentityCard, newcomer.id).employee_id, 'IDS-HZT-26004')
-
-    def test_concurrent_number_reservations_are_unique(self):
-        with TemporaryDirectory() as directory:
-            engine = create_engine('sqlite:///' + (Path(directory) / 'identity-test.db').as_posix(),
-                                   connect_args={'check_same_thread': False, 'timeout': 30})
-            models.Base.metadata.create_all(engine)
-            sessions = sessionmaker(bind=engine)
-            def reserve(_):
-                with sessions() as db:
-                    value = next_employee_id(db, 'HZT')
-                    db.commit()
-                    return value
-            try:
-                with ThreadPoolExecutor(max_workers=6) as pool:
-                    values = list(pool.map(reserve, range(24)))
-                self.assertEqual(len(set(values)), 24)
-                self.assertEqual(set(values), {f'IDS-HZT-26{i:03d}' for i in range(1, 25)})
-            finally:
-                engine.dispose()
-
-    def test_outlet_numbering_and_year_rollover(self):
-        data = self.client.get('/api/identity-cards').json()['cards']
-        self.assertEqual([c['employee_id'] for c in data], [
-            'IDS-HO-26001', 'IDS-HO-26002', 'IDS-HO-26003', 'IDS-HZT-26001', 'IDS-HZT-26003'])
-        with patch('identity_cards.issue_year', return_value='27'):
-            new_user = models.User(username='new', email='new@example.test', role='Employee', password_hash='x', store_id=self.hzt.id)
-            self.db.add(new_user)
-            self.db.commit()
-            refreshed = self.client.get('/api/identity-cards').json()['cards']
-        by_id = {c['user_id']: c['employee_id'] for c in refreshed}
-        self.assertEqual(by_id[self.users[3].id], 'IDS-HZT-26001')
-        self.assertEqual(by_id[new_user.id], 'IDS-HZT-27001')
-
-    def test_legacy_migration_preserves_details_and_transfer_renumbers(self):
-        self.db.add(models.IdentityCard(user_id=self.users[3].id, employee_id='IDSPL-00004', employee_name='Saved Name', designation='Saved Title', mobile='1234567890', photo=None))
-        self.db.commit()
-        self.client.get('/api/identity-cards')
-        card = self.db.get(models.IdentityCard, self.users[3].id)
-        self.assertEqual(card.employee_id, 'IDS-HZT-26001')
-        self.assertEqual(card.employee_name, 'Saved Name')
-        self.assertEqual(card.mobile, '1234567890')
-        self.users[3].store_id = self.ho.id
-        self.db.commit()
-        self.client.get('/api/identity-cards')
-        self.assertEqual(card.employee_id, 'IDS-HO-26004')
-        another = models.User(username='later', email='later@example.test', role='Employee', password_hash='x', store_id=self.hzt.id)
-        self.db.add(another)
-        self.db.commit()
-        self.client.get('/api/identity-cards')
-        self.assertEqual(self.db.get(models.IdentityCard, another.id).employee_id, 'IDS-HZT-26004')
-
-    def test_unassigned_users_do_not_get_a_false_outlet(self):
-        self.users[3].store_id = None
-        self.db.commit()
-        self.client.get('/api/identity-cards')
-        self.assertEqual(self.db.get(models.IdentityCard, self.users[3].id).employee_id, 'IDS-26001')
-
-    def test_unassigned_legacy_ids_migrate_and_remain_unique_and_stable(self):
-        for user in self.users[3::2]:
-            user.store_id = None
-        self.db.add(models.IdentityCard(user_id=self.users[3].id,
-                    employee_id='IDS-UNASSIGNED-25001', employee_name='Saved Name',
-                    designation='Saved Title', mobile='1234567890'))
-        self.db.commit()
-        self.client.get('/api/identity-cards')
-        card = self.db.get(models.IdentityCard, self.users[3].id)
-        self.assertEqual(card.employee_id, 'IDS-26001')
-        self.assertEqual(card.employee_name, 'Saved Name')
-        self.assertEqual(card.mobile, '1234567890')
-        self.assertEqual(self.db.get(models.IdentityCard, self.users[5].id).employee_id, 'IDS-26002')
-        with patch('identity_cards.issue_year', return_value='27'):
-            self.client.get('/api/identity-cards')
-        self.assertEqual(card.employee_id, 'IDS-26001')
-
-    def test_invalid_data_and_photo_rejected(self):
-        for change in [dict(employee_name='   '), dict(mobile='abc'), dict(employee_id='<bad>'), dict(photo='data:image/svg+xml;base64,xxx'), dict(photo='data:image/png;base64,YmFk'), dict(role='Admin')]:
-            self.assertEqual(self.put(**change).status_code, 422, change)
-        self.assertIsNone(self.db.get(models.IdentityCard, self.users[3].id))
-
-    def test_photo_normalization_preservation_and_removal(self):
-        output = BytesIO()
-        Image.new('RGB', (100, 180), 'teal').save(output, 'PNG')
-        photo = 'data:image/png;base64,' + base64.b64encode(output.getvalue()).decode()
-        response = self.put(photo=photo)
-        self.assertEqual(response.status_code, 200)
-        saved = response.json()['photo']
-        self.assertTrue(saved.startswith('data:image/jpeg;base64,'))
-        self.assertEqual(Image.open(BytesIO(base64.b64decode(saved.split(',')[1]))).size, (480, 480))
-        self.assertEqual(self.put().json()['photo'], saved)
-        self.assertIsNone(self.put(photo=None).json()['photo'])
 
     def test_joining_date_saved_preserved_and_cleared(self):
         response = self.put(joining_date='2024-02-29')
