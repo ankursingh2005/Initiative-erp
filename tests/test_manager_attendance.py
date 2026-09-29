@@ -17,6 +17,15 @@ main = isolated.main
 tearDownModule = isolated.tearDownModule
 
 
+def attendance_export_user_ids(content):
+    workbook = load_workbook(BytesIO(content))
+    if 'Attendance Detail' in workbook.sheetnames:
+        rows = list(workbook['Attendance Detail'].values)[1:]
+    else:
+        rows = list(workbook.active.values)[1:]
+    return {row[0] for row in rows if row and row[0] is not None}
+
+
 class ManagerAttendanceTests(unittest.TestCase):
     def setUp(self):
         self.engine = create_engine('sqlite://', connect_args={'check_same_thread': False}, poolclass=StaticPool)
@@ -81,9 +90,17 @@ class ManagerAttendanceTests(unittest.TestCase):
         for path in ['/api/attendance/admin-export?date=2026-09-23', '/api/attendance/monthly-export?month=2026-09']:
             response = self.client.get(path)
             self.assertEqual(response.status_code, 200, response.text if response.status_code != 200 else '')
-            rows = list(load_workbook(BytesIO(response.content)).active.values)[1:]
-            self.assertTrue(rows)
-            self.assertTrue(all(row[0] in {self.users[0].id, self.users[1].id} for row in rows))
+            if 'monthly-export' in path:
+                workbook = load_workbook(BytesIO(response.content))
+                self.assertEqual(workbook.sheetnames, ['Monthly Summary', 'Attendance Detail'])
+                self.assertEqual([workbook['Monthly Summary'].cell(4, column).value for column in range(1, 7)],
+                                 ['Outlet', 'Employee', '1', '2', '3', '4'])
+                self.assertEqual(list(workbook['Attendance Detail'].values)[0],
+                                 ('User ID', 'Outlet', 'Employee', 'Date', 'Day', 'Status', 'Punch In', 'Punch Out',
+                                  'Punch In Distance (m)', 'Punch Out Distance (m)', 'Punch In Photo', 'Punch Out Photo'))
+            user_ids = attendance_export_user_ids(response.content)
+            self.assertTrue(user_ids)
+            self.assertTrue(user_ids <= {self.users[0].id, self.users[1].id})
             self.assertEqual(self.client.get(path+'&store_id='+str(self.stores[1].id)).status_code, 403)
         self.assertEqual(self.client.get('/api/attendance/admin-user-export?user_id='+str(self.users[2].id)).status_code, 403)
         response = self.client.get('/api/attendance/admin-user-export?user_id='+str(self.users[1].id))
@@ -157,9 +174,9 @@ class ManagerAttendanceTests(unittest.TestCase):
         for path in ('/api/attendance/admin-export?date=2026-09-23', '/api/attendance/monthly-export?month=2026-09'):
             response = self.client.get(path)
             self.assertEqual(response.status_code, 200)
-            rows = list(load_workbook(BytesIO(response.content)).active.values)[1:]
-            self.assertTrue(rows)
-            self.assertTrue(all(row[0] in {noor.id, project.id} for row in rows))
+            user_ids = attendance_export_user_ids(response.content)
+            self.assertTrue(user_ids)
+            self.assertTrue(user_ids <= {noor.id, project.id})
         self.actor = other
         self.assertEqual(self.client.get('/summary').status_code, 200)
         self.assertEqual(self.client.get('/history/'+str(project.id)).status_code, 403)
@@ -203,5 +220,4 @@ class ManagerAttendanceTests(unittest.TestCase):
                 for path in ('/api/attendance/admin-export?date=2026-09-22', '/api/attendance/monthly-export?month=2026-09', '/api/attendance/admin-user-export?user_id='+str(self.users[2].id)):
                     response = self.client.get(path)
                     self.assertEqual(response.status_code, 200, path)
-                    rows = list(load_workbook(BytesIO(response.content)).active.values)[1:]
-                    self.assertIn(self.users[2].id, {row[0] for row in rows})
+                    self.assertIn(self.users[2].id, attendance_export_user_ids(response.content))
