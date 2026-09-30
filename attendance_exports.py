@@ -14,8 +14,8 @@ from database import get_db
 from attendance_categories import filter_employee_category, filter_manager_employees
 
 router = APIRouter(prefix='/api/attendance')
-HEADERS = ['User ID', 'Employee', 'Date', 'Outlet', 'Status', 'Punch in', 'Punch out', 'Hours']
-DETAIL_HEADERS = ['User ID', 'Outlet', 'Employee', 'Date', 'Day', 'Status', 'Punch In', 'Punch Out',
+HEADERS = ['Emp ID', 'Employee', 'Date', 'Status', 'Punch in', 'Punch out', 'Hours']
+DETAIL_HEADERS = ['Emp ID', 'Employee', 'Date', 'Day', 'Status', 'Punch In', 'Punch Out',
                   'Punch In Distance (m)', 'Punch Out Distance (m)', 'Punch In Photo', 'Punch Out Photo']
 
 
@@ -39,7 +39,7 @@ def render_export(rows, format, filename):
         for cell in sheet[1]:
             cell.font = Font(bold=True, color='FFFFFF')
             cell.fill = PatternFill('solid', fgColor='155EEF')
-        for index, width in enumerate([12, 30, 15, 25, 14, 15, 15, 12], 1):
+        for index, width in enumerate([18, 30, 15, 14, 15, 15, 12], 1):
             sheet.column_dimensions[get_column_letter(index)].width = width
         sheet.freeze_panes = 'A2'
         sheet.auto_filter.ref = sheet.dimensions
@@ -55,7 +55,7 @@ def render_export(rows, format, filename):
         body.fontSize = 8
         body.leading = 10
         data = [[Paragraph(escape(str(value)), body) for value in row] for row in [HEADERS] + rows]
-        table = Table(data, colWidths=[42, 155, 70, 125, 65, 65, 65, 50], repeatRows=1)
+        table = Table(data, colWidths=[85, 180, 70, 65, 65, 65, 50], repeatRows=1)
         table.setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#EAF1FF')),
             ('VALIGN', (0, 0), (-1, -1), 'TOP'), ('GRID', (0, 0), (-1, -1), .3, colors.lightgrey),
             ('TOPPADDING', (0, 0), (-1, -1), 6), ('BOTTOMPADDING', (0, 0), (-1, -1), 6)]))
@@ -74,6 +74,11 @@ def _safe_text(value):
 def _display_name(user, identity_cards):
     card = identity_cards.get(user.id)
     return _safe_text((card.employee_name if card and card.employee_name else None) or user.full_name or user.username)
+
+
+def _employee_id(user, identity_cards):
+    card = identity_cards.get(user.id)
+    return _safe_text(card.employee_id if card and card.employee_id else '')
 
 
 def _short_status(state):
@@ -139,7 +144,7 @@ def _build_monthly_workbook(db, start, end, store_id=None, weekoff_day=None, sta
     summary['A1'].fill = navy_fill
     summary['A2'].fill = month_fill
     summary.append([])
-    summary.append(['Outlet', 'Employee'] + [str(day.day) for day in days] + ['Present', 'Absent', 'Week Off', 'Total'])
+    summary.append(['Emp ID', 'Employee'] + [str(day.day) for day in days] + ['Present', 'Absent', 'Week Off', 'Total'])
 
     detail.append(DETAIL_HEADERS)
     summary_rows = []
@@ -149,7 +154,6 @@ def _build_monthly_workbook(db, start, end, store_id=None, weekoff_day=None, sta
         present = absent = weekoff = 0
         marks = []
         include_user = store_id is None
-        outlet_name = stores.get(user.store_id, '')
         for day in days:
             record = by_day.get((user.id, day))
             outlet_id = record.store_id if record and record.store_id is not None else user.store_id
@@ -157,7 +161,6 @@ def _build_monthly_workbook(db, start, end, store_id=None, weekoff_day=None, sta
                 marks.append('-')
                 continue
             include_user = True
-            outlet_name = stores.get(outlet_id, outlet_name)
             if day > today:
                 mark = '-'
             else:
@@ -175,7 +178,7 @@ def _build_monthly_workbook(db, start, end, store_id=None, weekoff_day=None, sta
                         weekoff += 1
             marks.append(mark)
         if include_user and (not status or any(mark == _short_status(status) for mark in marks)):
-            summary_rows.append([_safe_text(outlet_name), _display_name(user, identity_cards)] + marks +
+            summary_rows.append([_employee_id(user, identity_cards), _display_name(user, identity_cards)] + marks +
                                 [present, absent, weekoff, f'{present}/{len(days)}'])
 
     for record in sorted(by_day.values(), key=lambda item: (stores.get(item.store_id, ''), item.user_id, item.attendance_date, item.id)):
@@ -188,8 +191,7 @@ def _build_monthly_workbook(db, start, end, store_id=None, weekoff_day=None, sta
         state = 'Present' if record.checkin_at else 'Absent'
         if status and state != status:
             continue
-        detail_rows.append([record.user_id, _safe_text(stores.get(outlet_id, '')),
-                            _display_name(user, identity_cards), record.attendance_date,
+        detail_rows.append([_employee_id(user, identity_cards), _display_name(user, identity_cards), record.attendance_date,
                             record.attendance_date.strftime('%A'), _short_status(state),
                             record.checkin_at, record.checkout_at, record.checkin_distance_m or 0,
                             record.checkout_distance_m or 0, _photo_status(record.checkin_selfie),
@@ -247,10 +249,9 @@ def _build_monthly_workbook(db, start, end, store_id=None, weekoff_day=None, sta
         for column in range(summary_day_end + 1, total_columns + 1):
             summary.cell(row, column).alignment = Alignment(horizontal='center', vertical='center')
 
-    detail.column_dimensions['A'].hidden = True
     detail.row_dimensions[1].height = 24
     for row in range(2, detail.max_row + 1):
-        status_cell = detail.cell(row, 6)
+        status_cell = detail.cell(row, 5)
         status_cell.alignment = Alignment(horizontal='center', vertical='center')
         if status_cell.value == 'P':
             status_cell.fill = present_fill
@@ -258,23 +259,23 @@ def _build_monthly_workbook(db, start, end, store_id=None, weekoff_day=None, sta
             status_cell.fill = absent_fill
         elif status_cell.value == 'WO':
             status_cell.fill = weekoff_fill
+        detail.cell(row, 8).number_format = '0.0'
         detail.cell(row, 9).number_format = '0.0'
-        detail.cell(row, 10).number_format = '0.0'
 
     summary.freeze_panes = 'A5'
-    detail.freeze_panes = 'B2'
+    detail.freeze_panes = 'A2'
     for column, width in [(1, 20), (2, 25)]:
         summary.column_dimensions[get_column_letter(column)].width = width
     for column in range(3, 3 + len(days)):
         summary.column_dimensions[get_column_letter(column)].width = 6
     for column in range(3 + len(days), total_columns + 1):
         summary.column_dimensions[get_column_letter(column)].width = 12
-    for index, width in enumerate([10, 20, 25, 14, 14, 11, 18, 18, 22, 23, 17, 18], 1):
+    for index, width in enumerate([18, 25, 14, 14, 11, 18, 18, 22, 23, 17, 18], 1):
         detail.column_dimensions[get_column_letter(index)].width = width
     for row in range(2, detail.max_row + 1):
-        detail.cell(row, 4).number_format = 'dd-mmm-yyyy'
+        detail.cell(row, 3).number_format = 'dd-mmm-yyyy'
+        detail.cell(row, 6).number_format = 'hh:mm AM/PM'
         detail.cell(row, 7).number_format = 'hh:mm AM/PM'
-        detail.cell(row, 8).number_format = 'hh:mm AM/PM'
 
     output = BytesIO()
     workbook.save(output)
@@ -295,6 +296,7 @@ def export_rows(db, start=None, end=None, user_id=None, store_id=None, weekoff_d
     users = filter_employee_category(users, emp_category)
     users = users.order_by(models.User.username, models.User.id).all()
     ids = [user.id for user in users]
+    identity_cards = {card.user_id: card for card in db.query(models.IdentityCard).filter(models.IdentityCard.user_id.in_(ids)).all()} if ids else {}
     records = db.query(models.AttendanceRecord).filter(models.AttendanceRecord.user_id.in_(ids))
     leaves = db.query(models.AttendanceLeave).filter(models.AttendanceLeave.user_id.in_(ids))
     if start:
@@ -302,7 +304,6 @@ def export_rows(db, start=None, end=None, user_id=None, store_id=None, weekoff_d
         leaves = leaves.filter(models.AttendanceLeave.leave_date >= start, models.AttendanceLeave.leave_date <= end)
     by_day = {(r.user_id, r.attendance_date): r for r in records.order_by(models.AttendanceRecord.id).all()}
     leave_days = {(r.user_id, r.leave_date) for r in leaves.all()}
-    stores = {s.id: s.name for s in db.query(models.Store).all()}
     rows = []
     for user in users:
         days = ([start + timedelta(days=i) for i in range((end-start).days+1)] if start else
@@ -318,7 +319,7 @@ def export_rows(db, start=None, end=None, user_id=None, store_id=None, weekoff_d
                 continue
             checkin, checkout = (record.checkin_at, record.checkout_at) if record else (None, None)
             hours = round((checkout-checkin).total_seconds()/3600, 2) if checkin and checkout else ''
-            rows.append([user.id, user.username, day.isoformat(), stores.get(outlet_id, ''), state,
+            rows.append([_employee_id(user, identity_cards), _display_name(user, identity_cards), day.isoformat(), state,
                          checkin.strftime('%H:%M') if checkin else '', checkout.strftime('%H:%M') if checkout else '', hours])
     return rows
 
@@ -357,4 +358,6 @@ def user_export(user_id: int, format: str = 'xlsx', db: Session = Depends(get_db
     if not can_view_attendance(actor, user):
         raise HTTPException(403, "You cannot download another user's attendance")
     outlet = actor.store_id if actor.role == 'CategoryManager' and actor.id != user_id else None
-    return render_export(export_rows(db, user_id=user_id, store_id=outlet), format, f'attendance-user-{user_id}')
+    card = db.get(models.IdentityCard, user_id)
+    filename_id = card.employee_id if card and card.employee_id else user.username
+    return render_export(export_rows(db, user_id=user_id, store_id=outlet), format, f'attendance-{filename_id}')

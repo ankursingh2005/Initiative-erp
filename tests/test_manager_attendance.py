@@ -17,7 +17,7 @@ main = isolated.main
 tearDownModule = isolated.tearDownModule
 
 
-def attendance_export_user_ids(content):
+def attendance_export_emp_ids(content):
     workbook = load_workbook(BytesIO(content))
     if 'Attendance Detail' in workbook.sheetnames:
         rows = list(workbook['Attendance Detail'].values)[1:]
@@ -41,6 +41,9 @@ class ManagerAttendanceTests(unittest.TestCase):
             self.db.add(user)
             self.users.append(user)
         self.db.flush()
+        for index, user in enumerate(self.users, 1):
+            self.db.add(models.IdentityCard(user_id=user.id, employee_id=f'IDS-TEST-2600{index}',
+                employee_name=user.username, designation=user.role, mobile=''))
         self.records = []
         for employee, outlet in [(1, 0), (2, 1), (1, 1)]:
             record = models.AttendanceRecord(user_id=self.users[employee].id, store_id=self.stores[outlet].id,
@@ -94,20 +97,20 @@ class ManagerAttendanceTests(unittest.TestCase):
                 workbook = load_workbook(BytesIO(response.content))
                 self.assertEqual(workbook.sheetnames, ['Monthly Summary', 'Attendance Detail'])
                 self.assertEqual([workbook['Monthly Summary'].cell(4, column).value for column in range(1, 7)],
-                                 ['Outlet', 'Employee', '1', '2', '3', '4'])
+                                 ['Emp ID', 'Employee', '1', '2', '3', '4'])
                 self.assertEqual(list(workbook['Attendance Detail'].values)[0],
-                                 ('User ID', 'Outlet', 'Employee', 'Date', 'Day', 'Status', 'Punch In', 'Punch Out',
+                                 ('Emp ID', 'Employee', 'Date', 'Day', 'Status', 'Punch In', 'Punch Out',
                                   'Punch In Distance (m)', 'Punch Out Distance (m)', 'Punch In Photo', 'Punch Out Photo'))
-            user_ids = attendance_export_user_ids(response.content)
-            self.assertTrue(user_ids)
-            self.assertTrue(user_ids <= {self.users[0].id, self.users[1].id})
+            emp_ids = attendance_export_emp_ids(response.content)
+            self.assertTrue(emp_ids)
+            self.assertTrue(emp_ids <= {'IDS-TEST-26001', 'IDS-TEST-26002'})
             self.assertEqual(self.client.get(path+'&store_id='+str(self.stores[1].id)).status_code, 403)
         self.assertEqual(self.client.get('/api/attendance/admin-user-export?user_id='+str(self.users[2].id)).status_code, 403)
         response = self.client.get('/api/attendance/admin-user-export?user_id='+str(self.users[1].id))
         self.assertEqual(response.status_code, 200)
         rows = list(load_workbook(BytesIO(response.content)).active.values)[1:]
         self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0][3], 'Outlet A')
+        self.assertEqual(rows[0][0], 'IDS-TEST-26002')
 
     def test_manager_only_sees_ids_and_brand_categories(self):
         brand = models.User(username='Promoter', email='promoter@example.test', role='BrandPartner', store_id=self.stores[0].id, status='Active', password_hash='unused')
@@ -131,7 +134,11 @@ class ManagerAttendanceTests(unittest.TestCase):
 
     def test_summary_uses_latest_saved_profile_name_and_email(self):
         employee = self.users[1]
-        self.db.add(models.IdentityCard(user_id=employee.id, employee_id='IDS-TEST-26001', employee_name='MAHESH PRATAP SINGH', designation='Employee', mobile='9876543210'))
+        card = self.db.get(models.IdentityCard, employee.id)
+        card.employee_id = 'IDS-TEST-26099'
+        card.employee_name = 'MAHESH PRATAP SINGH'
+        card.designation = 'Employee'
+        card.mobile = '9876543210'
         employee.full_name = 'MAHESH PRATAP SINGH'
         employee.email = 'updated@example.test'
         self.db.commit()
@@ -141,7 +148,7 @@ class ManagerAttendanceTests(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             row = next(item for item in response.json()['rows'] if item['user_id'] == employee.id)
             self.assertEqual(row['display_name'], 'MAHESH PRATAP SINGH')
-            self.assertEqual(row['employee_id'], 'IDS-TEST-26001')
+            self.assertEqual(row['employee_id'], 'IDS-TEST-26099')
             self.assertEqual(row['designation'], 'Employee')
             self.assertEqual(row['email'], 'updated@example.test')
             self.assertEqual(row['username'], employee.username)
@@ -154,6 +161,10 @@ class ManagerAttendanceTests(unittest.TestCase):
         other = models.User(username='Other service manager', email='other@example.test', role='Service Manager B', status='Active', password_hash='unused')
         self.db.add_all([noor, project, retail, other])
         self.db.flush()
+        self.db.add(models.IdentityCard(user_id=noor.id, employee_id='IDS-TEST-26101',
+            employee_name=noor.username, designation=noor.role, mobile=''))
+        self.db.add(models.IdentityCard(user_id=project.id, employee_id='IDS-TEST-26102',
+            employee_name=project.username, designation=project.role, mobile=''))
         record = models.AttendanceRecord(user_id=project.id, store_id=self.stores[1].id, attendance_date=date(2026, 9, 23), checkin_at=datetime(2026, 9, 23, 9), checkin_selfie='project-photo')
         self.db.add(record)
         self.db.commit()
@@ -174,9 +185,9 @@ class ManagerAttendanceTests(unittest.TestCase):
         for path in ('/api/attendance/admin-export?date=2026-09-23', '/api/attendance/monthly-export?month=2026-09'):
             response = self.client.get(path)
             self.assertEqual(response.status_code, 200)
-            user_ids = attendance_export_user_ids(response.content)
-            self.assertTrue(user_ids)
-            self.assertTrue(user_ids <= {noor.id, project.id})
+            emp_ids = attendance_export_emp_ids(response.content)
+            self.assertTrue(emp_ids)
+            self.assertTrue(emp_ids <= {'IDS-TEST-26101', 'IDS-TEST-26102'})
         self.actor = other
         self.assertEqual(self.client.get('/summary').status_code, 200)
         self.assertEqual(self.client.get('/history/'+str(project.id)).status_code, 403)
@@ -220,4 +231,4 @@ class ManagerAttendanceTests(unittest.TestCase):
                 for path in ('/api/attendance/admin-export?date=2026-09-22', '/api/attendance/monthly-export?month=2026-09', '/api/attendance/admin-user-export?user_id='+str(self.users[2].id)):
                     response = self.client.get(path)
                     self.assertEqual(response.status_code, 200, path)
-                    self.assertIn(self.users[2].id, attendance_export_user_ids(response.content))
+                    self.assertIn('IDS-TEST-26003', attendance_export_emp_ids(response.content))
