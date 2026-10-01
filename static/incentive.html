@@ -138,15 +138,17 @@
   async function clearUpload(){
     const button=document.getElementById('clearUpload');button.disabled=true;
     try{
-      await storageOperation('readwrite',store=>store.delete(storageKey));
+      const response=await fetch('/api/incentive/saved',{method:'DELETE',headers:{Authorization:'Bearer '+token}});
+      if(!response.ok){const data=await response.json().catch(()=>({}));throw new Error(data.detail||'Unable to clear shared upload.')}
+      if(storageKey)await storageOperation('readwrite',store=>store.delete(storageKey));
       uploadVersion++;selectedFile=null;document.getElementById('file').value='';document.getElementById('savedFileName').textContent='';resetReport();
-      setMessage('Uploaded file and saved reports cleared.');
+      setMessage('Shared incentive upload and saved reports cleared.');
     }catch(e){setMessage('Unable to clear saved upload: '+e.message,true)}finally{button.disabled=false}
   }
   document.getElementById('file').addEventListener('change',async event=>{
     const file=event.target.files[0];if(!file)return;
     uploadVersion++;selectedFile=file;resetReport();document.getElementById('savedFileName').textContent=file.name;
-    try{await persistUpload();setMessage('File saved in this browser. Click Calculate to prepare reports.')}catch(e){setMessage('File selected but could not be saved: '+e.message,true)}
+    try{await persistUpload();setMessage('File selected. Click Calculate to save the report for all authorized users.')}catch(e){setMessage('File selected. Click Calculate to save the shared report.')}
   });
   for(const id of ['profitRate','incentiveRate'])document.getElementById(id).addEventListener('change',async()=>{
     uploadVersion++;resetReport();if(selectedFile){try{await persistUpload();setMessage('Rates saved. Click Calculate to update reports.')}catch(e){setMessage('Could not save rates: '+e.message,true)}}
@@ -158,6 +160,31 @@
       const response=await fetch('/api/me',{headers:{Authorization:'Bearer '+token}});
       if(!response.ok)throw new Error('Please sign in again.');
       const user=await response.json();storageKey=String(user.id);
+      const sharedResponse=await fetch('/api/incentive/saved',{headers:{Authorization:'Bearer '+token}});
+      if(sharedResponse.ok){
+        const shared=await sharedResponse.json();
+        if(shared?.has_data){
+          selectedFile=null;savedReport=shared.report;
+          document.getElementById('profitRate').value=shared.profit_rate;
+          document.getElementById('incentiveRate').value=shared.incentive_rate;
+          document.getElementById('savedFileName').textContent='Shared file: '+(shared.file_name||'Incentive upload');
+          const needsUpdate=savedReport?.report_version!==REPORT_VERSION;
+          if(!needsUpdate)renderIncentive(savedReport);
+          const fileResponse=await fetch('/api/incentive/saved-file',{headers:{Authorization:'Bearer '+token}});
+          if(fileResponse.ok){
+            const blob=await fileResponse.blob();
+            selectedFile=new File([blob],shared.file_name||'incentive_upload.xlsx',{type:blob.type||'application/octet-stream'});
+          }
+          if(needsUpdate&&selectedFile){
+            savedReport=null;
+            setMessage('Shared upload restored. Updating reports with the latest calculation...');
+            await calculate();
+            return;
+          }
+          setMessage(`Shared upload restored${shared.uploaded_by?' from '+shared.uploaded_by:''}. Use Clear to remove it for everyone.`);
+          return;
+        }
+      }
       const saved=await storageOperation('readonly',store=>store.get(storageKey));
       if(saved?.file){
         selectedFile=saved.file;savedReport=saved.report;
@@ -305,7 +332,7 @@
     }).join('');
     document.getElementById('remainingReport').hidden=false;
   }
-  async function calculate(){const btn=document.getElementById('calculate'),version=uploadVersion;try{btn.disabled=true;setMessage('Reading file and calculating incentives…');const response=await fetch('/api/incentive/calculate',{method:'POST',headers:{Authorization:`Bearer ${token}`},body:formData()});const data=await response.json();if(!response.ok)throw new Error(data.detail||'Calculation failed.');if(version!==uploadVersion)return;renderIncentive(data);savedReport=data;await persistUpload();setMessage(`${data.summary.length} outlets calculated successfully.`)}catch(e){setMessage(e.message,true)}finally{btn.disabled=false}}
+  async function calculate(){const btn=document.getElementById('calculate'),version=uploadVersion;try{btn.disabled=true;setMessage('Reading file and calculating incentives…');const response=await fetch('/api/incentive/calculate',{method:'POST',headers:{Authorization:`Bearer ${token}`},body:formData()});const data=await response.json();if(!response.ok)throw new Error(data.detail||'Calculation failed.');if(version!==uploadVersion)return;renderIncentive(data);savedReport=data;await persistUpload();setMessage(`${data.summary.length} outlets calculated and saved for all authorized users.`)}catch(e){setMessage(e.message,true)}finally{btn.disabled=false}}
   async function downloadExactReport(format,button){
     try{
       button.disabled=true;

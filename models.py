@@ -726,3 +726,19 @@ class AgeingStockItem(Base):
     location_age_buckets_json = Column(Text, nullable=True)
 
     source_file = Column(String(255), nullable=True)
+
+
+class IncentiveUpload(Base):
+    """Latest shared Incentive Project upload and calculated report."""
+    __tablename__ = "incentive_uploads"
+    id = Column(Integer, primary_key=True, index=True)
+    source_file = Column(String(255), nullable=True)
+    content_type = Column(String(150), nullable=True)
+    file_data = Column(LargeBinary, nullable=False)
+    profit_rate = Column(Float, nullable=False, default=7)
+    incentive_rate = Column(Float, nullable=False, default=2.5)
+    report_version = Column(Integer, nullable=False, default=7)
+    report_json = Column(Text, nullable=False)
+    uploaded_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    uploaded_by_username = Column(String(100), nullable=True)
+    uploaded_at = Column(DateTime, default=datetime.utcnow, nullable=False)

@@ -22,6 +22,7 @@ import importlib
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from uuid import uuid4
+from types import SimpleNamespace
 import base64
 import math
 
@@ -1609,14 +1610,92 @@ def calculate_incentive_report(file: UploadFile, profit_rate: float, incentive_r
             "ids_fund_report": build_ids_fund_report(source_rows)}
 
 
+def calculate_incentive_report_from_bytes(filename: str, raw: bytes, profit_rate: float, incentive_rate: float) -> dict:
+    file_like = SimpleNamespace(filename=filename, file=BytesIO(raw))
+    return calculate_incentive_report(file_like, profit_rate, incentive_rate)
+
+
+def latest_incentive_upload(db: Session) -> Optional["models.IncentiveUpload"]:
+    return db.query(models.IncentiveUpload).order_by(models.IncentiveUpload.id.desc()).first()
+
+
+def serialize_incentive_upload(upload: "models.IncentiveUpload") -> dict:
+    report = json.loads(upload.report_json)
+    return {
+        "has_data": True,
+        "file_name": upload.source_file,
+        "profit_rate": upload.profit_rate,
+        "incentive_rate": upload.incentive_rate,
+        "report_version": upload.report_version,
+        "uploaded_by": upload.uploaded_by_username,
+        "uploaded_at": upload.uploaded_at.isoformat() if upload.uploaded_at else None,
+        "report": report,
+    }
+
+
 @app.post("/api/incentive/calculate")
 def calculate_incentive_endpoint(
     file: UploadFile = File(...),
     profit_rate: float = Form(7),
     incentive_rate: float = Form(2.5),
     current_user: models.User = Depends(auth.require_roles(*INCENTIVE_ACCESS_ROLES)),
+    db: Session = Depends(get_db),
 ):
-    return calculate_incentive_report(file, profit_rate, incentive_rate)
+    raw = file.file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+    report = calculate_incentive_report_from_bytes(file.filename or "incentive_upload", raw, profit_rate, incentive_rate)
+    db.query(models.IncentiveUpload).delete()
+    db.add(models.IncentiveUpload(
+        source_file=file.filename or "incentive_upload",
+        content_type=file.content_type or "application/octet-stream",
+        file_data=raw,
+        profit_rate=profit_rate,
+        incentive_rate=incentive_rate,
+        report_version=report.get("report_version") or 7,
+        report_json=json.dumps(report),
+        uploaded_by=current_user.id,
+        uploaded_by_username=current_user.username,
+        uploaded_at=datetime.utcnow(),
+    ))
+    db.commit()
+    return report
+
+
+@app.get("/api/incentive/saved")
+def get_saved_incentive_upload(
+    current_user: models.User = Depends(auth.require_roles(*INCENTIVE_ACCESS_ROLES)),
+    db: Session = Depends(get_db),
+):
+    upload = latest_incentive_upload(db)
+    if not upload:
+        return {"has_data": False}
+    return serialize_incentive_upload(upload)
+
+
+@app.get("/api/incentive/saved-file")
+def get_saved_incentive_file(
+    current_user: models.User = Depends(auth.require_roles(*INCENTIVE_ACCESS_ROLES)),
+    db: Session = Depends(get_db),
+):
+    upload = latest_incentive_upload(db)
+    if not upload:
+        raise HTTPException(status_code=404, detail="No shared incentive upload is available.")
+    return Response(
+        content=upload.file_data,
+        media_type=upload.content_type or "application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{upload.source_file or "incentive_upload"}"'},
+    )
+
+
+@app.delete("/api/incentive/saved")
+def clear_saved_incentive_upload(
+    current_user: models.User = Depends(auth.require_roles(*INCENTIVE_ACCESS_ROLES)),
+    db: Session = Depends(get_db),
+):
+    deleted = db.query(models.IncentiveUpload).delete()
+    db.commit()
+    return {"message": "Shared incentive upload cleared", "deleted": deleted}
 
 
 def _write_rows(sheet, headers, rows):
@@ -4087,6 +4166,9 @@ def delete_user(
             {"updated_by_user_id": None}
         )
         db.query(models.AgeingStockUpload).filter(models.AgeingStockUpload.uploaded_by == target_user.id).update(
+            {"uploaded_by": None}
+        )
+        db.query(models.IncentiveUpload).filter(models.IncentiveUpload.uploaded_by == target_user.id).update(
             {"uploaded_by": None}
         )
 
