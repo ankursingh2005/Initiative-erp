@@ -5962,6 +5962,127 @@ def build_daily_profitability_workbook(merged_items: list, period_label: str) ->
     return buffer.getvalue()
 
 
+def format_indian_int(value: float) -> str:
+    n = int(round(value or 0))
+    sign = "-" if n < 0 else ""
+    s = str(abs(n))
+    if len(s) <= 3:
+        return sign + s
+    last3 = s[-3:]
+    rest = s[:-3]
+    parts = []
+    while len(rest) > 2:
+        parts.insert(0, rest[-2:])
+        rest = rest[:-2]
+    if rest:
+        parts.insert(0, rest)
+    return sign + ",".join(parts + [last3])
+
+
+def build_division_wise_sale_report_workbook(merged_items: list, period_label: str) -> bytes:
+    """Build the compact Division Wise Sale Report used by Daily Report."""
+    import openpyxl as _openpyxl
+    from openpyxl.styles import Font as _Font, PatternFill as _PatternFill, Alignment as _Alignment, Border as _Border, Side as _Side
+
+    stores = ["ALM", "ASH", "HZT", "GNG", "VKN"]
+    divisions = [
+        ("HA", "HA"),
+        ("HE", "HE"),
+        ("MOBILE", "Mobile"),
+        ("COMPUTER", "Computer"),
+        ("CAMERA", "Digital Camera"),
+        ("ACCESSORY", "Other"),
+    ]
+
+    matrix = {label: {store: 0.0 for store in stores} for label, _ in divisions}
+    for item in merged_items:
+        label = next((display for display, category in divisions if item.get("category") == category), None)
+        store = (item.get("store") or "").upper()
+        if label and store in stores:
+            matrix[label][store] += item.get("sale") or 0
+
+    wb = _openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Daily Report"
+    ws.sheet_view.showGridLines = False
+
+    peach = _PatternFill("solid", fgColor="F4C7A8")
+    blue = _PatternFill("solid", fgColor="9DC3E6")
+    white = _PatternFill("solid", fgColor="FFFFFF")
+    border = _Border(
+        left=_Side(style="thin", color="000000"),
+        right=_Side(style="thin", color="000000"),
+        top=_Side(style="thin", color="000000"),
+        bottom=_Side(style="thin", color="000000"),
+    )
+    title_font = _Font(name="Arial", size=14, bold=True, color="000000")
+    header_font = _Font(name="Arial", size=11, bold=True, color="000000")
+    data_font = _Font(name="Arial", size=10, bold=True, color="000000")
+
+    widths = {"A": 8, "B": 16, "C": 13, "D": 13, "E": 13, "F": 13, "G": 13, "H": 16}
+    for col, width in widths.items():
+        ws.column_dimensions[col].width = width
+
+    ws.row_dimensions[1].height = 22
+    ws.merge_cells("A1:H1")
+    cell = ws["A1"]
+    cell.value = f"Division Wise Sale Report {period_label}"
+    cell.font = title_font
+    cell.fill = peach
+    cell.alignment = _Alignment(horizontal="center", vertical="center")
+
+    headers = ["SL no.", "Division", *stores, "TOTAL VALUE"]
+    for col_idx, header in enumerate(headers, start=1):
+        cell = ws.cell(row=2, column=col_idx, value=header)
+        cell.font = header_font
+        cell.fill = blue
+        cell.border = border
+        cell.alignment = _Alignment(horizontal="center", vertical="center")
+
+    totals_by_store = {store: 0.0 for store in stores}
+    grand_total = 0.0
+
+    for row_idx, (display, _) in enumerate(divisions, start=3):
+        ws.cell(row=row_idx, column=1, value=row_idx - 2)
+        ws.cell(row=row_idx, column=2, value=display)
+        row_total = 0.0
+        for offset, store in enumerate(stores, start=3):
+            value = matrix[display][store]
+            row_total += value
+            totals_by_store[store] += value
+            ws.cell(row=row_idx, column=offset, value=format_indian_int(value) if value else "-")
+        grand_total += row_total
+        ws.cell(row=row_idx, column=8, value=format_indian_int(row_total) if row_total else "-")
+
+    total_row = 9
+    ws.cell(row=total_row, column=2, value="Total")
+    for offset, store in enumerate(stores, start=3):
+        ws.cell(row=total_row, column=offset, value=format_indian_int(totals_by_store[store]) if totals_by_store[store] else "-")
+    ws.cell(row=total_row, column=8, value=format_indian_int(grand_total) if grand_total else "-")
+
+    for row in range(1, total_row + 1):
+        for col in range(1, 9):
+            if row == 1 and col > 1:
+                continue
+            cell = ws.cell(row=row, column=col)
+            cell.border = border
+            cell.alignment = _Alignment(horizontal="center", vertical="center")
+            if row == 1:
+                cell.fill = peach
+            elif row in (2, total_row):
+                cell.fill = blue
+                cell.font = header_font if row == 2 else _Font(name="Arial", size=12, bold=True)
+            else:
+                cell.fill = white
+                cell.font = data_font
+    for row in range(3, total_row):
+        ws.cell(row=row, column=2).alignment = _Alignment(horizontal="left", vertical="center")
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    return buffer.getvalue()
+
+
 # ============================================================
 # DAILY PROFITABILITY REPORT (home-page "Daily Profitability" tile)
 # ============================================================
@@ -6476,12 +6597,12 @@ def daily_profitability_daily_report(
     daily_items = dp_remove_gst_uplift(merged)
 
     if start_date and end_date:
-        label = f"{start_date.strftime('%d-%b-%Y')} to {end_date.strftime('%d-%b-%Y')}" if start_date != end_date else start_date.strftime("%d-%b-%Y")
+        label = f"{start_date.strftime('%d %b %Y')} to {end_date.strftime('%d %b %Y')}" if start_date != end_date else start_date.strftime("%d %b %Y")
     else:
         dates = [m["date"] for m in daily_items if m.get("date")]
-        label = f"{min(dates).strftime('%d-%b-%Y')} to {max(dates).strftime('%d-%b-%Y')}" if dates else "All Dates"
+        label = f"{min(dates).strftime('%d %b %Y')} to {max(dates).strftime('%d %b %Y')}" if dates else "All Dates"
 
-    workbook_bytes = build_daily_profitability_workbook(daily_items, label)
+    workbook_bytes = build_division_wise_sale_report_workbook(daily_items, label)
 
     fname_bit = f"{start_date}_{end_date}" if (start_date or end_date) else "all"
     filename = f"Division_Wise_Daily_Report_{fname_bit}.xlsx"
