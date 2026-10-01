@@ -1557,7 +1557,7 @@ def build_non_sales_report(summary: list[dict]) -> dict:
     rows = []
     totals = [0, 0, 0, 0, 0]
     for outlet in [*required, *extra_outlets]:
-        ho_rate = 15 if outlet == "ALM" else 10
+        ho_rate = 15 if outlet == "ALM" else 12 if outlet == "HZT" else 10
         rates = [35, None, 12, 15, ho_rate]
         fund = by_outlet.get(outlet)
         if fund is None:
@@ -1700,7 +1700,7 @@ def build_incentive_workbook(report: dict) -> bytes:
         staff.cell(idx, 3, .35)
         staff.cell(idx, 5, .12)
         staff.cell(idx, 6, .15)
-        staff.cell(idx, 7, .15 if row["outlet"] == "ALM" else .10)
+        staff.cell(idx, 7, .15 if row["outlet"] == "ALM" else .12 if row["outlet"] == "HZT" else .10)
         for column in (3, 5, 6, 7):
             staff.cell(idx, column).number_format = "0%"
     mwh_row = 7

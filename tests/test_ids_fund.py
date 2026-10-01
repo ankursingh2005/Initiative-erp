@@ -16,10 +16,10 @@ class IdsFundTests(unittest.TestCase):
         report = main.build_non_sales_report(summary)
         self.assertEqual([r['values'] for r in report['rows']], [
             [4018, None, 1377, 1722, 1722], [293, None, 100, 126, 84],
-            [2525, None, 866, 1082, 721], [758, None, 260, 325, 217],
+            [2525, None, 866, 1082, 866], [758, None, 260, 325, 217],
             [586, None, 201, 251, 168], [None, 3739.36, None, None, None]])
         self.assertEqual(report['rows'][-1]['ids_fund'], 23371)
-        self.assertEqual(report['totals'], [8180, 3739.36, 2804, 3506, 2912])
+        self.assertEqual(report['totals'], [8180, 3739.36, 2804, 3506, 3057])
         self.assertEqual(main.build_non_sales_report(summary[:-1])['totals'], [7594, 3471.36, 2544, 3255, 2889])
         summary[0]['ids_fund'] = None
         self.assertEqual(main.build_non_sales_report(summary)['totals'], [4162, 1902.72, 1335, 1784, 1335])
@@ -100,6 +100,7 @@ class IdsFundTests(unittest.TestCase):
                 self.assertEqual(staff['B2'].value, "='IDS Fund Outlet Summary'!B3")
                 self.assertEqual(staff['B3'].value, "='IDS Fund Outlet Summary'!B4")
                 self.assertEqual(staff['C2'].value, .35)
+                self.assertEqual(staff['G4'].value, .12)
                 self.assertEqual(staff['D7'].value, .16)
                 self.assertEqual(staff['C11'].value, '=IF(ISNUMBER(B2),ROUND(B2*C2,0),"Pending")')
                 self.assertEqual(staff['D16'].value, '=IF(ISNUMBER(B7),ROUND(B7*D7,2),"Pending")')
