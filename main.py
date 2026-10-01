@@ -6280,6 +6280,19 @@ def dp_apply_filters(merged: List[dict], category: Optional[str], store: Optiona
     return out
 
 
+def dp_remove_gst_uplift(merged: List[dict]) -> List[dict]:
+    """Return Daily Report rows using the original Busy export amounts."""
+    out = []
+    for m in merged:
+        row = dict(m)
+        row["sale"] = row["sale"] / DP_GST_FACTOR
+        row["cost"] = row["cost"] / DP_GST_FACTOR
+        row["margin"] = row["sale"] - row["cost"]
+        row["pl_pct"] = (row["margin"] / row["cost"]) if row["cost"] else 0.0
+        out.append(row)
+    return out
+
+
 def dp_serialize_item(m: dict) -> dict:
     return {
         "store": m["store"], "vch_no": m["vch"], "item": m["item"], "category": m["category"],
@@ -6435,6 +6448,43 @@ def daily_profitability_download(
 
     fname_bit = f"{start_date}_{end_date}" if (start_date or end_date) else "all"
     filename = f"Daily_Profitability_{fname_bit}.xlsx"
+    return Response(
+        content=workbook_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/api/daily-profitability/daily-report")
+def daily_profitability_daily_report(
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
+    category: Optional[str] = Query(None),
+    store: Optional[str] = Query(None),
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    rows = dp_filter_rows(db, start_date, end_date)
+    if not rows:
+        raise HTTPException(status_code=404, detail="No data available for the selected range. Upload a Busy export first (Sales in your scope -> Interval Sales Analytics Upload).")
+
+    merged, _ = dp_merge_rows(rows)
+    merged = dp_apply_filters(merged, category, store)
+    if not merged:
+        raise HTTPException(status_code=404, detail="No rows match the selected filters.")
+
+    daily_items = dp_remove_gst_uplift(merged)
+
+    if start_date and end_date:
+        label = f"{start_date.strftime('%d-%b-%Y')} to {end_date.strftime('%d-%b-%Y')}" if start_date != end_date else start_date.strftime("%d-%b-%Y")
+    else:
+        dates = [m["date"] for m in daily_items if m.get("date")]
+        label = f"{min(dates).strftime('%d-%b-%Y')} to {max(dates).strftime('%d-%b-%Y')}" if dates else "All Dates"
+
+    workbook_bytes = build_daily_profitability_workbook(daily_items, label)
+
+    fname_bit = f"{start_date}_{end_date}" if (start_date or end_date) else "all"
+    filename = f"Division_Wise_Daily_Report_{fname_bit}.xlsx"
     return Response(
         content=workbook_bytes,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
