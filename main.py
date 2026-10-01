@@ -234,6 +234,7 @@ def ensure_default_branches():
             {"name": "Ashiyana", "code": "BR003", "city": "Lucknow", "status": "Active", "latitude": 26.79601399706687, "longitude": 80.9208545762198, "geofence_radius_m": 100},
             {"name": "Hazratganj", "code": "BR004", "city": "Lucknow", "status": "Active", "latitude": 26.84924030483742, "longitude": 80.94773860240677, "geofence_radius_m": 100},
             {"name": "Vikas Nagar", "code": "BR005", "city": "Lucknow", "status": "Active", "latitude": 26.90188397262733, "longitude": 80.95513690261241, "geofence_radius_m": 100},
+            {"name": "Raibareli", "code": "BR006", "city": "Raibareli", "status": "Active", "latitude": 26.769729, "longitude": 80.945309, "geofence_radius_m": 100},
             {"name": "Warehouse", "code": "WH", "city": "Lucknow", "status": "Active", "latitude": 26.779149508725354, "longitude": 80.88470873166187, "geofence_radius_m": 100},
             {"name": "Head Office", "code": "HO", "city": "Lucknow", "status": "Active", "latitude": 26.84904218332385, "longitude": 80.94789353821966, "geofence_radius_m": 100},
         ]
@@ -249,7 +250,13 @@ def ensure_default_branches():
                     db.add(models.Store(**branch))
                     continue
                 store.name = store.name or branch["name"]
-                store.code = store.code or branch["code"]
+                if branch["name"] == "Raibareli":
+                    store.name = branch["name"]
+                    store.code = branch["code"]
+                    store.latitude = branch["latitude"]
+                    store.longitude = branch["longitude"]
+                else:
+                    store.code = store.code or branch["code"]
                 store.city = store.city or branch["city"]
                 store.status = "Active"
                 if not store.latitude or not store.longitude:
@@ -1216,6 +1223,7 @@ def _incentive_outlet_short_name(value) -> str:
         "HAZRATGANJ": "HZT", "HAZARATGANJ": "HZT", "HZT": "HZT", "HTZ": "HZT",
         "GOMTINAGAR": "GNG", "GOMTI NAGAR": "GNG", "GNG": "GNG",
         "VIKAS NAGAR": "VKN", "VIKASNAGAR": "VKN", "VKN": "VKN",
+        "RAIBARELI": "RBL", "RAEBARELI": "RBL", "RAE BARELI": "RBL", "RBL": "RBL",
         "WAREHOUSE": "MWH", "MWH": "MWH",
     }
     compact = text_value.replace(" ", "")
@@ -1231,6 +1239,8 @@ def _incentive_outlet_short_name(value) -> str:
         return "GNG"
     if "VIKAS" in text_value or re.search(r"\bVKN\b", text_value):
         return "VKN"
+    if "RAIBARELI" in text_value or "RAEBARELI" in text_value or "RAE BARELI" in text_value or re.search(r"\bRBL\b", text_value):
+        return "RBL"
     if "WARE" in text_value or re.search(r"\bMWH\b", text_value):
         return "MWH"
     return aliases.get(text_value) or aliases.get(compact) or text_value[:12] or "OTHER"
@@ -3163,6 +3173,7 @@ def create_store(store: schemas.StoreCreate, db: Session = Depends(get_db)):
 @app.get("/stores", response_model=List[schemas.StoreOut])
 def list_stores(db: Session = Depends(get_db)):
     required_stores = [
+        {"name": "Raibareli", "code": "BR006", "city": "Raibareli", "status": "Active", "latitude": 26.769729, "longitude": 80.945309, "geofence_radius_m": 100},
         {"name": "Warehouse", "code": "WH", "city": "Lucknow", "status": "Active", "latitude": 26.779149508725354, "longitude": 80.88470873166187, "geofence_radius_m": 100},
         {"name": "Head Office", "code": "HO", "city": "Lucknow", "status": "Active", "latitude": 26.84904218332385, "longitude": 80.94789353821966, "geofence_radius_m": 100},
     ]
@@ -3177,6 +3188,9 @@ def list_stores(db: Session = Depends(get_db)):
             continue
         if store.status != "Active":
             store.status = "Active"
+            changed = True
+        if item["name"] == "Raibareli" and store.code != item["code"]:
+            store.code = item["code"]
             changed = True
         for field in ("code", "city", "latitude", "longitude", "geofence_radius_m"):
             if not getattr(store, field):
@@ -3728,6 +3742,11 @@ def attendance_admin_summary(
         "gomti nagar": "GNG",
         "vikas nagar": "VKN",
         "vikasnagar": "VKN",
+        "raibareli": "RBL",
+        "rae bareli": "RBL",
+        "raebareli": "RBL",
+        "br006": "RBL",
+        "rbl": "RBL",
     }
 
     record_query = db.query(models.AttendanceRecord).filter(
