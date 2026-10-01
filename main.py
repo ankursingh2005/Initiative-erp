@@ -562,7 +562,7 @@ if DATABASE_READY:
         DATABASE_READY = False
         logger.exception("Default data seeding failed. Check Render DATABASE_URL and database status.")
 
-from identity_cards import assign_employee_id, ensure_employee_ids
+from identity_cards import assign_employee_id, ensure_employee_ids, migrate_legacy_outlet_employee_id, outlet_abbreviation
 if DATABASE_READY:
     try:
         with SessionLocal() as employee_id_db:
@@ -3503,6 +3503,9 @@ def attendance_user_history(
     ).filter(models.UserBrand.user_id == user.id).distinct().order_by(models.Brand.name).all()]
     card = db.query(models.IdentityCard).filter(models.IdentityCard.user_id == user.id).first()
     outlet = db.query(models.Store).filter(models.Store.id == user.store_id).first() if user.store_id else None
+    if card and migrate_legacy_outlet_employee_id(db, card, outlet_abbreviation(outlet)):
+        db.commit()
+        db.refresh(card)
     return {"user_id": user.id, "username": user.username, "role": user.role,
             "employee_id": card.employee_id if card else None,
             "display_name": card.employee_name if card else user.full_name or user.username,

@@ -21,7 +21,9 @@ MANAGERS = {"Admin", "Owner", "HR", "CEO", "Director"}
 OUTLET_ABBREVIATIONS = {
     "hazratganj": "HZT", "alambagh": "ALM", "ashiyana": "ASH",
     "gomtinagar": "GNG", "gomti nagar": "GNG", "vikas nagar": "VKN",
-    "vikasnagar": "VKN", "warehouse": "WH", "head office": "HO",
+    "vikasnagar": "VKN", "raibareli": "RBL", "rae bareli": "RBL",
+    "raebareli": "RBL", "br006": "RBL", "rbl": "RBL",
+    "warehouse": "WH", "head office": "HO",
     "head-office": "HO",
 }
 
@@ -30,9 +32,29 @@ def outlet_abbreviation(store):
     if store is None:
         return ""
     known = OUTLET_ABBREVIATIONS.get(store.name.strip().lower())
+    if not known:
+        known = OUTLET_ABBREVIATIONS.get((store.code or "").strip().lower())
     if known:
         return known
     return re.sub(r"[^A-Z0-9]", "", (store.code or "").upper())[:15] or f"OUT{store.id}"
+
+
+def migrate_legacy_outlet_employee_id(db, card, abbreviation):
+    if not card or abbreviation != "RBL":
+        return False
+    match = re.fullmatch(r"IDS-BR006-(\d{2}\d{3,})", card.employee_id or "")
+    if not match:
+        return False
+    replacement = f"IDS-RBL-{match.group(1)}"
+    exists = db.query(models.IdentityCard).filter(
+        models.IdentityCard.employee_id == replacement,
+        models.IdentityCard.user_id != card.user_id,
+    ).first()
+    if exists:
+        return False
+    card.employee_id = replacement
+    db.flush()
+    return True
 
 
 def issue_year():
@@ -88,6 +110,8 @@ def ensure_employee_ids(db):
             changed = False
             for user, card, store in rows:
                 abbreviation = outlet_abbreviation(store)
+                if migrate_legacy_outlet_employee_id(db, card, abbreviation):
+                    changed = True
                 # A year rollover does not renumber a card. Outlet transfers do.
                 prefix = f"IDS-{abbreviation + '-' if abbreviation else ''}"
                 if card and re.fullmatch(rf"{re.escape(prefix)}\d{{2}}\d{{3,}}", card.employee_id):

@@ -185,6 +185,22 @@ class IdentityCardTests(unittest.TestCase):
         self.client.get('/api/identity-cards')
         self.assertEqual(self.db.get(models.IdentityCard, another.id).employee_id, 'IDS-HZT-26004')
 
+    def test_raibareli_store_code_uses_rbl_employee_id_prefix(self):
+        raibareli = models.Store(name='Raibareli', code='BR006')
+        self.db.add(raibareli)
+        self.db.flush()
+        self.users[3].store_id = raibareli.id
+        self.db.add(models.IdentityCard(user_id=self.users[3].id,
+                    employee_id='IDS-BR006-26002', employee_name='Saved Name',
+                    designation='Saved Title', mobile='1234567890'))
+        newcomer = models.User(username='rbl-new', email='rbl-new@example.test', role='Employee',
+                               password_hash='x', store_id=raibareli.id)
+        self.db.add(newcomer)
+        self.db.commit()
+        self.client.get('/api/identity-cards')
+        self.assertEqual(self.db.get(models.IdentityCard, self.users[3].id).employee_id, 'IDS-RBL-26002')
+        self.assertEqual(self.db.get(models.IdentityCard, newcomer.id).employee_id, 'IDS-RBL-26003')
+
     def test_unassigned_users_do_not_get_a_false_outlet(self):
         self.users[3].store_id = None
         self.db.commit()
