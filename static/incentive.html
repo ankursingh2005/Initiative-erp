@@ -49,7 +49,7 @@
   <section class="kpis" id="kpis" hidden>
     <div class="kpi"><span>Total Sales</span><strong id="totalSales">₹0</strong></div><div class="kpi"><span>AVG Profit</span><strong id="totalProfit">₹0</strong></div><div class="kpi"><span>Total Incentive</span><strong id="totalIncentive">₹0</strong></div>
     <button type="button" class="kpi kpi-link" id="salesCard" aria-controls="exactReport" aria-expanded="false" onclick="toggleIncentiveReport('sales')"><span>Sales Incentive</span><strong id="salesIncentive">Upload File</strong><small>Total Exact Incentive ? Click to view report</small></button>
-    <button type="button" class="kpi kpi-link" id="nonSalesCard" aria-controls="nonSalesReport" aria-expanded="false" onclick="toggleIncentiveReport('non-sales')"><span>Non-sales Incentive</span><strong id="nonSalesIncentive">Upload File</strong><small>Total IDS Fund ? Click to view report</small></button>
+    <button type="button" class="kpi kpi-link" id="nonSalesCard" aria-controls="nonSalesReport" aria-expanded="false" onclick="toggleIncentiveReport('non-sales')"><span>Non-sales Incentive</span><strong id="nonSalesIncentive">Upload File</strong><small>Central Service Total ? Click to view report</small></button>
     <div class="kpi"><span>Remaining Amount</span><strong id="remainingIncentive">Upload File</strong><small>Group-wise Total Incentive − (Sales Incentive + Non-sales Incentive)</small></div>
   </section>
   <div id="incentiveDownloads" class="table-head" hidden>
@@ -236,8 +236,13 @@
       const amounts=rows.map(row=>paise(value(row)));
       return amounts.some(amount=>amount===null)?null:amounts.reduce((a,b)=>a+b,0);
     };
+    const sumValues=values=>{
+      if(!Array.isArray(values)||!values.length)return null;
+      const amounts=values.map(paise);
+      return amounts.some(amount=>amount===null)?null:amounts.reduce((a,b)=>a+b,0);
+    };
     const sales=sum(data.exact_summary,r=>r.exact_incentive ?? r.total_incentive);
-    const nonSales=data.ids_fund_report?.version===3?paise(data.ids_fund_report.totals?.ids_fund ?? 0):null;
+    const nonSales=data.ids_fund_report?.version===3?sumValues(data.ids_fund_report.non_sales_report?.totals):null;
     const grouped=sum(data.grouped_summary,r=>r.total_incentive);
     const remaining=[sales,nonSales,grouped].some(value=>value===null)?null:grouped-sales-nonSales;
     if(data.ids_fund_report?.insufficient_data){
