@@ -1166,7 +1166,7 @@ def incentive_page():
     return FileResponse("static/incentive.html")
 
 
-INCENTIVE_ACCESS_ROLES = ("Admin", "Owner", "HR", "Accounts", "MISExecutive")
+INCENTIVE_ACCESS_ROLES = ("Admin", "Owner", "HR", "Accounts", "MISExecutive", "CEO", "Director")
 INCENTIVE_CATEGORIES = ["HA", "HE", "MOB", "COM", "DC", "ACC"]
 INCENTIVE_OUTLETS = {"ALM", "ASH", "HZT", "GNG", "VKN"}
 IDS_FUND_SHARES = {"MOB": 30, "COM": 20, "DC": 25, "HA": 20, "HE": 25, "ACC COM": 25, "ACC": 25}
