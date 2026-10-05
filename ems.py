@@ -89,7 +89,7 @@ def scoped_rows(db, model, user):
 
 class Input(BaseModel):
     model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
-
+                           
 
 class Leave(Input):
     start_date: date

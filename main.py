@@ -7694,6 +7694,25 @@ def read_ageing_sheet_rows(worksheet) -> List[dict]:
     return out
 
 
+def ageing_sheet_material_centre(worksheet) -> Optional[str]:
+    """Returns the normalized material-centre value printed above a stock
+    table, when the workbook includes it (for example, "--All--" or "ALM")."""
+    marker = "materialcentre"
+    for row in worksheet.iter_rows(min_row=1, max_row=15, values_only=True):
+        for index, value in enumerate(row):
+            normalized = normalize_header_name(value)
+            if not normalized.startswith(marker):
+                continue
+            centre = normalized[len(marker):]
+            if not centre:
+                centre = next(
+                    (normalize_header_name(cell) for cell in row[index + 1:] if cell is not None),
+                    "",
+                )
+            return centre or None
+    return None
+
+
 # Category classification keyword rules, checked in this order. Each is
 # (category_code, category_name, [substrings to look for in the
 # normalized/uppercased item text]). Matched top-down - HE/IT/HA product-
@@ -8417,6 +8436,20 @@ def parse_ageing_stock_workbook(content: bytes, db: Session) -> tuple:
         if not matched_code:
             continue
 
+        material_centre = ageing_sheet_material_centre(worksheet)
+        if material_centre in {"all", "alldata", "allitems", "allmaterialcentres", "allmaterialcenters"}:
+            # Some exports duplicate the All Data table under branch-named
+            # tabs. Never count those master totals as branch stock.
+            continue
+        if material_centre:
+            centre_code = next(
+                (code for code, definition in AGEING_LOCATION_DEFINITIONS.items()
+                 if material_centre in definition["aliases"]),
+                None,
+            )
+            if centre_code:
+                matched_code = centre_code
+
         rows = read_ageing_sheet_rows(worksheet)
         if not rows:
             continue
@@ -8547,6 +8580,16 @@ def upload_ageing_stock_file(
 
     item_rows, location_sheets_found, unclassified_count = parse_ageing_stock_workbook(raw_content, db)
 
+    reconciliation_mismatch_count = sum(
+        1
+        for row in item_rows
+        if sum(row.get(field) or 0.0 for field in AGEING_AGE_FIELDS) > 0
+        and abs(
+            sum(row.get(field) or 0.0 for field in AGEING_AGE_FIELDS)
+            - sum(row.get(field) or 0.0 for field in AGEING_LOCATION_FIELDS)
+        ) >= 0.005
+    )
+
     # Replace the previous dataset wholesale - this report always reflects
     # only the most recently uploaded workbook.
     db.query(models.AgeingStockItem).delete()
@@ -8580,6 +8623,7 @@ def upload_ageing_stock_file(
         "location_sheets_found": location_sheets_found,
         "location_sheets_missing": missing_locations,
         "unclassified_count": unclassified_count,
+        "reconciliation_mismatch_count": reconciliation_mismatch_count,
     }
 
 
@@ -8746,6 +8790,16 @@ def compute_ageing_stock_report(
         if location_fields:
             items = [it for it in items if any((getattr(it, f) or 0) > 0 for f in location_fields)]
 
+    reconciliation_mismatch_count = sum(
+        1
+        for item in items
+        if sum(getattr(item, field) or 0.0 for field in AGEING_AGE_FIELDS) > 0
+        and abs(
+            sum(getattr(item, field) or 0.0 for field in AGEING_AGE_FIELDS)
+            - sum(getattr(item, field) or 0.0 for field in AGEING_LOCATION_FIELDS)
+        ) >= 0.005
+    )
+
     age_fields = AGEING_AGE_FIELDS
     location_fields = AGEING_LOCATION_FIELDS
 
@@ -8824,6 +8878,7 @@ def compute_ageing_stock_report(
         "categories": categories_list,
         "grand_total": grand_total,
         "grand_total_items": grand_total_items,
+        "reconciliation_mismatch_count": reconciliation_mismatch_count,
         "location_columns": [
             {"code": code, "name": definition["name"]}
             for code, definition in AGEING_LOCATION_DEFINITIONS.items()

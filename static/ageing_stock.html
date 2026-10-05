@@ -53,6 +53,7 @@
     .pill { display:inline-block; padding:2px 9px; border-radius:999px; font-size:11.5px; font-weight:800; margin-right:4px; }
     .pill-good { background:#ecfdf3; color:var(--good); }
     .pill-warn { background:var(--warn-bg); color:var(--warn); }
+    .report-warning { margin:0 0 16px; padding:10px 14px; border:1px solid #fecdca; border-radius:8px; background:var(--warn-bg); color:#7a2e0e; font-size:13px; line-height:1.5; font-weight:700; }
 
     /* Dashboard summary cards - one per category plus a grand-total card,
        shown above the detailed tables so the overall picture is visible
@@ -714,14 +715,6 @@
       return activeAgeCols().reduce((sum, [bucketKey]) => sum + (Number(locationBuckets[bucketKey]) || 0), 0);
     }
 
-    function itemQtyInAllBranches(item) {
-      return Object.keys(LOC_LABELS).reduce((sum, key) => sum + locationQtyForDurations(item, key), 0);
-    }
-
-    function itemQuantitiesReconcile(item) {
-      return Math.abs(itemQtyInActiveDurations(item) - itemQtyInAllBranches(item)) < 0.005;
-    }
-
     // "Present At" list, scoped to the same selected duration(s) - a
     // branch only counts as "present" here if it actually has stock in
     // the checked bucket(s), not merely stock at some other age.
@@ -745,7 +738,6 @@
         for (const brand of cat.brands) {
           const items = brand.items.filter(it =>
             itemQtyInActiveDurations(it) > 0 &&
-            itemQuantitiesReconcile(it) &&
             (!selectedItemCategory || classifyItemCategory(it.item_details) === selectedItemCategory)
           );
           if (!items.length) continue;
@@ -934,10 +926,17 @@
         let text = `Loaded ${data.items_loaded} items from sheets: ${data.location_sheets_found.join(', ') || 'none'}.`;
         if (data.location_sheets_missing.length) text += ` Missing: ${data.location_sheets_missing.join(', ')}.`;
         if (data.unclassified_count) text += ` ${data.unclassified_count} item(s) need manual category review.`;
+        if (data.reconciliation_mismatch_count) text += ` Age totals differ from branch totals for ${data.reconciliation_mismatch_count} item(s); the dashboard uses the All Data sheet for age quantities.`;
         msg.textContent = text;
-        await loadMeta();
-        await loadBrands();
-        await loadReport();
+        try {
+          await loadMeta();
+          await loadBrands();
+          const reportLoaded = await loadReport();
+          if (!reportLoaded) throw new Error('The report request failed.');
+        } catch (e) {
+          msg.className = 'error';
+          msg.textContent = `Upload completed, but the dashboard could not refresh: ${e.message || 'check your connection and try again.'}`;
+        }
       } catch (e) {
         msg.className = 'error'; msg.textContent = 'Upload failed - check your connection and try again.';
       } finally {
@@ -1135,13 +1134,22 @@
       if (selectedBrand) params.set('brand', selectedBrand);
       if (search) params.set('search', search);
 
-      const res = await fetch(appUrl(`/api/ageing-stock/report?${params.toString()}`), { headers: authHeaders() });
-      if (res.status === 401) { logout(); return; }
-      const data = await res.json();
-      document.getElementById('loadingState').style.display = 'none';
-      lastReportData = data;
-      renderReport(data);
-      renderItemCatOptions();
+      try {
+        const res = await fetch(appUrl(`/api/ageing-stock/report?${params.toString()}`), { headers: authHeaders() });
+        if (res.status === 401) { logout(); return false; }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.detail || 'The report request failed.');
+        document.getElementById('loadingState').style.display = 'none';
+        lastReportData = data;
+        renderReport(data);
+        renderItemCatOptions();
+        return true;
+      } catch (e) {
+        document.getElementById('loadingState').style.display = 'none';
+        document.getElementById('emptyState').style.display = 'none';
+        document.getElementById('reportRoot').textContent = `Could not load the ageing stock dashboard: ${e.message || 'check your connection and try again.'}`;
+        return false;
+      }
     }
 
     // Renders from an already-fetched report payload (cached in
@@ -1167,6 +1175,9 @@
 
       const dashHtml = renderDashboard(filtered);
       const catsHtml = filtered.categories.map((c, i) => renderCategory(c, i)).join('');
+      const reconciliationWarning = data.reconciliation_mismatch_count
+        ? `<div class="report-warning" role="status">Age quantities come from the All Data sheet. Branch totals differ for ${data.reconciliation_mismatch_count} item(s); check for missing or incomplete location sheets.</div>`
+        : '';
       const grandHtml = `
         <div class="scroll-wrap app-table-scroll">
           <table>
@@ -1188,7 +1199,7 @@
           </table>
         </div>
       `;
-      root.innerHTML = dashHtml + catsHtml + grandHtml;
+      root.innerHTML = reconciliationWarning + dashHtml + catsHtml + grandHtml;
     }
 
     (async function init() {
