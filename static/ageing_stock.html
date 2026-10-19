@@ -738,7 +738,9 @@
         for (const brand of cat.brands) {
           const items = brand.items.filter(it =>
             itemQtyInActiveDurations(it) > 0 &&
-            (!selectedItemCategory || classifyItemCategory(it.item_details) === selectedItemCategory)
+            (ACTIVE_BRANCH_KEYS.size === Object.keys(LOC_LABELS).length ||
+              activeLocCols().some(([key]) => locationQtyForDurations(it, key) > 0)) &&
+            (!selectedItemCategory || (it.item_category || classifyItemCategory(it.item_details)) === selectedItemCategory)
           );
           if (!items.length) continue;
 
@@ -879,6 +881,10 @@
     // used for both the summary cards and each category's header bar.
     const CATEGORY_COLORS = { HA: '#0f766e', HE: '#6d28d9', MH: '#15803d', IT: '#1d4ed8', DC: '#b45309', OTHER: '#475467' };
     function catColor(code) { return CATEGORY_COLORS[(code || '').toUpperCase()] || '#111827'; }
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
 
     function fmt(n) {
       const v = Number(n || 0);
@@ -1022,8 +1028,8 @@
     function renderBrandTable(brand) {
       const rowsHtml = brand.items.map(item => `
         <tr>
-          <td>${item.item_details}${item.classification_source === 'Unclassified' ? '<span class="flag-review">REVIEW</span>' : ''}</td>
-          <td>${item.unit || ''}</td>
+          <td>${escapeHtml(item.item_details)}${item.model_no ? `<br><small>Model: ${escapeHtml(item.model_no)}</small>` : ''}${item.classification_source === 'Unclassified' ? '<span class="flag-review">REVIEW</span>' : ''}</td>
+          <td>${escapeHtml(item.unit)}</td>
           <td>${fmt(itemQtyInActiveDurations(item))}</td>
           ${ageDataCells(item)}
           ${locationDataCells(item)}
@@ -1033,7 +1039,7 @@
 
       return `
         <div class="brand-block">
-          <div class="brand-title">${brand.brand_name}</div>
+          <div class="brand-title">${escapeHtml(brand.brand_name)}</div>
           <div class="scroll-wrap app-table-scroll">
             <table>
               ${colgroupHtml()}
@@ -1065,7 +1071,7 @@
       return `
         <div class="cat-section">
           <div class="cat-header" style="--cat-color:${catColor(cat.category_code)};" onclick="toggleCat(${idx})">
-            <h3>${cat.category_name}</h3>
+            <h3>${escapeHtml(cat.category_name)}</h3>
             <span class="count">${cat.item_count} items</span>
           </div>
           <div class="cat-body" id="catBody${idx}">
@@ -1169,7 +1175,7 @@
       const filtered = buildFilteredReport(data);
       const root = document.getElementById('reportRoot');
       if (!filtered.categories.length) {
-        root.innerHTML = '<div id="emptyState" style="display:block;">No items have stock in the selected duration(s).</div>';
+        root.innerHTML = '<div class="report-warning">No items match the selected filters.</div>';
         return;
       }
 

@@ -8454,13 +8454,13 @@ def parse_ageing_stock_workbook(content: bytes, db: Session) -> tuple:
         if not rows:
             continue
         location_sheets_found.append(matched_code)
-        qty_map = {}
+        qty_map = location_row_maps.setdefault(matched_code, {})
         # Per-item, per-age-bucket breakdown WITHIN this location, so a
         # duration filter (e.g. ">= 366 Days") can show exactly this
         # branch's quantity for that duration, not its all-time total -
         # see location_qty_for_durations() below and the
         # location_age_buckets_json comment on models.AgeingStockItem.
-        bucket_map: dict = {}
+        bucket_map = location_bucket_maps.setdefault(matched_code, {})
         for row in rows:
             key = normalize_ageing_item_key(row.get("item_details"))
             if not key:
@@ -8483,6 +8483,9 @@ def parse_ageing_stock_workbook(content: bytes, db: Session) -> tuple:
         location_row_maps[matched_code] = qty_map
         location_bucket_maps[matched_code] = bucket_map
 
+    workbook.close()
+    location_sheets_found = list(dict.fromkeys(location_sheets_found))
+
     if all_data_rows is None:
         raise HTTPException(
             status_code=400,
@@ -8500,7 +8503,23 @@ def parse_ageing_stock_workbook(content: bytes, db: Session) -> tuple:
 
     item_rows = []
     unclassified_count = 0
+    # Merge repeated master rows before attaching branch quantities once.
+    merged_rows = {}
     for row in all_data_rows:
+        if not is_ageing_nos_unit(row.get("unit")):
+            continue
+        key = normalize_ageing_item_key(row.get("item_details"))
+        if not key:
+            continue
+        if key not in merged_rows:
+            merged_rows[key] = dict(row)
+        else:
+            existing = merged_rows[key]
+            for field in ["closing_qty"] + AGEING_AGE_FIELDS:
+                existing[field] = parse_float_value(existing.get(field), fallback=0.0) + parse_float_value(row.get(field), fallback=0.0)
+            if not existing.get("model_no"):
+                existing["model_no"] = row.get("model_no")
+    for row in merged_rows.values():
         item_details = str(row.get("item_details") or "").strip()
         # Per Admin request: Ageing Stock Analysis only covers Nos.-unit
         # items. A row measured in any other unit (Mtr, Kg, Ltr, Set, Box,
@@ -8590,11 +8609,13 @@ def upload_ageing_stock_file(
         ) >= 0.005
     )
 
+    if not item_rows:
+        raise HTTPException(status_code=400, detail="No eligible Nos. stock items found; the previous report has been kept.")
+
     # Replace the previous dataset wholesale - this report always reflects
     # only the most recently uploaded workbook.
     db.query(models.AgeingStockItem).delete()
     db.query(models.AgeingStockUpload).delete()
-    db.commit()
 
     upload_record = models.AgeingStockUpload(
         source_file=filename,
@@ -8605,8 +8626,7 @@ def upload_ageing_stock_file(
         unclassified_count=unclassified_count,
     )
     db.add(upload_record)
-    db.commit()
-    db.refresh(upload_record)
+    db.flush()
 
     for r in item_rows:
         r["upload_id"] = upload_record.id
@@ -8848,6 +8868,10 @@ def compute_ageing_stock_report(
             "locations_present": item.locations_present,
             "location_age_buckets_json": item.location_age_buckets_json,
             "classification_source": item.classification_source,
+            "category_code": item.category_code,
+            "category_name": item.category_name,
+            "brand_name": item.brand_name,
+            "item_category": classify_ageing_item_category(item.item_details),
         })
         add_into(brand_bucket["totals"], item)
         add_into(cat["totals"], item)
@@ -8992,7 +9016,10 @@ def build_ageing_export_dataset(report: dict, active_age_fields: List[str], acti
         brands_out = []
         cat_totals = zero_totals()
         for brand_bucket in cat["brands"]:
-            filtered_items = [it for it in brand_bucket["items"] if item_qty_in_active_durations(it) > 0]
+            filtered_items = [it for it in brand_bucket["items"]
+                              if item_qty_in_active_durations(it) > 0
+                              and (not report["filters"].get("locations")
+                                   or any(location_qty_for_durations(it, f, active_age_fields) > 0 for f in location_fields))]
             if not filtered_items:
                 continue
             rows = []
@@ -9011,7 +9038,10 @@ def build_ageing_export_dataset(report: dict, active_age_fields: List[str], acti
                 present_at_filtered = ", ".join(
                     loc_labels[f] for f in location_fields if loc_qtys[f] > 0
                 ) or "-"
-                row = [item["item_details"], item.get("unit") or ""]
+                description = item["item_details"]
+                if item.get("model_no"):
+                    description += " | Model: " + str(item["model_no"])
+                row = [description, item.get("unit") or ""]
                 row.append(item_active_qty)
                 row += [round(item.get(f) or 0, 2) for f in active_age_fields]
                 row += [round(loc_qtys[f], 2) for f in location_fields]

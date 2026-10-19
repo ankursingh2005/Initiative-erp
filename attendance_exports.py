@@ -90,7 +90,7 @@ def _photo_status(value):
 
 
 def _build_monthly_workbook(db, start, end, store_id=None, weekoff_day=None, status=None,
-                            emp_category=None, assigned_store_id=None):
+                            emp_category=None, assigned_store_id=None, monthly_group=None):
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import get_column_letter
@@ -102,6 +102,9 @@ def _build_monthly_workbook(db, start, end, store_id=None, weekoff_day=None, sta
     if weekoff_day:
         users = users.filter(models.User.weekoff_day == weekoff_day)
     users = filter_employee_category(users, emp_category)
+    if monthly_group:
+        users = users.filter(models.User.role == 'BrandPartner' if monthly_group == 'isp'
+                             else models.User.role != 'BrandPartner')
     users = users.order_by(models.User.username, models.User.id).all()
     ids = [user.id for user in users]
     stores = {s.id: s.name for s in db.query(models.Store).all()}
@@ -336,8 +339,13 @@ def daily_export(date: date, format: str = 'xlsx', store_id: int | None = None,
 
 @router.get('/monthly-export')
 def monthly_export(month: str, store_id: int | None = None, weekoff_day: str | None = None,
-                   status: str | None = None, emp_category: str | None = None,
+                   status: str | None = None, emp_category: str | None = None, monthly_group: str | None = None,
                    db: Session = Depends(get_db), actor=Depends(auth.require_roles('Admin', 'CategoryManager', 'Service Manager A', 'Service Manager B', 'CEO', 'Director', 'AccountsManager'))):
+    if monthly_group not in (None, 'ids_emp', 'isp'):
+        raise HTTPException(400, 'Choose IDS EMP or ISP')
+    if monthly_group:
+        emp_category = 'brand_pro' if monthly_group == 'isp' else None
+        weekoff_day = status = None
     store_id = dashboard_outlet(actor, store_id)
     emp_category = dashboard_category(actor, emp_category)
     try:
@@ -346,7 +354,7 @@ def monthly_export(month: str, store_id: int | None = None, weekoff_day: str | N
         raise HTTPException(400, 'Month must be YYYY-MM')
     end = start.replace(day=calendar.monthrange(start.year, start.month)[1])
     return _build_monthly_workbook(db, start, end, assigned_store_id=actor.store_id if actor.role == "CategoryManager" else None,
-                                   store_id=store_id, weekoff_day=weekoff_day, status=status, emp_category=emp_category)
+                                   store_id=store_id, weekoff_day=weekoff_day, status=status, emp_category=emp_category, monthly_group=monthly_group)
 
 
 @router.get('/admin-user-export')
