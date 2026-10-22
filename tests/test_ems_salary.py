@@ -85,6 +85,29 @@ class SalaryTests(unittest.TestCase):
         self.assertIn('static/ems.js', page)
         self.assertIn('data-erp="true"', page)
 
+    def test_salary_access_is_only_admin_and_hr(self):
+        reads = ('salary-preview?month=2026-09', 'salary-profiles',
+                 'salary-slips/1', 'payroll', 'earnings')
+        writes = (('POST', 'salary-profiles'), ('POST', 'salary-publish'),
+                  ('POST', 'payroll'), ('PUT', 'payroll/1/paid'),
+                  ('POST', 'earnings'), ('PUT', 'earnings/1/void'))
+        self.actor = self.users[0]
+        for role in ('Owner', 'Employee', 'AC Technician A', 'AC Technician B',
+                     'BrandPartner', 'Accounts', 'MISExecutive', 'CEO', 'Director'):
+            self.actor.role = role
+            for path in reads:
+                with self.subTest(role=role, path=path):
+                    self.assertEqual(self.client.get('/api/ems/'+path).status_code, 403)
+            for method, path in writes:
+                with self.subTest(role=role, method=method, path=path):
+                    self.assertEqual(self.client.request(method, '/api/ems/'+path, json={}).status_code, 403)
+        for role in ('Admin', 'HR'):
+            self.actor.role = role
+            for path in reads:
+                with self.subTest(role=role, path=path):
+                    self.assertEqual(self.client.get('/api/ems/'+path).status_code,
+                                     404 if path == 'salary-slips/1' else 200)
+
     def test_attendance_pay_and_approved_earnings(self):
         user = self.users[2]
         self.db.add(models.AttendanceRecord(user_id=user.id, attendance_date=date(2026,9,1), checkin_at=datetime(2026,9,1,9)))

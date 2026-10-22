@@ -35,8 +35,8 @@ def member(response: Response, user=Depends(auth.get_current_user)):
 
 
 def manager(user=Depends(member)):
-    if not auth.has_admin_access(user):
-        raise HTTPException(403, 'Admin, Owner or HR access required')
+    if user.role not in {'Admin', 'HR'}:
+        raise HTTPException(403, 'EMS salary is available only to Admin and HR')
     return user
 
 
@@ -54,7 +54,7 @@ def serialize(row, name=None):
 
 def user_data(user, card, store):
     return {'id': user.id, 'name': user.full_name or user.username, 'email': user.email,
-            'role': 'admin' if user.role == 'Admin' else 'hr' if user.role in ('Owner', 'HR') else 'employee',
+            'role': 'admin' if user.role == 'Admin' else 'hr' if user.role == 'HR' else 'employee',
             'erp_role': user.role, 'can_manage_users': user.role in ('Admin', 'HR'),
             'status': (user.status or '').lower(), 'employee_id': card.employee_id if card else '',
             'department': user.category_code or '', 'designation': card.designation if card else user.role,
@@ -248,7 +248,7 @@ def decide_leave(leave_id: int, payload: Decision, db: Session = Depends(get_db)
 
 
 @router.get('/earnings')
-def earnings(db: Session = Depends(get_db), user=Depends(member)):
+def earnings(db: Session = Depends(get_db), user=Depends(manager)):
     return scoped_rows(db, M.EMSEarning, user)
 
 
@@ -267,7 +267,7 @@ def add_earning(payload: Earning, db: Session = Depends(get_db), user=Depends(ma
 
 
 @router.get('/payroll')
-def payroll(db: Session = Depends(get_db), user=Depends(member)):
+def payroll(db: Session = Depends(get_db), user=Depends(manager)):
     return scoped_rows(db, M.EMSPayroll, user)
 
 
