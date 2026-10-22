@@ -4,6 +4,28 @@ from sqlalchemy import Column, Integer, BigInteger, String, Date, DateTime, Fore
 from database import Base
 
 
+class EMSSalaryProfile(Base):
+    __tablename__ = 'ems_salary_profiles'
+    __table_args__ = (UniqueConstraint('user_id', 'effective_month', name='uq_ems_salary_effective'),)
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    effective_month = Column(String(7), nullable=False)
+    basic = Column(BigInteger, nullable=False)
+    allowances = Column(BigInteger, nullable=False)
+    deductions = Column(BigInteger, nullable=False)
+    divisor = Column(String(10), nullable=False)
+    paid_weekoff = Column(Integer, nullable=False)
+    paid_leave = Column(Integer, nullable=False)
+    created_by = Column(Integer, nullable=False)
+
+
+class EMSPayrollSnapshot(Base):
+    __tablename__ = 'ems_payroll_snapshots'
+    id = Column(Integer, primary_key=True)
+    payroll_id = Column(Integer, ForeignKey('ems_payroll.id'), nullable=False, unique=True)
+    details = Column(Text, nullable=False)
+
+
 class EMSLeaveRequest(Base):
     __tablename__ = 'ems_leave_requests'
     id = Column(Integer, primary_key=True)

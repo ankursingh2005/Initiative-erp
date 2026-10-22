@@ -146,7 +146,7 @@ class EMSIntegrationTests(unittest.TestCase):
         page = self.client.get('/ems')
         self.assertEqual(page.status_code, 200)
         self.assertIn('data-erp="true"', page.text)
-        self.assertIn('"ems-assets/app.js"', page.text)
+        self.assertIn('"static/ems.js"', page.text)
         self.assertNotIn('"/static/app.js"', page.text)
 
     def test_real_erp_bearer_authentication(self):

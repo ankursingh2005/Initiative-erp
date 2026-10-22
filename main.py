@@ -48,6 +48,7 @@ load_dotenv()  # reads a local .env file (if present) into os.environ before
                 # anything below calls os.getenv() - e.g. SMTP_*, SECRET_KEY.
 
 import models
+import ems
 import schemas
 import scheme_engine
 import auth
@@ -640,6 +641,8 @@ async def handle_unexpected_error(request: Request, exc: Exception):
 # Serves the login.html / signup.html / dashboard.html pages from the
 # "static" folder sitting next to this file.
 app.mount("/static", StaticFiles(directory="static"), name="static")
+app.include_router(ems.router)
+app.include_router(ems.pages)
 
 VALID_ROLES = ["Accounts","AccountsManager","AC Technician A","AC Technician B","Admin","Assistant","AsstSalesManager","BrandManager","BrandPartner","Cashier","CategoryManager","CEO","CustomerCare","Director","Employee","AC Helper A", "AC Helper B","HR","ITEngineer","Loader","LogisticManager","MISExecutive","SalesExecutive","ServiceCoordinator","ServiceHead","Service Manager A", "Service Manager B","SupportingStaff","Supervisor","Other"]
 
@@ -4214,7 +4217,12 @@ def delete_user(
         # EMS is optional; clean its employee records only when its tables exist.
         import ems_models
         existing_tables = set(inspect(db.connection()).get_table_names())
-        for model in (ems_models.EMSLeaveRequest, ems_models.EMSEarning, ems_models.EMSPayroll):
+        if ems_models.EMSPayrollSnapshot.__tablename__ in existing_tables:
+            payroll_ids = db.query(ems_models.EMSPayroll.id).filter_by(user_id=target_user.id)
+            db.query(ems_models.EMSPayrollSnapshot).filter(
+                ems_models.EMSPayrollSnapshot.payroll_id.in_(payroll_ids)).delete(synchronize_session=False)
+        for model in (ems_models.EMSLeaveRequest, ems_models.EMSEarning,
+                      ems_models.EMSSalaryProfile, ems_models.EMSPayroll):
             if model.__tablename__ in existing_tables:
                 db.query(model).filter(model.user_id == target_user.id).delete(synchronize_session=False)
 
