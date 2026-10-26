@@ -28,3 +28,14 @@ def change_weekoff(user, day, effective_date=None):
     history.append({'from': key, 'day': day})
     user.weekoff_history = json.dumps(sorted(history, key=lambda entry: entry['from']))
     user.weekoff_day = day
+
+
+def daily_attendance_status(user, day, today, present=False, leave=False):
+    """Shared daily status priority for live attendance and salary summaries."""
+    if day > today:
+        return 'upcoming'
+    if present:
+        return 'present'
+    if leave:
+        return 'leave'
+    return 'weekoff' if weekoff_on(user, day) == day.strftime('%A') else 'absent'

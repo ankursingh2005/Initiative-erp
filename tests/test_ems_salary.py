@@ -34,6 +34,58 @@ class SalaryTests(unittest.TestCase):
     def tearDown(self):
         self.client.close(); self.db.close(); self.engine.dispose()
 
+    def test_weekoff_setup_fetches_attendance_and_ignores_manual_counts(self):
+        uid = self.users[2].id
+        self.assertEqual(self.setup_salary(weekoff_availed=0, weekoff_credit=4).status_code, 200)
+        profile = self.client.get('/api/ems/salary-profiles').json()[0]
+        self.assertEqual((profile['weekoff_availed'], profile['weekoff_credit'], profile['weekoff_pay']), (4, 0, 0))
+        self.db.add(models.AttendanceRecord(user_id=uid, attendance_date=date(2026, 9, 6),
+                                           checkin_at=datetime(2026, 9, 6, 9)))
+        self.db.commit()
+        self.assertEqual(self.setup_salary(basic='29063', allowances='0', weekoff_availed=0,
+                                          weekoff_pay='999').status_code, 200)
+        profile = self.client.get('/api/ems/salary-profiles').json()[0]
+        self.assertEqual((profile['weekoff_availed'], profile['weekoff_credit'], profile['weekoff_pay']), (3, 1, 96877))
+
+    def test_five_weekoffs_do_not_generate_negative_credit(self):
+        self.assertEqual(self.setup_salary(effective_month='2026-08').status_code, 200)
+        profile = self.client.get('/api/ems/salary-profiles').json()[0]
+        self.assertEqual((profile['weekoff_availed'], profile['weekoff_credit'], profile['weekoff_pay']), (5, 0, 0))
+
+    def test_employment_category_saves_and_appears_in_preview(self):
+        for category in ('Regular', 'Contract'):
+            self.assertEqual(self.setup_salary(employment_category=category).status_code, 200)
+            self.assertEqual(self.preview()['employment_category'], category)
+            profile = self.client.get('/api/ems/salary-profiles').json()[0]
+            self.assertEqual(profile['employment_category'], category)
+        self.assertEqual(self.setup_salary(employment_category='Other').status_code, 422)
+
+    def test_ids_attributes_and_hold_are_preserved(self):
+        response = self.setup_salary(employment_category='Regular',
+            ids_attributes=dict(branch='TEST', release_status='HOLD', epf_enabled=False))
+        self.assertEqual(response.status_code, 200)
+        row = self.preview()
+        self.assertEqual(row['ids_attributes']['branch'], 'TEST')
+        self.assertEqual(row['epf_employee'], 0)
+        self.assertFalse(row['can_publish'])
+        self.assertEqual(self.publish(row).status_code, 409)
+
+    def test_exclude_and_restore_salary_employee_preserves_records(self):
+        uid = self.users[2].id
+        self.setup_salary()
+        response = self.client.put(f'/api/ems/employees/{uid}/exclude')
+        self.assertEqual(response.status_code, 200)
+        rows = self.client.get('/api/ems/salary-preview?month=2026-09').json()['rows']
+        self.assertNotIn(uid, {row['user_id'] for row in rows})
+        self.assertIsNotNone(self.db.get(models.User, uid))
+        self.assertEqual(self.db.query(M.EMSSalaryProfile).filter_by(user_id=uid).count(), 1)
+        self.assertEqual(self.setup_salary(uid).status_code, 404)
+        self.assertIn(uid, {row['user_id'] for row in self.client.get('/api/ems/excluded-employees').json()})
+        self.assertEqual(self.client.delete(f'/api/ems/employees/{uid}/exclude').status_code, 200)
+        self.assertEqual(self.preview(uid)['user_id'], uid)
+        self.actor = self.users[2]
+        self.assertEqual(self.client.put(f'/api/ems/employees/{uid}/exclude').status_code, 403)
+
     def test_ems_reads_preserve_existing_erp_records(self):
         self.db.add(models.IdentityCard(user_id=self.users[2].id,
                     employee_id='LEGACY-UNCHANGED', employee_name='Existing card',
@@ -71,8 +123,8 @@ class SalaryTests(unittest.TestCase):
 
     def test_scope_auth_and_page(self):
         result = self.client.get('/api/ems/salary-preview?month=2026-09').json()['rows']
-        self.assertEqual(len(result), 5)
-        self.assertEqual({r['category'] for r in result}, {'ids_emp','ac_projects','ac_retails'})
+        self.assertEqual(len(result), 3)
+        self.assertEqual({r['category'] for r in result}, {'ids_emp'})
         self.assertEqual(self.setup_salary(self.users[-1].id).status_code, 404)
         self.db.rollback()
         for role in [self.users[2], self.users[-1]]:
@@ -84,6 +136,25 @@ class SalaryTests(unittest.TestCase):
         page = self.client.get('/ems').text
         self.assertIn('static/ems.js', page)
         self.assertIn('data-erp="true"', page)
+
+    def test_ac_salary_includes_only_service_managers_and_coordinator(self):
+        added = {}
+        for role in ('Service Manager A', 'Service Manager B', 'ServiceCoordinator', 'AC Helper A', 'AC Helper B'):
+            employee = models.User(username=role, full_name=role, email=role+'@test.local',
+                                   password_hash='unused', role=role, status='Active')
+            self.db.add(employee)
+            self.db.flush()
+            added[role] = employee.id
+        self.db.commit()
+        rows = self.client.get('/api/ems/salary-preview?month=2026-09').json()['rows']
+        ids = {row['user_id'] for row in rows}
+        for role, uid in added.items():
+            self.assertEqual(uid in ids, role in ('Service Manager A', 'Service Manager B', 'ServiceCoordinator'))
+        for employee in self.users[3:5]:
+            self.assertNotIn(employee.id, ids)
+            self.assertEqual(self.setup_salary(employee.id).status_code, 404)
+        self.assertEqual(self.setup_salary(added['Service Manager A']).status_code, 200)
+        self.assertEqual(self.setup_salary(added['ServiceCoordinator']).status_code, 200)
 
     def test_salary_access_is_only_admin_and_hr(self):
         reads = ('salary-preview?month=2026-09', 'salary-profiles',
@@ -131,8 +202,8 @@ class SalaryTests(unittest.TestCase):
         self.db.commit(); self.setup_salary()
         row = self.preview()
         self.assertEqual(row['counts']['before_joining'],14)
-        self.assertEqual(row['counts']['weekoff'],2)
-        self.assertEqual(row['counts']['absent'],14)
+        self.assertEqual(row['counts']['weekoff'],4)
+        self.assertEqual(row['counts']['absent'],26)
         future = self.preview(month='2099-01')
         self.assertEqual(future['counts']['upcoming'],31)
         self.assertFalse(future['can_publish'])
@@ -186,6 +257,45 @@ class SalaryTests(unittest.TestCase):
         row = self.preview()
         self.assertEqual(self.publish(row).status_code,201)
         self.assertEqual(self.client.put(f'/api/ems/earnings/{earning.id}/void').status_code,409)
+
+    def test_legacy_calendar_profile_uses_thirty_day_basis(self):
+        uid = self.users[2].id
+        self.setup_salary(effective_month='2026-08', divisor='calendar')
+        profile = self.db.query(M.EMSSalaryProfile).filter_by(user_id=uid).one()
+        self.assertEqual(profile.divisor, '30')
+        profile.divisor = 'calendar'
+        for day in range(2, 32):
+            self.db.add(models.AttendanceRecord(user_id=uid, attendance_date=date(2026, 8, day),
+                                               checkin_at=datetime(2026, 8, day, 9)))
+        self.db.commit()
+        row = self.preview(month='2026-08')
+        self.assertEqual(row['divisor'], '30')
+        self.assertEqual(row['unpaid_days'], 1)
+        self.assertEqual(row['basic'], 2900000)
+        self.assertEqual(row['allowances'], 290000)
+
+    def test_salary_counts_match_daily_attendance(self):
+        uid = self.users[2].id
+        self.db.add(models.IdentityCard(user_id=uid, employee_id='MATCH-001', employee_name='Employee',
+                                       designation='Sales', joining_date=date(2026, 9, 15)))
+        self.db.add(models.AttendanceRecord(user_id=uid, attendance_date=date(2026, 9, 6),
+                                           checkin_at=datetime(2026, 9, 6, 9)))
+        self.db.add(models.AttendanceLeave(user_id=uid, leave_date=date(2026, 9, 6), created_by=self.actor.id))
+        self.db.add(models.AttendanceLeave(user_id=uid, leave_date=date(2026, 9, 13), created_by=self.actor.id))
+        self.db.commit()
+        daily = self.client.get('/api/ems/attendance-summary?month=2026-09').json()
+        # The daily endpoint wraps rows in its response.
+        daily = daily['rows']
+        expected = {'Present': 0, 'Absent': 0, 'Week Off': 0, 'Leave': 0, 'Upcoming': 0}
+        for day in daily:
+            if day['user_id'] == uid:
+                expected[day['status']] += 1
+        row = self.preview()
+        for key, label in [('present', 'Present'), ('absent', 'Absent'), ('weekoff', 'Week Off'),
+                           ('leave', 'Leave'), ('upcoming', 'Upcoming')]:
+            self.assertEqual(row['counts'][key], expected[label])
+        self.assertEqual(row['counts']['present'], 1)
+        self.assertEqual(row['counts']['leave'], 1)
 
     def test_full_paid_thirty_one_day_month_is_full_salary(self):
         uid = self.users[2].id

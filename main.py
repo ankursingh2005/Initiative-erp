@@ -114,6 +114,12 @@ def ensure_username_not_unique():
 
 
 def ensure_database_schema():
+    ensure_column("ems_salary_profiles", "weekoff_availed", "INTEGER NOT NULL DEFAULT 0")
+    ensure_column("ems_salary_profiles", "weekoff_credit", "INTEGER NOT NULL DEFAULT 0")
+    ensure_column("ems_salary_profiles", "weekoff_pay", "BIGINT NOT NULL DEFAULT 0")
+    ensure_column("ems_salary_profiles", "setup_incentive", "BIGINT NOT NULL DEFAULT 0")
+    ensure_column("ems_salary_profiles", "employment_category", "VARCHAR(10)")
+    ensure_column("ems_salary_profiles", "ids_attributes", "TEXT")
     ensure_column("identity_cards", "dob", "DATE")
     ensure_column("users", "weekoff_day", "VARCHAR(10)")
     ensure_column("users", "weekoff_history", "TEXT")

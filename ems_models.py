@@ -16,6 +16,12 @@ class EMSSalaryProfile(Base):
     divisor = Column(String(10), nullable=False)
     paid_weekoff = Column(Integer, nullable=False)
     paid_leave = Column(Integer, nullable=False)
+    weekoff_availed = Column(Integer, nullable=False, default=0, server_default="0")
+    weekoff_credit = Column(Integer, nullable=False, default=0, server_default="0")
+    weekoff_pay = Column(BigInteger, nullable=False, default=0, server_default="0")
+    setup_incentive = Column(BigInteger, nullable=False, default=0, server_default="0")
+    employment_category = Column(String(10), nullable=True)
+    ids_attributes = Column(Text, nullable=True)
     created_by = Column(Integer, nullable=False)
 
 
@@ -77,4 +83,11 @@ class EMSAudit(Base):
     action = Column(String(60), nullable=False)
     target = Column(String(100), nullable=False)
     details = Column(Text, nullable=False, default='')
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class EMSExcludedEmployee(Base):
+    __tablename__ = 'ems_excluded_employees'
+    user_id = Column(Integer, ForeignKey('users.id'), primary_key=True)
+    created_by = Column(Integer, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
