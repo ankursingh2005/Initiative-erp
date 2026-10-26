@@ -136,3 +136,14 @@ th{background:#eaf0f6;color:#536e86}td button{background:#e6f4ef;border-color:#c
 .removal-password-step{display:grid;gap:10px;margin-top:14px}.removal-password-step input,#removeSalaryConfirmation{width:100%;margin-top:4px}.removal-password-step button{justify-self:start}#removeSalaryConfirmationStep{margin-top:16px}#removeSalaryConfirmationStep p{font-size:12px}#manualEmployeeId{background:#eef5f8;color:#247766}
 
 button[data-delete-ems],#excludedEmployeeRows button[data-delete-ems]{color:#a33f36;background:#fff1ee;border-color:#edcfc8}#excludedEmployeeRows>div{gap:10px;flex-wrap:wrap}
+
+/* IDS regular employee fields use the same column widths on every row. */
+#ids>.grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));column-gap:18px;row-gap:20px;align-items:end}
+#ids>.grid>label{min-width:0;width:100%;margin:0;gap:8px;line-height:1.5}
+#ids>.grid>label>input,#ids>.grid>label>select{display:block;width:100%;min-width:0;height:46px;margin:0;padding:10px 12px;box-sizing:border-box}
+#ids>.ids-actions{display:flex;justify-content:flex-end;margin-top:22px;padding-top:18px;border-top:1px solid var(--line)}
+#ids>.ids-actions>button{min-height:46px;padding:12px 22px;white-space:normal}
+#ids>.ids-formula-note{margin-top:18px;color:var(--muted);font-size:12px;line-height:1.8}
+@media(max-width:1200px){#ids>.grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(max-width:900px){#ids>.grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 16px}}
+@media(max-width:500px){#ids>.grid{grid-template-columns:minmax(0,1fr)}#ids>.ids-actions>button{width:100%}}
