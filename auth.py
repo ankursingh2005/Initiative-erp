@@ -60,7 +60,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         raise credentials_exception
 
     user = db.query(models.User).filter(models.User.id == user_id).first()
-    if user is None or user.status != "Active":
+    if user is None or user.status != "Active" or user.role == "EMSManual":
         raise credentials_exception
     if token_session_version != (user.session_version or 1):
         raise credentials_exception

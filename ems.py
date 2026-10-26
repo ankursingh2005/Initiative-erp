@@ -184,6 +184,7 @@ def attendance_summary(day: date | None = None, month: str | None = None,
     punches = {(record.user_id, record.attendance_date): record for record in records}
     leave_days = {(item.user_id, item.leave_date) for item in db.query(models.AttendanceLeave).filter(
         models.AttendanceLeave.user_id.in_(ids), models.AttendanceLeave.leave_date.between(start, end)).all()}
+    manual = {(r.user_id, r.day): r.status for r in db.query(M.EMSManualAttendance).filter(M.EMSManualAttendance.day.between(start, end)).all()}
     rows = []
     for offset in range((end - start).days + 1):
         current = start + timedelta(days=offset)
@@ -191,7 +192,9 @@ def attendance_summary(day: date | None = None, month: str | None = None,
             record = punches.get((employee.id, current))
             state = daily_attendance_status(employee, current, datetime.now(IST).date(),
                                             bool(record and record.checkin_at), (employee.id, current) in leave_days)
-            status = {'present': 'Present', 'absent': 'Absent', 'weekoff': 'Week Off',
+            if employee.role == 'EMSManual' and current <= datetime.now(IST).date():
+                state = manual.get((employee.id, current), 'unrecorded')
+            status = {'unrecorded': 'Not entered', 'present': 'Present', 'absent': 'Absent', 'weekoff': 'Week Off',
                       'leave': 'Leave', 'upcoming': 'Upcoming'}[state]
             rows.append({'user_id': employee.id, 'name': employee.full_name or employee.username,
                          'employee_id': card.employee_id if card else '', 'day': current.isoformat(),
@@ -453,6 +456,7 @@ def salary_preview(db, month):
         models.AttendanceRecord.checkin_at.isnot(None)).all()}
     leaves = {(r.user_id, r.leave_date) for r in db.query(models.AttendanceLeave).filter(
         models.AttendanceLeave.leave_date.between(start, end)).all()}
+    manual = {(r.user_id, r.day): r for r in db.query(M.EMSManualAttendance).filter(M.EMSManualAttendance.day.between(start, end)).all()}
     published = {r.user_id: r for r in db.query(M.EMSPayroll).filter_by(month=month).all()}
     earnings = {}
     for uid, kind, amount in db.query(M.EMSEarning.user_id, M.EMSEarning.kind, func.sum(M.EMSEarning.amount)).filter(
@@ -464,20 +468,29 @@ def salary_preview(db, month):
         counts = dict(present=0, absent=0, weekoff=0, leave=0, upcoming=0, before_joining=0)
         pay_counts = dict(counts)
         days = []
+        missing_attendance = 0
         for offset in range((end-start).days+1):
             day = start + timedelta(days=offset)
             state = daily_attendance_status(employee, day, today,
                                             (employee.id, day) in punches, (employee.id, day) in leaves)
+            manual_day = manual.get((employee.id, day))
+            if employee.role == 'EMSManual' and joining <= day <= today:
+                state = manual_day.status if manual_day else 'absent'
+                missing_attendance += int(manual_day is None)
             counts[state] += 1
             before_joining = day < joining
             counts['before_joining'] += int(before_joining)
             pay_counts['before_joining' if before_joining else state] += 1
-            days.append({'day': day.isoformat(), 'status': state})
+            days.append({'day': day.isoformat(), 'status': state,
+                         'entered': bool(manual_day) if employee.role == 'EMSManual' else True,
+                         'note': manual_day.note if manual_day else ''})
         profile = latest.get(employee.id)
         saved = published.get(employee.id)
         row = dict(user_id=employee.id, name=employee.full_name or employee.username,
-                   employee_id=card.employee_id if card else '', category=employee_category(employee),
+                   employee_id=card.employee_id if card else '',
+                   category=employee.category_code if employee.role == 'EMSManual' else employee_category(employee),
                    outlet=store.name if store else 'Unassigned', department=employee.category_code or '',
+                   manual_employee=employee.role == 'EMSManual', missing_attendance=missing_attendance,
                    joining_date=joining.isoformat(),
                    joining_source='Joining date' if card and card.joining_date else 'ERP registration date',
                    weekoff_availed=counts['weekoff'], weekoff_credit=max(0, 4-counts['weekoff']),
@@ -509,7 +522,7 @@ def salary_preview(db, month):
             row['bonus'] += row['bonus_payable']
             row['net'] = row['basic']+row['allowances']+row['incentive']+row['bonus']-row['deductions']
             row['working_days'] = float(Decimal(30)*factor)
-        row['can_publish'] = bool(profile and end < today and not saved and row.get('net', -1) >= 0 and joining <= end and row.get('ids_attributes', {}).get('release_status') != 'HOLD')
+        row['can_publish'] = bool(profile and end < today and not saved and row.get('net', -1) >= 0 and joining <= end and not missing_attendance and row.get('ids_attributes', {}).get('release_status') != 'HOLD')
         rows.append(row)
     return {'month': month, 'closed_month': end < today, 'rows': rows}
 
@@ -582,3 +595,86 @@ def restore_salary_employee(user_id: int, db: Session = Depends(get_db), user=De
         record(db, user, 'employee_restored_to_salary', user_id)
         db.commit()
     return {'message': 'Employee restored to EMS salary list'}
+
+class ManualEmployee(Input):
+    full_name: str = Field(min_length=2, max_length=150)
+    employee_id: str = Field(min_length=2, max_length=40, pattern=r'^[A-Za-z0-9_-]+$')
+    joining_date: date
+    phone: str = Field(default='', max_length=25)
+    designation: str = Field(default='Employee', min_length=2, max_length=100)
+    employee_group: Literal['ids_emp', 'ac_retails', 'ac_projects'] = 'ids_emp'
+    store_id: int | None = None
+    weekoff_day: Literal['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] | None = None
+
+
+class ManualDay(Input):
+    day: date
+    status: Literal['present', 'absent', 'weekoff', 'leave']
+    note: str = Field(default='', max_length=300)
+
+
+class ManualAttendanceInput(Input):
+    month: str = Field(pattern=r'^\d{4}-(0[1-9]|1[0-2])$')
+    days: list[ManualDay] = Field(min_length=1, max_length=31)
+
+
+@router.get('/manual-employee-options')
+def manual_employee_options(db: Session = Depends(get_db), user=Depends(manager)):
+    return {'stores': [{'id': row.id, 'name': row.name} for row in db.query(models.Store).filter(
+        models.Store.status == 'Active').order_by(models.Store.name).all()]}
+
+
+@router.post('/manual-employees', status_code=201)
+def add_manual_employee(payload: ManualEmployee, db: Session = Depends(get_db), user=Depends(manager)):
+    from uuid import uuid4
+    import secrets
+    if payload.joining_date > datetime.now(IST).date():
+        raise HTTPException(422, 'Joining date cannot be in the future')
+    if payload.store_id is not None:
+        store = db.get(models.Store, payload.store_id)
+        if not store or store.status != 'Active':
+            raise HTTPException(422, 'Choose an active outlet')
+    if db.query(models.IdentityCard).filter(func.lower(models.IdentityCard.employee_id) == payload.employee_id.lower()).first():
+        raise HTTPException(409, 'Employee ID already exists. Select the existing employee instead.')
+    employee = models.User(username='manual_' + uuid4().hex[:24], full_name=payload.full_name,
+        email=uuid4().hex+'@manual.invalid', password_hash=auth.hash_password(secrets.token_urlsafe(48)),
+        role='EMSManual', status='Active', category_code=payload.employee_group,
+        store_id=payload.store_id, weekoff_day=payload.weekoff_day)
+    try:
+        db.add(employee); db.flush()
+        db.add(models.IdentityCard(user_id=employee.id, employee_id=payload.employee_id,
+            employee_name=payload.full_name, designation=payload.designation,
+            mobile=payload.phone, joining_date=payload.joining_date))
+        record(db, user, 'manual_employee_created', employee.id, payload.model_dump_json())
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, 'Employee ID already exists')
+    return {'message': 'Manual employee added. Set up salary and enter attendance.', 'user_id': employee.id}
+
+
+@router.put('/manual-employees/{user_id}/attendance')
+def save_manual_attendance(user_id: int, payload: ManualAttendanceInput,
+                           db: Session = Depends(get_db), user=Depends(manager)):
+    employee = lock_employee(db, user_id)
+    if employee.role != 'EMSManual':
+        raise HTTPException(422, 'Manual attendance is for manually added employees')
+    start, end = month_bounds(payload.month)
+    if db.query(M.EMSPayroll).filter_by(user_id=user_id, month=payload.month).first():
+        raise HTTPException(409, 'Published salary attendance cannot be changed')
+    card = db.get(models.IdentityCard, user_id)
+    if len({entry.day for entry in payload.days}) != len(payload.days):
+        raise HTTPException(422, 'Each attendance date must be unique')
+    for entry in payload.days:
+        if not start <= entry.day <= end or entry.day > datetime.now(IST).date() or (card and card.joining_date and entry.day < card.joining_date):
+            raise HTTPException(422, 'Attendance dates must be within this month, on or after joining, and not in the future')
+    for entry in payload.days:
+        row = db.query(M.EMSManualAttendance).filter_by(user_id=user_id, day=entry.day).first()
+        if row is None:
+            row = M.EMSManualAttendance(user_id=user_id, day=entry.day)
+            db.add(row)
+        row.status = entry.status; row.note = entry.note; row.updated_by = user.id
+        row.updated_at = datetime.utcnow()
+    record(db, user, 'manual_attendance_saved', user_id, payload.model_dump_json())
+    db.commit()
+    return {'message': 'Manual attendance saved and draft salary recalculated'}

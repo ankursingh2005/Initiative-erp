@@ -91,3 +91,14 @@ class EMSExcludedEmployee(Base):
     user_id = Column(Integer, ForeignKey('users.id'), primary_key=True)
     created_by = Column(Integer, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+class EMSManualAttendance(Base):
+    __tablename__ = 'ems_manual_attendance'
+    __table_args__ = (UniqueConstraint('user_id', 'day', name='uq_ems_manual_attendance_day'),)
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    day = Column(Date, nullable=False)
+    status = Column(String(12), nullable=False)
+    note = Column(String(300), nullable=False, default='')
+    updated_by = Column(Integer, ForeignKey('users.id'), nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

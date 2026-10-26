@@ -2871,7 +2871,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         .filter((models.User.username == identifier) | (models.User.email == identifier))
         .first()
     )
-    if not user or not auth.verify_password(form_data.password, user.password_hash):
+    if not user or user.role == "EMSManual" or not auth.verify_password(form_data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Incorrect username/email or password")
     if user.status != "Active":
         raise HTTPException(status_code=403, detail="This account is not active")

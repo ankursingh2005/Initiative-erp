@@ -70,6 +70,62 @@ class SalaryTests(unittest.TestCase):
         self.assertFalse(row['can_publish'])
         self.assertEqual(self.publish(row).status_code, 409)
 
+    def create_manual(self, **changes):
+        payload = dict(full_name='Synthetic manual employee', employee_id='MANUAL-TEST',
+                       joining_date='2026-09-01', employee_group='ids_emp')
+        payload.update(changes)
+        return self.client.post('/api/ems/manual-employees', json=payload)
+
+    def test_manual_employee_attendance_and_payroll(self):
+        response = self.create_manual()
+        self.assertEqual(response.status_code, 201, response.text)
+        uid = response.json()['user_id']
+        self.assertEqual(self.db.get(models.User, uid).role, 'EMSManual')
+        self.assertEqual(self.create_manual().status_code, 409)
+        self.assertEqual(self.setup_salary(uid, basic='20000', allowances='5000',
+            deductions='1000', employment_category='Regular').status_code, 200)
+        row = self.preview(uid)
+        self.assertTrue(row['manual_employee'])
+        self.assertEqual(row['missing_attendance'], 30)
+        self.assertFalse(row['can_publish'])
+        days = [dict(day=f'2026-09-{day:02d}', status='present') for day in range(1, 31)]
+        path = f'/api/ems/manual-employees/{uid}/attendance'
+        response = self.client.put(path, json=dict(month='2026-09', days=days))
+        self.assertEqual(response.status_code, 200, response.text)
+        row = self.preview(uid)
+        self.assertEqual(row['missing_attendance'], 0)
+        self.assertEqual(row['counts']['present'], 30)
+        self.assertEqual(row['net'], 2270000)
+        self.assertTrue(row['can_publish'])
+        self.assertEqual(self.publish(row).status_code, 201)
+        self.assertEqual(self.client.put(path, json=dict(month='2026-09', days=days)).status_code, 409)
+        payroll = self.db.query(M.EMSPayroll).filter_by(user_id=uid).one()
+        slip = self.client.get(f'/api/ems/salary-slips/{payroll.id}').json()
+        self.assertTrue(slip['snapshot']['manual_employee'])
+        self.assertEqual(slip['payroll']['net'], 2270000)
+
+    def test_manual_employee_scope_and_attendance_validation(self):
+        response = self.create_manual(joining_date='2026-09-10')
+        self.assertEqual(response.status_code, 201)
+        uid = response.json()['user_id']
+        path = f'/api/ems/manual-employees/{uid}/attendance'
+        invalid = [dict(day='2026-09-09', status='present')]
+        self.assertEqual(self.client.put(path, json=dict(month='2026-09', days=invalid)).status_code, 422)
+        days = [dict(day='2026-09-10', status='present')]*2
+        self.assertEqual(self.client.put(path, json=dict(month='2026-09', days=days)).status_code, 422)
+        self.assertEqual(self.db.query(M.EMSManualAttendance).count(), 0)
+        self.actor = self.users[2]
+        self.assertEqual(self.create_manual(employee_id='DENIED').status_code, 403)
+        self.assertEqual(self.client.put(path, json=dict(month='2026-09', days=invalid)).status_code, 403)
+
+    def test_manual_employee_cannot_use_login_token(self):
+        uid = self.create_manual().json()['user_id']
+        token = auth.create_access_token(dict(user_id=uid, session_version=1))
+        from fastapi import HTTPException
+        with self.assertRaises(HTTPException) as error:
+            auth.get_current_user(token=token, db=self.db)
+        self.assertEqual(error.exception.status_code, 401)
+
     def test_exclude_and_restore_salary_employee_preserves_records(self):
         uid = self.users[2].id
         self.setup_salary()
