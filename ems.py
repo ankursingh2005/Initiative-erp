@@ -336,37 +336,6 @@ def audit(db: Session = Depends(get_db), user=Depends(manager)):
     return [serialize(row) for row in db.query(M.EMSAudit).order_by(M.EMSAudit.id.desc()).limit(300).all()]
 
 
-class IDSAttributes(Input):
-    branch: str = Field(default='', max_length=60)
-    skill_category: str = Field(default='Skilled', max_length=60)
-    epf_enabled: bool = True
-    esic_enabled: bool = False
-    bonus_enabled: bool = False
-    payment_mode: Literal['BANK', 'CASH'] = 'BANK'
-    account_no: str = Field(default='', max_length=40)
-    ifsc_code: str = Field(default='', max_length=11)
-    release_status: Literal['HOLD', 'RELEASE'] = 'RELEASE'
-
-
-def regular_pay(basic, allowance, deductions, factor, attributes):
-    """Sheet arithmetic in paise; components rounded to rupees, half up."""
-    rupee = lambda v: int((Decimal(v)/100).quantize(Decimal('1'), rounding=ROUND_HALF_UP))*100
-    actual_basic = rupee(Decimal(basic)*factor)
-    vda = rupee(Decimal(basic)*factor*Decimal('0.0625'))
-    epf_base_exact = Decimal(basic)*factor*Decimal('1.0625')
-    actual_oa = rupee(Decimal(allowance)*factor)
-    epf = rupee(epf_base_exact*Decimal('0.12')) if attributes.get('epf_enabled', True) else 0
-    bonus = rupee(epf_base_exact*Decimal('0.0833')) if attributes.get('bonus_enabled', False) else 0
-    total = actual_basic+vda+actual_oa
-    gross = total+bonus
-    esic = rupee(Decimal(gross)*Decimal('0.0075')) if attributes.get('esic_enabled', False) else 0
-    return dict(basic=actual_basic, allowances=vda+actual_oa, actual_vda=vda,
-                actual_pay_epf=actual_basic+vda, actual_oa=actual_oa,
-                total_earning=total, bonus_payable=bonus, actual_gross_earning=gross,
-                epf_employee=epf, esic_employee=esic, staff_advance=deductions,
-                deductions=deductions+epf+esic)
-
-
 class SalarySetup(Input):
     user_id: int
     effective_month: str = Field(pattern=r'^\d{4}-(0[1-9]|1[0-2])$')
@@ -381,7 +350,8 @@ class SalarySetup(Input):
     weekoff_pay: Decimal = Field(default=Decimal(0), ge=0, le=10000000, decimal_places=2)
     setup_incentive: Decimal = Field(default=Decimal(0), ge=0, le=10000000, decimal_places=2)
     employment_category: Literal['Regular', 'Contract'] | None = None
-    ids_attributes: IDSAttributes | None = None
+    account_no: str = Field(default='', max_length=40, pattern=r'^[0-9]*$')
+    ifsc_code: str = Field(default='', max_length=11, pattern=r'^(?:[A-Za-z]{4}0[A-Za-z0-9]{6})?$')
 
 
 class SalaryRun(Input):
@@ -434,8 +404,8 @@ def save_salary_profile(payload: SalarySetup, db: Session = Depends(get_db), use
     row.weekoff_pay = int((Decimal(row.basic + row.allowances) * row.weekoff_credit / Decimal(30)).quantize(Decimal('1'), rounding=ROUND_HALF_UP))
     if payload.employment_category is not None:
         row.employment_category = payload.employment_category
-    if payload.ids_attributes is not None:
-        row.ids_attributes = payload.ids_attributes.model_dump_json()
+    row.account_no = payload.account_no
+    row.ifsc_code = payload.ifsc_code.upper()
     row.created_by = user.id
     record(db, user, 'salary_profile_saved', payload.user_id, payload.model_dump_json())
     db.commit()
@@ -517,14 +487,7 @@ def salary_preview(db, month):
                        divisor='30', paid_weekoff=bool(profile.paid_weekoff), paid_leave=bool(profile.paid_leave),
                        payable_days=payable, unpaid_days=unpaid,
                        net=basic+allowance+row['incentive']+row['bonus']-profile.deductions)
-        if profile and profile.employment_category == 'Regular':
-            attributes = json.loads(profile.ids_attributes or '{}')
-            row['ids_attributes'] = attributes
-            row.update(regular_pay(profile.basic, profile.allowances, profile.deductions, factor, attributes))
-            row['bonus'] += row['bonus_payable']
-            row['net'] = row['basic']+row['allowances']+row['incentive']+row['bonus']-row['deductions']
-            row['working_days'] = float(Decimal(30)*factor)
-        row['can_publish'] = bool(profile and end < today and not saved and row.get('net', -1) >= 0 and joining <= end and not missing_attendance and row.get('ids_attributes', {}).get('release_status') != 'HOLD')
+        row['can_publish'] = bool(profile and end < today and not saved and row.get('net', -1) >= 0 and joining <= end and not missing_attendance)
         rows.append(row)
     return {'month': month, 'closed_month': end < today, 'rows': rows}
 
@@ -742,7 +705,7 @@ def permanently_delete_ems_employee(user_id: int, payload: EMSPermanentDeletion,
     # Remove employee-specific audit payloads which duplicate salary/profile details.
     audit_groups = [
         (['salary_profile_saved', 'employee_excluded_from_salary', 'employee_restored_to_salary',
-          'manual_employee_created', 'manual_attendance_saved'], [user_id]),
+          'manual_employee_created', 'manual_attendance_saved', 'salary_distribution_inputs_saved'], [user_id]),
         (['payroll_published', 'payroll_marked_paid', 'salary_published_from_attendance'], payroll_ids),
         (['earning_approved', 'earning_voided'], earning_ids),
         (['leave_requested', 'leave_approved', 'leave_rejected'], leave_ids),
@@ -750,7 +713,7 @@ def permanently_delete_ems_employee(user_id: int, payload: EMSPermanentDeletion,
     for actions, targets in audit_groups:
         db.query(M.EMSAudit).filter(M.EMSAudit.action.in_(actions),
             M.EMSAudit.target.in_([str(value) for value in targets])).delete(synchronize_session=False)
-    for model in (M.EMSManualAttendance, M.EMSExcludedEmployee, M.EMSLeaveRequest,
+    for model in (M.EMSDistributionInput, M.EMSManualAttendance, M.EMSExcludedEmployee, M.EMSLeaveRequest,
                   M.EMSEarning, M.EMSSalaryProfile, M.EMSPayroll):
         db.query(model).filter_by(user_id=user_id).delete(synchronize_session=False)
     # Tombstone prevents an ERP account from automatically reappearing in EMS.
@@ -759,3 +722,80 @@ def permanently_delete_ems_employee(user_id: int, payload: EMSPermanentDeletion,
     record(db, user, 'employee_permanently_deleted_from_ems', user_id)
     db.commit()
     return {'message': 'Employee permanently deleted from EMS. Salary history and manual attendance were deleted. ERP account records are preserved.'}
+
+# Retired IDS NEW fields are removed from legacy storage without rewriting
+# published payroll amounts or touching shared ERP/attendance tables.
+def remove_retired_ids_data(connection):
+    from sqlalchemy import inspect, text
+    tables = set(inspect(connection).get_table_names())
+    if 'ems_salary_profiles' in tables:
+        columns = {column['name'] for column in inspect(connection).get_columns('ems_salary_profiles')}
+        if 'ids_attributes' in columns:
+            connection.execute(text('UPDATE ems_salary_profiles SET ids_attributes = NULL WHERE ids_attributes IS NOT NULL'))
+    retired = {'ids_attributes', 'actual_vda', 'actual_pay_epf', 'actual_oa',
+               'total_earning', 'bonus_payable', 'actual_gross_earning',
+               'epf_employee', 'esic_employee', 'staff_advance', 'working_days'}
+    parameters = {f'key_{index}': f'%"{key}"%' for index, key in enumerate(sorted(retired))}
+    condition = ' OR '.join(f'details LIKE :{key}' for key in parameters)
+    for table in ('ems_payroll_snapshots', 'ems_audit'):
+        if table not in tables:
+            continue
+        scope = " AND action IN ('salary_profile_saved', 'salary_published_from_attendance')" if table == 'ems_audit' else ''
+        rows = connection.execute(text(f'SELECT id, details FROM {table} WHERE ({condition}){scope}'), parameters).all()
+        for row in rows:
+            try:
+                details = json.loads(row.details)
+            except (ValueError, TypeError):
+                continue
+            if not isinstance(details, dict) or not retired.intersection(details):
+                continue
+            cleaned = {key: value for key, value in details.items() if key not in retired}
+            connection.execute(text(f'UPDATE {table} SET details = :details WHERE id = :id'),
+                               {'id': row.id, 'details': json.dumps(cleaned)})
+
+class DistributionInput(Input):
+    month: str = Field(pattern=r'^\d{4}-(0[1-9]|1[0-2])$')
+    other_allowances: Decimal = Field(ge=0, le=10000000, decimal_places=2)
+    staff_advance: Decimal = Field(ge=0, le=10000000, decimal_places=2)
+
+
+@router.get('/salary-distribution')
+def salary_distribution(month: str, db: Session = Depends(get_db), user=Depends(manager)):
+    from salary_distribution import calculate_distribution
+    preview = salary_preview(db, month)
+    inputs = {row.user_id: row for row in db.query(M.EMSDistributionInput).filter_by(month=month).all()}
+    profiles = {row.id: row for row in db.query(M.EMSSalaryProfile).all()}
+    rows = []
+    for employee in preview['rows']:
+        profile = profiles.get(employee['profile_id'])
+        saved = inputs.get(employee['user_id'])
+        attendance_absent = employee['counts']['absent']
+        calculated = calculate_distribution(profile.basic + profile.allowances if profile else 0,
+            attendance_absent, saved.other_allowances if saved else 0, saved.staff_advance if saved else 0)
+        rows.append(dict(**calculated, user_id=employee['user_id'], name=employee['name'],
+            employee_id=employee['employee_id'], profile_id=employee['profile_id'],
+            attendance_absent=attendance_absent, missing_attendance=employee['missing_attendance'],
+            account_no=profile.account_no or '' if profile else '',
+            ifsc_code=profile.ifsc_code or '' if profile else ''))
+    return {'month': month, 'closed_month': preview['closed_month'], 'rows': rows}
+
+
+@router.put('/salary-distribution/{user_id}')
+def save_distribution_inputs(user_id: int, payload: DistributionInput,
+                             db: Session = Depends(get_db), user=Depends(manager)):
+    month_bounds(payload.month)
+    lock_employee(db, user_id)
+    if not db.query(M.EMSSalaryProfile).filter(M.EMSSalaryProfile.user_id == user_id,
+            M.EMSSalaryProfile.effective_month <= payload.month).first():
+        raise HTTPException(409, 'Save salary setup for this employee and month first')
+    row = db.query(M.EMSDistributionInput).filter_by(user_id=user_id, month=payload.month).first()
+    if row is None:
+        row = M.EMSDistributionInput(user_id=user_id, month=payload.month)
+        db.add(row)
+    row.other_allowances = int(payload.other_allowances * 100)
+    row.staff_advance = int(payload.staff_advance * 100)
+    row.updated_by = user.id
+    row.updated_at = datetime.utcnow()
+    record(db, user, 'salary_distribution_inputs_saved', user_id, payload.model_dump_json())
+    db.commit()
+    return {'message': 'Salary distribution inputs saved'}

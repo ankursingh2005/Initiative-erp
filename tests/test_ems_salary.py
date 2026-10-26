@@ -60,15 +60,65 @@ class SalaryTests(unittest.TestCase):
             self.assertEqual(profile['employment_category'], category)
         self.assertEqual(self.setup_salary(employment_category='Other').status_code, 422)
 
-    def test_ids_attributes_and_hold_are_preserved(self):
-        response = self.setup_salary(employment_category='Regular',
-            ids_attributes=dict(branch='TEST', release_status='HOLD', epf_enabled=False))
-        self.assertEqual(response.status_code, 200)
-        row = self.preview()
-        self.assertEqual(row['ids_attributes']['branch'], 'TEST')
-        self.assertEqual(row['epf_employee'], 0)
-        self.assertFalse(row['can_publish'])
-        self.assertEqual(self.publish(row).status_code, 409)
+    def test_retired_ids_cleanup_preserves_salary_totals(self):
+        import json
+        from sqlalchemy import text
+        from ems import remove_retired_ids_data
+        uid = self.users[2].id
+        self.setup_salary(uid)
+        payroll = M.EMSPayroll(user_id=uid, month='2026-09', basic=2000000,
+            allowances=625000, deductions=355000, incentives=0, bonuses=0, net=2270000, created_by=self.actor.id)
+        self.db.add(payroll); self.db.flush()
+        details = dict(net=2270000, basic=2000000, ids_attributes=dict(account_no='SYNTHETIC'),
+                       actual_vda=125000, epf_employee=255000)
+        snapshot = M.EMSPayrollSnapshot(payroll_id=payroll.id, details=json.dumps(details))
+        self.db.add(snapshot)
+        self.db.add(M.EMSAudit(actor_id=self.actor.id, name='Synthetic actor', action='salary_profile_saved',
+            target=str(uid), details=json.dumps(details)))
+        self.db.commit()
+        with self.engine.begin() as connection:
+            connection.execute(text('ALTER TABLE ems_salary_profiles ADD COLUMN ids_attributes TEXT'))
+            connection.execute(text('UPDATE ems_salary_profiles SET ids_attributes = :value'),
+                               dict(value=json.dumps(dict(branch='SYNTHETIC'))))
+            remove_retired_ids_data(connection)
+            remove_retired_ids_data(connection)
+            self.assertIsNone(connection.execute(text('SELECT ids_attributes FROM ems_salary_profiles')).scalar())
+        self.db.expire_all()
+        self.assertEqual(json.loads(snapshot.details), dict(net=2270000, basic=2000000))
+        self.assertEqual(self.db.get(M.EMSPayroll, payroll.id).net, 2270000)
+        self.assertEqual(self.db.query(M.EMSSalaryProfile).count(), 1)
+        self.assertEqual(self.setup_salary(uid, ids_attributes=dict(branch='REMOVED')).status_code, 422)
+
+    def test_salary_distribution_inputs_are_monthly_and_do_not_change_other_projects(self):
+        from salary_distribution import calculate_distribution
+        uid = self.users[2].id
+        response = self.setup_salary(uid, basic='16000', allowances='0', deductions='0',
+            account_no='000123456789', ifsc_code='SBIN0001234')
+        self.assertEqual(response.status_code, 200, response.text)
+        shared = [t for t in Base.metadata.sorted_tables if not t.name.startswith('ems_')]
+        before = {t.name: self.db.execute(t.select()).all() for t in shared}
+        path = f'/api/ems/salary-distribution/{uid}'
+        response = self.client.put(path, json=dict(month='2026-09', other_allowances='1000.00', staff_advance='500.00'))
+        self.assertEqual(response.status_code, 200, response.text)
+        result = self.client.get('/api/ems/salary-distribution?month=2026-09')
+        self.assertEqual(result.status_code, 200, result.text)
+        row = next(r for r in result.json()['rows'] if r['user_id'] == uid)
+        absent = self.preview(uid)['counts']['absent']
+        expected = calculate_distribution(1600000, absent, 100000, 50000)
+        for key, value in expected.items():
+            self.assertEqual(row[key], value, key)
+        self.assertEqual(row['account_no'], '000123456789')
+        self.assertEqual(row['ifsc_code'], 'SBIN0001234')
+        october = self.client.get('/api/ems/salary-distribution?month=2026-10').json()
+        row = next(r for r in october['rows'] if r['user_id'] == uid)
+        self.assertEqual(row['other_allowances'], 0)
+        self.assertEqual(row['staff_advance'], 0)
+        self.assertEqual({t.name: self.db.execute(t.select()).all() for t in shared}, before)
+        self.assertEqual(self.db.query(M.EMSPayroll).count(), 0)
+        self.assertEqual(self.client.put(path, json=dict(month='2026-09', other_allowances='-1', staff_advance='0')).status_code, 422)
+        self.actor = self.users[2]
+        self.assertEqual(self.client.get('/api/ems/salary-distribution?month=2026-09').status_code, 403)
+        self.assertEqual(self.client.put(path, json=dict(month='2026-09', other_allowances='0', staff_advance='0')).status_code, 403)
 
     def create_manual(self, **changes):
         payload = dict(full_name='Synthetic manual employee',
@@ -97,14 +147,14 @@ class SalaryTests(unittest.TestCase):
         row = self.preview(uid)
         self.assertEqual(row['missing_attendance'], 0)
         self.assertEqual(row['counts']['present'], 30)
-        self.assertEqual(row['net'], 2270000)
+        self.assertEqual(row['net'], 2400000)
         self.assertTrue(row['can_publish'])
         self.assertEqual(self.publish(row).status_code, 201)
         self.assertEqual(self.client.put(path, json=dict(month='2026-09', days=days)).status_code, 409)
         payroll = self.db.query(M.EMSPayroll).filter_by(user_id=uid).one()
         slip = self.client.get(f'/api/ems/salary-slips/{payroll.id}').json()
         self.assertTrue(slip['snapshot']['manual_employee'])
-        self.assertEqual(slip['payroll']['net'], 2270000)
+        self.assertEqual(slip['payroll']['net'], 2400000)
 
     def test_manual_employee_scope_and_attendance_validation(self):
         response = self.create_manual(joining_date='2026-09-10')
@@ -168,6 +218,7 @@ class SalaryTests(unittest.TestCase):
         self.db.add(payroll); self.db.flush()
         self.db.add(M.EMSPayrollSnapshot(payroll_id=payroll.id, details='{}'))
         self.db.add(M.EMSExcludedEmployee(user_id=uid, created_by=self.actor.id))
+        self.db.add(M.EMSDistributionInput(user_id=uid, month='2026-09', other_allowances=10000, staff_advance=0, updated_by=self.actor.id))
         self.db.commit()
         path = f'/api/ems/employees/{uid}'
         self.assertEqual(self.client.request('DELETE', path, json=dict(password='wrong', confirmation='DELETE')).status_code, 403)
@@ -178,7 +229,7 @@ class SalaryTests(unittest.TestCase):
         self.assertFalse(self.db.get(models.User, uid).erp_deleted)
         self.assertIsNotNone(self.db.get(models.IdentityCard, uid))
         self.assertEqual(self.db.query(models.AttendanceRecord).filter_by(user_id=uid).count(), 1)
-        for model in (M.EMSSalaryProfile, M.EMSPayroll, M.EMSManualAttendance, M.EMSExcludedEmployee):
+        for model in (M.EMSSalaryProfile, M.EMSPayroll, M.EMSManualAttendance, M.EMSExcludedEmployee, M.EMSDistributionInput):
             self.assertEqual(self.db.query(model).filter_by(user_id=uid).count(), 0)
         self.assertEqual(self.db.query(M.EMSPayrollSnapshot).count(), 0)
         self.assertNotIn(uid, [r['user_id'] for r in self.client.get('/api/ems/salary-preview?month=2026-09').json()['rows']])

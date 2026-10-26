@@ -21,7 +21,8 @@ class EMSSalaryProfile(Base):
     weekoff_pay = Column(BigInteger, nullable=False, default=0, server_default="0")
     setup_incentive = Column(BigInteger, nullable=False, default=0, server_default="0")
     employment_category = Column(String(10), nullable=True)
-    ids_attributes = Column(Text, nullable=True)
+    account_no = Column(String(40), nullable=True)
+    ifsc_code = Column(String(11), nullable=True)
     created_by = Column(Integer, nullable=False)
 
 
@@ -101,4 +102,15 @@ class EMSManualAttendance(Base):
     status = Column(String(12), nullable=False)
     note = Column(String(300), nullable=False, default='')
     updated_by = Column(Integer, ForeignKey('users.id'), nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+class EMSDistributionInput(Base):
+    __tablename__ = 'ems_distribution_inputs'
+    __table_args__ = (UniqueConstraint('user_id', 'month', name='uq_ems_distribution_month'),)
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    month = Column(String(7), nullable=False, index=True)
+    other_allowances = Column(BigInteger, nullable=False, default=0)
+    staff_advance = Column(BigInteger, nullable=False, default=0)
+    updated_by = Column(Integer, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

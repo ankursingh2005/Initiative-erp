@@ -5,7 +5,7 @@ Open **EMS Salary** from Home, or visit `/ems` (`/erp/ems` when hosted under `/e
 ## Monthly workflow
 
 1. Select the salary month and review the employee group or search by name, employee ID or outlet.
-2. **Salary setup** lists Emp ID, Emp Name and Gross Salary (basic plus allowances), including employees with no setup. Use **Set up** or **Edit** to fill the form; employee identity fields come from ERP records. Choose the employee, effective month, basic salary, monthly allowances, fixed deductions and attendance pay rules. Salary always uses a fixed 30-day divisor, and explicitly choose whether weekoff and recorded leave are paid.
+2. **Salary setup** lists Emp ID, Emp Name and Expected Basic (basic plus allowances), including employees with no setup. Use **Set up** or **Edit** to fill the form; employee identity fields come from ERP records. Choose the employee, effective month, basic salary, monthly allowances, fixed deductions and attendance pay rules. Salary always uses a fixed 30-day divisor, and explicitly choose whether weekoff and recorded leave are paid.
 3. In **Monthly payroll**, review Present, Absent, Weekoff and Leave totals. Open **Review** for each employee's daily attendance and salary calculation.
 4. **Manual earnings** accepts individually approved incentive and bonus amounts with a reason. Use **Void entry** to correct a mistaken entry before publication, then record the correct amount. Automatic allocation from the Incentive Project is pending the employee allocation rules.
 5. After the month ends, review and publish the salary. The incentive acknowledgment confirms that automatic allocation is still pending. If attendance or salary values changed since review, refresh and review again.
@@ -39,8 +39,20 @@ Automatic Exact Sales and Non-sales incentive distribution is intentionally pend
 
 `tests/ems_salary_preview.py` runs a local preview using synthetic in-memory data; `tests/ems-salary-ui.cjs` checks the ERP prefix, filters, attendance review, publication, payslip and mobile layout against that preview and an isolated Chrome debugger on port 9246.
 
-Week Off Pay is calculated automatically as (Gross Salary / 30) ? Week Off Credit, rounded to the nearest paise. Incentive is manually entered. Amount Payable is their sum, matching the reference sheet; gross salary is excluded from this total. These reference amounts do not add approved earnings or change published payroll.
+Week Off Pay is calculated automatically as (Expected Basic / 30) ? Week Off Credit, rounded to the nearest paise. Incentive is manually entered. Amount Payable is their sum, matching the reference sheet; Expected Basic is excluded from this total. These reference amounts do not add approved earnings or change published payroll.
 
 Choose Regular or Contract in Emp Category after Amount Payable, then save the salary setup. The Emp Category filter after Employee Group filters the register, payroll, CSV and employee totals for the selected month. Existing employees remain unclassified until assigned.
 
 Use Remove in the salary setup register to exclude an unpaid employee from EMS. Their ERP account, attendance and saved payroll remain stored. Open Excluded employees and choose Restore to salary list to reverse this. Admin and HR manage these exclusions.
+
+## IDS NEW removed
+
+IDS NEW is no longer part of EMS. Regular and Contract employees use the standard attendance-linked salary calculation. Restart the server to clear legacy IDS NEW attributes and breakdown fields. Published payroll totals, employee records and attendance history are preserved.
+
+## Salary Distribution
+
+Open Salary Distribution for the selected salary month and employee filters. Absence comes from attendance (capped at 30); working days are 30 minus absence. Expected Basic and bank details come from Salary setup. Enter monthly Other Allowances and Staff Advance & Deduction, then select Save inputs in that row. Values are saved per employee and month and recalculate immediately.
+
+VDA is 6.25% of Actual Basic; EPF is 12% of Actual Basic plus VDA. Bonus is 8.33% of Actual Pay (EPF) only when Total Earning is strictly below INR 21,000. ESIC is 0.75% of Actual Gross Earning only when gross is strictly below INR 21,000. Each component is rounded to paise. Net is gross less EPF, ESIC and the entered advance/deduction.
+
+The table scrolls horizontally, with a fixed employee column, formula tooltips, totals and a distribution download. Open months and missing manual attendance are provisional. This report does not publish payroll or transfer money. Existing payroll totals and ERP attendance records are not changed. Restart the server to create the distribution input table.

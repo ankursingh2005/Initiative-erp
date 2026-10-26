@@ -65,6 +65,7 @@ class UserDeletionTests(unittest.TestCase):
                     ems_models.EMSPayrollSnapshot(payroll_id=saved_payroll.id, details='{"net":100}'),
                     ems_models.EMSManualAttendance(user_id=uid, day=date.today(), status='present', updated_by=self.actor.id),
                     ems_models.EMSExcludedEmployee(user_id=uid, created_by=self.actor.id),
+                    ems_models.EMSDistributionInput(user_id=uid, month='2026-09', other_allowances=10000, staff_advance=0, updated_by=self.actor.id),
                 ])
                 self.db.commit()
                 response = self.client.delete('/users/'+str(uid))
@@ -80,7 +81,7 @@ class UserDeletionTests(unittest.TestCase):
                 self.assertIsNone(receipt.voided_by_user_id)
                 self.assertIn('Originally received by', receipt.notes)
                 self.assertEqual(other_leave.created_by, uid)
-                for model in (models.AttendanceRecord, models.AttendanceLocationPoint, models.AttendanceLeave, models.IdentityCard, ems_models.EMSLeaveRequest, ems_models.EMSEarning, ems_models.EMSPayroll, ems_models.EMSSalaryProfile, ems_models.EMSManualAttendance, ems_models.EMSExcludedEmployee):
+                for model in (models.AttendanceRecord, models.AttendanceLocationPoint, models.AttendanceLeave, models.IdentityCard, ems_models.EMSLeaveRequest, ems_models.EMSEarning, ems_models.EMSPayroll, ems_models.EMSSalaryProfile, ems_models.EMSManualAttendance, ems_models.EMSExcludedEmployee, ems_models.EMSDistributionInput):
                     self.assertEqual(self.db.query(model).filter(model.user_id == uid).count(), 1)
 
                 self.assertEqual(self.db.query(ems_models.EMSPayrollSnapshot).filter_by(payroll_id=saved_payroll.id).one().details, '{"net":100}')

@@ -121,7 +121,10 @@ def ensure_database_schema():
     ensure_column("ems_salary_profiles", "weekoff_pay", "BIGINT NOT NULL DEFAULT 0")
     ensure_column("ems_salary_profiles", "setup_incentive", "BIGINT NOT NULL DEFAULT 0")
     ensure_column("ems_salary_profiles", "employment_category", "VARCHAR(10)")
-    ensure_column("ems_salary_profiles", "ids_attributes", "TEXT")
+    ensure_column("ems_salary_profiles", "account_no", "VARCHAR(40)")
+    ensure_column("ems_salary_profiles", "ifsc_code", "VARCHAR(11)")
+    with engine.begin() as connection:
+        ems.remove_retired_ids_data(connection)
     ensure_column("identity_cards", "dob", "DATE")
     ensure_column("users", "weekoff_day", "VARCHAR(10)")
     ensure_column("users", "weekoff_history", "TEXT")
