@@ -29,7 +29,7 @@ function render(){
  const p=state.profiles.filter(p=>p.user_id===employee.user_id&&p.effective_month<=state.month).sort((a,b)=>b.effective_month.localeCompare(a.effective_month))[0];
  const availed=employee.weekoff_availed??employee.counts.weekoff,credit=Math.max(0,4-availed);
  const gross=p?p.basic+p.allowances:0,pay=Math.round(gross*credit/30),incentive=p?.setup_incentive||0;
- return cells([esc(employee.employee_id||'ID not assigned'),esc(employee.name),p?esc(p.effective_month):'Setup needed',availed,credit,p?money(gross):'-',p?money(pay):'-',p?money(incentive):'-',p?money(employee.employment_category==='Regular'?employee.net:pay+incentive):'-',(employee.manual_employee?'<button type="button" data-manual-attendance="'+employee.user_id+'">Attendance</button> ':'')+'<button type="button" data-setup="'+employee.user_id+'"'+(p?' data-profile="'+p.id+'"':'')+'>'+(p?'Edit':'Set up')+'</button> <button type="button" class="exclude-employee" data-exclude="'+employee.user_id+'">Remove</button>']);
+ return cells([esc(employee.employee_id||'ID not assigned'),esc(employee.name),p?esc(p.effective_month):'Setup needed',availed,credit,p?money(gross):'-',p?money(pay):'-',p?money(incentive):'-',p?money(employee.employment_category==='Regular'?employee.net:pay+incentive):'-',(employee.manual_employee?'<button type="button" data-manual-attendance="'+employee.user_id+'">Attendance</button> ':'')+'<button type="button" data-setup="'+employee.user_id+'"'+(p?' data-profile="'+p.id+'"':'')+'>'+(p?'Edit':'Set up')+'</button> <button type="button" class="exclude-employee" data-exclude="'+employee.user_id+'">Remove</button> <button type="button" class="exclude-employee" data-delete-ems="'+employee.user_id+'">Delete permanently</button>']);
  }).join('')||empty(10);
  $('earningRows').innerHTML=state.earnings.filter(r=>ids.has(r.user_id)&&r.month===$('month').value).map(r=>cells([esc(name(r.user_id)),esc(r.month),esc(r.kind),money(r.amount),`${esc(r.note)}<small>${esc(r.status)}</small>${r.status==='approved'&&!state.records.some(p=>p.user_id===r.user_id&&p.month===r.month)?`<button data-void="${r.id}">Void entry</button>`:''}`])).join('')||empty(5);
  $('recordRows').innerHTML=state.records.filter(r=>ids.has(r.user_id)&&r.month===$('month').value).map(r=>cells([esc(r.name),esc(r.month),money(r.basic),money(r.allowances),money(r.incentives),money(r.bonuses),money(r.deductions),money(r.net),`<span class="badge">${esc(r.status)}</span>`,`<button data-slip="${r.id}">Payslip</button> ${r.status==='published'?`<button data-paid="${r.id}">Mark paid</button>`:''}`])).join('')||empty(10);
@@ -113,10 +113,10 @@ document.addEventListener('click',event=>{const button=event.target.closest('[da
 async function refresh(){if(loading)return;loading=true;$('refresh').disabled=true;$('month').disabled=true;message('Loading employee and attendance records…');try{
  const month=$('month').value;if(!month)throw Error('Choose a month');
  const [preview,profiles,earnings,records,excluded]=await Promise.all([api('/salary-preview?month='+encodeURIComponent(month)),api('/salary-profiles'),api('/earnings'),api('/payroll'),api('/excluded-employees')]);
- state={...preview,profiles,earnings,records};
+ state={...preview,profiles,earnings,records,excluded};
  $('excludedCount').textContent=excluded.length;
  $('excludedToggleLabel').textContent=$('excludedSalaryEmployees').open?'Hide removed employees':'Show removed employees';
- $('excludedEmployeeRows').innerHTML=excluded.map(r=>'<div>'+esc(r.employee_id)+' - '+esc(r.name)+' <button type="button" data-restore="'+r.user_id+'">Add to salary list</button></div>').join('')||'<p>No removed employees. Employees you remove will appear here so you can add them back.</p>';
+ $('excludedEmployeeRows').innerHTML=excluded.map(r=>'<div>'+esc(r.employee_id)+' - '+esc(r.name)+' <button type="button" data-restore="'+r.user_id+'">Add to salary list</button> <button type="button" class="exclude-employee" data-delete-ems="'+r.user_id+'">Delete permanently</button></div>').join('')||'<p>No removed employees. Employees you remove will appear here so you can add them back.</p>';
  if(!state.rows.some(r=>String(r.user_id)===$('setupForm').elements.user_id.value)){$('setupEmployeeSearch').value='';$('setupForm').elements.user_id.value='';}
 
  for(const form of [$('setupForm'),$('earningForm')]){
@@ -208,33 +208,37 @@ $('month').value=initial;$('setupForm').elements.effective_month.value=initial;$
 if(!localStorage.getItem('token'))location.href=base+'/login';else refresh();
 
 
-let salaryRemovalTarget=null,salaryRemovalBusy=false;
+let salaryRemovalTarget=null,salaryRemovalBusy=false,salaryRemovalPermanent=false;
 function cancelSalaryRemoval(){
  if(salaryRemovalBusy)return;
- salaryRemovalTarget=null;$('removeSalaryDialog').close('cancel');
+ salaryRemovalTarget=null;resetSalaryRemovalVerification();$('removeSalaryDialog').close('cancel');
 }
 $('removeSalaryCancel').onclick=cancelSalaryRemoval;
 $('removeSalaryDialog').addEventListener('cancel',event=>{event.preventDefault();cancelSalaryRemoval();});
 $('removeSalaryDialog').querySelector('form').addEventListener('submit',event=>event.preventDefault());
 $('removeSalaryConfirm').onclick=async()=>{
- if(salaryRemovalBusy||salaryRemovalTarget===null)return;
+ if(salaryRemovalBusy||salaryRemovalTarget===null||!salaryRemovalVerified||$('removeSalaryConfirmation').value!==(salaryRemovalPermanent?'DELETE':'REMOVE'))return;
  salaryRemovalBusy=true;const uid=salaryRemovalTarget,confirmButton=$('removeSalaryConfirm');
- confirmButton.disabled=true;$('removeSalaryCancel').disabled=true;confirmButton.textContent='Removing...';$('removeSalaryError').hidden=true;
+ confirmButton.disabled=true;$('removeSalaryCancel').disabled=true;confirmButton.textContent=salaryRemovalPermanent?'Deleting...':'Removing...';$('removeSalaryError').hidden=true;
  try{
- const result=await api('/employees/'+uid+'/exclude',{method:'PUT'});
- salaryRemovalTarget=null;$('removeSalaryDialog').close('removed');
+ const result=await api('/employees/'+uid+(salaryRemovalPermanent?'':'/exclude'),{method:salaryRemovalPermanent?'DELETE':'PUT',body:JSON.stringify({password:$('removeSalaryPassword').value,confirmation:$('removeSalaryConfirmation').value})});
+ salaryRemovalTarget=null;resetSalaryRemovalVerification();$('removeSalaryDialog').close('removed');
  await refresh();setupMessage(result.message);
  }catch(error){$('removeSalaryError').textContent=error.message;$('removeSalaryError').hidden=false;}
- finally{salaryRemovalBusy=false;confirmButton.disabled=false;$('removeSalaryCancel').disabled=false;confirmButton.textContent='Remove from salary list';}
+ finally{salaryRemovalBusy=false;$('removeSalaryCancel').disabled=false;confirmButton.textContent=salaryRemovalPermanent?'Permanently delete from EMS':'Remove from salary list';syncSalaryRemovalButton();}
 };
 document.addEventListener('click',async event=>{
- const button=event.target.closest('[data-exclude],[data-restore]');if(!button)return;
- if(button.dataset.exclude){
+ const button=event.target.closest('[data-exclude],[data-restore],[data-delete-ems]');if(!button)return;
+ if(button.dataset.exclude||button.dataset.deleteEms){
  if($('removeSalaryDialog').open)return;
- salaryRemovalTarget=Number(button.dataset.exclude);
- const employee=state.rows.find(r=>r.user_id===salaryRemovalTarget);
+ salaryRemovalPermanent=Boolean(button.dataset.deleteEms);resetSalaryRemovalVerification();salaryRemovalTarget=Number(button.dataset.deleteEms||button.dataset.exclude);
+ const word=salaryRemovalPermanent?'DELETE':'REMOVE';$('salaryRemovalWord').textContent=word;$('salaryRemovalWordLabel').textContent='Type '+word;
+ $('removeSalaryTitle').textContent=salaryRemovalPermanent?'Permanently delete from EMS':'Remove only from salary list';
+ $('removeSalaryDescription').textContent=salaryRemovalPermanent?'This permanently deletes the employee EMS salary setups, earnings, payroll history, payslips and manual attendance. This cannot be undone. Their ERP account and shared attendance remain separate. A deletion audit is kept.':'This employee will be excluded from the EMS salary list and salary reports. Their login, attendance, other access and saved records remain unchanged.';
+ $('removeSalaryConfirm').textContent=salaryRemovalPermanent?'Permanently delete from EMS':'Remove from salary list';
+ const employee=state.rows.find(r=>r.user_id===salaryRemovalTarget)||state.excluded?.find(r=>r.user_id===salaryRemovalTarget);
  $('removeSalaryEmployee').textContent=employee?employeeOptionLabel(employee):'Selected employee';
- $('removeSalaryError').hidden=true;$('removeSalaryDialog').showModal();return;
+ $('removeSalaryError').hidden=true;$('removeSalaryDialog').showModal();$('removeSalaryPassword').focus();return;
  }
  button.disabled=true;const originalLabel=button.textContent;button.textContent='Adding...';
  try{const result=await api('/employees/'+Number(button.dataset.restore)+'/exclude',{method:'DELETE'});await refresh();setupMessage(result.message);}
@@ -267,7 +271,7 @@ $('showMissingEmployees').onclick=()=>showEmployeeList(true);
 document.addEventListener('click',event=>{const button=event.target.closest('[data-close-dialog]');if(button)$(button.dataset.closeDialog).close();const attendanceButton=event.target.closest('[data-manual-attendance]');if(attendanceButton)openManualAttendance(Number(attendanceButton.dataset.manualAttendance));});
 $('addManualEmployee').onclick=async()=>{
  const button=$('addManualEmployee');button.disabled=true;
- try{const options=await api('/manual-employee-options');$('manualEmployeeStore').innerHTML='<option value="">Unassigned</option>'+options.stores.map(s=>'<option value="'+s.id+'">'+esc(s.name)+'</option>').join('');$('manualEmployeeError').textContent='';$('manualEmployeeDialog').showModal();}
+ try{const options=await api('/manual-employee-options');$('manualEmployeeStore').innerHTML='<option value="">Unassigned</option>'+options.stores.map(s=>'<option value="'+s.id+'">'+esc(s.name)+'</option>').join('');$('manualEmployeeError').textContent='';$('manualEmployeeDialog').showModal();await updateManualEmployeeId();}
  catch(error){message(error.message,true);}finally{button.disabled=false;}
 };
 $('manualEmployeeForm').onsubmit=async event=>{
@@ -293,4 +297,26 @@ $('manualAttendanceForm').onsubmit=async event=>{
  event.preventDefault();const button=event.target.querySelector('button.primary');button.disabled=true;$('manualAttendanceError').textContent='';
  try{const days=Array.from($('manualAttendanceRows').querySelectorAll('[data-manual-day]')).filter(input=>!input.disabled&&input.value).map(input=>({day:input.dataset.manualDay,status:input.value,note:$('manualAttendanceRows').querySelector('[data-manual-note="'+input.dataset.manualDay+'"]').value}));if(!days.length)throw Error('Enter attendance for at least one day.');const result=await api('/manual-employees/'+manualAttendanceEmployee+'/attendance',{method:'PUT',body:JSON.stringify({month:manualAttendanceMonth,days})});$('manualAttendanceDialog').close();await refresh();message(result.message);}
  catch(error){$('manualAttendanceError').textContent=error.message;}finally{button.disabled=false;}
+};
+
+let manualIdPreviewRequest=0;
+async function updateManualEmployeeId(){
+ const request=++manualIdPreviewRequest,store=$('manualEmployeeStore').value;
+ $('manualEmployeeId').value='';$('manualEmployeeId').placeholder='Generating employee ID...';
+ try{const data=await api('/manual-employee-id'+(store?'?store_id='+encodeURIComponent(store):''));if(request!==manualIdPreviewRequest)return;$('manualEmployeeId').value=data.employee_id;$('manualEmployeeId').placeholder='Assigned automatically on creation';}
+ catch(error){if(request===manualIdPreviewRequest){$('manualEmployeeId').placeholder='Assigned automatically on creation';$('manualEmployeeError').textContent=error.message;}}
+}
+$('manualEmployeeStore').onchange=updateManualEmployeeId;
+let salaryRemovalVerified=false;
+function syncSalaryRemovalButton(){$('removeSalaryConfirm').disabled=salaryRemovalBusy||!salaryRemovalVerified||$('removeSalaryConfirmation').value!==(salaryRemovalPermanent?'DELETE':'REMOVE');}
+function resetSalaryRemovalVerification(){salaryRemovalVerified=false;$('removeSalaryPassword').value='';$('removeSalaryConfirmation').value='';$('removeSalaryConfirmationStep').hidden=true;$('removeSalaryError').hidden=true;syncSalaryRemovalButton();}
+$('removeSalaryPassword').addEventListener('input',()=>{salaryRemovalVerified=false;$('removeSalaryConfirmation').value='';$('removeSalaryConfirmationStep').hidden=true;syncSalaryRemovalButton();});
+$('removeSalaryConfirmation').addEventListener('input',syncSalaryRemovalButton);
+$('verifySalaryRemovalPassword').onclick=async()=>{
+ if(salaryRemovalBusy||salaryRemovalTarget===null)return;
+ const password=$('removeSalaryPassword').value;if(!password){$('removeSalaryError').textContent='Enter your login password.';$('removeSalaryError').hidden=false;return;}
+ salaryRemovalBusy=true;$('verifySalaryRemovalPassword').disabled=true;$('removeSalaryPassword').disabled=true;$('removeSalaryCancel').disabled=true;$('removeSalaryError').hidden=true;
+ try{await api('/employees/'+salaryRemovalTarget+'/removal-password',{method:'POST',body:JSON.stringify({password})});salaryRemovalVerified=true;$('removeSalaryConfirmationStep').hidden=false;$('removeSalaryConfirmation').focus();}
+ catch(error){salaryRemovalVerified=false;$('removeSalaryError').textContent=error.message;$('removeSalaryError').hidden=false;}
+ finally{salaryRemovalBusy=false;$('verifySalaryRemovalPassword').disabled=false;$('removeSalaryPassword').disabled=false;$('removeSalaryCancel').disabled=false;syncSalaryRemovalButton();}
 };

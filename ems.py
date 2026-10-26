@@ -5,7 +5,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
 from sqlalchemy import func
 from sqlalchemy.orm import Session, defer
 from sqlalchemy.exc import IntegrityError
@@ -69,7 +69,7 @@ def employee_rows(db, include_excluded=True):
     query = (db.query(models.User, models.IdentityCard, models.Store)
             .outerjoin(models.IdentityCard, models.IdentityCard.user_id == models.User.id)
             .outerjoin(models.Store, models.User.store_id == models.Store.id)
-            .filter(~models.User.role.in_(EMS_EXCLUDED_ROLES)))
+            .filter(~models.User.role.in_(EMS_EXCLUDED_ROLES), models.User.ems_deleted.is_(False)))
     if not include_excluded:
         query = query.filter(~models.User.id.in_(db.query(M.EMSExcludedEmployee.user_id)))
     return query
@@ -77,7 +77,7 @@ def employee_rows(db, include_excluded=True):
 
 def lock_employee(db, user_id, salary_only=True):
     user = db.get(models.User, user_id)
-    if not user or user.status != 'Active' or user.role in EMS_EXCLUDED_ROLES or (salary_only and db.get(M.EMSExcludedEmployee, user_id)):
+    if not user or user.ems_deleted or user.status != 'Active' or user.role in EMS_EXCLUDED_ROLES or (salary_only and db.get(M.EMSExcludedEmployee, user_id)):
         raise HTTPException(404, 'Active ERP employee not found')
     # Serialize earning/payroll and leave changes per employee on SQLite and PostgreSQL.
     db.query(models.User).filter(models.User.id == user_id).update({models.User.id: user_id})
@@ -86,7 +86,7 @@ def lock_employee(db, user_id, salary_only=True):
 
 def scoped_rows(db, model, user):
     query = db.query(model, models.User.full_name, models.User.username).join(models.User, model.user_id == models.User.id)
-    query = query.filter(~models.User.role.in_(EMS_EXCLUDED_ROLES))
+    query = query.filter(~models.User.role.in_(EMS_EXCLUDED_ROLES), models.User.ems_deleted.is_(False))
     if not auth.has_admin_access(user):
         query = query.filter(model.user_id == user.id)
     query = query.order_by(model.month.desc(), model.id.desc()) if hasattr(model, 'month') else query.order_by(model.id.desc())
@@ -141,7 +141,8 @@ def ems_page():
 
 @router.get('/me')
 def me(db: Session = Depends(get_db), user=Depends(member)):
-    return user_data(*employee_rows(db, include_excluded=True).filter(models.User.id == user.id).one())
+    return user_data(user, db.get(models.IdentityCard, user.id),
+                     db.get(models.Store, user.store_id) if user.store_id else None)
 
 
 @router.get('/employees')
@@ -404,7 +405,7 @@ def month_bounds(value):
 def salary_profiles(db: Session = Depends(get_db), user=Depends(manager)):
     return [serialize(row) for row in db.query(M.EMSSalaryProfile).join(
         models.User, models.User.id == M.EMSSalaryProfile.user_id).filter(
-        ~models.User.role.in_(EMS_EXCLUDED_ROLES)).order_by(
+        ~models.User.role.in_(EMS_EXCLUDED_ROLES), models.User.ems_deleted.is_(False)).order_by(
         M.EMSSalaryProfile.effective_month.desc()).all()]
 
 
@@ -490,6 +491,7 @@ def salary_preview(db, month):
                    employee_id=card.employee_id if card else '',
                    category=employee.category_code if employee.role == 'EMSManual' else employee_category(employee),
                    outlet=store.name if store else 'Unassigned', department=employee.category_code or '',
+                   erp_account_deleted=bool(employee.erp_deleted),
                    manual_employee=employee.role == 'EMSManual', missing_attendance=missing_attendance,
                    joining_date=joining.isoformat(),
                    joining_source='Joining date' if card and card.joining_date else 'ERP registration date',
@@ -574,10 +576,39 @@ def excluded_salary_employees(db: Session = Depends(get_db), user=Depends(manage
                 models.User.id.in_(db.query(M.EMSExcludedEmployee.user_id))).all()]
 
 
-@router.put('/employees/{user_id}/exclude')
-def exclude_salary_employee(user_id: int, db: Session = Depends(get_db), user=Depends(manager)):
+class RemovalPassword(Input):
+    password: SecretStr = Field(min_length=1, max_length=1024)
+
+
+class SalaryRemoval(RemovalPassword):
+    confirmation: Literal['REMOVE']
+
+
+def verify_removal_password(payload, user):
+    try:
+        valid = auth.verify_password(payload.password.get_secret_value(), user.password_hash)
+    except (ValueError, TypeError):
+        valid = False
+    if not valid:
+        raise HTTPException(403, 'Incorrect password. Enter your own login password.')
+
+
+@router.post('/employees/{user_id}/removal-password')
+def check_removal_password(user_id: int, payload: RemovalPassword,
+                           db: Session = Depends(get_db), user=Depends(manager)):
     employee = db.get(models.User, user_id)
-    if not employee or employee.role in EMS_EXCLUDED_ROLES:
+    if not employee or employee.ems_deleted or employee.role in EMS_EXCLUDED_ROLES:
+        raise HTTPException(404, 'ERP employee not found')
+    verify_removal_password(payload, user)
+    return {'message': 'Password verified. Type REMOVE to confirm.'}
+
+
+@router.put('/employees/{user_id}/exclude')
+def exclude_salary_employee(user_id: int, payload: SalaryRemoval,
+                            db: Session = Depends(get_db), user=Depends(manager)):
+    verify_removal_password(payload, user)
+    employee = db.get(models.User, user_id)
+    if not employee or employee.ems_deleted or employee.role in EMS_EXCLUDED_ROLES:
         raise HTTPException(404, 'ERP employee not found')
     db.query(models.User).filter(models.User.id == user_id).update({models.User.id: user_id})
     if not db.get(M.EMSExcludedEmployee, user_id):
@@ -589,6 +620,9 @@ def exclude_salary_employee(user_id: int, db: Session = Depends(get_db), user=De
 
 @router.delete('/employees/{user_id}/exclude')
 def restore_salary_employee(user_id: int, db: Session = Depends(get_db), user=Depends(manager)):
+    employee = db.get(models.User, user_id)
+    if not employee or employee.ems_deleted:
+        raise HTTPException(404, 'EMS employee not found')
     row = db.get(M.EMSExcludedEmployee, user_id)
     if row:
         db.delete(row)
@@ -598,7 +632,6 @@ def restore_salary_employee(user_id: int, db: Session = Depends(get_db), user=De
 
 class ManualEmployee(Input):
     full_name: str = Field(min_length=2, max_length=150)
-    employee_id: str = Field(min_length=2, max_length=40, pattern=r'^[A-Za-z0-9_-]+$')
     joining_date: date
     phone: str = Field(default='', max_length=25)
     designation: str = Field(default='Employee', min_length=2, max_length=100)
@@ -624,25 +657,35 @@ def manual_employee_options(db: Session = Depends(get_db), user=Depends(manager)
         models.Store.status == 'Active').order_by(models.Store.name).all()]}
 
 
+@router.get('/manual-employee-id')
+def manual_employee_id(store_id: int | None = None, db: Session = Depends(get_db), user=Depends(manager)):
+    from identity_cards import outlet_abbreviation, preview_employee_id
+    store = db.get(models.Store, store_id) if store_id is not None else None
+    if store_id is not None and (not store or store.status != 'Active'):
+        raise HTTPException(422, 'Choose an active outlet')
+    return {'employee_id': preview_employee_id(db, outlet_abbreviation(store))}
+
+
 @router.post('/manual-employees', status_code=201)
 def add_manual_employee(payload: ManualEmployee, db: Session = Depends(get_db), user=Depends(manager)):
     from uuid import uuid4
     import secrets
+    from identity_cards import outlet_abbreviation, next_employee_id
+    store = None
     if payload.joining_date > datetime.now(IST).date():
         raise HTTPException(422, 'Joining date cannot be in the future')
     if payload.store_id is not None:
         store = db.get(models.Store, payload.store_id)
         if not store or store.status != 'Active':
             raise HTTPException(422, 'Choose an active outlet')
-    if db.query(models.IdentityCard).filter(func.lower(models.IdentityCard.employee_id) == payload.employee_id.lower()).first():
-        raise HTTPException(409, 'Employee ID already exists. Select the existing employee instead.')
     employee = models.User(username='manual_' + uuid4().hex[:24], full_name=payload.full_name,
         email=uuid4().hex+'@manual.invalid', password_hash=auth.hash_password(secrets.token_urlsafe(48)),
         role='EMSManual', status='Active', category_code=payload.employee_group,
         store_id=payload.store_id, weekoff_day=payload.weekoff_day)
     try:
         db.add(employee); db.flush()
-        db.add(models.IdentityCard(user_id=employee.id, employee_id=payload.employee_id,
+        assigned_id = next_employee_id(db, outlet_abbreviation(store))
+        db.add(models.IdentityCard(user_id=employee.id, employee_id=assigned_id,
             employee_name=payload.full_name, designation=payload.designation,
             mobile=payload.phone, joining_date=payload.joining_date))
         record(db, user, 'manual_employee_created', employee.id, payload.model_dump_json())
@@ -650,7 +693,8 @@ def add_manual_employee(payload: ManualEmployee, db: Session = Depends(get_db), 
     except IntegrityError:
         db.rollback()
         raise HTTPException(409, 'Employee ID already exists')
-    return {'message': 'Manual employee added. Set up salary and enter attendance.', 'user_id': employee.id}
+    return {'message': f'Manual employee {assigned_id} added. Set up salary and enter attendance.',
+            'user_id': employee.id, 'employee_id': assigned_id}
 
 
 @router.put('/manual-employees/{user_id}/attendance')
@@ -678,3 +722,40 @@ def save_manual_attendance(user_id: int, payload: ManualAttendanceInput,
     record(db, user, 'manual_attendance_saved', user_id, payload.model_dump_json())
     db.commit()
     return {'message': 'Manual attendance saved and draft salary recalculated'}
+
+class EMSPermanentDeletion(RemovalPassword):
+    confirmation: Literal['DELETE']
+
+
+@router.delete('/employees/{user_id}')
+def permanently_delete_ems_employee(user_id: int, payload: EMSPermanentDeletion,
+                                    db: Session = Depends(get_db), user=Depends(manager)):
+    verify_removal_password(payload, user)
+    employee = db.get(models.User, user_id)
+    if not employee or employee.ems_deleted or employee.role in EMS_EXCLUDED_ROLES:
+        raise HTTPException(404, 'EMS employee not found')
+    db.query(models.User).filter_by(id=user_id).update({models.User.id: user_id})
+    payroll_ids = [row.id for row in db.query(M.EMSPayroll.id).filter_by(user_id=user_id).all()]
+    earning_ids = [row.id for row in db.query(M.EMSEarning.id).filter_by(user_id=user_id).all()]
+    leave_ids = [row.id for row in db.query(M.EMSLeaveRequest.id).filter_by(user_id=user_id).all()]
+    db.query(M.EMSPayrollSnapshot).filter(M.EMSPayrollSnapshot.payroll_id.in_(payroll_ids)).delete(synchronize_session=False)
+    # Remove employee-specific audit payloads which duplicate salary/profile details.
+    audit_groups = [
+        (['salary_profile_saved', 'employee_excluded_from_salary', 'employee_restored_to_salary',
+          'manual_employee_created', 'manual_attendance_saved'], [user_id]),
+        (['payroll_published', 'payroll_marked_paid', 'salary_published_from_attendance'], payroll_ids),
+        (['earning_approved', 'earning_voided'], earning_ids),
+        (['leave_requested', 'leave_approved', 'leave_rejected'], leave_ids),
+    ]
+    for actions, targets in audit_groups:
+        db.query(M.EMSAudit).filter(M.EMSAudit.action.in_(actions),
+            M.EMSAudit.target.in_([str(value) for value in targets])).delete(synchronize_session=False)
+    for model in (M.EMSManualAttendance, M.EMSExcludedEmployee, M.EMSLeaveRequest,
+                  M.EMSEarning, M.EMSSalaryProfile, M.EMSPayroll):
+        db.query(model).filter_by(user_id=user_id).delete(synchronize_session=False)
+    # Tombstone prevents an ERP account from automatically reappearing in EMS.
+    # Shared ERP identity and attendance remain owned by that account.
+    employee.ems_deleted = True
+    record(db, user, 'employee_permanently_deleted_from_ems', user_id)
+    db.commit()
+    return {'message': 'Employee permanently deleted from EMS. Salary history and manual attendance were deleted. ERP account records are preserved.'}

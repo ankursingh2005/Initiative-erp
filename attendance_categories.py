@@ -16,6 +16,7 @@ def employee_category(user):
 
 
 def filter_employee_category(query, category):
+    query = query.filter(models.User.role != "EMSManual", models.User.erp_deleted.is_(False))
     if not category:
         return query
     if category == 'ids_emp':
@@ -27,10 +28,10 @@ def filter_employee_category(query, category):
 
 
 def manager_employee_visible(user):
-    return user.role not in AC_ROLES
+    return user.role not in AC_ROLES and user.role != "EMSManual" and not getattr(user, "erp_deleted", False)
 
 
 def filter_manager_employees(query, category=None):
     if category not in (None, '', 'ids_emp', 'brand_pro'):
         raise HTTPException(403, 'Manager attendance is limited to IDS EMP and BRAND PRO')
-    return query.filter(~models.User.role.in_(AC_ROLES))
+    return query.filter(~models.User.role.in_(AC_ROLES), models.User.role != "EMSManual", models.User.erp_deleted.is_(False))

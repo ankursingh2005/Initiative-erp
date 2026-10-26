@@ -61,6 +61,18 @@ def issue_year():
     return datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%y")
 
 
+def preview_employee_id(db, abbreviation):
+    """Read the next candidate without reserving a serial; creation assigns atomically."""
+    prefix = f"IDS-{abbreviation + '-' if abbreviation else ''}{issue_year()}"
+    ids = db.scalars(select(models.IdentityCard.employee_id).where(
+        models.IdentityCard.employee_id.startswith(prefix))).all()
+    largest = max([int(value[len(prefix):]) for value in ids
+                   if value[len(prefix):].isdigit()] or [0])
+    counter = db.get(models.IdentityCardSequence, prefix)
+    number = max(largest, counter.last_number if counter else 0) + 1
+    return f"{prefix}{number:03d}"
+
+
 def next_employee_id(db, abbreviation):
     """Atomically reserve a serial. Counters survive employee deletion."""
     from sqlalchemy.dialects.sqlite import insert as sqlite_insert

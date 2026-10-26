@@ -11,6 +11,29 @@ class AttendanceCategoryTests(unittest.TestCase):
     setUp = fixtures.AttendanceOutletTests.setUp
     tearDown = fixtures.AttendanceOutletTests.tearDown
 
+    def test_manual_salary_staff_are_excluded_from_main_attendance(self):
+        from attendance_access import can_view_attendance
+        today = main.india_today()
+        before = main.attendance_admin_summary(store_id=None, from_date=today, to_date=today,
+            db=self.db, current_user=self.actor)
+        manual = models.User(username='manual-test', email='manual@manual.invalid',
+            full_name='Synthetic Manual Staff', role='EMSManual', status='Active', password_hash='unused')
+        self.db.add(manual); self.db.flush()
+        self.db.add(models.AttendanceRecord(user_id=manual.id, attendance_date=today,
+            checkin_at=main.datetime.combine(today, main.datetime.min.time())))
+        self.db.commit()
+        after = main.attendance_admin_summary(store_id=None, from_date=today, to_date=today,
+            db=self.db, current_user=self.actor)
+        self.assertEqual(before, after)
+        self.assertFalse(can_view_attendance(self.actor, manual))
+        self.assertEqual(export_rows(self.db, today, today, user_id=manual.id), [])
+        from attendance_exports import _build_monthly_workbook
+        from io import BytesIO
+        from openpyxl import load_workbook
+        response = _build_monthly_workbook(self.db, today, today)
+        workbook = load_workbook(BytesIO(response.body), data_only=True)
+        self.assertNotIn('Synthetic Manual Staff', str([list(sheet.values) for sheet in workbook]))
+
     def test_dashboard_returns_assigned_brand_names_for_daily_and_range_views(self):
         from datetime import timedelta
         today = main.india_today()

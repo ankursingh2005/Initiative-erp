@@ -114,6 +114,8 @@ def ensure_username_not_unique():
 
 
 def ensure_database_schema():
+    ensure_column("users", "erp_deleted", "BOOLEAN NOT NULL DEFAULT FALSE")
+    ensure_column("users", "ems_deleted", "BOOLEAN NOT NULL DEFAULT FALSE")
     ensure_column("ems_salary_profiles", "weekoff_availed", "INTEGER NOT NULL DEFAULT 0")
     ensure_column("ems_salary_profiles", "weekoff_credit", "INTEGER NOT NULL DEFAULT 0")
     ensure_column("ems_salary_profiles", "weekoff_pay", "BIGINT NOT NULL DEFAULT 0")
@@ -2871,7 +2873,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         .filter((models.User.username == identifier) | (models.User.email == identifier))
         .first()
     )
-    if not user or user.role == "EMSManual" or not auth.verify_password(form_data.password, user.password_hash):
+    if not user or user.erp_deleted or user.role == "EMSManual" or not auth.verify_password(form_data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Incorrect username/email or password")
     if user.status != "Active":
         raise HTTPException(status_code=403, detail="This account is not active")
@@ -3259,7 +3261,7 @@ def user_export_role_label(user_data: dict) -> str:
 
 
 def build_user_export_rows(db: Session) -> list[dict]:
-    users = db.query(models.User).order_by(models.User.username, models.User.email).all()
+    users = db.query(models.User).filter(models.User.erp_deleted.is_(False), models.User.role != "EMSManual").order_by(models.User.username, models.User.email).all()
     rows = []
     for user in users:
         data = serialize_user_with_brands(user, db)
@@ -3470,7 +3472,8 @@ def list_attendance(
     scope: str = "all",
     include_selfies: bool = True,
 ):
-    query = db.query(models.AttendanceRecord)
+    query = db.query(models.AttendanceRecord).filter(models.AttendanceRecord.user_id.in_(
+        db.query(models.User.id).filter(models.User.role != "EMSManual", models.User.erp_deleted.is_(False))))
     if current_user.role != "Admin" or scope == "self":
         query = query.filter(models.AttendanceRecord.user_id == current_user.id)
     selfie_fields = {"checkin_selfie", "second_punch_selfie", "checkout_selfie"}
@@ -3918,7 +3921,7 @@ def list_users_for_admin(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.require_user_management_admin),
 ):
-    users = db.query(models.User).order_by(models.User.username).all()
+    users = db.query(models.User).filter(models.User.erp_deleted.is_(False), models.User.role != "EMSManual").order_by(models.User.username).all()
     cards = {user_id: (employee_id, name) for user_id, employee_id, name in db.query(
         models.IdentityCard.user_id, models.IdentityCard.employee_id, models.IdentityCard.employee_name).all()}
     return [{**serialize_user_with_brands(u), "employee_id": cards.get(u.id, (None, None))[0],
@@ -4051,7 +4054,7 @@ def admin_reset_user_password(
     a user who's locked out should ask an Admin to reset their password
     here instead."""
     target_user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not target_user:
+    if not target_user or target_user.erp_deleted:
         raise HTTPException(status_code=404, detail="User not found")
 
     new_password = (payload.new_password or "").strip()
@@ -4075,7 +4078,7 @@ def update_user_details(
     current_user: models.User = Depends(auth.require_user_management_admin),
 ):
     target_user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not target_user:
+    if not target_user or target_user.erp_deleted:
         raise HTTPException(status_code=404, detail="User not found")
     if current_user.role == "HR" and target_user.role == "Admin":
         raise HTTPException(status_code=403, detail="Only Admin can edit Admin accounts")
@@ -4122,7 +4125,7 @@ def update_user_assignments(
     """Assign which store, category (division), and brands a user — typically
     a CategoryManager — can see on the Purchase Orders page."""
     target_user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not target_user:
+    if not target_user or target_user.erp_deleted:
         raise HTTPException(status_code=404, detail="User not found")
 
     if payload.store_id is not None:
@@ -4146,16 +4149,9 @@ def delete_user(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.require_user_management_admin),
 ):
-    """Admin and HR: permanently delete a user account, regardless of what
-    they've submitted/uploaded in the past. Purchase orders require an
-    owning user (that column is NOT NULL), so any the deleted user
-    submitted or approved are reassigned to the admin doing the deletion,
-    with a note recording who originally submitted them - the order itself
-    and its history are kept, just no longer tied to the removed login.
-    Other historical references (uploaded scheme attachments, price list
-    edits, etc.) are simply detached from the deleted user."""
+    """Remove ERP login access while preserving the employee and all EMS history."""
     target_user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not target_user:
+    if not target_user or target_user.erp_deleted:
         raise HTTPException(status_code=404, detail="User not found")
 
     if target_user.id == current_user.id:
@@ -4203,14 +4199,7 @@ def delete_user(
             {"uploaded_by": None}
         )
 
-        # Personal account records are removed explicitly for existing databases
-        # whose foreign keys do not have ON DELETE CASCADE.
-        for model in (models.AttendanceLocationPoint, models.AttendanceRecord,
-                      models.AttendanceLeave, models.IdentityCard):
-            db.query(model).filter(model.user_id == target_user.id).delete(synchronize_session=False)
-        # Keep leave entries belonging to other employees.
-        db.query(models.AttendanceLeave).filter(models.AttendanceLeave.created_by == target_user.id).update(
-            {"created_by": current_user.id}, synchronize_session=False)
+        # Identity and attendance remain linked to the retained employee for EMS.
         db.query(models.PurchaseOrder).filter(models.PurchaseOrder.verified_by_user_id == target_user.id).update(
             {"verified_by_user_id": None}, synchronize_session=False)
         for receipt in db.query(models.PurchaseOrderReceipt).filter(
@@ -4220,19 +4209,12 @@ def delete_user(
             receipt.received_by_user_id = current_user.id
         db.query(models.PurchaseOrderReceipt).filter(models.PurchaseOrderReceipt.voided_by_user_id == target_user.id).update(
             {"voided_by_user_id": None}, synchronize_session=False)
-        # EMS is optional; clean its employee records only when its tables exist.
-        import ems_models
-        existing_tables = set(inspect(db.connection()).get_table_names())
-        if ems_models.EMSPayrollSnapshot.__tablename__ in existing_tables:
-            payroll_ids = db.query(ems_models.EMSPayroll.id).filter_by(user_id=target_user.id)
-            db.query(ems_models.EMSPayrollSnapshot).filter(
-                ems_models.EMSPayrollSnapshot.payroll_id.in_(payroll_ids)).delete(synchronize_session=False)
-        for model in (ems_models.EMSLeaveRequest, ems_models.EMSEarning,
-                      ems_models.EMSSalaryProfile, ems_models.EMSPayroll):
-            if model.__tablename__ in existing_tables:
-                db.query(model).filter(model.user_id == target_user.id).delete(synchronize_session=False)
-
-        db.delete(target_user)
+        # Keep the internal employee ID stable; revoke the ERP account independently.
+        target_user.erp_deleted = True
+        target_user.session_version = (target_user.session_version or 1) + 1
+        target_user.reset_token = None
+        target_user.reset_token_expires = None
+        ems.record(db, current_user, 'erp_account_deleted_ems_preserved', target_user.id)
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -4241,7 +4223,7 @@ def delete_user(
             detail=f"Unable to delete {deleted_username}: this account still has linked records.",
         )
 
-    return {"message": f"Account '{deleted_username}' deleted"}
+    return {"message": f"Account '{deleted_username}' removed from User Management. EMS employee records and history are preserved."}
 
 
 # ============================================================

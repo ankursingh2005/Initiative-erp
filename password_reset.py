@@ -36,7 +36,7 @@ def email_provider():
 
 def request_reset(payload, db):
     provider = email_provider()
-    user = db.query(models.User).filter(func.lower(models.User.email) == payload.identifier.strip().lower(), models.User.status == "Active").first()
+    user = db.query(models.User).filter(func.lower(models.User.email) == payload.identifier.strip().lower(), models.User.status == "Active", models.User.erp_deleted.is_(False)).first()
     if not user:
         return REQUEST_MESSAGE
     now = datetime.utcnow()
@@ -92,7 +92,7 @@ def request_reset(payload, db):
 def confirm_reset(payload, db):
     if not payload.new_password or len(payload.new_password.encode("utf-8")) > 72:
         raise HTTPException(400, "Enter a password of no more than 72 UTF-8 bytes.")
-    user = db.query(models.User).filter(func.lower(models.User.email) == payload.identifier.strip().lower(), models.User.status == "Active").first()
+    user = db.query(models.User).filter(func.lower(models.User.email) == payload.identifier.strip().lower(), models.User.status == "Active", models.User.erp_deleted.is_(False)).first()
     now = datetime.utcnow()
     if not user or not user.reset_token or not user.reset_token_expires or user.reset_token_expires <= now:
         raise HTTPException(400, INVALID_CODE)

@@ -71,7 +71,7 @@ class SalaryTests(unittest.TestCase):
         self.assertEqual(self.publish(row).status_code, 409)
 
     def create_manual(self, **changes):
-        payload = dict(full_name='Synthetic manual employee', employee_id='MANUAL-TEST',
+        payload = dict(full_name='Synthetic manual employee',
                        joining_date='2026-09-01', employee_group='ids_emp')
         payload.update(changes)
         return self.client.post('/api/ems/manual-employees', json=payload)
@@ -81,7 +81,9 @@ class SalaryTests(unittest.TestCase):
         self.assertEqual(response.status_code, 201, response.text)
         uid = response.json()['user_id']
         self.assertEqual(self.db.get(models.User, uid).role, 'EMSManual')
-        self.assertEqual(self.create_manual().status_code, 409)
+        second = self.create_manual()
+        self.assertEqual(second.status_code, 201)
+        self.assertNotEqual(response.json()['employee_id'], second.json()['employee_id'])
         self.assertEqual(self.setup_salary(uid, basic='20000', allowances='5000',
             deductions='1000', employment_category='Regular').status_code, 200)
         row = self.preview(uid)
@@ -115,8 +117,92 @@ class SalaryTests(unittest.TestCase):
         self.assertEqual(self.client.put(path, json=dict(month='2026-09', days=days)).status_code, 422)
         self.assertEqual(self.db.query(M.EMSManualAttendance).count(), 0)
         self.actor = self.users[2]
-        self.assertEqual(self.create_manual(employee_id='DENIED').status_code, 403)
+        self.assertEqual(self.create_manual(full_name='Denied').status_code, 403)
         self.assertEqual(self.client.put(path, json=dict(month='2026-09', days=invalid)).status_code, 403)
+
+    def test_outlet_employee_id_preview_and_atomic_assignment(self):
+        store = models.Store(name='Raibareli', code='RBL', status='Active')
+        self.db.add(store); self.db.commit()
+        path = f'/api/ems/manual-employee-id?store_id={store.id}'
+        preview = self.client.get(path).json()['employee_id']
+        self.assertTrue(preview.startswith('IDS-RBL-'))
+        self.assertEqual(self.client.get(path).json()['employee_id'], preview)
+        self.assertEqual(self.db.query(models.IdentityCardSequence).count(), 0)
+        result = self.create_manual(store_id=store.id)
+        self.assertEqual(result.status_code, 201, result.text)
+        self.assertEqual(result.json()['employee_id'], preview)
+        second = self.create_manual(store_id=store.id)
+        self.assertNotEqual(second.json()['employee_id'], preview)
+        self.assertEqual(self.db.query(models.IdentityCardSequence).one().last_number, 2)
+        self.assertEqual(self.create_manual(employee_id='OVERRIDE').status_code, 422)
+
+    def test_salary_removal_requires_actor_password_and_remove(self):
+        uid = self.users[2].id
+        self.actor.password_hash = auth.hash_password('SyntheticPassword123')
+        self.db.commit()
+        path = f'/api/ems/employees/{uid}/exclude'
+        self.assertEqual(self.client.put(path).status_code, 422)
+        self.assertEqual(self.client.put(path, json=dict(password='wrong', confirmation='REMOVE')).status_code, 403)
+        self.assertEqual(self.client.put(path, json=dict(password='SyntheticPassword123', confirmation='remove')).status_code, 422)
+        self.assertIsNone(self.db.get(M.EMSExcludedEmployee, uid))
+        check = f'/api/ems/employees/{uid}/removal-password'
+        self.assertEqual(self.client.post(check, json=dict(password='wrong')).status_code, 403)
+        self.assertEqual(self.client.post(check, json=dict(password='SyntheticPassword123')).status_code, 200)
+        self.assertIsNone(self.db.get(M.EMSExcludedEmployee, uid))
+        self.assertEqual(self.client.put(path, json=dict(password='SyntheticPassword123', confirmation='REMOVE')).status_code, 200)
+        audit = self.db.query(M.EMSAudit).filter_by(action='employee_excluded_from_salary').one()
+        self.assertNotIn('SyntheticPassword123', audit.details)
+
+    def test_permanent_ems_deletion_is_separate_from_erp(self):
+        uid = self.users[2].id
+        self.actor.password_hash = auth.hash_password('SyntheticPassword123')
+        self.db.commit()
+        self.setup_salary(uid)
+        self.db.add(models.IdentityCard(user_id=uid, employee_id='PRESERVED-ID',
+            employee_name='Synthetic employee', designation='Employee'))
+        self.db.add(models.AttendanceRecord(user_id=uid, attendance_date=date(2026, 9, 1),
+            checkin_at=datetime(2026, 9, 1, 9)))
+        self.db.add(M.EMSManualAttendance(user_id=uid, day=date(2026, 9, 2), status='present', updated_by=self.actor.id))
+        payroll = M.EMSPayroll(user_id=uid, month='2026-09', basic=100, allowances=0,
+            deductions=0, incentives=0, bonuses=0, net=100, created_by=self.actor.id)
+        self.db.add(payroll); self.db.flush()
+        self.db.add(M.EMSPayrollSnapshot(payroll_id=payroll.id, details='{}'))
+        self.db.add(M.EMSExcludedEmployee(user_id=uid, created_by=self.actor.id))
+        self.db.commit()
+        path = f'/api/ems/employees/{uid}'
+        self.assertEqual(self.client.request('DELETE', path, json=dict(password='wrong', confirmation='DELETE')).status_code, 403)
+        self.assertEqual(self.client.request('DELETE', path, json=dict(password='SyntheticPassword123', confirmation='REMOVE')).status_code, 422)
+        response = self.client.request('DELETE', path, json=dict(password='SyntheticPassword123', confirmation='DELETE'))
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertTrue(self.db.get(models.User, uid).ems_deleted)
+        self.assertFalse(self.db.get(models.User, uid).erp_deleted)
+        self.assertIsNotNone(self.db.get(models.IdentityCard, uid))
+        self.assertEqual(self.db.query(models.AttendanceRecord).filter_by(user_id=uid).count(), 1)
+        for model in (M.EMSSalaryProfile, M.EMSPayroll, M.EMSManualAttendance, M.EMSExcludedEmployee):
+            self.assertEqual(self.db.query(model).filter_by(user_id=uid).count(), 0)
+        self.assertEqual(self.db.query(M.EMSPayrollSnapshot).count(), 0)
+        self.assertNotIn(uid, [r['user_id'] for r in self.client.get('/api/ems/salary-preview?month=2026-09').json()['rows']])
+        self.assertNotIn(uid, [r['user_id'] for r in self.client.get('/api/ems/excluded-employees').json()])
+        self.assertEqual(self.client.delete(f'/api/ems/employees/{uid}/exclude').status_code, 404)
+        self.assertEqual(self.setup_salary(uid).status_code, 404)
+        self.assertEqual(self.client.get(f'/api/ems/salary-slips/{payroll.id}').status_code, 404)
+        self.assertEqual(self.db.query(M.EMSAudit).filter_by(action='employee_permanently_deleted_from_ems').count(), 1)
+
+    def test_erp_deleted_employee_stays_in_ems(self):
+        uid = self.users[2].id
+        self.setup_salary(uid)
+        before = self.preview(uid)
+        self.users[2].erp_deleted = True
+        self.db.commit()
+        after = self.preview(uid)
+        self.assertTrue(after.pop('erp_account_deleted'))
+        before.pop('erp_account_deleted')
+        self.assertEqual(before, after)
+        self.assertEqual(self.setup_salary(uid, effective_month='2026-10').status_code, 200)
+        from fastapi import HTTPException
+        token = auth.create_access_token(dict(user_id=uid, session_version=1))
+        with self.assertRaises(HTTPException):
+            auth.get_current_user(token=token, db=self.db)
 
     def test_manual_employee_cannot_use_login_token(self):
         uid = self.create_manual().json()['user_id']
@@ -129,7 +215,10 @@ class SalaryTests(unittest.TestCase):
     def test_exclude_and_restore_salary_employee_preserves_records(self):
         uid = self.users[2].id
         self.setup_salary()
-        response = self.client.put(f'/api/ems/employees/{uid}/exclude')
+        self.actor.password_hash = auth.hash_password('SyntheticPassword123')
+        self.db.commit()
+        response = self.client.put(f'/api/ems/employees/{uid}/exclude',
+            json=dict(password='SyntheticPassword123', confirmation='REMOVE'))
         self.assertEqual(response.status_code, 200)
         rows = self.client.get('/api/ems/salary-preview?month=2026-09').json()['rows']
         self.assertNotIn(uid, {row['user_id'] for row in rows})
@@ -140,7 +229,47 @@ class SalaryTests(unittest.TestCase):
         self.assertEqual(self.client.delete(f'/api/ems/employees/{uid}/exclude').status_code, 200)
         self.assertEqual(self.preview(uid)['user_id'], uid)
         self.actor = self.users[2]
-        self.assertEqual(self.client.put(f'/api/ems/employees/{uid}/exclude').status_code, 403)
+        self.assertEqual(self.client.put(f'/api/ems/employees/{uid}/exclude',
+            json=dict(password='SyntheticPassword123', confirmation='REMOVE')).status_code, 403)
+
+    def test_ems_changes_preserve_other_projects_and_attendance(self):
+        uid = self.users[2].id
+        self.actor.password_hash = auth.hash_password('SyntheticPassword123')
+        self.db.add(models.Store(name='Synthetic shared outlet', code='SYN', status='Active'))
+        self.db.add(models.Brand(name='Synthetic shared brand'))
+        self.db.add(models.IdentityCard(user_id=uid, employee_id='SHARED-UNCHANGED',
+            employee_name='Synthetic employee', designation='Employee', mobile='12345'))
+        self.db.add(models.AttendanceRecord(user_id=uid, attendance_date=date(2026, 9, 1),
+            checkin_at=datetime(2026, 9, 1, 9), checkout_at=datetime(2026, 9, 1, 18)))
+        self.db.add(models.AttendanceLeave(user_id=uid, leave_date=date(2026, 9, 2), created_by=self.actor.id))
+        self.db.commit()
+        shared_tables = [table for table in Base.metadata.sorted_tables
+                         if not table.name.startswith('ems_') and table.name != 'users']
+        def snapshot():
+            return {table.name: self.db.execute(table.select()).all() for table in shared_tables}
+        before = snapshot()
+        original_users = {r.id: {c.name: getattr(r, c.name) for c in models.User.__table__.columns}
+                          for r in self.db.query(models.User).all()}
+        self.assertEqual(self.setup_salary(uid).status_code, 200)
+        self.assertEqual(snapshot(), before)
+        earning = self.client.post('/api/ems/earnings', json=dict(user_id=uid,
+            month='2026-09', kind='bonus', amount='100', note='Synthetic approval'))
+        self.assertEqual(earning.status_code, 201)
+        self.assertEqual(snapshot(), before)
+        self.assertEqual(self.client.put(f'/api/ems/employees/{uid}/exclude',
+            json=dict(password='SyntheticPassword123', confirmation='REMOVE')).status_code, 200)
+        self.assertEqual(snapshot(), before)
+        self.assertEqual(self.client.delete(f'/api/ems/employees/{uid}/exclude').status_code, 200)
+        self.assertEqual(snapshot(), before)
+        self.assertEqual(self.client.request('DELETE', f'/api/ems/employees/{uid}',
+            json=dict(password='SyntheticPassword123', confirmation='DELETE')).status_code, 200)
+        self.assertEqual(snapshot(), before)
+        self.db.expire_all()
+        expected_users = original_users
+        expected_users[uid]['ems_deleted'] = True
+        actual_users = {r.id: {c.name: getattr(r, c.name) for c in models.User.__table__.columns}
+                        for r in self.db.query(models.User).all()}
+        self.assertEqual(actual_users, expected_users)
 
     def test_ems_reads_preserve_existing_erp_records(self):
         self.db.add(models.IdentityCard(user_id=self.users[2].id,

@@ -1,6 +1,6 @@
 const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict');
 const nodes=new Map();
-function element(){return {value:'',textContent:'',hidden:false,style:{},dataset:{},addEventListener(){},setAttribute(){},setCustomValidity(){},querySelector(){return element();},querySelectorAll(){return [];},checkValidity(){return true;},elements:new Proxy({},{get:(t,k)=>t[k]??=(element())})};}
+function element(){return {value:'',textContent:'',hidden:false,style:{},dataset:{},addEventListener(){},focus(){},setAttribute(){},setCustomValidity(){},querySelector(){return element();},querySelectorAll(){return [];},checkValidity(){return true;},elements:new Proxy({},{get:(t,k)=>t[k]??=(element())})};}
 const context={console,Intl,Date,Number,String,Math,Set,JSON,URL,setTimeout,Blob,
  location:{pathname:'/ems'},localStorage:{getItem(){return null;}},
  document:{getElementById:id=>{if(!nodes.has(id))nodes.set(id,element());return nodes.get(id);},querySelectorAll(){return [];},addEventListener(){}},
@@ -31,3 +31,41 @@ assert.match(html,/<details id="excludedSalaryEmployees">/);
 assert.match(html,/Show removed employees/);
 assert.doesNotMatch(fs.readFileSync('static/ems.js','utf8'),/\.open=excluded.length>0/);
 console.log('Employee lists, manual attendance controls and collapsed removed list checks passed.');
+(async()=>{
+ vm.runInContext(`globalThis.calls=[];api=async(path,options={})=>{calls.push({path,...options});return {employee_id:'IDS-RBL-26001',message:'Saved'};};`,context);
+ nodes.get('manualEmployeeStore').value='7';
+ await vm.runInContext('updateManualEmployeeId()',context);
+ assert.equal(nodes.get('manualEmployeeId').value,'IDS-RBL-26001');
+ assert.equal(vm.runInContext('calls[0].path',context),'/manual-employee-id?store_id=7');
+ vm.runInContext('resetSalaryRemovalVerification();salaryRemovalTarget=1;',context);
+ assert.equal(nodes.get('removeSalaryConfirm').disabled,true);
+ nodes.get('removeSalaryPassword').value='SyntheticPassword123';
+ await nodes.get('verifySalaryRemovalPassword').onclick();
+ assert.equal(nodes.get('removeSalaryConfirmationStep').hidden,false);
+ assert.equal(nodes.get('removeSalaryConfirm').disabled,true);
+ nodes.get('removeSalaryConfirmation').value='remove';vm.runInContext('syncSalaryRemovalButton()',context);
+ assert.equal(nodes.get('removeSalaryConfirm').disabled,true);
+ nodes.get('removeSalaryConfirmation').value='REMOVE';vm.runInContext('syncSalaryRemovalButton()',context);
+ assert.equal(nodes.get('removeSalaryConfirm').disabled,false);
+ const dialog=nodes.get('removeSalaryDialog');dialog.close=function(){this.open=false;};
+ vm.runInContext('refresh=async()=>{};',context);
+ await nodes.get('removeSalaryConfirm').onclick();
+ const call=vm.runInContext('calls.find(c=>c.path.endsWith("/exclude"))',context);
+ assert.equal(JSON.parse(call.body).confirmation,'REMOVE');
+ assert.equal(JSON.parse(call.body).password,'SyntheticPassword123');
+ assert.equal(nodes.get('removeSalaryPassword').value,'');
+ assert.equal(nodes.get('removeSalaryConfirm').disabled,true);
+ vm.runInContext('salaryRemovalPermanent=true;resetSalaryRemovalVerification();salaryRemovalTarget=2;',context);
+ nodes.get('removeSalaryPassword').value='SyntheticPassword123';
+ await nodes.get('verifySalaryRemovalPassword').onclick();
+ nodes.get('removeSalaryConfirmation').value='REMOVE';vm.runInContext('syncSalaryRemovalButton()',context);
+ assert.equal(nodes.get('removeSalaryConfirm').disabled,true);
+ nodes.get('removeSalaryConfirmation').value='DELETE';vm.runInContext('syncSalaryRemovalButton()',context);
+ assert.equal(nodes.get('removeSalaryConfirm').disabled,false);
+ await nodes.get('removeSalaryConfirm').onclick();
+ const deletion=vm.runInContext('calls.find(c=>c.path==="/employees/2")',context);
+ assert.equal(deletion.method,'DELETE');assert.equal(JSON.parse(deletion.body).confirmation,'DELETE');
+ assert.equal(nodes.get('removeSalaryPassword').value,'');
+ assert.match(nodes.get('profileRows').innerHTML,/Delete permanently/);
+ console.log('Automatic outlet ID, password + REMOVE and permanent DELETE confirmation checks passed.');
+})().catch(error=>{console.error(error);process.exitCode=1;});

@@ -45,6 +45,6 @@ def dashboard_outlet(actor, requested=None):
 
 
 def can_view_attendance(actor, user):
-    return user is not None and (actor.id == user.id or can_view_all_attendance(actor) or
+    return user is not None and user.role != "EMSManual" and not getattr(user, "erp_deleted", False) and (actor.id == user.id or can_view_all_attendance(actor) or
         (service_dashboard_category(actor) is not None and employee_category(user) == service_dashboard_category(actor)) or
         (actor.role == 'CategoryManager' and actor.store_id is not None and actor.store_id == user.store_id and manager_employee_visible(user)))

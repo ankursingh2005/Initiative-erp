@@ -57,20 +57,34 @@ class UserDeletionTests(unittest.TestCase):
                     ems_models.EMSLeaveRequest(user_id=uid, start_date=date.today(), end_date=date.today(), kind='casual', reason='Leave'),
                     ems_models.EMSEarning(user_id=uid, month='2026-09', kind='bonus', amount=100, note='Bonus', created_by=self.actor.id),
                     ems_models.EMSPayroll(user_id=uid, month='2026-09', basic=100, allowances=0, deductions=0, incentives=0, bonuses=0, net=100, created_by=self.actor.id)])
+                self.db.flush()
+                saved_payroll = self.db.query(ems_models.EMSPayroll).filter_by(user_id=uid).one()
+                self.db.add_all([
+                    ems_models.EMSSalaryProfile(user_id=uid, effective_month='2026-09', basic=100,
+                        allowances=0, deductions=0, divisor='30', paid_weekoff=1, paid_leave=0, created_by=self.actor.id),
+                    ems_models.EMSPayrollSnapshot(payroll_id=saved_payroll.id, details='{"net":100}'),
+                    ems_models.EMSManualAttendance(user_id=uid, day=date.today(), status='present', updated_by=self.actor.id),
+                    ems_models.EMSExcludedEmployee(user_id=uid, created_by=self.actor.id),
+                ])
                 self.db.commit()
                 response = self.client.delete('/users/'+str(uid))
                 self.assertEqual(response.status_code, 200, response.text)
                 self.db.expire_all()
-                self.assertIsNone(self.db.get(models.User, uid))
+                self.assertTrue(self.db.get(models.User, uid).erp_deleted)
+                self.assertFalse(self.db.get(models.User, uid).ems_deleted)
+                self.assertNotIn(uid, [row["id"] for row in main.list_users_for_admin(db=self.db, current_user=self.actor)])
                 self.assertEqual(po.submitted_by_user_id, self.actor.id)
                 self.assertIsNone(po.verified_by_user_id)
                 self.assertIsNone(po.approved_by_user_id)
                 self.assertEqual(receipt.received_by_user_id, self.actor.id)
                 self.assertIsNone(receipt.voided_by_user_id)
                 self.assertIn('Originally received by', receipt.notes)
-                self.assertEqual(other_leave.created_by, self.actor.id)
-                for model in (models.AttendanceRecord, models.AttendanceLocationPoint, models.AttendanceLeave, models.IdentityCard, ems_models.EMSLeaveRequest, ems_models.EMSEarning, ems_models.EMSPayroll):
-                    self.assertEqual(self.db.query(model).filter(model.user_id == uid).count(), 0)
+                self.assertEqual(other_leave.created_by, uid)
+                for model in (models.AttendanceRecord, models.AttendanceLocationPoint, models.AttendanceLeave, models.IdentityCard, ems_models.EMSLeaveRequest, ems_models.EMSEarning, ems_models.EMSPayroll, ems_models.EMSSalaryProfile, ems_models.EMSManualAttendance, ems_models.EMSExcludedEmployee):
+                    self.assertEqual(self.db.query(model).filter(model.user_id == uid).count(), 1)
+
+                self.assertEqual(self.db.query(ems_models.EMSPayrollSnapshot).filter_by(payroll_id=saved_payroll.id).one().details, '{"net":100}')
+                self.assertEqual(self.db.query(ems_models.EMSPayroll).filter_by(user_id=uid).one().net, 100)
 
     def test_other_roles_and_self_deletion_are_blocked(self):
         for role in ('Employee', 'Owner', 'CategoryManager', 'ServiceManager'):
