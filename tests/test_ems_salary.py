@@ -81,6 +81,18 @@ class SalaryTests(unittest.TestCase):
             self.assertEqual(source_snapshot(), original, status)
         self.assertEqual(self.db.query(M.EMSManualAttendance).filter_by(user_id=uid).count(), 0)
 
+    def test_weekoff_incentive_is_saved_per_employee_and_month(self):
+        uid = self.users[2].id
+        path = f'/api/ems/weekoff-incentives/{uid}'
+        for month, incentive in [('2026-09', '500.25'), ('2026-10', '750.00')]:
+            response = self.client.put(path, json={'month': month, 'incentive': incentive})
+            self.assertEqual(response.status_code, 200, response.text)
+        rows = self.client.get('/api/ems/weekoff-incentives?month=2026-09').json()
+        self.assertEqual(rows[0]['incentive'], 50025)
+        self.assertEqual(self.client.put(path, json={'month': '2026-09', 'incentive': '-1'}).status_code, 422)
+        self.actor = self.users[2]
+        self.assertEqual(self.client.put(path, json={'month': '2026-09', 'incentive': '1'}).status_code, 403)
+
     def test_weekoff_setup_fetches_attendance_and_ignores_manual_counts(self):
         uid = self.users[2].id
         self.assertEqual(self.setup_salary(weekoff_availed=0, weekoff_credit=4).status_code, 200)

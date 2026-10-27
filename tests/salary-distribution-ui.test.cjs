@@ -93,3 +93,17 @@ test('typing a new attendance code selects the old code for replacement',()=>{
  context.cell.value='W';vm.runInContext("replaceAttendanceCode(cell,'o')",context);assert.equal(selected,3);
  vm.runInContext("replaceAttendanceCode(cell,'ArrowRight')",context);assert.equal(selected,3);
 });
+
+
+test('weekoff uses distribution gross, four days and monthly incentive',()=>{
+ const {context,nodes}=setup();
+ vm.runInContext(`state.rows[0].counts={weekoff:1};state.weekoffIncentives=[{user_id:1,incentive:50000}];renderWeekoffTable();`,context);
+ const expected=vm.runInContext('Math.round(currentDistributionRows()[0].actual_gross_earning*3/30)+50000',context);
+ assert.equal(vm.runInContext('currentWeekoffRows()[0].payable',context),expected);
+ assert.match(nodes.get('weekoffRows').innerHTML,/value="500.00"/);
+ assert.equal(vm.runInContext('currentWeekoffRows()[0].credit',context),3);
+ assert.equal(vm.runInContext('weekoffValues(3000000,4,10000).payable',context),10000);
+ assert.equal(vm.runInContext('weekoffValues(3000000,5,0).pay',context),-100000);
+ vm.runInContext("weekoffDrafts.set(state.month+':1',75000)",context);
+ assert.equal(vm.runInContext('currentWeekoffRows()[0].incentive',context),75000);
+});

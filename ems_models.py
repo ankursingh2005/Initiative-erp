@@ -114,3 +114,14 @@ class EMSDistributionInput(Base):
     staff_advance = Column(BigInteger, nullable=False, default=0)
     updated_by = Column(Integer, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class EMSWeekoffIncentive(Base):
+    __tablename__ = 'ems_weekoff_incentives'
+    __table_args__ = (UniqueConstraint('user_id', 'month', name='uq_ems_weekoff_incentive_month'),)
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    month = Column(String(7), nullable=False, index=True)
+    incentive = Column(BigInteger, nullable=False, default=0)
+    updated_by = Column(Integer, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

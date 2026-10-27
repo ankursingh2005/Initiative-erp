@@ -25,6 +25,8 @@ function render(){
  $('monthlyRows').innerHTML=rows.map(r=>cells([`<b>${esc(r.name)}</b><small>${esc(r.employee_id||'ID not assigned')}</small>`,`${esc(r.outlet)}<small>${groups[r.category]}</small>`,r.counts.present,r.counts.absent,r.counts.weekoff,r.counts.leave,r.profile_id?money(r.basic+r.allowances):'Setup needed',money(r.incentive),money(r.bonus),r.profile_id?money(r.deductions):'—',r.profile_id?money(r.net):'—',`${r.manual_employee?'<button data-manual-attendance="'+r.user_id+'">Attendance</button> ':''}<button data-review="${r.user_id}">${r.published_id?'Attendance':'Review'}</button>${r.status==='draft'?'':'<small>'+esc(r.status)+'</small>'}`])).join('')||empty(12);
  renderDistribution();
  renderAttendanceRecord();
+ renderWeekoffTable();
+
  const name=uid=>state.rows.find(r=>r.user_id===uid)?.name||'Employee '+uid;
  $('profileRows').innerHTML=rows.map(employee=>{
  const p=state.profiles.filter(p=>p.user_id===employee.user_id&&p.effective_month<=state.month).sort((a,b)=>b.effective_month.localeCompare(a.effective_month))[0];
@@ -117,8 +119,8 @@ for(const key of ['basic','allowances'])$('setupForm').elements[key].addEventLis
 document.addEventListener('click',event=>{const button=event.target.closest('[data-setup]');if(!button)return;if($('employeeListDialog').open)$('employeeListDialog').close();document.querySelector('[data-tab="setup"]').click();editSetup(Number(button.dataset.setup),Number(button.dataset.profile)||null);$('setupForm').scrollIntoView({behavior:'smooth',block:'center'});$('setupGross').focus({preventScroll:true});});
 async function refresh(){if(loading)return;loading=true;$('refresh').disabled=true;$('month').disabled=true;message('Loading employee and attendance records…');try{
  const month=$('month').value;if(!month)throw Error('Choose a month');
- const [preview,profiles,earnings,records,excluded,distribution]=await Promise.all([api('/salary-preview?month='+encodeURIComponent(month)),api('/salary-profiles'),api('/earnings'),api('/payroll'),api('/excluded-employees'),api('/salary-distribution?month='+encodeURIComponent(month))]);
- state={...preview,profiles,earnings,records,excluded,distribution:distribution.rows};
+ const [preview,profiles,earnings,records,excluded,distribution,weekoffIncentives]=await Promise.all([api('/salary-preview?month='+encodeURIComponent(month)),api('/salary-profiles'),api('/earnings'),api('/payroll'),api('/excluded-employees'),api('/salary-distribution?month='+encodeURIComponent(month)),api('/weekoff-incentives?month='+encodeURIComponent(month))]);
+ state={...preview,profiles,earnings,records,excluded,weekoffIncentives,distribution:distribution.rows};
  $('excludedCount').textContent=excluded.length;
  $('excludedToggleLabel').textContent=$('excludedSalaryEmployees').open?'Hide removed employees':'Show removed employees';
  $('excludedEmployeeRows').innerHTML=excluded.map(r=>'<div>'+esc(r.employee_id)+' - '+esc(r.name)+' <button type="button" data-restore="'+r.user_id+'">Add to salary list</button> <button type="button" class="exclude-employee" data-delete-ems="'+r.user_id+'">Delete permanently</button></div>').join('')||'<p>No removed employees. Employees you remove will appear here so you can add them back.</p>';
@@ -135,10 +137,10 @@ async function refresh(){if(loading)return;loading=true;$('refresh').disabled=tr
  setupForm.elements.effective_month.value=month;
  syncAttendanceWeekoffs();render();if($('employeeListDialog').open)renderEmployeeList();message('Records updated. Automatic incentive allocation is pending.');
  }catch(e){message(e.message,true);}finally{loading=false;$('refresh').disabled=false;$('month').disabled=false;}}
-function attendanceDetails(row){return (row.manual_employee?'<p class="notice">Manual employee: '+(row.missing_attendance||0)+' attendance days not entered.</p>':'')+`<p><b>${esc(row.name)}</b> · ${esc(row.employee_id)} · ${esc(row.outlet)} · ${esc(state.month)}</p><p>Present: ${row.counts.present} &nbsp; Absent: ${row.counts.absent} &nbsp; Weekoff: ${row.counts.weekoff} &nbsp; Leave: ${row.counts.leave}</p><p class="muted">${esc(row.joining_source)}: ${esc(row.joining_date)} · Before joining: ${row.counts.before_joining} · Upcoming: ${row.counts.upcoming}. Leave uses the ERP attendance leave register.</p><div class="days">${row.days.map(d=>`<div class="day ${d.status}"><b>${esc(d.day.slice(8))}</b><br>${esc(d.entered===false?'Not entered':d.status.replace('_',' '))}</div>`).join('')}</div>`;}
-function review(uid){selected=state.rows.find(r=>r.user_id===uid);if(!selected)return;$('detailTitle').textContent='Review salary · '+state.month;$('detailBody').innerHTML=attendanceDetails(selected)+(selected.profile_id?`<p>Monthly basic: ${money(selected.monthly_basic)} · Monthly allowances: ${money(selected.monthly_allowances)}</p><p>Divisor: ${esc(selected.divisor)} · Weekoff: ${selected.paid_weekoff?'paid':'unpaid'} · Leave: ${selected.paid_leave?'paid':'unpaid'}</p><p>Payable days: ${selected.payable_days} · Unpaid days: ${selected.unpaid_days}</p><p>Earned basic: ${money(selected.basic)} · Earned allowances: ${money(selected.allowances)}<br>Manual incentive: ${money(selected.incentive)} · Bonus: ${money(selected.bonus)} · Deductions: ${money(selected.deductions)}</p><h2>Draft net: ${money(selected.net)}</h2>`:'<p>Save salary setup to calculate this employee’s salary.</p>');$('ack').checked=false;$('publishControls').hidden=!selected.can_publish;$('printSlip').hidden=true;$('detail').showModal();}
+function attendanceDetails(row){return (row.manual_employee?'<p class="notice">Manual employee: '+(row.missing_attendance||0)+' attendance days not entered.</p>':'')+`<p><b>${esc(row.name)}</b> · ${esc(row.employee_id)} · ${esc(row.outlet)} · ${esc(state.month)}</p><p>Present: ${row.counts.present} &nbsp; Absent: ${row.counts.absent} &nbsp; W/O: ${row.counts.weekoff} &nbsp; Leave: ${row.counts.leave}</p><p class="muted">${esc(row.joining_source)}: ${esc(row.joining_date)} · Before joining: ${row.counts.before_joining} · Upcoming: ${row.counts.upcoming}. Leave uses the ERP attendance leave register.</p><div class="days">${row.days.map(d=>`<div class="day ${d.status}"><b>${esc(d.day.slice(8))}</b><br>${esc(d.entered===false?'Not entered':d.status.replace('_',' '))}</div>`).join('')}</div>`;}
+function review(uid){selected=state.rows.find(r=>r.user_id===uid);if(!selected)return;$('detailTitle').textContent='Review salary · '+state.month;$('detailBody').innerHTML=attendanceDetails(selected)+(selected.profile_id?`<p>Monthly basic: ${money(selected.monthly_basic)} · Monthly allowances: ${money(selected.monthly_allowances)}</p><p>Divisor: ${esc(selected.divisor)} · W/O: ${selected.paid_weekoff?'paid':'unpaid'} · Leave: ${selected.paid_leave?'paid':'unpaid'}</p><p>Payable days: ${selected.payable_days} · Unpaid days: ${selected.unpaid_days}</p><p>Earned basic: ${money(selected.basic)} · Earned allowances: ${money(selected.allowances)}<br>Manual incentive: ${money(selected.incentive)} · Bonus: ${money(selected.bonus)} · Deductions: ${money(selected.deductions)}</p><h2>Draft net: ${money(selected.net)}</h2>`:'<p>Save salary setup to calculate this employee’s salary.</p>');$('ack').checked=false;$('publishControls').hidden=!selected.can_publish;$('printSlip').hidden=true;$('detail').showModal();}
 async function slip(id){try{const data=await api('/salary-slips/'+id),p=data.payroll,s=data.snapshot;$('detailTitle').textContent='IDSPL Salary Slip · '+p.month;$('detailBody').innerHTML=`<p>Employee: ${esc(s?.name||state.records.find(r=>r.id===id)?.name)} · ${esc(s?.employee_id||'')}</p><p>Status: ${esc(p.status)}</p><table>${[['Earned basic',p.basic],['Earned allowances',p.allowances],['Approved manual incentive',p.incentives],['Bonus',p.bonuses],['Deductions',p.deductions],['Net salary',p.net]].map(([label,value])=>cells([label,money(value)])).join('')}</table><p class="muted">Automatic incentive allocation pending. This slip records the salary published in EMS.</p>`+(s?attendanceDetails(s):'');$('publishControls').hidden=true;$('printSlip').hidden=false;$('detail').showModal();}catch(e){message(e.message,true);}}
-document.querySelectorAll('[data-tab]').forEach(button=>button.addEventListener('click',()=>{document.querySelectorAll('[data-tab]').forEach(b=>{b.classList.toggle('active',b===button);$(b.dataset.tab).hidden=b!==button;});if(button.dataset.tab==='distribution')renderDistribution();}));
+document.querySelectorAll('[data-tab]').forEach(button=>button.addEventListener('click',()=>{document.querySelectorAll('[data-tab]').forEach(b=>{b.classList.toggle('active',b===button);$(b.dataset.tab).hidden=b!==button;});if(button.dataset.tab==='distribution')renderDistribution();if(button.dataset.tab==='earnings')renderWeekoffTable();}));
 $('refresh').onclick=refresh;$('month').onchange=()=>{if(!$('detail').open)refresh();};$('group').onchange=render;$('employmentCategory').onchange=render;$('search').oninput=render;$('detailClose').onclick=()=>$('detail').close();$('printSlip').onclick=()=>window.print();
 document.addEventListener('click',async event=>{const button=event.target.closest('button');if(!button)return;if(button.dataset.review)review(Number(button.dataset.review));if(button.dataset.slip)await slip(Number(button.dataset.slip));if(button.dataset.paid&&confirm('Record that this salary was paid outside EMS?')){button.disabled=true;try{await api('/payroll/'+button.dataset.paid+'/paid',{method:'PUT'});await refresh();}catch(e){message(e.message,true);button.disabled=false;}}});
 document.addEventListener('click',async event=>{const button=event.target.closest('[data-void]');if(!button||!confirm('Void this approved earning and recalculate the draft salary?'))return;button.disabled=true;try{await api('/earnings/'+button.dataset.void+'/void',{method:'PUT'});await refresh();}catch(e){message(e.message,true);button.disabled=false;}});
@@ -176,7 +178,7 @@ for(const [formId,path] of [['setupForm','/salary-profiles'],['earningForm','/ea
  };
 }
 function salaryReportRows(){
- const headers=['Employee ID','Employee Name','Employee Group','Emp Category','Salary Month','Absent','Working Days','Week Off Availed','Week Off Credit','Expected Basic INR','Week Off Pay INR','Incentive INR','Amount Payable INR','Present','Week Off','Leave','Setup Status'];
+ const headers=['Employee ID','Employee Name','Employee Group','Emp Category','Salary Month','Absent','Working Days','W/O Availed','W/O Credit','Expected Basic INR','W/O Pay INR','Incentive INR','Amount Payable INR','Present','W/O','Leave','Setup Status'];
  const report=filtered().map(employee=>{
  const profile=state.profiles.filter(p=>p.user_id===employee.user_id&&p.effective_month<=state.month).sort((a,b)=>b.effective_month.localeCompare(a.effective_month))[0];
  const availed=employee.weekoff_availed??employee.counts.weekoff,credit=Math.max(0,4-availed);
@@ -272,7 +274,7 @@ function openManualAttendance(uid){
  const part=k=>todayParts.find(p=>p.type===k).value,today=part('year')+'-'+part('month')+'-'+part('day');
  $('manualAttendanceRows').innerHTML=employee.days.map(d=>{
  const disabled=Boolean(employee.published_id||d.day<employee.joining_date||d.day>today);
- return cells([esc(d.day)+'<small>'+esc(d.entered===false?'Not entered':d.status.replace('_',' '))+'</small>','<select aria-label="Attendance '+esc(d.day)+'" data-manual-day="'+esc(d.day)+'" data-original="'+esc(d.overridden||employee.manual_employee&&d.entered?d.status:"auto")+'"'+(disabled?' disabled':'')+'><option value="auto">Automatic</option><option value="">'+(d.day<employee.joining_date?'Before joining':d.day>today?'Upcoming':'Not entered')+'</option>'+['present','absent','weekoff','leave'].map(status=>'<option value="'+status+'"'+((employee.manual_employee?d.entered:d.overridden)&&d.status===status?' selected':'')+'>'+({present:'Present',absent:'Absent',weekoff:'Week Off',leave:'Leave'}[status])+'</option>').join('')+'</select>','<input aria-label="Note '+esc(d.day)+'" data-manual-note="'+esc(d.day)+'" value="'+esc(d.note||'')+'" data-original-note="'+esc(d.note||'')+'" maxlength="300"'+(disabled?' disabled':'')+'>']);
+ return cells([esc(d.day)+'<small>'+esc(d.entered===false?'Not entered':d.status.replace('_',' '))+'</small>','<select aria-label="Attendance '+esc(d.day)+'" data-manual-day="'+esc(d.day)+'" data-original="'+esc(d.overridden||employee.manual_employee&&d.entered?d.status:"auto")+'"'+(disabled?' disabled':'')+'><option value="auto">Automatic</option><option value="">'+(d.day<employee.joining_date?'Before joining':d.day>today?'Upcoming':'Not entered')+'</option>'+['present','absent','weekoff','leave'].map(status=>'<option value="'+status+'"'+((employee.manual_employee?d.entered:d.overridden)&&d.status===status?' selected':'')+'>'+({present:'Present',absent:'Absent',weekoff:'W/O',leave:'Leave'}[status])+'</option>').join('')+'</select>','<input aria-label="Note '+esc(d.day)+'" data-manual-note="'+esc(d.day)+'" value="'+esc(d.note||'')+'" data-original-note="'+esc(d.note||'')+'" maxlength="300"'+(disabled?' disabled':'')+'>']);
  }).join('');
  $('manualAttendanceError').textContent='';$('manualAttendanceForm').querySelector('button.primary').disabled=Boolean(employee.published_id);$('manualAttendanceDialog').showModal();
 }
@@ -380,7 +382,7 @@ $('distributionExport').onclick=()=>{
 const attendanceDrafts=new Map();
 let attendanceSaveTimer=null,attendanceSaving=false,attendanceSaveAgain=false;
 const attendanceCodes={present:'P',absent:'A',weekoff:'WO',leave:'L',upcoming:'',before_joining:''};
-function attendanceStatus(value){return {P:'present',PRESENT:'present',A:'absent',ABSENT:'absent',WO:'weekoff',W:'weekoff',WEEKOFF:'weekoff','WEEK OFF':'weekoff',L:'leave',LEAVE:'leave',AUTO:'auto','':'auto'}[value.trim().toUpperCase()];}
+function attendanceStatus(value){return {P:'present',PRESENT:'present',A:'absent',ABSENT:'absent',WO:'weekoff',W:'weekoff',WEEKOFF:'weekoff','W/O':'weekoff','WEEK OFF':'weekoff',L:'leave',LEAVE:'leave',AUTO:'auto','':'auto'}[value.trim().toUpperCase()];}
 function attendanceKey(uid,day){return state.month+':'+uid+':'+day;}
 function effectiveAttendanceStatus(employee,day){
  const draft=attendanceDrafts.get(attendanceKey(employee.user_id,day.day));
@@ -458,5 +460,42 @@ async function saveAttendanceSheet(automatic=false){
  if(attendanceDrafts.size&&[...attendanceDrafts.values()].every(d=>d.status)&&attendanceSaveAgain){attendanceSaveAgain=false;attendanceSaveTimer=setTimeout(()=>saveAttendanceSheet(true),700);}
 }
 $('saveAttendanceSheet').onclick=()=>saveAttendanceSheet();
-window.addEventListener('beforeunload',event=>{if(attendanceDrafts.size){event.preventDefault();event.returnValue='';}});
-setInterval(()=>{if(!document.hidden&&!document.querySelector('dialog[open]')&&!document.querySelector('input:focus,select:focus')&&!distributionDrafts.size&&!attendanceDrafts.size)refresh();},60000);
+window.addEventListener('beforeunload',event=>{if(attendanceDrafts.size||weekoffDrafts.size){event.preventDefault();event.returnValue='';}});
+setInterval(()=>{if(!document.hidden&&!document.querySelector('dialog[open]')&&!document.querySelector('input:focus,select:focus')&&!distributionDrafts.size&&!attendanceDrafts.size&&!weekoffDrafts.size)refresh();},60000);
+
+
+const weekoffDrafts=new Map();
+function weekoffValues(gross,availed,incentive){
+ const credit=4-availed,pay=Math.sign(gross*credit)*Math.round(Math.abs(gross*credit)/30);
+ return {credit,pay,payable:pay+incentive};
+}
+function currentWeekoffRows(){
+ const distribution=new Map(currentDistributionRows().map(r=>[r.user_id,r]));
+ return filtered().map(r=>{
+ const d=distribution.get(r.user_id),saved=(state.weekoffIncentives||[]).find(i=>i.user_id===r.user_id),draft=weekoffDrafts.get(state.month+':'+r.user_id);
+ const incentive=draft??saved?.incentive??0,gross=d?.actual_gross_earning??0,availed=r.counts.weekoff;
+ return {...r,gross,incentive,...weekoffValues(gross,availed,incentive)};
+ });
+}
+function renderWeekoffTotals(){
+ const rows=currentWeekoffRows(),sum=key=>rows.reduce((s,r)=>s+r[key],0);
+ $('weekoffTotals').innerHTML=cells(['Total','','','',money(sum('gross')),money(sum('pay')),money(sum('incentive')),money(sum('payable')),'']);
+}
+function renderWeekoffTable(){
+ $('weekoffRows').innerHTML=currentWeekoffRows().map(r=>'<tr data-weekoff-user="'+r.user_id+'"><td><b>'+esc(r.name)+'</b><small>'+esc(r.employee_id)+'</small></td><td>4</td><td>'+r.counts.weekoff+'</td><td>'+r.credit+'</td><td>'+money(r.gross)+'</td><td>'+money(r.pay)+'</td><td><input type="number" min="0" max="10000000" step="0.01" aria-label="Incentive for '+esc(r.name)+'" data-weekoff-incentive="'+r.user_id+'" value="'+(r.incentive/100).toFixed(2)+'"></td><td data-weekoff-payable>'+money(r.payable)+'</td><td><button type="button" data-weekoff-save="'+r.user_id+'">Save</button><small data-weekoff-status>'+(weekoffDrafts.has(state.month+':'+r.user_id)?'Unsaved incentive':'')+'</small></td></tr>').join('')||empty(9);
+ renderWeekoffTotals();
+}
+$('weekoffRows').addEventListener('input',event=>{
+ const input=event.target;if(!input.matches('[data-weekoff-incentive]'))return;
+ const tr=input.closest('tr');try{
+ input.setCustomValidity('');const value=parseDistributionAmount(input),uid=Number(input.dataset.weekoffIncentive);weekoffDrafts.set(state.month+':'+uid,value);
+ tr.querySelector('[data-weekoff-payable]').textContent=money(currentWeekoffRows().find(r=>r.user_id===uid).payable);tr.querySelector('[data-weekoff-status]').textContent='Unsaved incentive';renderWeekoffTotals();
+ }catch(error){input.setCustomValidity(error.message);tr.querySelector('[data-weekoff-status]').textContent=error.message;}
+});
+$('weekoffRows').addEventListener('click',async event=>{
+ const button=event.target.closest('[data-weekoff-save]');if(!button)return;
+ const tr=button.closest('tr'),input=tr.querySelector('[data-weekoff-incentive]'),uid=Number(button.dataset.weekoffSave),month=state.month;
+ try{input.setCustomValidity('');const incentive=parseDistributionAmount(input);button.disabled=true;input.disabled=true;
+ await api('/weekoff-incentives/'+uid,{method:'PUT',body:JSON.stringify({month,incentive:(incentive/100).toFixed(2)})});weekoffDrafts.delete(month+':'+uid);await refresh();message('W/O incentive saved.');
+ }catch(error){tr.querySelector('[data-weekoff-status]').textContent=error.message;}finally{button.disabled=false;input.disabled=false;}
+});

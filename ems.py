@@ -757,7 +757,7 @@ def permanently_delete_ems_employee(user_id: int, payload: EMSPermanentDeletion,
     for actions, targets in audit_groups:
         db.query(M.EMSAudit).filter(M.EMSAudit.action.in_(actions),
             M.EMSAudit.target.in_([str(value) for value in targets])).delete(synchronize_session=False)
-    for model in (M.EMSDistributionInput, M.EMSManualAttendance, M.EMSExcludedEmployee, M.EMSLeaveRequest,
+    for model in (M.EMSWeekoffIncentive, M.EMSDistributionInput, M.EMSManualAttendance, M.EMSExcludedEmployee, M.EMSLeaveRequest,
                   M.EMSEarning, M.EMSSalaryProfile, M.EMSPayroll):
         db.query(model).filter_by(user_id=user_id).delete(synchronize_session=False)
     # Tombstone prevents an ERP account from automatically reappearing in EMS.
@@ -843,3 +843,33 @@ def save_distribution_inputs(user_id: int, payload: DistributionInput,
     record(db, user, 'salary_distribution_inputs_saved', user_id, payload.model_dump_json())
     db.commit()
     return {'message': 'Salary distribution inputs saved'}
+
+
+class WeekoffIncentiveInput(Input):
+    month: str = Field(pattern=r'^\d{4}-(0[1-9]|1[0-2])$')
+    incentive: Decimal = Field(ge=0, le=10000000, decimal_places=2)
+
+
+@router.get('/weekoff-incentives')
+def weekoff_incentives(month: str, db: Session = Depends(get_db), user=Depends(manager)):
+    month_bounds(month)
+    ids = [row.id for row, _, _ in employee_rows(db, include_excluded=False).all()]
+    return [serialize(row) for row in db.query(M.EMSWeekoffIncentive).filter(
+        M.EMSWeekoffIncentive.month == month, M.EMSWeekoffIncentive.user_id.in_(ids)).all()]
+
+
+@router.put('/weekoff-incentives/{user_id}')
+def save_weekoff_incentive(user_id: int, payload: WeekoffIncentiveInput,
+                          db: Session = Depends(get_db), user=Depends(manager)):
+    month_bounds(payload.month)
+    lock_employee(db, user_id)
+    row = db.query(M.EMSWeekoffIncentive).filter_by(user_id=user_id, month=payload.month).first()
+    if row is None:
+        row = M.EMSWeekoffIncentive(user_id=user_id, month=payload.month)
+        db.add(row)
+    row.incentive = int(payload.incentive * 100)
+    row.updated_by = user.id
+    row.updated_at = datetime.utcnow()
+    record(db, user, 'weekoff_incentive_saved', user_id, payload.model_dump_json())
+    db.commit()
+    return {'message': 'Weekoff incentive saved'}
