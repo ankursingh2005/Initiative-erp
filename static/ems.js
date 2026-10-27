@@ -24,6 +24,7 @@ function render(){
  $('periodNote').textContent=state.closed_month?'Closed month: review attendance and salary before publication.':'Open or future month: provisional totals only. Publication is available after month end.';
  $('monthlyRows').innerHTML=rows.map(r=>cells([`<b>${esc(r.name)}</b><small>${esc(r.employee_id||'ID not assigned')}</small>`,`${esc(r.outlet)}<small>${groups[r.category]}</small>`,r.counts.present,r.counts.absent,r.counts.weekoff,r.counts.leave,r.profile_id?money(r.basic+r.allowances):'Setup needed',money(r.incentive),money(r.bonus),r.profile_id?money(r.deductions):'—',r.profile_id?money(r.net):'—',`${r.manual_employee?'<button data-manual-attendance="'+r.user_id+'">Attendance</button> ':''}<button data-review="${r.user_id}">${r.published_id?'Attendance':'Review'}</button>${r.status==='draft'?'':'<small>'+esc(r.status)+'</small>'}`])).join('')||empty(12);
  renderDistribution();
+ renderAttendanceRecord();
  const name=uid=>state.rows.find(r=>r.user_id===uid)?.name||'Employee '+uid;
  $('profileRows').innerHTML=rows.map(employee=>{
  const p=state.profiles.filter(p=>p.user_id===employee.user_id&&p.effective_month<=state.month).sort((a,b)=>b.effective_month.localeCompare(a.effective_month))[0];
@@ -262,22 +263,22 @@ $('manualEmployeeForm').onsubmit=async event=>{
  catch(error){$('manualEmployeeError').textContent=error.message;}finally{button.disabled=false;}
 };
 function openManualAttendance(uid){
- const employee=state.rows.find(r=>r.user_id===uid);if(!employee?.manual_employee)return;
+ const employee=state.rows.find(r=>r.user_id===uid);if(!employee)return;
  if($('employeeListDialog').open)$('employeeListDialog').close();
  manualAttendanceEmployee=uid;manualAttendanceMonth=state.month;
- $('manualAttendanceTitle').textContent='Manual attendance - '+employee.name+' - '+state.month;
- $('manualAttendanceNote').textContent=employee.published_id?'Published salary: attendance is locked.':employee.missing_attendance+' days not entered. Select a status for each day on or after joining; future dates are unavailable.';
+ $('manualAttendanceTitle').textContent='Attendance Record - '+employee.name+' - '+state.month;
+ $('manualAttendanceNote').textContent=employee.published_id?'Published salary: attendance is locked.':'Select a status to correct attendance, or Automatic to restore fetched attendance.';
  const todayParts=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kolkata',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
  const part=k=>todayParts.find(p=>p.type===k).value,today=part('year')+'-'+part('month')+'-'+part('day');
  $('manualAttendanceRows').innerHTML=employee.days.map(d=>{
  const disabled=Boolean(employee.published_id||d.day<employee.joining_date||d.day>today);
- return cells([esc(d.day),'<select aria-label="Attendance '+esc(d.day)+'" data-manual-day="'+esc(d.day)+'"'+(disabled?' disabled':'')+'><option value="">'+(d.day<employee.joining_date?'Before joining':d.day>today?'Upcoming':'Not entered')+'</option>'+['present','absent','weekoff','leave'].map(status=>'<option value="'+status+'"'+(d.entered&&d.status===status?' selected':'')+'>'+({present:'Present',absent:'Absent',weekoff:'Week Off',leave:'Leave'}[status])+'</option>').join('')+'</select>','<input aria-label="Note '+esc(d.day)+'" data-manual-note="'+esc(d.day)+'" value="'+esc(d.note||'')+'" maxlength="300"'+(disabled?' disabled':'')+'>']);
+ return cells([esc(d.day)+'<small>'+esc(d.entered===false?'Not entered':d.status.replace('_',' '))+'</small>','<select aria-label="Attendance '+esc(d.day)+'" data-manual-day="'+esc(d.day)+'" data-original="'+esc(d.overridden||employee.manual_employee&&d.entered?d.status:"auto")+'"'+(disabled?' disabled':'')+'><option value="auto">Automatic</option><option value="">'+(d.day<employee.joining_date?'Before joining':d.day>today?'Upcoming':'Not entered')+'</option>'+['present','absent','weekoff','leave'].map(status=>'<option value="'+status+'"'+((employee.manual_employee?d.entered:d.overridden)&&d.status===status?' selected':'')+'>'+({present:'Present',absent:'Absent',weekoff:'Week Off',leave:'Leave'}[status])+'</option>').join('')+'</select>','<input aria-label="Note '+esc(d.day)+'" data-manual-note="'+esc(d.day)+'" value="'+esc(d.note||'')+'" data-original-note="'+esc(d.note||'')+'" maxlength="300"'+(disabled?' disabled':'')+'>']);
  }).join('');
  $('manualAttendanceError').textContent='';$('manualAttendanceForm').querySelector('button.primary').disabled=Boolean(employee.published_id);$('manualAttendanceDialog').showModal();
 }
 $('manualAttendanceForm').onsubmit=async event=>{
  event.preventDefault();const button=event.target.querySelector('button.primary');button.disabled=true;$('manualAttendanceError').textContent='';
- try{const days=Array.from($('manualAttendanceRows').querySelectorAll('[data-manual-day]')).filter(input=>!input.disabled&&input.value).map(input=>({day:input.dataset.manualDay,status:input.value,note:$('manualAttendanceRows').querySelector('[data-manual-note="'+input.dataset.manualDay+'"]').value}));if(!days.length)throw Error('Enter attendance for at least one day.');const result=await api('/manual-employees/'+manualAttendanceEmployee+'/attendance',{method:'PUT',body:JSON.stringify({month:manualAttendanceMonth,days})});$('manualAttendanceDialog').close();await refresh();message(result.message);}
+ try{const days=Array.from($('manualAttendanceRows').querySelectorAll('[data-manual-day]')).filter(input=>!input.disabled&&input.value&&(input.value!==input.dataset.original||$('manualAttendanceRows').querySelector('[data-manual-note="'+input.dataset.manualDay+'"]').value!==$('manualAttendanceRows').querySelector('[data-manual-note="'+input.dataset.manualDay+'"]').dataset.originalNote)).map(input=>({day:input.dataset.manualDay,status:input.value,note:$('manualAttendanceRows').querySelector('[data-manual-note="'+input.dataset.manualDay+'"]').value}));if(!days.length)throw Error('Enter attendance for at least one day.');const result=await api('/attendance-records/'+manualAttendanceEmployee,{method:'PUT',body:JSON.stringify({month:manualAttendanceMonth,days})});$('manualAttendanceDialog').close();await refresh();message(result.message);}
  catch(error){$('manualAttendanceError').textContent=error.message;}finally{button.disabled=false;}
 };
 
@@ -375,3 +376,8 @@ $('distributionExport').onclick=()=>{
  const url=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'})),link=document.createElement('a');link.href=url;link.download='IDSPL_Salary_Distribution_'+state.month+'.csv';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
  message(distributionDrafts.size?'Distribution downloaded. Unsaved inputs are included.':'Salary distribution downloaded.');
 };
+
+function renderAttendanceRecord(){
+ $('attendanceRecordRows').innerHTML=filtered().map(r=>cells(['<b>'+esc(r.name)+'</b><small>'+esc(r.employee_id)+'</small>',esc(r.outlet),r.counts.present,r.counts.absent,r.counts.weekoff,r.counts.leave,'<button type="button" data-manual-attendance="'+r.user_id+'">'+(r.published_id?'View':'Edit attendance')+'</button>'])).join('')||empty(7);
+}
+setInterval(()=>{if(!document.hidden&&!document.querySelector('dialog[open]')&&!document.querySelector('input:focus,select:focus')&&!distributionDrafts.size)refresh();},60000);

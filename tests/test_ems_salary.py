@@ -34,6 +34,27 @@ class SalaryTests(unittest.TestCase):
     def tearDown(self):
         self.client.close(); self.db.close(); self.engine.dispose()
 
+    def test_shared_attendance_correction_updates_ems_and_restores_source(self):
+        uid = self.users[2].id
+        day = date(2026, 9, 6)
+        self.db.add(models.AttendanceRecord(user_id=uid, attendance_date=day,
+                                           checkin_at=datetime(2026, 9, 6, 9)))
+        self.db.commit()
+        path = f'/api/ems/attendance-records/{uid}'
+        payload = {'month': '2026-09', 'days': [{'day': str(day), 'status': 'absent', 'note': 'HR correction'}]}
+        self.assertEqual(self.client.put(path, json=payload).status_code, 200)
+        row = next(r for r in self.client.get('/api/ems/salary-preview?month=2026-09').json()['rows'] if r['user_id'] == uid)
+        self.assertEqual(next(d for d in row['days'] if d['day'] == str(day))['status'], 'absent')
+        summary = self.client.get('/api/ems/attendance-summary?day=2026-09-06').json()
+        self.assertEqual(next(r for r in summary['rows'] if r['user_id'] == uid)['status'], 'Absent')
+        self.assertIsNotNone(self.db.query(models.AttendanceRecord).filter_by(user_id=uid, attendance_date=day).first().checkin_at)
+        payload['days'][0]['status'] = 'auto'
+        self.assertEqual(self.client.put(path, json=payload).status_code, 200)
+        row = next(r for r in self.client.get('/api/ems/salary-preview?month=2026-09').json()['rows'] if r['user_id'] == uid)
+        self.assertEqual(next(d for d in row['days'] if d['day'] == str(day))['status'], 'present')
+        self.actor = self.users[2]
+        self.assertEqual(self.client.put(path, json=payload).status_code, 403)
+
     def test_weekoff_setup_fetches_attendance_and_ignores_manual_counts(self):
         uid = self.users[2].id
         self.assertEqual(self.setup_salary(weekoff_availed=0, weekoff_credit=4).status_code, 200)

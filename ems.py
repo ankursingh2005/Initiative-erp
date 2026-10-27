@@ -193,8 +193,8 @@ def attendance_summary(day: date | None = None, month: str | None = None,
             record = punches.get((employee.id, current))
             state = daily_attendance_status(employee, current, datetime.now(IST).date(),
                                             bool(record and record.checkin_at), (employee.id, current) in leave_days)
-            if employee.role == 'EMSManual' and current <= datetime.now(IST).date():
-                state = manual.get((employee.id, current), 'unrecorded')
+            if current <= datetime.now(IST).date():
+                state = manual.get((employee.id, current), 'unrecorded' if employee.role == 'EMSManual' else state)
             status = {'unrecorded': 'Not entered', 'present': 'Present', 'absent': 'Absent', 'weekoff': 'Week Off',
                       'leave': 'Leave', 'upcoming': 'Upcoming'}[state]
             rows.append({'user_id': employee.id, 'name': employee.full_name or employee.username,
@@ -448,12 +448,15 @@ def salary_preview(db, month):
             if employee.role == 'EMSManual' and joining <= day <= today:
                 state = manual_day.status if manual_day else 'absent'
                 missing_attendance += int(manual_day is None)
+            if manual_day and joining <= day <= today:
+                state = manual_day.status
             counts[state] += 1
             before_joining = day < joining
             counts['before_joining'] += int(before_joining)
             pay_counts['before_joining' if before_joining else state] += 1
             days.append({'day': day.isoformat(), 'status': state,
                          'entered': bool(manual_day) if employee.role == 'EMSManual' else True,
+                         'overridden': bool(manual_day),
                          'note': manual_day.note if manual_day else ''})
         profile = latest.get(employee.id)
         saved = published.get(employee.id)
@@ -685,6 +688,46 @@ def save_manual_attendance(user_id: int, payload: ManualAttendanceInput,
     record(db, user, 'manual_attendance_saved', user_id, payload.model_dump_json())
     db.commit()
     return {'message': 'Manual attendance saved and draft salary recalculated'}
+
+class AttendanceCorrectionDay(ManualDay):
+    status: Literal['present', 'absent', 'weekoff', 'leave', 'auto']
+
+
+class AttendanceCorrectionInput(ManualAttendanceInput):
+    days: list[AttendanceCorrectionDay] = Field(min_length=1, max_length=31)
+
+
+@router.put('/attendance-records/{user_id}')
+def save_attendance_corrections(user_id: int, payload: AttendanceCorrectionInput,
+                               db: Session = Depends(get_db), user=Depends(manager)):
+    employee = lock_employee(db, user_id)
+    start, end = month_bounds(payload.month)
+    if db.query(M.EMSPayroll).filter_by(user_id=user_id, month=payload.month).first():
+        raise HTTPException(409, 'Published salary attendance cannot be changed')
+    card = db.get(models.IdentityCard, user_id)
+    joining = card.joining_date if card and card.joining_date else employee.created_date.date() if employee.created_date else start
+    if len({entry.day for entry in payload.days}) != len(payload.days):
+        raise HTTPException(422, 'Each attendance date must be unique')
+    for entry in payload.days:
+        if not start <= entry.day <= end or entry.day > datetime.now(IST).date() or entry.day < joining:
+            raise HTTPException(422, 'Attendance dates must be within this month, on or after joining, and not in the future')
+    for entry in payload.days:
+        row = db.query(M.EMSManualAttendance).filter_by(user_id=user_id, day=entry.day).first()
+        if entry.status == 'auto':
+            if row is not None:
+                db.delete(row)
+            continue
+        if row is None:
+            row = M.EMSManualAttendance(user_id=user_id, day=entry.day)
+            db.add(row)
+        row.status = entry.status
+        row.note = entry.note
+        row.updated_by = user.id
+        row.updated_at = datetime.utcnow()
+    record(db, user, 'attendance_corrections_saved', user_id, payload.model_dump_json())
+    db.commit()
+    return {'message': 'Attendance saved and draft salary recalculated'}
+
 
 class EMSPermanentDeletion(RemovalPassword):
     confirmation: Literal['DELETE']
