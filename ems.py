@@ -700,6 +700,7 @@ class AttendanceCorrectionInput(ManualAttendanceInput):
 @router.put('/attendance-records/{user_id}')
 def save_attendance_corrections(user_id: int, payload: AttendanceCorrectionInput,
                                db: Session = Depends(get_db), user=Depends(manager)):
+    # EMS-only overrides: never update source punches, leave records or weekly schedules.
     employee = lock_employee(db, user_id)
     start, end = month_bounds(payload.month)
     if db.query(M.EMSPayroll).filter_by(user_id=user_id, month=payload.month).first():

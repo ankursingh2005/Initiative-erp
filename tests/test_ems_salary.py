@@ -55,6 +55,32 @@ class SalaryTests(unittest.TestCase):
         self.actor = self.users[2]
         self.assertEqual(self.client.put(path, json=payload).status_code, 403)
 
+    def test_all_ems_corrections_leave_original_attendance_unchanged(self):
+        uid = self.users[2].id
+        day = date(2026, 9, 6)
+        self.db.add(models.AttendanceRecord(user_id=uid, attendance_date=day,
+            checkin_at=datetime(2026, 9, 6, 9), checkout_at=datetime(2026, 9, 6, 18),
+            checkin_selfie='original-in', checkout_selfie='original-out'))
+        self.db.add(models.AttendanceLeave(user_id=uid, leave_date=date(2026, 9, 7), created_by=self.actor.id))
+        self.db.commit()
+
+        def source_snapshot():
+            self.db.expire_all()
+            return {model.__tablename__: [tuple(getattr(row, column.name) for column in model.__table__.columns)
+                    for row in self.db.query(model).order_by(model.id).all()]
+                    for model in (models.AttendanceRecord, models.AttendanceLeave, models.User)}
+
+        original = source_snapshot()
+        for status in ('absent', 'present', 'weekoff', 'leave', 'auto'):
+            result = self.client.put(f'/api/ems/attendance-records/{uid}', json={
+                'month': '2026-09', 'days': [
+                    {'day': '2026-09-06', 'status': status},
+                    {'day': '2026-09-07', 'status': status},
+                    {'day': '2026-09-08', 'status': status}]})
+            self.assertEqual(result.status_code, 200, result.text)
+            self.assertEqual(source_snapshot(), original, status)
+        self.assertEqual(self.db.query(M.EMSManualAttendance).filter_by(user_id=uid).count(), 0)
+
     def test_weekoff_setup_fetches_attendance_and_ignores_manual_counts(self):
         uid = self.users[2].id
         self.assertEqual(self.setup_salary(weekoff_availed=0, weekoff_credit=4).status_code, 200)

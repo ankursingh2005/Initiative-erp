@@ -41,3 +41,55 @@ test('Expected Basic automatically follows the effective salary setup and recalc
  vm.runInContext("state.month='2026-10';renderDistribution();",context);
  assert.equal(vm.runInContext('currentDistributionRows()[0].expected_basic',context),3000000);
 });
+
+
+test('attendance sheet renders daily codes, totals and locked published rows',()=>{
+ const {context,nodes}=setup();
+ vm.runInContext(`state.rows=[{user_id:1,name:'Sheet Employee',employee_id:'E001',outlet:'Main',joining_date:'2026-09-01',counts:{present:1,absent:1,weekoff:0,leave:0},days:[{day:'2026-09-01',status:'present',entered:true},{day:'2026-09-02',status:'absent',entered:true}]}];renderAttendanceRecord();`,context);
+ assert.match(nodes.get('attendanceRecordRows').innerHTML,/value="P"/);
+ assert.match(nodes.get('attendanceRecordRows').innerHTML,/value="A"/);
+ assert.match(nodes.get('attendanceSheetHead').innerHTML,/01/);
+ assert.match(nodes.get('attendanceRecordRows').innerHTML,/Sheet Employee/);
+ vm.runInContext('state.rows[0].published_id=4;renderAttendanceRecord();',context);
+ assert.match(nodes.get('attendanceRecordRows').innerHTML,/ disabled/);
+});
+
+test('attendance sheet accepts codes and preserves unsaved edits across rendering',()=>{
+ const {context,nodes}=setup();
+ assert.equal(vm.runInContext("attendanceStatus('p')",context),'present');
+ assert.equal(vm.runInContext("attendanceStatus('WO')",context),'weekoff');
+ assert.equal(vm.runInContext("attendanceStatus('AUTO')",context),'auto');
+ assert.equal(vm.runInContext("attendanceStatus('invalid')",context),undefined);
+ vm.runInContext(`state.rows=[{user_id:1,name:'Sheet Employee',employee_id:'E001',outlet:'Main',joining_date:'2026-09-01',counts:{present:1,absent:0,weekoff:0,leave:0},days:[{day:'2026-09-01',status:'present',entered:true}]}];attendanceDrafts.set(attendanceKey(1,'2026-09-01'),{value:'L',status:'leave'});renderAttendanceRecord();`,context);
+ assert.match(nodes.get('attendanceRecordRows').innerHTML,/value="L"/);
+ assert.match(nodes.get('attendanceRecordRows').innerHTML,/sheet-dirty/);
+ assert.equal(nodes.get('attendanceSheetStatus').textContent,'1 unsaved cells');
+});
+
+
+test('editing attendance immediately changes colors and totals and schedules automatic saving',()=>{
+ const {context,nodes}=setup();
+ context.clearTimeout=()=>{};context.setTimeout=fn=>{context.scheduledSave=fn;return 1;};
+ vm.runInContext(`state.rows=[{user_id:1,name:'Test',joining_date:'2026-09-01',counts:{present:0,absent:1,weekoff:0,leave:0},days:[{day:'2026-09-01',status:'absent',entered:true}]}];`,context);
+ const classes=new Set(['absent']);const counts={};nodes.get('attendanceRecordRows').querySelector=selector=>counts[selector]??={textContent:''};
+ context.input={value:'p',dataset:{sheetUser:'1',sheetDay:'2026-09-01'},setCustomValidity(){},classList:{add:v=>classes.add(v),toggle:(v,on)=>on?classes.add(v):classes.delete(v)}};
+ vm.runInContext('stageAttendanceCell(input)',context);
+ assert.ok(classes.has('present'));assert.ok(!classes.has('absent'));assert.equal(typeof context.scheduledSave,'function');
+ assert.equal(vm.runInContext('attendanceSheetCounts(state.rows[0]).present',context),1);
+ assert.equal(vm.runInContext('attendanceSheetCounts(state.rows[0]).absent',context),0);
+ context.input.value='WO';vm.runInContext('stageAttendanceCell(input)',context);
+ assert.ok(classes.has('weekoff'));assert.ok(!classes.has('present'));
+ assert.equal(vm.runInContext('attendanceSheetCounts(state.rows[0]).weekoff',context),1);
+ assert.equal(vm.runInContext('attendanceSheetCounts(state.rows[0]).present',context),0);
+});
+
+
+test('typing a new attendance code selects the old code for replacement',()=>{
+ const {context}=setup();let selected=0;
+ context.cell={value:'A',select(){selected++;}};
+ vm.runInContext("replaceAttendanceCode(cell,'p')",context);assert.equal(selected,1);
+ context.cell.value='P';vm.runInContext("replaceAttendanceCode(cell,'a')",context);assert.equal(selected,2);
+ context.cell.value='WO';vm.runInContext("replaceAttendanceCode(cell,'p')",context);assert.equal(selected,3);
+ context.cell.value='W';vm.runInContext("replaceAttendanceCode(cell,'o')",context);assert.equal(selected,3);
+ vm.runInContext("replaceAttendanceCode(cell,'ArrowRight')",context);assert.equal(selected,3);
+});

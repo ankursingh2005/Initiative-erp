@@ -377,7 +377,86 @@ $('distributionExport').onclick=()=>{
  message(distributionDrafts.size?'Distribution downloaded. Unsaved inputs are included.':'Salary distribution downloaded.');
 };
 
-function renderAttendanceRecord(){
- $('attendanceRecordRows').innerHTML=filtered().map(r=>cells(['<b>'+esc(r.name)+'</b><small>'+esc(r.employee_id)+'</small>',esc(r.outlet),r.counts.present,r.counts.absent,r.counts.weekoff,r.counts.leave,'<button type="button" data-manual-attendance="'+r.user_id+'">'+(r.published_id?'View':'Edit attendance')+'</button>'])).join('')||empty(7);
+const attendanceDrafts=new Map();
+let attendanceSaveTimer=null,attendanceSaving=false,attendanceSaveAgain=false;
+const attendanceCodes={present:'P',absent:'A',weekoff:'WO',leave:'L',upcoming:'',before_joining:''};
+function attendanceStatus(value){return {P:'present',PRESENT:'present',A:'absent',ABSENT:'absent',WO:'weekoff',W:'weekoff',WEEKOFF:'weekoff','WEEK OFF':'weekoff',L:'leave',LEAVE:'leave',AUTO:'auto','':'auto'}[value.trim().toUpperCase()];}
+function attendanceKey(uid,day){return state.month+':'+uid+':'+day;}
+function effectiveAttendanceStatus(employee,day){
+ const draft=attendanceDrafts.get(attendanceKey(employee.user_id,day.day));
+ return draft?.status&&draft.status!=='auto'?draft.status:day.status;
 }
-setInterval(()=>{if(!document.hidden&&!document.querySelector('dialog[open]')&&!document.querySelector('input:focus,select:focus')&&!distributionDrafts.size)refresh();},60000);
+function attendanceSheetCounts(employee){
+ const counts={present:0,absent:0,weekoff:0,leave:0};
+ for(const day of employee.days){const status=effectiveAttendanceStatus(employee,day);if(status in counts)counts[status]++;}
+ return counts;
+}
+function renderAttendanceRecord(){
+ const active=document.activeElement,focus=active?.dataset?.sheetDay?{user:active.dataset.sheetUser,day:active.dataset.sheetDay}:null;
+ const rows=filtered(),days=state.rows[0]?.days||[];
+ $('attendanceSheetHead').innerHTML='<tr><th class="attendance-employee">Employee / ID</th><th>Outlet</th>'+days.map(d=>'<th scope="col">'+esc(d.day.slice(8))+'<small>'+esc(new Intl.DateTimeFormat('en',{weekday:'short',timeZone:'UTC'}).format(new Date(d.day+'T00:00:00Z')))+'</small></th>').join('')+'<th>P</th><th>A</th><th>WO</th><th>L</th></tr>';
+ $('attendanceRecordRows').innerHTML=rows.map((r,ri)=>'<tr><th class="attendance-employee" scope="row"><b>'+esc(r.name)+'</b><small>'+esc(r.employee_id)+(r.published_id?' ? Locked':'')+'</small></th><td>'+esc(r.outlet)+'</td>'+r.days.map((d,ci)=>{
+ const key=attendanceKey(r.user_id,d.day),draft=attendanceDrafts.get(key),disabled=Boolean(r.published_id||d.day<r.joining_date||d.status==='upcoming');
+ const value=draft?draft.value:d.day<r.joining_date?'':d.entered===false?'':attendanceCodes[d.status]||'';
+ return '<td class="attendance-cell"><input aria-label="'+esc(r.name+' '+d.day)+'" title="'+esc(d.day+' ? '+d.status+(d.note?' ? '+d.note:''))+'" data-sheet-user="'+r.user_id+'" data-sheet-day="'+d.day+'" data-sheet-row="'+ri+'" data-sheet-col="'+ci+'" class="sheet-code '+esc(effectiveAttendanceStatus(r,d))+(draft?' sheet-dirty':'')+'" value="'+esc(value)+'" autocomplete="off" spellcheck="false"'+(disabled?' disabled':'')+'></td>';
+ }).join('')+['present','absent','weekoff','leave'].map(k=>'<td class="attendance-count" data-sheet-count="'+r.user_id+':'+k+'">'+attendanceSheetCounts(r)[k]+'</td>').join('')+'</tr>').join('')||empty(days.length+6);
+ attendanceSheetMessage();
+ if(focus){const input=$('attendanceRecordRows').querySelector('[data-sheet-user="'+focus.user+'"][data-sheet-day="'+focus.day+'"]');input?.focus();}
+}
+function attendanceSheetMessage(text){$('attendanceSheetStatus').textContent=text||(attendanceDrafts.size?attendanceDrafts.size+' unsaved cells':'Attendance fetched automatically');}
+function stageAttendanceCell(input){
+ if(attendanceSaving)attendanceSaveAgain=true;
+ const value=input.value.trim().toUpperCase(),status=attendanceStatus(value),employee=state.rows.find(r=>r.user_id===Number(input.dataset.sheetUser)),day=employee.days.find(d=>d.day===input.dataset.sheetDay);
+ input.value=value;input.setCustomValidity(status?'':'Use P, A, WO, L or AUTO');input.classList.toggle('sheet-invalid',!status);
+ attendanceDrafts.set(attendanceKey(employee.user_id,day.day),{month:state.month,user_id:employee.user_id,day:day.day,value,status,note:day.note||''});input.classList.add('sheet-dirty');
+ for(const name of ['present','absent','weekoff','leave'])input.classList.toggle(name,status===name);
+ const counts=attendanceSheetCounts(employee);
+ for(const name of Object.keys(counts)){const cell=$('attendanceRecordRows').querySelector('[data-sheet-count="'+employee.user_id+':'+name+'"]');if(cell)cell.textContent=counts[name];}
+ attendanceSheetMessage(status?'Updating attendance and salary calculations?':'Use P, A, WO, L or AUTO.');
+ clearTimeout(attendanceSaveTimer);
+ if(status)attendanceSaveTimer=setTimeout(()=>saveAttendanceSheet(true),700);
+}
+function selectAttendanceCell(event){
+ const input=event.target;if(input.matches('[data-sheet-day]')&&!input.disabled)input.select();
+}
+$('attendanceRecordRows').addEventListener('focusin',selectAttendanceCell);
+$('attendanceRecordRows').addEventListener('click',selectAttendanceCell);
+function replaceAttendanceCode(input,key){
+ // Keep W followed by O as one code; a new status replaces a completed code.
+ if(/^[pawl]$/i.test(key)&&attendanceStatus(input.value)&&!(input.value.toUpperCase()==='W'&&key.toUpperCase()==='O'))input.select();
+}
+$('attendanceRecordRows').addEventListener('input',event=>{if(event.target.matches('[data-sheet-day]'))stageAttendanceCell(event.target);});
+$('attendanceRecordRows').addEventListener('keydown',event=>{
+ const input=event.target;if(!input.matches('[data-sheet-day]'))return;
+ if(!event.ctrlKey&&!event.metaKey&&!event.altKey)replaceAttendanceCode(input,event.key);
+ let row=Number(input.dataset.sheetRow),col=Number(input.dataset.sheetCol);
+ if(event.key==='Enter'||event.key==='ArrowDown')row+=event.shiftKey?-1:1;
+ else if(event.key==='ArrowUp')row--;else return;
+ const next=$('attendanceRecordRows').querySelector('[data-sheet-row="'+row+'"][data-sheet-col="'+col+'"]');if(next&&!next.disabled){event.preventDefault();next.focus();next.select();}
+});
+$('attendanceRecordRows').addEventListener('paste',event=>{
+ const input=event.target;if(!input.matches('[data-sheet-day]'))return;
+ const text=event.clipboardData.getData('text/plain');if(!/[\t\r\n]/.test(text)){event.preventDefault();input.value=text.trim();stageAttendanceCell(input);return;}event.preventDefault();
+ text.replace(/\r/g,'').replace(/\n$/,'').split('\n').forEach((line,ri)=>line.split('\t').forEach((value,ci)=>{
+ const cell=$('attendanceRecordRows').querySelector('[data-sheet-row="'+(Number(input.dataset.sheetRow)+ri)+'"][data-sheet-col="'+(Number(input.dataset.sheetCol)+ci)+'"]');
+ if(cell&&!cell.disabled){cell.value=value;stageAttendanceCell(cell);}
+ }));
+});
+async function saveAttendanceSheet(automatic=false){
+ if(attendanceSaving)return;
+ clearTimeout(attendanceSaveTimer);
+ if(!attendanceDrafts.size){attendanceSheetMessage('No changes to save.');return;}
+ if([...attendanceDrafts.values()].some(d=>!d.status)){attendanceSheetMessage('Fix highlighted cells: use P, A, WO, L or AUTO.');return;}
+ const button=$('saveAttendanceSheet');button.disabled=true;attendanceSaving=true;
+ const batches=new Map();for(const [key,d] of attendanceDrafts){const batchKey=d.month+':'+d.user_id;if(!batches.has(batchKey))batches.set(batchKey,[]);batches.get(batchKey).push([key,d]);}
+ try{for(const entries of batches.values()){
+ const first=entries[0][1];await api('/attendance-records/'+first.user_id,{method:'PUT',body:JSON.stringify({month:first.month,days:entries.map(([,d])=>({day:d.day,status:d.status,note:d.note}))})});
+ for(const [key,d] of entries)if(attendanceDrafts.get(key)===d)attendanceDrafts.delete(key);
+ }await refresh();attendanceSheetMessage(attendanceDrafts.size?'Saving latest changes?':'Attendance saved automatically. Salary totals updated.');}
+ catch(error){attendanceSheetMessage(error.message+' Remaining changes are kept for retry.');}
+ finally{button.disabled=false;attendanceSaving=false;}
+ if(attendanceDrafts.size&&[...attendanceDrafts.values()].every(d=>d.status)&&attendanceSaveAgain){attendanceSaveAgain=false;attendanceSaveTimer=setTimeout(()=>saveAttendanceSheet(true),700);}
+}
+$('saveAttendanceSheet').onclick=()=>saveAttendanceSheet();
+window.addEventListener('beforeunload',event=>{if(attendanceDrafts.size){event.preventDefault();event.returnValue='';}});
+setInterval(()=>{if(!document.hidden&&!document.querySelector('dialog[open]')&&!document.querySelector('input:focus,select:focus')&&!distributionDrafts.size&&!attendanceDrafts.size)refresh();},60000);
