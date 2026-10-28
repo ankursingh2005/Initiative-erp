@@ -56,3 +56,6 @@ Open Salary Distribution for the selected salary month and employee filters. Abs
 VDA is 6.25% of Actual Basic; EPF is 12% of Actual Basic plus VDA. Bonus is 8.33% of Actual Pay (EPF) only when Total Earning is strictly below INR 21,000. ESIC is 0.75% of Actual Gross Earning only when gross is strictly below INR 21,000. Each component is rounded to paise. Net is gross less EPF, ESIC and the entered advance/deduction.
 
 The table scrolls horizontally, with a fixed employee column, formula tooltips, totals and a distribution download. Open months and missing manual attendance are provisional. This report does not publish payroll or transfer money. Existing payroll totals and ERP attendance records are not changed. Restart the server to create the distribution input table.
+
+
+?Delete from EMS only? permanently removes the employee from EMS, including EMS salary setups, earnings, payroll history, payslips and EMS manual attendance. Their registered ERP account, login, shared Attendance records and access to other modules remain unchanged. A deletion audit is retained.

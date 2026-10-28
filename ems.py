@@ -771,7 +771,7 @@ def permanently_delete_ems_employee(user_id: int, payload: EMSPermanentDeletion,
     employee.ems_deleted = True
     record(db, user, 'employee_permanently_deleted_from_ems', user_id)
     db.commit()
-    return {'message': 'Employee permanently deleted from EMS. Salary history and manual attendance were deleted. ERP account records are preserved.'}
+    return {'message': 'Employee permanently deleted from EMS. EMS salary history and EMS manual attendance were deleted. Registered account, login, shared Attendance records and other module access are preserved.'}
 
 # Retired IDS NEW fields are removed from legacy storage without rewriting
 # published payroll amounts or touching shared ERP/attendance tables.

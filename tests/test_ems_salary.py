@@ -285,6 +285,7 @@ class SalaryTests(unittest.TestCase):
 
     def test_permanent_ems_deletion_is_separate_from_erp(self):
         uid = self.users[2].id
+        token = auth.create_access_token(dict(user_id=uid, session_version=1))
         self.actor.password_hash = auth.hash_password('SyntheticPassword123')
         self.db.commit()
         self.setup_salary(uid)
@@ -307,6 +308,7 @@ class SalaryTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertTrue(self.db.get(models.User, uid).ems_deleted)
         self.assertFalse(self.db.get(models.User, uid).erp_deleted)
+        self.assertEqual(auth.get_current_user(token=token, db=self.db).id, uid)
         self.assertIsNotNone(self.db.get(models.IdentityCard, uid))
         self.assertEqual(self.db.query(models.AttendanceRecord).filter_by(user_id=uid).count(), 1)
         for model in (M.EMSSalaryProfile, M.EMSPayroll, M.EMSManualAttendance, M.EMSExcludedEmployee, M.EMSDistributionInput):
