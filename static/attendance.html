@@ -811,6 +811,15 @@ const WEEKOFF_DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday
     const menu=document.createElement('details');menu.className='admin-weekoff-days';
     menu.innerHTML='<summary>Week Off</summary><div role="group" aria-label="Choose weekly off days">'+WEEKOFF_DAYS.map(day=>'<label><input type="checkbox" value="'+day+'">'+day+'</label>').join('')+'</div>';
     select.hidden=true;select.after(menu);
+    document.addEventListener('click',event=>{
+      if(menu.open&&!menu.contains(event.target))menu.open=false;
+    });
+    menu.addEventListener('keydown',event=>{
+      if(event.key==='Escape'){
+        menu.open=false;
+        menu.querySelector('summary').focus();
+      }
+    });
     const boxes=[...menu.querySelectorAll('input')];
     function render(){boxes.forEach(box=>box.checked=savedDays.includes(box.value));menu.querySelector('summary').textContent=savedDays.join(', ')||'Week Off'}
     render();
