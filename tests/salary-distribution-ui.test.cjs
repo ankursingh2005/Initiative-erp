@@ -7,6 +7,22 @@ function setup(){
  vm.runInContext(`state={month:'2026-09',closed_month:true,rows:[{user_id:1,name:'Synthetic Employee',employee_id:'TEST',category:'ids_emp',outlet:'Test',profile_id:1}],distribution:[{...salaryDistributionMath.calculateDistribution(1600000,0,0,10000),user_id:1,name:'Synthetic Employee',employee_id:'TEST',profile_id:1,missing_attendance:0,account_no:'000123456789',ifsc_code:'SBIN0001234'}]};renderDistribution();`,context);
  return {context,nodes,listeners,element};
 }
+
+test('manual employee attendance opens the Excel sheet with editable totals and keeps the selected employee on refresh',()=>{
+ const {context,nodes}=setup();
+ context.document.querySelector=()=>({click(){}});
+ context.document.getElementById('attendanceRecord').scrollIntoView=()=>{};
+ vm.runInContext(`state.rows=[{user_id:1,manual_employee:true,name:'Manual Person',employee_id:'M001',outlet:'Main',joining_date:'2026-09-01',counts:{present:0,absent:0,weekoff:0,leave:0},days:[{day:'2026-09-01',status:'unrecorded',entered:false}]},{user_id:2,name:'Other Person',days:[]}];openManualAttendance(1);`,context);
+ for(const kind of ['present','absent','weekoff','leave'])assert.match(nodes.get('attendanceRecordRows').innerHTML,new RegExp('data-total-kind="'+kind+'"'));
+ assert.match(nodes.get('attendanceRecordRows').innerHTML,/Manual Person/);
+ assert.doesNotMatch(nodes.get('attendanceRecordRows').innerHTML,/Other Person/);
+ vm.runInContext('renderAttendanceRecord();',context);
+ assert.doesNotMatch(nodes.get('attendanceRecordRows').innerHTML,/Other Person/);
+ assert.equal(nodes.get('showAllAttendanceEmployees').hidden,false);
+ nodes.get('showAllAttendanceEmployees').onclick();
+ assert.match(nodes.get('attendanceRecordRows').innerHTML,/Other Person/);
+ assert.equal(nodes.get('showAllAttendanceEmployees').hidden,true);
+});
 test('distribution renders all 20 cells, leading-zero bank account and totals',()=>{
  const {nodes}=setup(),html=nodes.get('distributionRows').innerHTML;
  assert.equal((html.match(/<td\b/g)||[]).length,20);assert.match(html,/000123456789/);assert.match(html,/SBIN0001234/);assert.match(html,/data-dist-input="other_allowances"/);assert.match(html,/data-dist-save="1"/);

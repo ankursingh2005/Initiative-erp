@@ -5,6 +5,7 @@ const money = v => new Intl.NumberFormat('en-IN', {style:'currency',currency:'IN
 const esc = value => String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const groups = {ids_emp:'IDS EMP',ac_retails:'AC Retail',ac_projects:'AC Projects'};
 let state = {rows:[],profiles:[],earnings:[],records:[]}, selected = null, loading = false;
+let attendanceSheetEmployee=null;
 function message(text, error=false){$('message').textContent=text;$('message').className=error?'error':'';}
 async function api(path, options={}) {
   const response = await fetch(base+'/api/ems'+path,{...options,headers:{Authorization:'Bearer '+localStorage.getItem('token'),'Content-Type':'application/json',...options.headers},cache:'no-store'});
@@ -140,7 +141,7 @@ async function refresh(){if(loading)return;loading=true;$('refresh').disabled=tr
 function attendanceDetails(row){return (row.manual_employee?'<p class="notice">Manual employee: '+(row.missing_attendance||0)+' attendance days not entered.</p>':'')+`<p><b>${esc(row.name)}</b> · ${esc(row.employee_id)} · ${esc(row.outlet)} · ${esc(state.month)}</p><p>Present: ${row.counts.present} &nbsp; Absent: ${row.counts.absent} &nbsp; W/O: ${row.counts.weekoff} &nbsp; Leave: ${row.counts.leave}</p><p class="muted">${esc(row.joining_source)}: ${esc(row.joining_date)} · Before joining: ${row.counts.before_joining} · Upcoming: ${row.counts.upcoming}. Leave uses the ERP attendance leave register.</p><div class="days">${row.days.map(d=>`<div class="day ${d.status}"><b>${esc(d.day.slice(8))}</b><br>${esc(d.entered===false?'Not entered':d.status.replace('_',' '))}</div>`).join('')}</div>`;}
 function review(uid){selected=state.rows.find(r=>r.user_id===uid);if(!selected)return;$('detailTitle').textContent='Review salary · '+state.month;$('detailBody').innerHTML=attendanceDetails(selected)+(selected.profile_id?`<p>Monthly basic: ${money(selected.monthly_basic)} · Monthly allowances: ${money(selected.monthly_allowances)}</p><p>Divisor: ${esc(selected.divisor)} · W/O: ${selected.paid_weekoff?'paid':'unpaid'} · Leave: ${selected.paid_leave?'paid':'unpaid'}</p><p>Payable days: ${selected.payable_days} · Unpaid days: ${selected.unpaid_days}</p><p>Earned basic: ${money(selected.basic)} · Earned allowances: ${money(selected.allowances)}<br>Manual incentive: ${money(selected.incentive)} · Bonus: ${money(selected.bonus)} · Deductions: ${money(selected.deductions)}</p><h2>Draft net: ${money(selected.net)}</h2>`:'<p>Save salary setup to calculate this employee’s salary.</p>');$('ack').checked=false;$('publishControls').hidden=!selected.can_publish;$('printSlip').hidden=true;$('detail').showModal();}
 async function slip(id){try{const data=await api('/salary-slips/'+id),p=data.payroll,s=data.snapshot;$('detailTitle').textContent='IDSPL Salary Slip · '+p.month;$('detailBody').innerHTML=`<p>Employee: ${esc(s?.name||state.records.find(r=>r.id===id)?.name)} · ${esc(s?.employee_id||'')}</p><p>Status: ${esc(p.status)}</p><table>${[['Earned basic',p.basic],['Earned allowances',p.allowances],['Approved manual incentive',p.incentives],['Bonus',p.bonuses],['Deductions',p.deductions],['Net salary',p.net]].map(([label,value])=>cells([label,money(value)])).join('')}</table><p class="muted">Automatic incentive allocation pending. This slip records the salary published in EMS.</p>`+(s?attendanceDetails(s):'');$('publishControls').hidden=true;$('printSlip').hidden=false;$('detail').showModal();}catch(e){message(e.message,true);}}
-document.querySelectorAll('[data-tab]').forEach(button=>button.addEventListener('click',()=>{document.querySelectorAll('[data-tab]').forEach(b=>{b.classList.toggle('active',b===button);$(b.dataset.tab).hidden=b!==button;});if(button.dataset.tab==='distribution')renderDistribution();if(button.dataset.tab==='earnings')renderWeekoffTable();}));
+document.querySelectorAll('[data-tab]').forEach(button=>button.addEventListener('click',()=>{document.querySelectorAll('[data-tab]').forEach(b=>{b.classList.toggle('active',b===button);$(b.dataset.tab).hidden=b!==button;});if(button.dataset.tab==='attendanceRecord'){attendanceSheetEmployee=null;renderAttendanceRecord();}if(button.dataset.tab==='distribution')renderDistribution();if(button.dataset.tab==='earnings')renderWeekoffTable();}));
 $('refresh').onclick=refresh;$('month').onchange=()=>{if(!$('detail').open)refresh();};$('group').onchange=render;$('employmentCategory').onchange=render;$('search').oninput=render;$('detailClose').onclick=()=>$('detail').close();$('printSlip').onclick=()=>window.print();
 document.addEventListener('click',async event=>{const button=event.target.closest('button');if(!button)return;if(button.dataset.review)review(Number(button.dataset.review));if(button.dataset.slip)await slip(Number(button.dataset.slip));if(button.dataset.paid&&confirm('Record that this salary was paid outside EMS?')){button.disabled=true;try{await api('/payroll/'+button.dataset.paid+'/paid',{method:'PUT'});await refresh();}catch(e){message(e.message,true);button.disabled=false;}}});
 document.addEventListener('click',async event=>{const button=event.target.closest('[data-void]');if(!button||!confirm('Void this approved earning and recalculate the draft salary?'))return;button.disabled=true;try{await api('/earnings/'+button.dataset.void+'/void',{method:'PUT'});await refresh();}catch(e){message(e.message,true);button.disabled=false;}});
@@ -276,6 +277,13 @@ $('manualEmployeeForm').onsubmit=async event=>{
 };
 function openManualAttendance(uid){
  const employee=state.rows.find(r=>r.user_id===uid);if(!employee)return;
+ if(employee.manual_employee){
+   if($('employeeListDialog').open)$('employeeListDialog').close();
+   document.querySelector('[data-tab="attendanceRecord"]').click();
+   attendanceSheetEmployee=uid;renderAttendanceRecord();
+   $('attendanceRecord').scrollIntoView({behavior:'smooth',block:'start'});
+   return;
+ }
  if($('employeeListDialog').open)$('employeeListDialog').close();
  manualAttendanceEmployee=uid;manualAttendanceMonth=state.month;
  $('manualAttendanceTitle').textContent='Attendance Record - '+employee.name+' - '+state.month;
@@ -409,7 +417,8 @@ function attendanceSheetCounts(employee){
 }
 function renderAttendanceRecord(){
  const active=document.activeElement,focus=active?.dataset?.sheetDay?{user:active.dataset.sheetUser,day:active.dataset.sheetDay}:null;
- const rows=filtered(),days=state.rows[0]?.days||[];
+ const rows=attendanceSheetEmployee===null?filtered():state.rows.filter(r=>r.user_id===attendanceSheetEmployee),days=state.rows[0]?.days||[];
+ $('showAllAttendanceEmployees').hidden=attendanceSheetEmployee===null;
  $('attendanceSheetHead').innerHTML='<tr><th class="attendance-employee">Employee / ID</th><th>Outlet</th>'+days.map(d=>'<th scope="col">'+esc(d.day.slice(8))+'<small>'+esc(new Intl.DateTimeFormat('en',{weekday:'short',timeZone:'UTC'}).format(new Date(d.day+'T00:00:00Z')))+'</small></th>').join('')+'<th>P</th><th>A</th><th>WO</th><th>L</th></tr>';
  $('attendanceRecordRows').innerHTML=rows.map((r,ri)=>'<tr><th class="attendance-employee" scope="row"><b>'+esc(r.name)+'</b><small>'+esc(r.employee_id)+(r.published_id?' ? Locked':'')+'</small></th><td>'+esc(r.outlet)+'</td>'+r.days.map((d,ci)=>{
  const key=attendanceKey(r.user_id,d.day),draft=attendanceDrafts.get(key),disabled=Boolean(r.published_id||d.day<r.joining_date||d.status==='upcoming');
@@ -533,3 +542,5 @@ $('saveAttendanceSheet').onclick=async()=>{
  attendanceSheetMessage('EMS totals and salary updated. Daily dates unchanged.');
  }catch(error){attendanceSheetMessage(error.message);}finally{button.disabled=false;}
 };
+
+$('showAllAttendanceEmployees').onclick=()=>{attendanceSheetEmployee=null;renderAttendanceRecord();};
