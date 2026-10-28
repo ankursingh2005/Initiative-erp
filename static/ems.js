@@ -14,7 +14,7 @@ async function api(path, options={}) {
   if(!response.ok)throw Error(typeof data.detail==='string'?data.detail:JSON.stringify(data.detail || data));
   return data;
 }
-function filtered(){const query=$('search').value.toLowerCase();return state.rows.filter(r=>(!$('group').value||r.category===$('group').value)&&(!$('employmentCategory').value||r.employment_category===$('employmentCategory').value)&&[r.name,r.employee_id,r.outlet].some(v=>String(v).toLowerCase().includes(query)));}
+function filtered(category=$('employmentCategory').value){const query=$('search').value.toLowerCase();return state.rows.filter(r=>(!$('group').value||r.category===$('group').value)&&(!category||r.employment_category===category)&&[r.name,r.employee_id,r.outlet].some(v=>String(v).toLowerCase().includes(query)));}
 function cells(values){return '<tr>'+values.map(v=>'<td>'+v+'</td>').join('')+'</tr>';}
 function empty(columns){return `<tr><td colspan="${columns}">No records for this selection.</td></tr>`;}
 function render(){
@@ -177,9 +177,9 @@ for(const [formId,path] of [['setupForm','/salary-profiles'],['earningForm','/ea
  finally{button.disabled=false;button.textContent=label;}
  };
 }
-function salaryReportRows(){
+function salaryReportRows(category=''){
  const headers=['Employee ID','Employee Name','Employee Group','Emp Category','Salary Month','Absent','Working Days','W/O Availed','W/O Credit','Expected Basic INR','W/O Pay INR','Incentive INR','Amount Payable INR','Present','W/O','Leave','Setup Status'];
- const report=filtered().map(employee=>{
+ const report=filtered(category).map(employee=>{
  const profile=state.profiles.filter(p=>p.user_id===employee.user_id&&p.effective_month<=state.month).sort((a,b)=>b.effective_month.localeCompare(a.effective_month))[0];
  const availed=employee.weekoff_availed??employee.counts.weekoff,credit=Math.max(0,4-availed);
  const gross=profile?profile.basic+profile.allowances:0,pay=Math.round(gross*credit/30),incentive=profile?.setup_incentive||0;
@@ -187,16 +187,26 @@ function salaryReportRows(){
  });
  return [headers,...report];
 }
-$('export').onclick=()=>{
- const rows=salaryReportRows();
+function downloadSalary(category){
+ const rows=salaryReportRows(category);
  if(rows.length===1){message('No employees match the selected report filters.',true);return;}
  const csv=rows.map(r=>r.map(v=>'"'+String(v??'').replace(/^[=+@\-]/,"'$&").replace(/"/g,'""')+'"').join(',')).join('\r\n');
  const url=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));
  const link=document.createElement('a');link.href=url;
- link.download='IDSPL_Salary_Report_'+state.month+'_'+($('employmentCategory').value||'All_Categories')+'.csv';
+ link.download='IDSPL_Salary_Report_'+state.month+'_'+(category||'All_Categories')+'.csv';
  link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
- message('Salary report downloaded: '+($('employmentCategory').value||'All categories')+' ('+(rows.length-1)+' employees).');
+ message('Salary report downloaded: '+(category||'All categories')+' ('+(rows.length-1)+' employees).');
 };
+function showSalaryDownloadMenu(open){
+ $('salaryDownloadMenu').hidden=!open;$('export').setAttribute('aria-expanded',String(open));
+}
+$('export').onclick=()=>{const open=$('salaryDownloadMenu').hidden;showSalaryDownloadMenu(open);if(open)$('salaryDownloadMenu').querySelector('button').focus();};
+$('salaryDownloadMenu').addEventListener('click',event=>{const button=event.target.closest('[data-salary-download]');if(!button)return;showSalaryDownloadMenu(false);downloadSalary(button.dataset.salaryDownload);$('export').focus();});
+document.addEventListener('click',event=>{if(!event.target.closest('.salary-download'))showSalaryDownloadMenu(false);});
+$('salaryDownloadMenu').addEventListener('keydown',event=>{
+ if(event.key==='Escape'){showSalaryDownloadMenu(false);$('export').focus();}
+ if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();const buttons=Array.from($('salaryDownloadMenu').querySelectorAll('button')),index=buttons.indexOf(document.activeElement);buttons[(index+(event.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length].focus();}
+});
 $('homeLink').href=base+'/home';
 const now=new Date(),month=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kolkata',year:'numeric',month:'2-digit'}).formatToParts(now),initial=month.find(p=>p.type==='year').value+'-'+month.find(p=>p.type==='month').value;
 $('month').value=initial;$('setupForm').elements.effective_month.value=initial;$('earningForm').elements.month.value=initial;
@@ -380,6 +390,7 @@ $('distributionExport').onclick=()=>{
 };
 
 const attendanceDrafts=new Map();
+const attendanceTotalDrafts=new Map();
 let attendanceSaveTimer=null,attendanceSaving=false,attendanceSaveAgain=false;
 const attendanceCodes={present:'P',absent:'A',weekoff:'WO',leave:'L',upcoming:'',before_joining:''};
 function attendanceStatus(value){return {P:'present',PRESENT:'present',A:'absent',ABSENT:'absent',WO:'weekoff',W:'weekoff',WEEKOFF:'weekoff','W/O':'weekoff','WEEK OFF':'weekoff',L:'leave',LEAVE:'leave',AUTO:'auto','':'auto'}[value.trim().toUpperCase()];}
@@ -389,6 +400,9 @@ function effectiveAttendanceStatus(employee,day){
  return draft?.status&&draft.status!=='auto'?draft.status:day.status;
 }
 function attendanceSheetCounts(employee){
+ const draft=attendanceTotalDrafts.get(state.month+':'+employee.user_id);
+ if(draft)return {...draft};
+ if(employee.totals_overridden)return {present:employee.counts.present,absent:employee.counts.absent,weekoff:employee.counts.weekoff,leave:employee.counts.leave};
  const counts={present:0,absent:0,weekoff:0,leave:0};
  for(const day of employee.days){const status=effectiveAttendanceStatus(employee,day);if(status in counts)counts[status]++;}
  return counts;
@@ -401,7 +415,7 @@ function renderAttendanceRecord(){
  const key=attendanceKey(r.user_id,d.day),draft=attendanceDrafts.get(key),disabled=Boolean(r.published_id||d.day<r.joining_date||d.status==='upcoming');
  const value=draft?draft.value:d.day<r.joining_date?'':d.entered===false?'':attendanceCodes[d.status]||'';
  return '<td class="attendance-cell"><input aria-label="'+esc(r.name+' '+d.day)+'" title="'+esc(d.day+' ? '+d.status+(d.note?' ? '+d.note:''))+'" data-sheet-user="'+r.user_id+'" data-sheet-day="'+d.day+'" data-sheet-row="'+ri+'" data-sheet-col="'+ci+'" class="sheet-code '+esc(effectiveAttendanceStatus(r,d))+(draft?' sheet-dirty':'')+'" value="'+esc(value)+'" autocomplete="off" spellcheck="false"'+(disabled?' disabled':'')+'></td>';
- }).join('')+['present','absent','weekoff','leave'].map(k=>'<td class="attendance-count" data-sheet-count="'+r.user_id+':'+k+'">'+attendanceSheetCounts(r)[k]+'</td>').join('')+'</tr>').join('')||empty(days.length+6);
+ }).join('')+['present','absent','weekoff','leave'].map(k=>'<td class="attendance-count" data-sheet-count="'+r.user_id+':'+k+'">'+'<input type="number" min="0" max="31" step="1" aria-label="'+esc(r.name+' total '+k)+'" data-total-user="'+r.user_id+'" data-total-kind="'+k+'" value="'+attendanceSheetCounts(r)[k]+'"'+(r.published_id?' disabled':'')+'> </td>').join('')+'</tr>').join('')||empty(days.length+6);
  attendanceSheetMessage();
  if(focus){const input=$('attendanceRecordRows').querySelector('[data-sheet-user="'+focus.user+'"][data-sheet-day="'+focus.day+'"]');input?.focus();}
 }
@@ -413,7 +427,7 @@ function stageAttendanceCell(input){
  attendanceDrafts.set(attendanceKey(employee.user_id,day.day),{month:state.month,user_id:employee.user_id,day:day.day,value,status,note:day.note||''});input.classList.add('sheet-dirty');
  for(const name of ['present','absent','weekoff','leave'])input.classList.toggle(name,status===name);
  const counts=attendanceSheetCounts(employee);
- for(const name of Object.keys(counts)){const cell=$('attendanceRecordRows').querySelector('[data-sheet-count="'+employee.user_id+':'+name+'"]');if(cell)cell.textContent=counts[name];}
+ for(const name of Object.keys(counts)){const cell=$('attendanceRecordRows').querySelector('[data-sheet-count="'+employee.user_id+':'+name+'"]');if(cell){const total=cell.querySelector?.('input');if(total)total.value=counts[name];else cell.textContent=counts[name];}}
  attendanceSheetMessage(status?'Updating attendance and salary calculations?':'Use P, A, WO, L or AUTO.');
  clearTimeout(attendanceSaveTimer);
  if(status)attendanceSaveTimer=setTimeout(()=>saveAttendanceSheet(true),700);
@@ -460,8 +474,8 @@ async function saveAttendanceSheet(automatic=false){
  if(attendanceDrafts.size&&[...attendanceDrafts.values()].every(d=>d.status)&&attendanceSaveAgain){attendanceSaveAgain=false;attendanceSaveTimer=setTimeout(()=>saveAttendanceSheet(true),700);}
 }
 $('saveAttendanceSheet').onclick=()=>saveAttendanceSheet();
-window.addEventListener('beforeunload',event=>{if(attendanceDrafts.size||weekoffDrafts.size){event.preventDefault();event.returnValue='';}});
-setInterval(()=>{if(!document.hidden&&!document.querySelector('dialog[open]')&&!document.querySelector('input:focus,select:focus')&&!distributionDrafts.size&&!attendanceDrafts.size&&!weekoffDrafts.size)refresh();},60000);
+window.addEventListener('beforeunload',event=>{if(attendanceDrafts.size||attendanceTotalDrafts.size||weekoffDrafts.size){event.preventDefault();event.returnValue='';}});
+setInterval(()=>{if(!document.hidden&&!document.querySelector('dialog[open]')&&!document.querySelector('input:focus,select:focus')&&!distributionDrafts.size&&!attendanceDrafts.size&&!attendanceTotalDrafts.size&&!weekoffDrafts.size)refresh();},60000);
 
 
 const weekoffDrafts=new Map();
@@ -499,3 +513,23 @@ $('weekoffRows').addEventListener('click',async event=>{
  await api('/weekoff-incentives/'+uid,{method:'PUT',body:JSON.stringify({month,incentive:(incentive/100).toFixed(2)})});weekoffDrafts.delete(month+':'+uid);await refresh();message('W/O incentive saved.');
  }catch(error){tr.querySelector('[data-weekoff-status]').textContent=error.message;}finally{button.disabled=false;input.disabled=false;}
 });
+
+$('attendanceRecordRows').addEventListener('input',event=>{
+ const input=event.target;if(!input.matches('[data-total-kind]'))return;
+ const uid=Number(input.dataset.totalUser),employee=state.rows.find(r=>r.user_id===uid),key=state.month+':'+uid;
+ const values=attendanceTotalDrafts.get(key)||attendanceSheetCounts(employee);
+ values[input.dataset.totalKind]=Number(input.value);attendanceTotalDrafts.set(key,values);attendanceSheetMessage('Edited totals pending. Use Save now; daily dates stay unchanged.');
+});
+const saveDailyAttendance=$('saveAttendanceSheet').onclick;
+$('saveAttendanceSheet').onclick=async()=>{
+ const button=$('saveAttendanceSheet');button.disabled=true;
+ try{
+ for(const [key,values] of attendanceTotalDrafts){
+ if(Object.values(values).some(v=>!Number.isInteger(v)||v<0||v>31))throw Error('Totals must be whole numbers from 0 to 31.');
+ const split=key.lastIndexOf(':'),month=key.slice(0,split),uid=key.slice(split+1);
+ await api('/attendance-totals/'+uid,{method:'PUT',body:JSON.stringify({month,...values})});attendanceTotalDrafts.delete(key);
+ }
+ if(attendanceDrafts.size)await saveDailyAttendance();else await refresh();
+ attendanceSheetMessage('EMS totals and salary updated. Daily dates unchanged.');
+ }catch(error){attendanceSheetMessage(error.message);}finally{button.disabled=false;}
+};

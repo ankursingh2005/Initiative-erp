@@ -12,6 +12,7 @@
 .record-dialog .record-date{display:block;width:100%;min-width:180px;min-height:48px;margin:8px 0 6px;padding:10px 14px;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:10px;font:inherit}
 .admin-dashboard-panel .admin-employee-designation{font-size:11px;font-weight:400;color:#667085;white-space:normal;overflow-wrap:anywhere}
 .monthly-group-options{border-top:1px solid var(--line);padding:4px 0 0 10px}.download-options .monthly-group-options button{color:var(--blue);font-weight:700}
+.admin-weekoff-days{position:relative;min-width:180px;color:var(--ink)}.admin-weekoff-days summary{cursor:pointer;padding:14px;border:1px solid var(--line);border-radius:10px;background:#fff}.admin-weekoff-days>div{position:absolute;top:100%;left:0;right:0;z-index:50;background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px;box-shadow:0 8px 24px #0002}.admin-weekoff-days label{display:flex;align-items:center;gap:10px;padding:8px;cursor:pointer}.admin-weekoff-days input{width:18px;height:18px;margin:0}
 </style>
 <style>
 .admin-row,.admin-row *{cursor:pointer}.admin-row{user-select:none}.admin-row:hover{background:#f5f8ff}.record-modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:20px;background:#10182899;z-index:10}.record-modal.show{display:flex}.record-dialog{width:min(100%,520px);max-height:90vh;overflow:auto;padding:22px;border-radius:10px;background:#fff;box-shadow:0 20px 70px #10182844}.record-dialog h2{margin:0 0 5px}.record-dialog p{margin:5px 0;color:var(--muted);font-size:12px}.record-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:18px 0}.record-stat{padding:12px;border:1px solid var(--line);border-radius:8px}.record-stat small{display:block;color:var(--muted);font-size:10px}.record-stat b{display:block;margin-top:5px;font-size:15px}.record-close{width:100%;color:var(--blue);background:var(--soft)}
@@ -685,7 +686,7 @@ function monthlyAttendanceCalendar(data,month,currentDate){
     else if(date>currentDate){status='Future date'}
     else if(start&&date<start){status='Before joining'}
     else if(leaves.has(date)){status='Leave';style='absent'}
-    else if(weekdays[new Date(year,number-1,day).getDay()]===weekoff){status='Week Off';style='weekoff'}
+    else if((Array.isArray(weekoff)?weekoff:[weekoff]).includes(weekdays[new Date(year,number-1,day).getDay()])){status='Week Off';style='weekoff'}
     else{status='Absent';style='absent'}
     html+='<button type="button" class="calendar-day '+style+'" data-date="'+date+'" data-status="'+status+'" title="'+date+' - '+status+'" aria-label="'+date+' - '+status+'"><span>'+day+'</span></button>';
   }
@@ -803,8 +804,27 @@ const WEEKOFF_DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday
   let savedDay='';
   try{
     const response=await fetch('/api/me',{headers:{Authorization:'Bearer '+token}});
-    if(response.ok){const user=await response.json();savedDay=user.weekoff_day||'';select.value=savedDay;if(user.weekoff_day)label.textContent='Week Off';}
+    if(response.ok){const user=await response.json();savedDay=user.weekoff_day||'';select.dataset.days=JSON.stringify(user.weekoff_days||[savedDay].filter(Boolean));select.value=savedDay;if(user.weekoff_day)label.textContent='Week Off';}
   }catch(error){}
+  if(localStorage.getItem('role')==='Admin'){
+    let savedDays=JSON.parse(select.dataset.days||'[]');
+    const menu=document.createElement('details');menu.className='admin-weekoff-days';
+    menu.innerHTML='<summary>Week Off</summary><div role="group" aria-label="Choose weekly off days">'+WEEKOFF_DAYS.map(day=>'<label><input type="checkbox" value="'+day+'">'+day+'</label>').join('')+'</div>';
+    select.hidden=true;select.after(menu);
+    const boxes=[...menu.querySelectorAll('input')];
+    function render(){boxes.forEach(box=>box.checked=savedDays.includes(box.value));menu.querySelector('summary').textContent=savedDays.join(', ')||'Week Off'}
+    render();
+    menu.addEventListener('change',async()=>{
+      const days=boxes.filter(box=>box.checked).map(box=>box.value);boxes.forEach(box=>box.disabled=true);
+      try{
+        const response=await fetch('/api/me/weekoff',{method:'PUT',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({weekoff_days:days})});
+        const data=await response.json();if(!response.ok)throw new Error(data.detail||'Unable to save weekly off');
+        savedDays=data.weekoff_days;if(profile){profile.weekoff_day=data.weekoff_day;profile.weekoff_days=savedDays}
+        label.textContent='Saved';
+      }catch(error){alert(error.message)}finally{render();boxes.forEach(box=>box.disabled=false)}
+    });
+    return;
+  }
   select.addEventListener('change',async()=>{
     const selected=select.value;select.disabled=true;label.textContent='Saving...';label.classList.remove('weekoff-saved');
     try{

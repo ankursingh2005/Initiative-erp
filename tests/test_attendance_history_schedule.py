@@ -2,7 +2,7 @@
 import unittest
 from datetime import date
 from types import SimpleNamespace
-from attendance_history import change_weekoff, weekoff_on
+from attendance_history import change_weekoff, weekoff_on, is_weekoff
 
 
 class AttendanceScheduleHistoryTests(unittest.TestCase):
@@ -24,3 +24,16 @@ class AttendanceScheduleHistoryTests(unittest.TestCase):
         saved = user.weekoff_history
         change_weekoff(user, 'Friday', date(2026, 10, 1))
         self.assertEqual(user.weekoff_history, saved)
+
+
+    def test_multiple_weekoffs_preserve_history_and_clear(self):
+        user = SimpleNamespace(weekoff_day='Monday', weekoff_history=None)
+        change_weekoff(user, ['Saturday', 'Sunday'], date(2026, 10, 1))
+        self.assertEqual(user.weekoff_day, 'Saturday')
+        self.assertEqual(weekoff_on(user, date(2026, 9, 28)), 'Monday')
+        self.assertTrue(is_weekoff(user, date(2026, 10, 3)))
+        self.assertTrue(is_weekoff(user, date(2026, 10, 4)))
+        self.assertFalse(is_weekoff(user, date(2026, 10, 5)))
+        change_weekoff(user, [], date(2026, 10, 6))
+        self.assertTrue(is_weekoff(user, date(2026, 10, 4)))
+        self.assertFalse(is_weekoff(user, date(2026, 10, 10)))

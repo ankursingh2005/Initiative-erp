@@ -428,6 +428,7 @@ def salary_preview(db, month):
     leaves = {(r.user_id, r.leave_date) for r in db.query(models.AttendanceLeave).filter(
         models.AttendanceLeave.leave_date.between(start, end)).all()}
     manual = {(r.user_id, r.day): r for r in db.query(M.EMSManualAttendance).filter(M.EMSManualAttendance.day.between(start, end)).all()}
+    totals = {r.user_id: r for r in db.query(M.EMSAttendanceTotals).filter_by(month=month).all()}
     published = {r.user_id: r for r in db.query(M.EMSPayroll).filter_by(month=month).all()}
     earnings = {}
     for uid, kind, amount in db.query(M.EMSEarning.user_id, M.EMSEarning.kind, func.sum(M.EMSEarning.amount)).filter(
@@ -458,6 +459,11 @@ def salary_preview(db, month):
                          'entered': bool(manual_day) if employee.role == 'EMSManual' else True,
                          'overridden': bool(manual_day),
                          'note': manual_day.note if manual_day else ''})
+        totals_override = totals.get(employee.id)
+        if totals_override:
+            for key in ('present', 'absent', 'weekoff', 'leave'):
+                counts[key] = getattr(totals_override, key)
+                pay_counts[key] = counts[key]
         profile = latest.get(employee.id)
         saved = published.get(employee.id)
         row = dict(user_id=employee.id, name=employee.full_name or employee.username,
@@ -470,7 +476,7 @@ def salary_preview(db, month):
                    joining_source='Joining date' if card and card.joining_date else 'ERP registration date',
                    weekoff_availed=counts['weekoff'], weekoff_credit=max(0, 4-counts['weekoff']),
                    employment_category=profile.employment_category if profile else None,
-                   counts=counts, days=days, profile_id=profile.id if profile else None,
+                   totals_overridden=bool(totals_override), counts=counts, days=days, profile_id=profile.id if profile else None,
                    published_id=saved.id if saved else None, status=saved.status if saved else 'draft',
                    incentive_status='Automatic allocation pending rules',
                    incentive=earnings.get(employee.id, {}).get('incentive', 0),
@@ -757,7 +763,7 @@ def permanently_delete_ems_employee(user_id: int, payload: EMSPermanentDeletion,
     for actions, targets in audit_groups:
         db.query(M.EMSAudit).filter(M.EMSAudit.action.in_(actions),
             M.EMSAudit.target.in_([str(value) for value in targets])).delete(synchronize_session=False)
-    for model in (M.EMSWeekoffIncentive, M.EMSDistributionInput, M.EMSManualAttendance, M.EMSExcludedEmployee, M.EMSLeaveRequest,
+    for model in (M.EMSAttendanceTotals, M.EMSWeekoffIncentive, M.EMSDistributionInput, M.EMSManualAttendance, M.EMSExcludedEmployee, M.EMSLeaveRequest,
                   M.EMSEarning, M.EMSSalaryProfile, M.EMSPayroll):
         db.query(model).filter_by(user_id=user_id).delete(synchronize_session=False)
     # Tombstone prevents an ERP account from automatically reappearing in EMS.
@@ -873,3 +879,34 @@ def save_weekoff_incentive(user_id: int, payload: WeekoffIncentiveInput,
     record(db, user, 'weekoff_incentive_saved', user_id, payload.model_dump_json())
     db.commit()
     return {'message': 'Weekoff incentive saved'}
+
+
+class AttendanceTotalsInput(Input):
+    month: str = Field(pattern=r'^\d{4}-(0[1-9]|1[0-2])$')
+    present: int = Field(ge=0, le=31, strict=True)
+    absent: int = Field(ge=0, le=31, strict=True)
+    weekoff: int = Field(ge=0, le=31, strict=True)
+    leave: int = Field(ge=0, le=31, strict=True)
+
+
+@router.put('/attendance-totals/{user_id}')
+def save_attendance_totals(user_id: int, payload: AttendanceTotalsInput,
+                           db: Session = Depends(get_db), user=Depends(manager)):
+    start, end = month_bounds(payload.month)
+    lock_employee(db, user_id)
+    if db.query(M.EMSPayroll).filter_by(user_id=user_id, month=payload.month).first():
+        raise HTTPException(409, 'Published salary attendance cannot be changed')
+    elapsed = max(0, (min(end, datetime.now(IST).date()) - start).days + 1)
+    if sum(getattr(payload, k) for k in ('present', 'absent', 'weekoff', 'leave')) > elapsed:
+        raise HTTPException(422, f'Attendance totals cannot exceed {elapsed} elapsed days in this month')
+    row = db.query(M.EMSAttendanceTotals).filter_by(user_id=user_id, month=payload.month).first()
+    if row is None:
+        row = M.EMSAttendanceTotals(user_id=user_id, month=payload.month)
+        db.add(row)
+    for key in ('present', 'absent', 'weekoff', 'leave'):
+        setattr(row, key, getattr(payload, key))
+    row.updated_by = user.id
+    row.updated_at = datetime.utcnow()
+    record(db, user, 'attendance_totals_saved', user_id, payload.model_dump_json())
+    db.commit()
+    return {'message': 'EMS totals saved; daily attendance unchanged'}

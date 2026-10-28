@@ -1,5 +1,5 @@
 """Attendance downloads built from saved user IDs and attendance records."""
-from attendance_history import weekoff_on
+from attendance_history import weekoff_on, is_weekoff
 from attendance_access import dashboard_outlet, dashboard_category, can_view_attendance
 import calendar
 from datetime import date, timedelta
@@ -168,7 +168,7 @@ def _build_monthly_workbook(db, start, end, store_id=None, weekoff_day=None, sta
                 mark = '-'
             else:
                 state = ('Present' if record and record.checkin_at else 'Leave' if (user.id, day) in leave_days
-                         else 'Week Off' if day.strftime('%A') == weekoff_on(user, day) else 'Absent')
+                         else 'Week Off' if is_weekoff(user, day) else 'Absent')
                 if status and state != status:
                     mark = '-'
                 else:
@@ -317,7 +317,7 @@ def export_rows(db, start=None, end=None, user_id=None, store_id=None, weekoff_d
             if store_id is not None and outlet_id != store_id:
                 continue
             state = ('Present' if record and record.checkin_at else 'Leave' if (user.id, day) in leave_days
-                     else 'Week Off' if day.strftime('%A') == weekoff_on(user, day) else 'Absent')
+                     else 'Week Off' if is_weekoff(user, day) else 'Absent')
             if status and state != status:
                 continue
             checkin, checkout = (record.checkin_at, record.checkout_at) if record else (None, None)

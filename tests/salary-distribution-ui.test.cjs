@@ -107,3 +107,26 @@ test('weekoff uses distribution gross, four days and monthly incentive',()=>{
  vm.runInContext("weekoffDrafts.set(state.month+':1',75000)",context);
  assert.equal(vm.runInContext('currentWeekoffRows()[0].incentive',context),75000);
 });
+
+
+test('salary download All includes both categories regardless of dashboard category filter',()=>{
+ const {context,nodes}=setup();
+ vm.runInContext(`state.rows=[{user_id:1,name:'Contract Employee',category:'ids_emp',employment_category:'Contract',counts:{weekoff:0,present:1,absent:0,leave:0}},{user_id:2,name:'Regular Employee',category:'ids_emp',employment_category:'Regular',counts:{weekoff:0,present:1,absent:0,leave:0}}];state.profiles=[];`,context);
+ nodes.get('employmentCategory').value='Contract';
+ assert.equal(vm.runInContext("salaryReportRows('').length",context),3);
+ assert.equal(vm.runInContext("salaryReportRows('Contract')[1][1]",context),'Contract Employee');
+ assert.equal(vm.runInContext("salaryReportRows('Regular')[1][1]",context),'Regular Employee');
+ assert.equal(vm.runInContext("salaryReportRows('Regular').length",context),2);
+});
+
+
+test('editable monthly totals override counts while daily cells stay unchanged',()=>{
+ const {context,nodes}=setup();
+ vm.runInContext(`state.rows=[{user_id:1,name:'Test',joining_date:'2026-09-01',counts:{present:20,absent:4,weekoff:3,leave:0},totals_overridden:true,days:[{day:'2026-09-01',status:'absent',entered:true}]}];renderAttendanceRecord();`,context);
+ assert.match(nodes.get('attendanceRecordRows').innerHTML,/data-total-kind="present" value="20"/);
+ assert.match(nodes.get('attendanceRecordRows').innerHTML,/data-sheet-day="2026-09-01"[^>]*value="A"/);
+ assert.equal(vm.runInContext('attendanceSheetCounts(state.rows[0]).present',context),20);
+ vm.runInContext("attendanceTotalDrafts.set(state.month+':1',{present:21,absent:3,weekoff:3,leave:0})",context);
+ assert.equal(vm.runInContext('attendanceSheetCounts(state.rows[0]).present',context),21);
+ assert.equal(vm.runInContext('state.rows[0].days[0].status',context),'absent');
+});

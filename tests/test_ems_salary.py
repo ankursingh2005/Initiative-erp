@@ -93,6 +93,27 @@ class SalaryTests(unittest.TestCase):
         self.actor = self.users[2]
         self.assertEqual(self.client.put(path, json={'month': '2026-09', 'incentive': '1'}).status_code, 403)
 
+    def test_total_overrides_change_ems_salary_without_changing_dates(self):
+        uid = self.users[2].id
+        self.setup_salary(uid)
+        original = next(r for r in self.client.get('/api/ems/salary-preview?month=2026-09').json()['rows'] if r['user_id'] == uid)
+        response = self.client.put(f'/api/ems/attendance-totals/{uid}', json={
+            'month': '2026-09', 'present': 24, 'absent': 2, 'weekoff': 3, 'leave': 1})
+        self.assertEqual(response.status_code, 200, response.text)
+        updated = next(r for r in self.client.get('/api/ems/salary-preview?month=2026-09').json()['rows'] if r['user_id'] == uid)
+        self.assertEqual(updated['days'], original['days'])
+        self.assertEqual(updated['counts']['present'], 24)
+        self.assertEqual(updated['counts']['absent'], 2)
+        self.assertEqual(updated['weekoff_availed'], 3)
+        self.assertNotEqual(updated['net'], original['net'])
+        distribution = self.client.get('/api/ems/salary-distribution?month=2026-09').json()['rows']
+        self.assertEqual(next(r for r in distribution if r['user_id'] == uid)['attendance_absent'], 2)
+        self.assertEqual(self.db.query(models.AttendanceRecord).count(), 0)
+        self.assertEqual(self.db.query(M.EMSManualAttendance).count(), 0)
+        invalid = self.client.put(f'/api/ems/attendance-totals/{uid}', json={
+            'month': '2026-09', 'present': 30, 'absent': 2, 'weekoff': 3, 'leave': 1})
+        self.assertEqual(invalid.status_code, 422)
+
     def test_weekoff_setup_fetches_attendance_and_ignores_manual_counts(self):
         uid = self.users[2].id
         self.assertEqual(self.setup_salary(weekoff_availed=0, weekoff_credit=4).status_code, 200)

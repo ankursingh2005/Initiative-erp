@@ -1,5 +1,5 @@
 from attendance_access import dashboard_outlet, dashboard_category, can_view_attendance, is_ac_project_manager, service_dashboard_category
-from attendance_history import change_weekoff, weekoff_on, weekoff_history
+from attendance_history import change_weekoff, weekoff_on, weekoff_history, is_weekoff
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Query, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, Response, RedirectResponse
@@ -3350,6 +3350,7 @@ def get_my_profile(current_user: models.User = Depends(auth.get_current_user)):
         "username": current_user.username,
         "full_name": current_user.full_name,
         "weekoff_day": current_user.weekoff_day,
+        "weekoff_days": (lambda v: v if isinstance(v, list) else ([v] if v else []))(weekoff_on(current_user, india_today())),
         "role": current_user.role,
         "store_id": current_user.store_id,
         "category_code": current_user.category_code,
@@ -3366,9 +3367,16 @@ def update_my_weekoff(
     day = (payload.weekoff_day or "").strip() or None
     if day not in {None, "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}:
         raise HTTPException(400, "Choose a valid weekly off day")
+    if payload.weekoff_days is not None:
+        if current_user.role != "Admin":
+            raise HTTPException(403, "Only Admin can select multiple weekly off days")
+        day = list(dict.fromkeys(payload.weekoff_days))
+        if any(value not in {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"} for value in day):
+            raise HTTPException(400, "Choose valid weekly off days")
     change_weekoff(current_user, day)
     db.commit()
-    return {"weekoff_day": day}
+    value = weekoff_on(current_user, india_today())
+    return {"weekoff_day": current_user.weekoff_day, "weekoff_days": value if isinstance(value, list) else ([value] if value else [])}
 
 
 @app.get("/api/me/attendance-status")
@@ -3377,7 +3385,7 @@ def my_attendance_status(db: Session = Depends(get_db), current_user: models.Use
     record = db.query(models.AttendanceRecord).filter_by(user_id=current_user.id, attendance_date=today).first()
     leave = db.query(models.AttendanceLeave).filter_by(user_id=current_user.id, leave_date=today).first()
     status = ("Present" if record and record.checkin_at else "Leave" if leave else
-              "Week Off" if current_user.weekoff_day == today.strftime("%A") else "Working")
+              "Week Off" if is_weekoff(current_user, today) else "Working")
     return {"status": status, "weekoff_day": current_user.weekoff_day}
 
 
@@ -3806,7 +3814,7 @@ def attendance_admin_summary(
         leave_dates = leaves_by_user.get(user.id, set()) - present_dates
         weekoff_dates = {
             start_date + timedelta(days=offset) for offset in range(days_in_range)
-            if (start_date + timedelta(days=offset)).strftime("%A") == weekoff_on(user, start_date + timedelta(days=offset))
+            if is_weekoff(user, start_date + timedelta(days=offset))
         } - present_dates - leave_dates
         present_days = len(present_dates)
         leave_days = len(leave_dates)
