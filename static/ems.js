@@ -15,7 +15,9 @@ async function api(path, options={}) {
   if(!response.ok)throw Error(typeof data.detail==='string'?data.detail:JSON.stringify(data.detail || data));
   return data;
 }
-function filtered(category=$('employmentCategory').value){const query=$('search').value.toLowerCase();return state.rows.filter(r=>(!$('group').value||r.category===$('group').value)&&(!category||r.employment_category===category)&&[r.name,r.employee_id,r.outlet].some(v=>String(v).toLowerCase().includes(query)));}
+const employeeSort=new Intl.Collator('en-IN',{numeric:true,sensitivity:'base'});
+function compareEmployees(a,b){return employeeSort.compare(String(a.outlet||'Unassigned').trim(),String(b.outlet||'Unassigned').trim())||employeeSort.compare(String(a.name||'').trim(),String(b.name||'').trim())||employeeSort.compare(a.employee_id||'',b.employee_id||'')||a.user_id-b.user_id;}
+function filtered(category=$('employmentCategory').value){const query=$('search').value.toLowerCase();return state.rows.filter(r=>(!$('group').value||r.category===$('group').value)&&(!category||r.employment_category===category)&&[r.name,r.employee_id,r.outlet].some(v=>String(v).toLowerCase().includes(query))).sort(compareEmployees);}
 function cells(values){return '<tr>'+values.map(v=>'<td>'+v+'</td>').join('')+'</tr>';}
 function empty(columns){return `<tr><td colspan="${columns}">No records for this selection.</td></tr>`;}
 function render(){
@@ -44,7 +46,7 @@ window.addEventListener('resize',()=>showEmployeeOptions(false));
 document.addEventListener('scroll',event=>{if(!event.target.closest?.('#setupEmployeeOptions'))showEmployeeOptions(false);},true);
 function filterSetupEmployees(showAll=false){
  const input=$('setupEmployeeSearch'),query=showAll?'':input.value.trim().toLowerCase();
- const matches=state.rows.filter(r=>employeeOptionLabel(r).toLowerCase().includes(query));
+ const matches=state.rows.filter(r=>employeeOptionLabel(r).toLowerCase().includes(query)).sort(compareEmployees);
  $('setupEmployeeOptions').innerHTML=matches.map(r=>'<button type="button" role="option" aria-selected="'+String(String(r.user_id)===$('setupForm').elements.user_id.value)+'" data-employee-option="'+r.user_id+'">'+esc(employeeOptionLabel(r))+'</button>').join('')||'<p>No matching employees</p>';
  const match=state.rows.find(r=>employeeOptionLabel(r)===input.value);
  $('setupForm').elements.user_id.value=match?String(match.user_id):'';
@@ -339,8 +341,8 @@ function salaryAttendance(employee,profile,fallback){
  return {unpaid,weekoff,pending};
 }
 function currentDistributionRows(category){
- const ids=new Set(filtered(category).map(row=>row.user_id));
- return (state.distribution||[]).filter(row=>ids.has(row.user_id)).map(row=>{
+ const order=new Map(filtered(category).map((row,index)=>[row.user_id,index]));
+ return (state.distribution||[]).filter(row=>order.has(row.user_id)).sort((a,b)=>order.get(a.user_id)-order.get(b.user_id)).map(row=>{
   const draft=distributionDrafts.get(distributionKey(row.user_id));
   // Use the same effective salary setup displayed in the Salary setup table.
   const profile=Array.isArray(state.profiles)?state.profiles.filter(p=>p.user_id===row.user_id&&p.effective_month<=state.month).sort((a,b)=>b.effective_month.localeCompare(a.effective_month))[0]:null;

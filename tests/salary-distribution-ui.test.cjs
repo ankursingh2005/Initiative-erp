@@ -267,3 +267,23 @@ test('saving manual overall attendance uses EMS totals endpoint',async()=>{
  assert.equal(vm.runInContext('attendanceTotalDrafts.size',context),0);
  assert.equal(vm.runInContext('state.rows[0].monthly_attendance',context),true);
 });
+
+test('outlet then natural employee name order matches All Regular and Contract workbook sheets',()=>{
+ const {context,nodes}=setup();
+ vm.runInContext(`state.rows=[{user_id:1,name:'Employee 10',outlet:'Branch 2',employment_category:'Regular'},{user_id:2,name:'employee 2',outlet:'Branch 2',employment_category:'Contract'},{user_id:3,name:'Zara',outlet:'Branch 1',employment_category:'Contract'},{user_id:4,name:'Alice',outlet:'Branch 1',employment_category:'Regular'},{user_id:5,name:'Alice',outlet:'Branch 10',employment_category:'Regular'}].map(r=>({...r,employee_id:'IDS-'+r.user_id,category:'ids_emp',profile_id:1,counts:{weekoff:4}}));state.distribution=[...state.rows].reverse().map(r=>({...salaryDistributionMath.calculateDistribution(1600000,0),...r}));`,context);
+ const original=vm.runInContext('state.rows.map(r=>r.user_id).join()',context);
+ for(const [category,expected] of [['','4,3,2,1,5'],['Regular','4,1,5'],['Contract','3,2']]){
+  context.category=category;
+  assert.equal(vm.runInContext('filtered(category).map(r=>r.user_id).join()',context),expected);
+  assert.equal(vm.runInContext('currentDistributionRows(category).map(r=>r.user_id).join()',context),expected);
+  const payload=vm.runInContext('salaryWorkbookPayload(category)',context);
+  assert.equal(payload.ids_rows.map(r=>r[0]).join(),expected.split(',').map(id=>'IDS-'+id).join());
+  assert.deepEqual(Array.from(payload.ids_rows,r=>r[0]),Array.from(payload.weekoff_rows,r=>r[0]));
+ }
+ assert.equal(vm.runInContext('state.rows.map(r=>r.user_id).join()',context),original);
+ nodes.get('employmentCategory').value='Contract';
+ assert.equal(vm.runInContext("salaryWorkbookPayload('').ids_rows.length",context),5);
+ vm.runInContext('filterSetupEmployees(true)',context);
+ const picker=nodes.get('setupEmployeeOptions').innerHTML;
+ assert.ok(picker.indexOf('IDS-4 - Alice')<picker.indexOf('IDS-3 - Zara'));
+});
