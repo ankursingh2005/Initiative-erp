@@ -24,9 +24,9 @@ test('manual employee attendance opens the Excel sheet with calculated totals an
  assert.match(nodes.get('attendanceRecordRows').innerHTML,/Other Person/);
  assert.equal(nodes.get('showAllAttendanceEmployees').hidden,true);
 });
-test('distribution renders all 21 cells, leading-zero bank account and totals',()=>{
+test('distribution renders all 20 cells, leading-zero bank account and totals',()=>{
  const {nodes}=setup(),html=nodes.get('distributionRows').innerHTML;
- assert.equal((html.match(/<td\b/g)||[]).length,21);assert.match(html,/000123456789/);assert.match(html,/SBIN0001234/);assert.match(html,/data-dist-input="other_allowances"/);assert.match(html,/data-dist-save="1"/);
+ assert.equal((html.match(/<td\b/g)||[]).length,20);assert.match(html,/000123456789/);assert.match(html,/SBIN0001234/);assert.match(html,/data-dist-input="other_allowances"/);assert.match(html,/data-dist-save="1"/);
  assert.equal(nodes.get('distributionCount').textContent,1);assert.equal(nodes.get('distributionNet').textContent,new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR'}).format(16137.98));
 });
 test('editing allowances updates calculated cells and saves only monthly inputs',async()=>{
@@ -146,4 +146,20 @@ test('totals are read-only and count daily entries despite legacy overrides',()=
  vm.runInContext("attendanceTotalDrafts.set(state.month+':1',{present:21,absent:3,weekoff:3,leave:0})",context);
  assert.equal(vm.runInContext('attendanceSheetCounts(state.rows[0]).present',context),0);
  assert.equal(vm.runInContext('state.rows[0].days[0].status',context),'absent');
+});
+
+test('IDS shows phase 1 net and phase 2 stays separate on the same gross',()=>{
+ const {context,nodes}=setup();
+ vm.runInContext("state.rows[0].counts={weekoff:2};state.distribution[0].weekoff_availed=2;state.weekoffIncentives=[{user_id:1,incentive:50000}];renderIDS();renderWeekoffTable();",context);
+ const phase1=vm.runInContext('currentDistributionRows()[0]',context),phase2=vm.runInContext('currentWeekoffRows()[0]',context);
+ assert.equal(phase1.net_amount,phase1.actual_gross_earning-phase1.total_deductions);
+ assert.equal(phase2.gross,phase1.actual_gross_earning);
+ assert.equal(phase2.pay,Math.round(phase1.actual_gross_earning*2/30));
+ assert.equal(phase2.payable,phase2.pay+50000);
+ assert.equal(nodes.get('idsNet').textContent,vm.runInContext('money(currentDistributionRows()[0].net_amount)',context));
+ assert.match(nodes.get('idsNote').textContent,/Phase 1/);
+ assert.equal((nodes.get('idsRows').innerHTML.match(/<td\b/g)||[]).length,20);
+ const html=fs.readFileSync('static/ems.html','utf8');
+ assert.match(html,/data-tab="earnings"[^>]*>W\/O &amp; Incentive<\/button><button data-tab="ids">IDS/);
+ assert.ok(!vm.runInContext('distributionKeys.includes("weekoff_pay")',context));
 });

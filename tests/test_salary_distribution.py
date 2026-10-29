@@ -8,7 +8,7 @@ class DistributionCalculationTests(unittest.TestCase):
         result = calc(2000000, 0, 500000, 100000, 2)
         self.assertEqual(result['weekoff_credit'], 2)
         self.assertEqual(result['weekoff_pay'], 175000)
-        self.assertEqual(result['net_amount'], base['net_amount'] + 175000)
+        self.assertEqual(result['net_amount'], base['net_amount'])
         self.assertEqual(calc(2000000, 0, 0, 0, 5)['weekoff_pay'], 0)
 
     def test_above_threshold(self):

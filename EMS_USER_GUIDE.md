@@ -12,7 +12,7 @@ Open **EMS Salary** from Home, or visit `/ems` (`/erp/ems` when hosted under `/e
 6. Open **Salary records** to print a payslip or save it as PDF. **Mark paid** records a payment made outside EMS; EMS does not transfer money.
 7. **Download CSV** exports the filtered attendance and salary preview. Published salary amounts are available from Salary records and their frozen payslips.
 
-Each employee is granted 4 weekoffs. Week Off Availed is fetched automatically from daily attendance for the selected salary month (only dates marked Week Off count; future dates do not). Week Off Credit is calculated automatically as max(0, 4 minus Week Off Availed) and saved with the effective salary setup; attendance pay rules continue to determine payroll, and unused weekoff pay is added to salary using earned gross. Restart the server after updating to add these columns to an existing database.
+Each employee is granted 4 weekoffs. Week Off Availed is fetched automatically from daily attendance for the selected salary month (only dates marked Week Off count; future dates do not). Week Off Credit is calculated automatically as max(0, 4 minus Week Off Availed) and saved with the effective salary setup; attendance pay rules continue to determine payroll, and unused weekoff pay is paid separately in Phase 2 using IDS Actual Gross Earning. Restart the server after updating to add these columns to an existing database.
 
 ## Calculation rules
 
@@ -39,7 +39,7 @@ Automatic Exact Sales and Non-sales incentive distribution is intentionally pend
 
 `tests/ems_salary_preview.py` runs a local preview using synthetic in-memory data; `tests/ems-salary-ui.cjs` checks the ERP prefix, filters, attendance review, publication, payslip and mobile layout against that preview and an isolated Chrome debugger on port 9246.
 
-Week Off Pay is calculated automatically as (earned gross salary / 30) multiplied by Week Off Credit, rounded to the nearest paise. Incentive is manually entered. Amount Payable is their sum, matching the reference sheet; Expected Basic is excluded from this total. Unused weekoff pay is included when publishing new payroll. Previously published payroll stays unchanged.
+Week Off Pay is calculated automatically as (earned gross salary / 30) multiplied by Week Off Credit, rounded to the nearest paise. Incentive is manually entered. Amount Payable is their sum, matching the reference sheet; Expected Basic is excluded from this total. For the two-phase payment workflow, IDS shows Phase 1 and W/O & Incentive shows Phase 2. Previously published payroll stays unchanged.
 
 Choose Regular or Contract in Emp Category after Amount Payable, then save the salary setup. The Emp Category filter after Employee Group filters the register, payroll, CSV and employee totals for the selected month. Existing employees remain unclassified until assigned.
 
@@ -63,4 +63,14 @@ The table scrolls horizontally, with a fixed employee column, formula tooltips, 
 - **CL (Casual Leave)** is available between A and WO in Attendance Record. Type CL or choose Casual Leave in the attendance editor. CL totals are separate from L; both follow the salary profile's paid leave setting.
 
 ## Paid unused weekoffs
-Each month allows 4 weekoffs. Unused weekoff days = max(0, 4 - WO availed). Additional weekoff pay = earned gross salary / 30 * unused weekoff days, rounded to paise. Monthly payroll adds this pay before fixed deductions; the payslip shows it separately. Salary Distribution uses Actual Gross Earning for the same formula and adds the pay to net. More than 4 weekoffs gives zero extra pay. Leave and CL follow the salary profile's paid leave rule; unpaid days, including ineligible days before joining, reduce salary. Open months remain provisional. Previously published payslips retain their saved values.
+Each month allows 4 weekoffs. Unused weekoff days = max(0, 4 - WO availed). Additional weekoff pay = earned gross salary / 30 * unused weekoff days, rounded to paise. Monthly payroll adds this pay before fixed deductions; the payslip shows it separately. IDS and Salary Distribution show Phase 1 net only. W/O & Incentive uses IDS Actual Gross Earning for the same formula and shows the separate Phase 2 payment. More than 4 weekoffs gives zero extra pay. Leave and CL follow the salary profile's paid leave rule; unpaid days, including ineligible days before joining, reduce salary. Open months remain provisional. Previously published payslips retain their saved values.
+
+## Two-phase salary payments
+
+Open **IDS**, immediately after **W/O & Incentive**, for the Phase 1 pay sheet. It shows attendance-based Actual Basic, VDA, prorated Other Allowances, Total Earning, Bonus, Actual Gross Earning, EPF, ESIC, Staff Advance & Deduction and Net Amount, with totals and a Download IDS button. Enter and save Other Allowances and Staff Advance & Deduction in Salary Distribution; IDS uses the same monthly saved values and shows unsaved edits as provisional.
+
+- **Phase 1 (IDS):** Net Amount = Actual Gross Earning minus Total Deductions. Weekoff credit pay and incentive are excluded.
+- **Phase 2 (W/O & Incentive):** Amount Payable = Actual Gross Earning / 30 multiplied by max(0, 4 minus Weekoffs Availed), plus the separately entered monthly incentive. Gross is taken from the same IDS calculation, before deductions.
+- Example: IDS gross INR 29,063 and deductions INR 2,348 gives Phase 1 INR 26,715. With 3 weekoffs availed, Phase 2 weekoff credit pay is INR 968.77, plus the entered incentive. Amounts retain the existing paise rounding.
+
+Both tabs follow the selected month, employee group and category filters. The reports do not transfer money or change previously published payslips. The legacy Monthly payroll publication calculation is separate from these two payment reports.

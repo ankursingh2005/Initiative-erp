@@ -1,0 +1,11 @@
+# Keep EMS source and tests consistent across Windows and Linux.
+# Other project files retain their existing Git settings.
+/.gitattributes text eol=lf
+/EMS_USER_GUIDE.md text eol=lf
+/salary_distribution.py text eol=lf
+/static/ems.html text eol=lf
+/static/ems.js text eol=lf
+/static/salary-distribution-math.js text eol=lf
+/tests/salary-distribution-ui.test.cjs text eol=lf
+/tests/salary-distribution.test.cjs text eol=lf
+/tests/test_salary_distribution.py text eol=lf

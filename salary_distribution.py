@@ -27,4 +27,4 @@ def calculate_distribution(expected_basic, absent, other_allowances=0, staff_adv
         actual_gross_earning=actual_gross_earning, epf_employee=epf_employee,
         esic_employee=esic_employee, staff_advance=staff_advance,
         weekoff_availed=weekoff_availed, weekoff_credit=weekoff_credit, weekoff_pay=weekoff_pay,
-        total_deductions=total_deductions, net_amount=actual_gross_earning+weekoff_pay-total_deductions)
+        total_deductions=total_deductions, net_amount=actual_gross_earning-total_deductions)

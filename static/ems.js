@@ -24,7 +24,7 @@ function render(){
  $('netTotal').textContent=money(rows.filter(r=>!r.published_id).reduce((s,r)=>s+(r.net||0),0));$('publishedCount').textContent=rows.filter(r=>r.published_id).length;
  $('periodNote').textContent=state.closed_month?'Closed month: review attendance and salary before publication.':'Open or future month: provisional totals only. Publication is available after month end.';
  $('monthlyRows').innerHTML=rows.map(r=>cells([`<b>${esc(r.name)}</b><small>${esc(r.employee_id||'ID not assigned')}</small>`,`${esc(r.outlet)}<small>${groups[r.category]}</small>`,r.counts.present,r.counts.absent,r.counts.casual_leave??0,r.counts.weekoff,r.counts.leave,r.profile_id?money(r.basic+r.allowances):'Setup needed',money(r.weekoff_pay||0),money(r.incentive),money(r.bonus),r.profile_id?money(r.deductions):'—',r.profile_id?money(r.net):'—',`${r.manual_employee?'<button data-manual-attendance="'+r.user_id+'">Attendance</button> ':''}<button data-review="${r.user_id}">${r.published_id?'Attendance':'Review'}</button>${r.status==='draft'?'':'<small>'+esc(r.status)+'</small>'}`])).join('')||empty(14);
- renderDistribution();
+ renderDistribution();renderIDS();
  renderAttendanceRecord();
  renderWeekoffTable();
 
@@ -142,7 +142,7 @@ async function refresh(){if(loading)return;loading=true;$('refresh').disabled=tr
 function attendanceDetails(row){return (row.manual_employee?'<p class="notice">Manual employee: '+(row.missing_attendance||0)+' attendance days not entered.</p>':'')+`<p><b>${esc(row.name)}</b> · ${esc(row.employee_id)} · ${esc(row.outlet)} · ${esc(state.month)}</p><p>Gross salary: ${money(row.gross_salary||0)} &nbsp; Unused weekoff days: ${row.weekoff_credit||0} &nbsp; Weekoff pay: ${money(row.weekoff_pay||0)}</p><p>Present: ${row.counts.present} &nbsp; Absent: ${row.counts.absent} &nbsp; CL: ${row.counts.casual_leave??0} &nbsp; W/O: ${row.counts.weekoff} &nbsp; Leave: ${row.counts.leave}</p><p class="muted">${esc(row.joining_source)}: ${esc(row.joining_date)} · Before joining: ${row.counts.before_joining} · Upcoming: ${row.counts.upcoming}. Leave uses the ERP attendance leave register.</p><div class="days">${row.days.map(d=>`<div class="day ${d.status}"><b>${esc(d.day.slice(8))}</b><br>${esc(d.entered===false?'Not entered':d.status.replace('_',' '))}</div>`).join('')}</div>`;}
 function review(uid){selected=state.rows.find(r=>r.user_id===uid);if(!selected)return;$('detailTitle').textContent='Review salary · '+state.month;$('detailBody').innerHTML=attendanceDetails(selected)+(selected.profile_id?`<p>Monthly basic: ${money(selected.monthly_basic)} · Monthly allowances: ${money(selected.monthly_allowances)}</p><p>Divisor: ${esc(selected.divisor)} · W/O: ${selected.paid_weekoff?'paid':'unpaid'} · Leave: ${selected.paid_leave?'paid':'unpaid'}</p><p>Payable days: ${selected.payable_days} · Unpaid days: ${selected.unpaid_days}</p><p>Earned basic: ${money(selected.basic)} · Earned allowances: ${money(selected.allowances)}<br>Manual incentive: ${money(selected.incentive)} · Bonus: ${money(selected.bonus)} · Deductions: ${money(selected.deductions)}</p><h2>Draft net: ${money(selected.net)}</h2>`:'<p>Save salary setup to calculate this employee’s salary.</p>');$('ack').checked=false;$('publishControls').hidden=!selected.can_publish;$('printSlip').hidden=true;$('detail').showModal();}
 async function slip(id){try{const data=await api('/salary-slips/'+id),p=data.payroll,s=data.snapshot;$('detailTitle').textContent='IDSPL Salary Slip · '+p.month;$('detailBody').innerHTML=`<p>Employee: ${esc(s?.name||state.records.find(r=>r.id===id)?.name)} · ${esc(s?.employee_id||'')}</p><p>Status: ${esc(p.status)}</p><table>${[['Earned basic',p.basic],['Earned allowances',p.allowances],['Approved manual incentive',p.incentives],['Bonus',(p.bonuses||0)-(s?.weekoff_pay||0)],['Unused weekoff pay',s?.weekoff_pay||0],['Deductions',p.deductions],['Net salary',p.net]].map(([label,value])=>cells([label,money(value)])).join('')}</table><p class="muted">Automatic incentive allocation pending. This slip records the salary published in EMS.</p>`+(s?attendanceDetails(s):'');$('publishControls').hidden=true;$('printSlip').hidden=false;$('detail').showModal();}catch(e){message(e.message,true);}}
-document.querySelectorAll('[data-tab]').forEach(button=>button.addEventListener('click',()=>{document.querySelectorAll('[data-tab]').forEach(b=>{b.classList.toggle('active',b===button);$(b.dataset.tab).hidden=b!==button;});if(button.dataset.tab==='attendanceRecord'){attendanceSheetEmployee=null;renderAttendanceRecord();}if(button.dataset.tab==='distribution')renderDistribution();if(button.dataset.tab==='earnings')renderWeekoffTable();}));
+document.querySelectorAll('[data-tab]').forEach(button=>button.addEventListener('click',()=>{document.querySelectorAll('[data-tab]').forEach(b=>{b.classList.toggle('active',b===button);$(b.dataset.tab).hidden=b!==button;});if(button.dataset.tab==='attendanceRecord'){attendanceSheetEmployee=null;renderAttendanceRecord();}if(button.dataset.tab==='distribution')renderDistribution();if(button.dataset.tab==='earnings')renderWeekoffTable();if(button.dataset.tab==='ids')renderIDS();}));
 $('refresh').onclick=refresh;$('month').onchange=()=>{if(!$('detail').open)refresh();};$('group').onchange=render;$('employmentCategory').onchange=render;$('search').oninput=render;$('detailClose').onclick=()=>$('detail').close();$('printSlip').onclick=()=>window.print();
 document.addEventListener('click',async event=>{const button=event.target.closest('button');if(!button)return;if(button.dataset.review)review(Number(button.dataset.review));if(button.dataset.slip)await slip(Number(button.dataset.slip));if(button.dataset.paid&&confirm('Record that this salary was paid outside EMS?')){button.disabled=true;try{await api('/payroll/'+button.dataset.paid+'/paid',{method:'PUT'});await refresh();}catch(e){message(e.message,true);button.disabled=false;}}});
 document.addEventListener('click',async event=>{const button=event.target.closest('[data-void]');if(!button||!confirm('Void this approved earning and recalculate the draft salary?'))return;button.disabled=true;try{await api('/earnings/'+button.dataset.void+'/void',{method:'PUT'});await refresh();}catch(e){message(e.message,true);button.disabled=false;}});
@@ -326,7 +326,7 @@ $('verifySalaryRemovalPassword').onclick=async()=>{
 };
 
 const distributionDrafts=new Map();
-const distributionKeys=['absent','no_of_days','working_days','expected_basic','actual_basic','other_allowances','actual_vda','actual_pay_epf','actual_oa','total_earning','bonus_payable','actual_gross_earning','weekoff_pay','epf_employee','esic_employee','staff_advance','total_deductions','net_amount','account_no','ifsc_code'];
+const distributionKeys=['absent','no_of_days','working_days','expected_basic','actual_basic','other_allowances','actual_vda','actual_pay_epf','actual_oa','total_earning','bonus_payable','actual_gross_earning','epf_employee','esic_employee','staff_advance','total_deductions','net_amount','account_no','ifsc_code'];
 function distributionKey(uid){return state.month+':'+uid;}
 function currentDistributionRows(){
  const ids=new Set(filtered().map(row=>row.user_id));
@@ -351,7 +351,7 @@ function renderDistribution(){
   else content=row.profile_id?money(row[key]):'-';
   const displayed=['other_allowances','staff_advance'].includes(key)?content:'<span class="distribution-value" title="'+esc(String(content))+'">'+content+'</span>';
   return '<td data-dist-value="'+key+'" class="'+(key==='net_amount'?'distribution-net':total?'dist-total':'')+'">'+displayed+'</td>';
- }).join('')+'</tr>').join('')||empty(21);
+ }).join('')+'</tr>').join('')||empty(20);
  $('distributionNote').textContent=(state.month||'')+' | '+(state.closed_month?'Closed month':'Provisional: month not closed')+' | Fixed 30-day basis';
  renderDistributionTotals(rows);
 }
@@ -361,6 +361,17 @@ function renderDistributionTotals(rows=currentDistributionRows()){
  const totalKeys=new Set(['expected_basic','actual_basic','other_allowances','actual_vda','actual_pay_epf','actual_oa','total_earning','bonus_payable','actual_gross_earning','weekoff_pay','epf_employee','esic_employee','staff_advance','total_deductions','net_amount']);
  $('distributionTotals').innerHTML=cells(['Total',...distributionKeys.map(key=>totalKeys.has(key)?money(sum(key)):'')]);
 }
+
+function renderIDS(){
+ const rows=currentDistributionRows(),saved=rows.filter(r=>r.profile_id),sum=k=>saved.reduce((n,r)=>n+(r[k]||0),0);
+ const plain=new Set(['absent','no_of_days','working_days','account_no','ifsc_code']);
+ $('idsRows').innerHTML=rows.map(r=>cells(['<b>'+esc(r.name)+'</b><small>'+esc(r.employee_id)+'</small>'+(r.missing_attendance?'<small>Attendance incomplete</small>':'')+(distributionDrafts.has(distributionKey(r.user_id))?'<small>Unsaved inputs</small>':''),...distributionKeys.map(k=>plain.has(k)?esc(r[k]??''):r.profile_id?money(r[k]):'Setup needed')])).join('')||empty(distributionKeys.length+1);
+ const totals=new Set(distributionKeys.filter(k=>!plain.has(k)));
+ $('idsTotals').innerHTML=cells(['Total',...distributionKeys.map(k=>totals.has(k)?money(sum(k)):'')]);
+ $('idsCount').textContent=rows.length;$('idsGross').textContent=money(sum('actual_gross_earning'));$('idsDeductions').textContent=money(sum('total_deductions'));$('idsNet').textContent=money(sum('net_amount'));
+ $('idsNote').textContent=state.month+' | '+(state.closed_month?'Closed month':'Provisional: month not closed')+' | Phase 1: gross less deductions; W/O and incentive excluded';
+}
+
 function parseDistributionAmount(input){
  if(!input.checkValidity()||!/^\d+(?:\.\d{1,2})?$/.test(input.value))throw Error('Enter a non-negative amount with up to two decimal places.');
  const [whole,fraction='']=input.value.split('.');const value=Number(whole)*100+Number(fraction.padEnd(2,'0'));
@@ -375,7 +386,7 @@ document.addEventListener('input',event=>{
   distributionDrafts.set(distributionKey(uid),{...previous,[input.dataset.distInput]:value});
   const row=currentDistributionRows().find(row=>row.user_id===uid);
   for(const key of distributionKeys){if(['absent','no_of_days','working_days','account_no','ifsc_code','other_allowances','staff_advance'].includes(key))continue;tr.querySelector('[data-dist-value="'+key+'"]').textContent=money(row[key]);}
-  tr.querySelector('[data-dist-status]').textContent='Unsaved inputs';renderDistributionTotals();
+  tr.querySelector('[data-dist-status]').textContent='Unsaved inputs';renderDistributionTotals();renderIDS();renderWeekoffTable();
  }catch(error){input.setCustomValidity(error.message);tr.querySelector('[data-dist-status]').textContent=error.message;}
 });
 document.addEventListener('click',async event=>{
@@ -389,14 +400,16 @@ document.addEventListener('click',async event=>{
  }catch(error){tr.querySelector('[data-dist-status]').textContent=error.message;message(error.message,true);}
  finally{button.disabled=false;inputs.forEach(input=>input.disabled=false);}
 });
-$('distributionExport').onclick=()=>{
+function exportDistribution(filename='IDSPL_Salary_Distribution_'){
  const rows=currentDistributionRows();if(!rows.length){message('No employees match the selected filters.',true);return;}
- const headers=['Emp Name','Absent','No. of Days','Working Days','Expected Basic INR','Actual Basic INR','Other Allowances INR','Actual VDA INR','Actual Pay EPF INR','Actual OA INR','Total Earning INR','Bonus Payable INR','Actual Gross Earning INR','Unused Weekoff Pay INR','EPF Employee Contribution INR','ESIC Employee Contribution INR','Staff Advance & Deduction INR','Total Deductions INR','Net Amount INR','Account No.','IFSC Code'];
+ const headers=['Emp Name','Absent','No. of Days','Working Days','Expected Basic INR','Actual Basic INR','Other Allowances INR','Actual VDA INR','Actual Pay EPF INR','Actual OA INR','Total Earning INR','Bonus Payable INR','Actual Gross Earning INR','EPF Employee Contribution INR','ESIC Employee Contribution INR','Staff Advance & Deduction INR','Total Deductions INR','Net Amount INR','Account No.','IFSC Code'];
  const body=rows.map(row=>[row.name,...distributionKeys.map(key=>['account_no','ifsc_code','absent','no_of_days','working_days'].includes(key)?row[key]:row.profile_id?(row[key]/100).toFixed(2):'')]);
  const csv=[headers,...body].map(row=>row.map(value=>'"'+String(value??'').replace(/^[=+@\-]/,"'$&").replace(/"/g,'""')+'"').join(',')).join('\r\n');
- const url=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'})),link=document.createElement('a');link.href=url;link.download='IDSPL_Salary_Distribution_'+state.month+'.csv';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
- message(distributionDrafts.size?'Distribution downloaded. Unsaved inputs are included.':'Salary distribution downloaded.');
-};
+ const url=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'})),link=document.createElement('a');link.href=url;link.download=filename+state.month+'.csv';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+ message(distributionDrafts.size?'Downloaded. Unsaved inputs are included.':'Salary downloaded.');
+}
+$('distributionExport').onclick=()=>exportDistribution();
+$('idsExport').onclick=()=>exportDistribution('IDSPL_IDS_Phase1_');
 
 const attendanceDrafts=new Map();
 const attendanceTotalDrafts=new Map();
@@ -494,8 +507,8 @@ function currentWeekoffRows(){
  const distribution=new Map(currentDistributionRows().map(r=>[r.user_id,r]));
  return filtered().map(r=>{
  const d=distribution.get(r.user_id),saved=(state.weekoffIncentives||[]).find(i=>i.user_id===r.user_id),draft=weekoffDrafts.get(state.month+':'+r.user_id);
- const incentive=draft??saved?.incentive??0,gross=d?.actual_gross_earning??0,availed=r.counts.weekoff;
- return {...r,gross,incentive,...weekoffValues(gross,availed,incentive)};
+ const incentive=draft??saved?.incentive??0,gross=d?.actual_gross_earning??0,availed=r.counts?.weekoff??d?.weekoff_availed??0;
+ return {...r,gross,incentive,weekoff_availed:availed,...weekoffValues(gross,availed,incentive)};
  });
 }
 function renderWeekoffTotals(){
@@ -503,7 +516,7 @@ function renderWeekoffTotals(){
  $('weekoffTotals').innerHTML=cells(['Total','','','',money(sum('gross')),money(sum('pay')),money(sum('incentive')),money(sum('payable')),'']);
 }
 function renderWeekoffTable(){
- $('weekoffRows').innerHTML=currentWeekoffRows().map(r=>'<tr data-weekoff-user="'+r.user_id+'"><td><b>'+esc(r.name)+'</b><small>'+esc(r.employee_id)+'</small></td><td>4</td><td>'+r.counts.weekoff+'</td><td>'+r.credit+'</td><td>'+money(r.gross)+'</td><td>'+money(r.pay)+'</td><td><input type="number" min="0" max="10000000" step="0.01" aria-label="Incentive for '+esc(r.name)+'" data-weekoff-incentive="'+r.user_id+'" value="'+(r.incentive/100).toFixed(2)+'"></td><td data-weekoff-payable>'+money(r.payable)+'</td><td><button type="button" data-weekoff-save="'+r.user_id+'">Save</button><small data-weekoff-status>'+(weekoffDrafts.has(state.month+':'+r.user_id)?'Unsaved incentive':'')+'</small></td></tr>').join('')||empty(9);
+ $('weekoffRows').innerHTML=currentWeekoffRows().map(r=>'<tr data-weekoff-user="'+r.user_id+'"><td><b>'+esc(r.name)+'</b><small>'+esc(r.employee_id)+'</small></td><td>4</td><td>'+r.weekoff_availed+'</td><td>'+r.credit+'</td><td>'+money(r.gross)+'</td><td>'+money(r.pay)+'</td><td><input type="number" min="0" max="10000000" step="0.01" aria-label="Incentive for '+esc(r.name)+'" data-weekoff-incentive="'+r.user_id+'" value="'+(r.incentive/100).toFixed(2)+'"></td><td data-weekoff-payable>'+money(r.payable)+'</td><td><button type="button" data-weekoff-save="'+r.user_id+'">Save</button><small data-weekoff-status>'+(weekoffDrafts.has(state.month+':'+r.user_id)?'Unsaved incentive':'')+'</small></td></tr>').join('')||empty(9);
  renderWeekoffTotals();
 }
 $('weekoffRows').addEventListener('input',event=>{

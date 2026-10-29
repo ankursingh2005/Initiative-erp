@@ -12,7 +12,7 @@
   return {absent,no_of_days:30,working_days:working,expected_basic:expectedBasic,actual_basic:actualBasic,
    other_allowances:otherAllowances,actual_vda:vda,actual_pay_epf:epfPay,actual_oa:actualOA,
    total_earning:earning,bonus_payable:bonus,actual_gross_earning:gross,epf_employee:epf,
-   esic_employee:esic,staff_advance:staffAdvance,weekoff_availed:weekoffAvailed,weekoff_credit:credit,weekoff_pay:weekoffPay,total_deductions:deductions,net_amount:gross+weekoffPay-deductions};
+   esic_employee:esic,staff_advance:staffAdvance,weekoff_availed:weekoffAvailed,weekoff_credit:credit,weekoff_pay:weekoffPay,total_deductions:deductions,net_amount:gross-deductions};
  }
  const api={calculateDistribution};
  if(typeof module!=='undefined'&&module.exports)module.exports=api;
