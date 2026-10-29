@@ -3,6 +3,7 @@
 /.gitattributes text eol=lf
 /EMS_USER_GUIDE.md text eol=lf
 /ems.py text eol=lf
+/ems_workbook.py text eol=lf
 /salary_distribution.py text eol=lf
 /static/ems.html text eol=lf
 /static/ems.js text eol=lf
@@ -11,3 +12,4 @@
 /tests/salary-distribution.test.cjs text eol=lf
 /tests/test_salary_distribution.py text eol=lf
 /tests/test_ems_salary.py text eol=lf
+/tests/test_ems_workbook.py text eol=lf

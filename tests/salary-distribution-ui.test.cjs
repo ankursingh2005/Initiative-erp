@@ -196,3 +196,31 @@ test('CL is paid while ordinary leave, weekoff settings and joining dates are re
  vm.runInContext('state.rows[0].paid_weekoff=true;state.rows[0].paid_leave=true;',context);
  assert.equal(vm.runInContext('currentDistributionRows()[0].absent',context),1);
 });
+
+test('Excel payload has both phases, numeric amounts, text accounts and matching filtered employees',()=>{
+ const {context,nodes}=setup();
+ vm.runInContext(`state.rows[0].employment_category='Regular';state.rows[0].counts={weekoff:2};state.weekoffIncentives=[{user_id:1,incentive:50000}];`,context);
+ const payload=vm.runInContext('salaryWorkbookPayload()',context);
+ assert.equal(payload.ids_rows.length,1);assert.equal(payload.weekoff_rows.length,1);
+ assert.equal(payload.ids_rows[0].length,23);assert.equal(payload.weekoff_rows[0].length,11);
+ assert.equal(payload.ids_rows[0][0],payload.weekoff_rows[0][0]);
+ assert.equal(payload.ids_rows[0][21],'000123456789');
+ assert.equal(typeof payload.ids_rows[0][20],'number');
+ assert.equal(payload.ids_rows[0][15],payload.weekoff_rows[0][7]);
+ assert.equal(payload.weekoff_rows[0][10],payload.weekoff_rows[0][8]+payload.weekoff_rows[0][9]);
+ nodes.get('employmentCategory').value='Contract';
+ assert.equal(vm.runInContext('salaryWorkbookPayload().ids_rows.length',context),0);
+ assert.equal(vm.runInContext("salaryWorkbookPayload('').ids_rows.length",context),1);
+});
+test('salary, IDS and weekoff downloads request a single xlsx workbook',async()=>{
+ const {context,nodes}=setup();let request,download;
+ context.fetch=async(url,options)=>{request={url,options};return {ok:true,status:200,blob:async()=>new Blob(['PK'])};};
+ context.document.createElement=()=>({click(){download=this.download;}});
+ context.setTimeout=fn=>{fn();};
+ await vm.runInContext('downloadSalaryWorkbook()',context);
+ assert.equal(request.url,'/api/ems/salary-workbook');assert.equal(request.options.method,'POST');
+ assert.equal(download,'IDSPL_Salary_2026-09.xlsx');
+ const payload=JSON.parse(request.options.body);assert.equal(payload.ids_rows.length,payload.weekoff_rows.length);
+ assert.equal(typeof nodes.get('idsExport').onclick,'function');assert.equal(typeof nodes.get('weekoffExport').onclick,'function');
+ assert.match(nodes.get('message').textContent,/IDS and W\/O & Incentive/);
+});

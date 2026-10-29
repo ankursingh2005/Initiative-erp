@@ -14,6 +14,23 @@ from ems import router, pages
 
 
 class SalaryTests(unittest.TestCase):
+    def test_workbook_export_is_authorized_and_does_not_write_any_records(self):
+        from ems_workbook import IDS_HEADERS
+        ids = ['EMP001', 'Synthetic employee', 'Test', 'Regular', 0, 30, 30,
+               *([100] * 14), '000123456789', 'SBIN0001234']
+        self.assertEqual(len(ids), len(IDS_HEADERS))
+        payload = {'month': '2026-09', 'ids_rows': [ids],
+                   'weekoff_rows': [['EMP001', 'Synthetic employee', 'Test', 'Regular',
+                                     4, 3, 1, 100, 3.33, 500, 503.33]]}
+        before = {t.name: self.db.execute(t.select()).all() for t in Base.metadata.sorted_tables}
+        response = self.client.post('/api/ems/salary-workbook', json=payload)
+        self.assertEqual(response.status_code, 200, response.text[:100] if response.status_code != 200 else '')
+        self.assertTrue(response.content.startswith(b'PK'))
+        self.assertIn('.xlsx', response.headers['content-disposition'])
+        self.assertEqual({t.name: self.db.execute(t.select()).all() for t in Base.metadata.sorted_tables}, before)
+        self.actor = self.users[2]
+        self.assertEqual(self.client.post('/api/ems/salary-workbook', json=payload).status_code, 403)
+
     def test_paid_cl_recalculates_distribution_without_changing_shared_attendance(self):
         uid = self.users[2].id
         self.assertEqual(self.setup_salary(uid, paid_leave=False).status_code, 200)

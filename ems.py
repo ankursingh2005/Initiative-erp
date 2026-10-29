@@ -101,6 +101,38 @@ def scoped_rows(db, model, user):
 
 class Input(BaseModel):
     model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
+
+
+class SalaryWorkbookInput(Input):
+    month: str = Field(pattern=r'^\d{4}-(0[1-9]|1[0-2])$')
+    ids_rows: list[list[str | int | float | None]] = Field(min_length=1, max_length=5000)
+    weekoff_rows: list[list[str | int | float | None]] = Field(min_length=1, max_length=5000)
+    provisional: bool = False
+
+
+@router.post('/salary-workbook')
+def salary_workbook(payload: SalaryWorkbookInput, user=Depends(manager)):
+    """Export the currently displayed EMS snapshot without changing any records."""
+    import math
+    from ems_workbook import build_salary_workbook
+    if len(payload.ids_rows) != len(payload.weekoff_rows):
+        raise HTTPException(422, 'Both salary sheets must contain the same employees')
+    for rows, width, money_columns in ((payload.ids_rows, 23, range(7, 21)),
+                                       (payload.weekoff_rows, 11, range(7, 11))):
+        for row in rows:
+            if len(row) != width or any(isinstance(value, str) and len(value) > 300 for value in row):
+                raise HTTPException(422, 'Invalid salary worksheet row')
+            for column in money_columns:
+                value = row[column]
+                if value is not None and (not isinstance(value, (int, float)) or not math.isfinite(value)):
+                    raise HTTPException(422, 'Salary amounts must be finite numbers')
+    if [row[0] for row in payload.ids_rows] != [row[0] for row in payload.weekoff_rows]:
+        raise HTTPException(422, 'Salary sheet employee order must match')
+    content = build_salary_workbook(payload.month, payload.ids_rows, payload.weekoff_rows, payload.provisional)
+    return Response(content=content,
+        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        headers={'Content-Disposition': f'attachment; filename="IDSPL_Salary_{payload.month}.xlsx"',
+                 'Cache-Control': 'no-store'})
                            
 
 class Leave(Input):
