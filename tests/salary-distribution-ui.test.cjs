@@ -160,7 +160,7 @@ test('IDS shows phase 1 net and phase 2 stays separate on the same gross',()=>{
  assert.match(nodes.get('idsNote').textContent,/Phase 1/);
  assert.equal((nodes.get('idsRows').innerHTML.match(/<td\b/g)||[]).length,20);
  const html=fs.readFileSync('static/ems.html','utf8');
- assert.match(html,/data-tab="earnings"[^>]*>W\/O &amp; Incentive<\/button><button data-tab="ids">IDS/);
+ assert.match(html,/data-tab="ids">IDS<\/button><button data-tab="earnings">W\/O &amp; Incentive/);
  assert.ok(!vm.runInContext('distributionKeys.includes("weekoff_pay")',context));
 });
 
@@ -189,12 +189,12 @@ test('A to CL recalculates IDS, distribution and phase 2 immediately and after r
  assert.equal(vm.runInContext('currentDistributionRows()[0].absent',context),12);
  assert.equal(vm.runInContext('currentWeekoffRows()[0].credit',context),4);
 });
-test('CL is paid while ordinary leave, weekoff settings and joining dates are respected',()=>{
+test('CL and weekly offs are paid while L and dates before joining are unpaid',()=>{
  const {context}=setup();
  vm.runInContext(`state.rows[0].joining_date='2026-09-02';state.rows[0].paid_weekoff=false;state.rows[0].paid_leave=false;state.rows[0].days=[{day:'2026-09-01',status:'casual_leave'},{day:'2026-09-02',status:'casual_leave'},{day:'2026-09-03',status:'leave'},{day:'2026-09-04',status:'weekoff'},{day:'2026-09-05',status:'upcoming'}];`,context);
- assert.equal(vm.runInContext('currentDistributionRows()[0].absent',context),3);
+ assert.equal(vm.runInContext('currentDistributionRows()[0].absent',context),2);
  vm.runInContext('state.rows[0].paid_weekoff=true;state.rows[0].paid_leave=true;',context);
- assert.equal(vm.runInContext('currentDistributionRows()[0].absent',context),1);
+ assert.equal(vm.runInContext('currentDistributionRows()[0].absent',context),2);
 });
 
 test('Excel payload has both phases, numeric amounts, text accounts and matching filtered employees',()=>{

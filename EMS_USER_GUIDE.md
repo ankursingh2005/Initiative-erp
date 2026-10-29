@@ -67,7 +67,7 @@ Each month allows 4 weekoffs. Unused weekoff days = max(0, 4 - WO availed). Addi
 
 ## Two-phase salary payments
 
-Open **IDS**, immediately after **W/O & Incentive**, for the Phase 1 pay sheet. It shows attendance-based Actual Basic, VDA, prorated Other Allowances, Total Earning, Bonus, Actual Gross Earning, EPF, ESIC, Staff Advance & Deduction and Net Amount, with totals and a Download IDS button. Enter and save Other Allowances and Staff Advance & Deduction in Salary Distribution; IDS uses the same monthly saved values and shows unsaved edits as provisional.
+Open **IDS**, immediately before **W/O & Incentive**, for the Phase 1 pay sheet. It shows attendance-based Actual Basic, VDA, prorated Other Allowances, Total Earning, Bonus, Actual Gross Earning, EPF, ESIC, Staff Advance & Deduction and Net Amount, with totals and a Download IDS button. Enter and save Other Allowances and Staff Advance & Deduction in Salary Distribution; IDS uses the same monthly saved values and shows unsaved edits as provisional.
 
 - **Phase 1 (IDS):** Net Amount = Actual Gross Earning minus Total Deductions. Weekoff credit pay and incentive are excluded.
 - **Phase 2 (W/O & Incentive):** Amount Payable = Actual Gross Earning / 30 multiplied by max(0, 4 minus Weekoffs Availed), plus the separately entered monthly incentive. Gross is taken from the same IDS calculation, before deductions.
@@ -82,3 +82,7 @@ Attendance edits immediately recalculate Unpaid Days, Working Days, earnings and
 Download Salary, Download Salary Excel in IDS, Salary Distribution, or W/O & Incentive now creates one .xlsx workbook. The first sheet is IDS (Phase 1); the second is W-O & Incentive (Phase 2). Excel does not permit a slash in worksheet names. Both sheets contain the same selected employees and month, numeric INR amounts, totals, frozen headings and text bank account numbers. Report category choices and existing employee filters apply to both sheets. The workbook uses current calculated values, including unsaved edits, and marks open-month, incomplete or unsaved reports provisional. Exporting does not save inputs or change payroll or ERP records.
 
 Bonus Payable, EPF Employee Contribution A/C and ESIC Employee Contribution A/C apply only to employees classified **Regular** in their effective Salary setup. For **Contract** employees all three are zero. Unclassified employees must be classified before these Regular-only amounts apply. Regular bonus and ESIC retain the gross salary threshold of strictly below INR 21,000; EPF remains 12% of Actual Pay (EPF). Staff Advance & Deduction still applies to both categories. IDS, Salary Distribution, Phase 2 gross and Excel downloads recalculate from the same category-aware calculation.
+
+Paid CL is fixed to Yes in Salary setup: CL is always paid and L is always unpaid, including for profiles previously saved with paid leave enabled. Weekly-off payment remains configurable. Published salary snapshots remain unchanged.
+
+Salary setup no longer displays Paid weekly offs or Paid CL controls. WO and CL are automatically paid; L remains unpaid. Attendance counts and unused weekoff credit pay continue to work.

@@ -111,7 +111,7 @@ function editSetup(uid,profileId){
  form.elements.account_no.value=profile?.account_no||'';
  form.elements.ifsc_code.value=profile?.ifsc_code||'';
  form.elements.divisor.value='30';
- for(const key of ['paid_weekoff','paid_leave'])form.elements[key].value=profile?String(Boolean(profile[key])):String(key==='paid_weekoff');
+ form.elements.paid_weekoff.value='true';form.elements.paid_leave.value='false';
  setupIdentity();
 
 }
@@ -139,7 +139,7 @@ async function refresh(){if(loading)return;loading=true;$('refresh').disabled=tr
  syncAttendanceWeekoffs();render();if($('employeeListDialog').open)renderEmployeeList();message('Records updated. Automatic incentive allocation is pending.');
  }catch(e){message(e.message,true);}finally{loading=false;$('refresh').disabled=false;$('month').disabled=false;}}
 function attendanceDetails(row){return (row.manual_employee?'<p class="notice">Manual employee: '+(row.missing_attendance||0)+' attendance days not entered.</p>':'')+`<p><b>${esc(row.name)}</b> · ${esc(row.employee_id)} · ${esc(row.outlet)} · ${esc(state.month)}</p><p>Gross salary: ${money(row.gross_salary||0)} &nbsp; Unused weekoff days: ${row.weekoff_credit||0} &nbsp; Weekoff pay: ${money(row.weekoff_pay||0)}</p><p>Present: ${row.counts.present} &nbsp; Absent: ${row.counts.absent} &nbsp; CL: ${row.counts.casual_leave??0} &nbsp; W/O: ${row.counts.weekoff} &nbsp; Leave: ${row.counts.leave}</p><p class="muted">${esc(row.joining_source)}: ${esc(row.joining_date)} · Before joining: ${row.counts.before_joining} · Upcoming: ${row.counts.upcoming}. Leave uses the ERP attendance leave register.</p><div class="days">${row.days.map(d=>`<div class="day ${d.status}"><b>${esc(d.day.slice(8))}</b><br>${esc(d.entered===false?'Not entered':d.status.replace('_',' '))}</div>`).join('')}</div>`;}
-function review(uid){selected=state.rows.find(r=>r.user_id===uid);if(!selected)return;$('detailTitle').textContent='Review salary · '+state.month;$('detailBody').innerHTML=attendanceDetails(selected)+(selected.profile_id?`<p>Monthly basic: ${money(selected.monthly_basic)} · Monthly allowances: ${money(selected.monthly_allowances)}</p><p>Divisor: ${esc(selected.divisor)} · W/O: ${selected.paid_weekoff?'paid':'unpaid'} · Leave: ${selected.paid_leave?'paid':'unpaid'}</p><p>Payable days: ${selected.payable_days} · Unpaid days: ${selected.unpaid_days}</p><p>Earned basic: ${money(selected.basic)} · Earned allowances: ${money(selected.allowances)}<br>Manual incentive: ${money(selected.incentive)} · Bonus: ${money(selected.bonus)} · Deductions: ${money(selected.deductions)}</p><h2>Draft net: ${money(selected.net)}</h2>`:'<p>Save salary setup to calculate this employee’s salary.</p>');$('ack').checked=false;$('publishControls').hidden=!selected.can_publish;$('printSlip').hidden=true;$('detail').showModal();}
+function review(uid){selected=state.rows.find(r=>r.user_id===uid);if(!selected)return;$('detailTitle').textContent='Review salary · '+state.month;$('detailBody').innerHTML=attendanceDetails(selected)+(selected.profile_id?`<p>Monthly basic: ${money(selected.monthly_basic)} · Monthly allowances: ${money(selected.monthly_allowances)}</p><p>Divisor: ${esc(selected.divisor)} · W/O: ${selected.paid_weekoff?'paid':'unpaid'} · CL: paid ? L: unpaid</p><p>Payable days: ${selected.payable_days} · Unpaid days: ${selected.unpaid_days}</p><p>Earned basic: ${money(selected.basic)} · Earned allowances: ${money(selected.allowances)}<br>Manual incentive: ${money(selected.incentive)} · Bonus: ${money(selected.bonus)} · Deductions: ${money(selected.deductions)}</p><h2>Draft net: ${money(selected.net)}</h2>`:'<p>Save salary setup to calculate this employee’s salary.</p>');$('ack').checked=false;$('publishControls').hidden=!selected.can_publish;$('printSlip').hidden=true;$('detail').showModal();}
 async function slip(id){try{const data=await api('/salary-slips/'+id),p=data.payroll,s=data.snapshot;$('detailTitle').textContent='IDSPL Salary Slip · '+p.month;$('detailBody').innerHTML=`<p>Employee: ${esc(s?.name||state.records.find(r=>r.id===id)?.name)} · ${esc(s?.employee_id||'')}</p><p>Status: ${esc(p.status)}</p><table>${[['Earned basic',p.basic],['Earned allowances',p.allowances],['Approved manual incentive',p.incentives],['Bonus',(p.bonuses||0)-(s?.weekoff_pay||0)],['Unused weekoff pay',s?.weekoff_pay||0],['Deductions',p.deductions],['Net salary',p.net]].map(([label,value])=>cells([label,money(value)])).join('')}</table><p class="muted">Automatic incentive allocation pending. This slip records the salary published in EMS.</p>`+(s?attendanceDetails(s):'');$('publishControls').hidden=true;$('printSlip').hidden=false;$('detail').showModal();}catch(e){message(e.message,true);}}
 document.querySelectorAll('[data-tab]').forEach(button=>button.addEventListener('click',()=>{document.querySelectorAll('[data-tab]').forEach(b=>{b.classList.toggle('active',b===button);$(b.dataset.tab).hidden=b!==button;});if(button.dataset.tab==='attendanceRecord'){attendanceSheetEmployee=null;renderAttendanceRecord();}if(button.dataset.tab==='distribution')renderDistribution();if(button.dataset.tab==='earnings')renderWeekoffTable();if(button.dataset.tab==='ids')renderIDS();}));
 $('refresh').onclick=refresh;$('month').onchange=()=>{if(!$('detail').open)refresh();};$('group').onchange=render;$('employmentCategory').onchange=render;$('search').oninput=render;$('detailClose').onclick=()=>$('detail').close();$('printSlip').onclick=()=>window.print();
@@ -169,7 +169,7 @@ for(const [formId,path] of [['setupForm','/salary-profiles'],['earningForm','/ea
  data.weekoff_availed=employee.counts.weekoff;
  data.weekoff_credit=Math.max(0,4-data.weekoff_availed);
  data.weekoff_pay=(Math.round(Math.round(Number($('setupGross').value)*100)*data.weekoff_credit/30)/100).toFixed(2);
- data.paid_weekoff=data.paid_weekoff==='true';data.paid_leave=data.paid_leave==='true';
+ data.paid_weekoff=true;data.paid_leave=false;
  }else data.user_id=Number(data.user_id);
  const result=await api(path,{method:'POST',body:JSON.stringify(data)});
  if(isSetup)setupMessage(result.message||'Salary setup saved successfully.');
@@ -320,14 +320,13 @@ const distributionKeys=['absent','no_of_days','working_days','expected_basic','a
 function distributionKey(uid){return state.month+':'+uid;}
 function salaryAttendance(employee,profile,fallback){
  if(!Array.isArray(employee?.days))return {unpaid:fallback.absent,weekoff:employee?.counts?.weekoff??fallback.weekoff_availed??4,pending:false};
- const paidWeekoff=Boolean(profile?.paid_weekoff??employee.paid_weekoff??true),paidLeave=Boolean(profile?.paid_leave??employee.paid_leave??false);
  let unpaid=0,weekoff=0,pending=false;
  for(const day of employee.days){
   const draft=attendanceDrafts.get(attendanceKey(employee.user_id,day.day));
   pending ||= Boolean(draft);
   const status=effectiveAttendanceStatus(employee,day);
   if(status==='weekoff')weekoff++;
-  if(day.day<employee.joining_date||status==='before_joining'||status==='absent'||status==='unrecorded'||status==='weekoff'&&!paidWeekoff||status==='leave'&&!paidLeave)unpaid++;
+  if(day.day<employee.joining_date||status==='before_joining'||status==='absent'||status==='unrecorded'||status==='leave')unpaid++;
  }
  return {unpaid,weekoff,pending};
 }

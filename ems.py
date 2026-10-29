@@ -432,8 +432,8 @@ def save_salary_profile(payload: SalarySetup, db: Session = Depends(get_db), use
     for key in ('basic', 'allowances', 'deductions', 'weekoff_pay', 'setup_incentive'):
         setattr(row, key, int(getattr(payload, key) * 100))
     row.divisor = '30'
-    row.paid_weekoff = int(payload.paid_weekoff)
-    row.paid_leave = int(payload.paid_leave)
+    row.paid_weekoff = 1  # Weekly offs are always paid in EMS.
+    row.paid_leave = 0  # CL is paid separately; L is always unpaid.
     daily_rows = attendance_summary(day=None, month=payload.effective_month, db=db, user=user)['rows']
     row.weekoff_availed = sum(1 for day in daily_rows
                              if day['user_id'] == payload.user_id and day['status'] == 'Week Off')
@@ -515,9 +515,9 @@ def salary_preview(db, month):
                    incentive=earnings.get(employee.id, {}).get('incentive', 0),
                    bonus=earnings.get(employee.id, {}).get('bonus', 0))
         if profile:
-            # CL is paid casual leave; the optional leave setting applies to L only.
-            payable = pay_counts['present'] + pay_counts['casual_leave'] + (pay_counts['weekoff'] if profile.paid_weekoff else 0) + (pay_counts['leave'] if profile.paid_leave else 0)
-            unpaid = pay_counts['absent'] + pay_counts['before_joining'] + (0 if profile.paid_weekoff else pay_counts['weekoff']) + (0 if profile.paid_leave else pay_counts['leave'])
+            # CL is always paid; L is always unpaid.
+            payable = pay_counts['present'] + pay_counts['casual_leave'] + pay_counts['weekoff']
+            unpaid = pay_counts['absent'] + pay_counts['before_joining'] + pay_counts['leave']
             divisor = 30
             # Deduct unpaid days; a fully paid month receives the full monthly salary.
             factor = max(Decimal(0), Decimal(1) - Decimal(unpaid)/Decimal(divisor))
@@ -531,7 +531,7 @@ def salary_preview(db, month):
             row.update(basic=basic, allowances=allowance, deductions=profile.deductions,
                        gross_salary=gross, weekoff_pay=weekoff_pay,
                        monthly_basic=profile.basic, monthly_allowances=profile.allowances,
-                       divisor='30', paid_weekoff=bool(profile.paid_weekoff), paid_leave=bool(profile.paid_leave),
+                       divisor='30', paid_weekoff=True, paid_leave=False,
                        payable_days=payable, unpaid_days=unpaid,
                        net=gross+weekoff_pay+row['incentive']+row['bonus']-profile.deductions)
         row['can_publish'] = bool(profile and end < today and not saved and row.get('net', -1) >= 0 and joining <= end and not missing_attendance)
@@ -642,7 +642,7 @@ def restore_salary_employee(user_id: int, db: Session = Depends(get_db), user=De
 
 class ManualEmployee(Input):
     full_name: str = Field(min_length=2, max_length=150)
-    joining_date: date
+    joining_date: date = Field(default_factory=lambda: datetime.now(IST).date())
     phone: str = Field(default='', max_length=25)
     designation: str = Field(default='Employee', min_length=2, max_length=100)
     employee_group: Literal['ids_emp', 'ac_retails', 'ac_projects'] = 'ids_emp'
