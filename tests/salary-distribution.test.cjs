@@ -1,5 +1,13 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');
 const {calculateDistribution:calc}=require('../static/salary-distribution-math.js');
+test('ESIC is deducted only below gross INR 21000',()=>{
+ const below=calc(1600000,0,399999),exact=calc(1600000,0,400000),above=calc(1600000,0,400001);
+ assert.equal(below.actual_gross_earning,2099999);assert.equal(below.esic_employee,15750);
+ for(const r of [exact,above]){
+  assert.ok(r.actual_gross_earning>=2100000);assert.equal(r.esic_employee,0);
+  assert.equal(r.total_deductions,r.epf_employee+r.staff_advance);
+ }
+});
 test('full pay above threshold has no bonus or ESIC',()=>{
  const r=calc(2000000,0,500000,100000);
  assert.equal(r.actual_basic,2000000);assert.equal(r.actual_vda,125000);assert.equal(r.actual_pay_epf,2125000);
@@ -14,8 +22,10 @@ test('below threshold bonus and ESIC use their distinct bases',()=>{
 test('exactly INR 21000 excludes bonus and ESIC',()=>{
  const r=calc(1600000,0,400000,0);assert.equal(r.total_earning,2100000);assert.equal(r.bonus_payable,0);assert.equal(r.esic_employee,0);
 });
-test('bonus can raise gross above ESIC threshold',()=>{
- const r=calc(1600000,0,399999,0);assert.equal(r.total_earning,2099999);assert.equal(r.bonus_payable,141610);assert.equal(r.esic_employee,0);
+test('bonus is zero if adding it would reach or exceed gross INR 21000',()=>{
+ const above=calc(1600000,0,399999,0);assert.equal(above.total_earning,2099999);assert.equal(above.bonus_payable,0);assert.equal(above.actual_gross_earning,2099999);assert.equal(above.esic_employee,15750);
+ const exact=calc(1600000,0,258390);assert.equal(exact.total_earning+141610,2100000);assert.equal(exact.bonus_payable,0);
+ const below=calc(1600000,0,258389);assert.equal(below.bonus_payable,141610);assert.equal(below.actual_gross_earning,2099999);
 });
 test('attendance prorates basic and allowances using 30 minus absence',()=>{
  const r=calc(2000000,15,400000,0);assert.equal(r.working_days,15);assert.equal(r.actual_basic,1000000);assert.equal(r.actual_oa,200000);assert.equal(r.actual_vda,62500);
@@ -33,4 +43,14 @@ test('unused weekoff pay stays in phase 2 without changing phase 1 net',()=>{
  assert.equal(r.net_amount,base.net_amount);
  assert.equal(calc(2000000,0,500000,100000,5).weekoff_pay,0);
  assert.equal(calc(2000000,30,0,0,0).weekoff_pay,0);
+});
+
+test('only Regular employees receive bonus and EPF ESIC deductions',()=>{
+ for(const category of ['Contract',null])for(const basic of [1600000,3000000]){
+  const r=calc(basic,0,0,10000,2,category);
+  assert.equal(r.bonus_payable,0);assert.equal(r.epf_employee,0);assert.equal(r.esic_employee,0);
+  assert.equal(r.total_deductions,10000);assert.equal(r.net_amount,r.actual_gross_earning-10000);
+ }
+ const regular=calc(1600000,0,0,10000,2,'Regular');
+ assert.equal(regular.bonus_payable,141610);assert.equal(regular.epf_employee,204000);assert.equal(regular.esic_employee,13812);
 });

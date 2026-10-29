@@ -860,7 +860,7 @@ def salary_distribution(month: str, db: Session = Depends(get_db), user=Depends(
         attendance_absent = employee.get('unpaid_days', employee['counts']['absent'])
         calculated = calculate_distribution(profile.basic + profile.allowances if profile else 0,
             attendance_absent, saved.other_allowances if saved else 0, saved.staff_advance if saved else 0,
-            employee['counts']['weekoff'])
+            employee['counts']['weekoff'], profile.employment_category if profile else None)
         rows.append(dict(**calculated, user_id=employee['user_id'], name=employee['name'],
             employee_id=employee['employee_id'], profile_id=employee['profile_id'],
             attendance_absent=attendance_absent, missing_attendance=employee['missing_attendance'],

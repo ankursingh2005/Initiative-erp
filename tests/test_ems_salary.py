@@ -220,8 +220,9 @@ class SalaryTests(unittest.TestCase):
         result = self.client.get('/api/ems/salary-distribution?month=2026-09')
         self.assertEqual(result.status_code, 200, result.text)
         row = next(r for r in result.json()['rows'] if r['user_id'] == uid)
-        absent = self.preview(uid)['counts']['absent']
-        expected = calculate_distribution(1600000, absent, 100000, 50000)
+        preview = self.preview(uid)
+        expected = calculate_distribution(1600000, preview['unpaid_days'], 100000, 50000,
+                                          preview['counts']['weekoff'], preview['employment_category'])
         for key, value in expected.items():
             self.assertEqual(row[key], value, key)
         self.assertEqual(row['account_no'], '000123456789')

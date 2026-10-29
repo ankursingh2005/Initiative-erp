@@ -1,7 +1,7 @@
 """Format EMS report snapshots as Excel; never read or write ERP records."""
 from io import BytesIO
 
-IDS_HEADERS = ['Employee ID', 'Employee Name', 'Branch', 'Category', 'Unpaid Days',
+IDS_HEADERS = ['Employee ID', 'Employee Name', 'Branch', 'Category', 'Absent',
     'No. of Days', 'Working Days', 'Expected Basic', 'Actual Basic', 'Other Allowances',
     'Actual VDA', 'Actual Pay (EPF)', 'Actual OA', 'Total Earning', 'Bonus Payable',
     'Actual Gross Earning', 'EPF Employee Contribution', 'ESIC Employee Contribution',

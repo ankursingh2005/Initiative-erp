@@ -340,7 +340,8 @@ function currentDistributionRows(category){
   const expectedBasic=Array.isArray(state.profiles)?(profile?profile.basic+profile.allowances:0):row.expected_basic;
   const profileId=Array.isArray(state.profiles)?(profile?.id??null):row.profile_id;
   const employee=state.rows.find(r=>r.user_id===row.user_id),attendance=salaryAttendance(employee,profile,row);
-  return {...row,profile_id:profileId,attendance_pending:attendance.pending,...salaryDistributionMath.calculateDistribution(expectedBasic,attendance.unpaid,draft?.other_allowances??row.other_allowances,draft?.staff_advance??row.staff_advance,attendance.weekoff)};
+  const employmentCategory=profile?.employment_category??employee?.employment_category??row.employment_category??null;
+  return {...row,profile_id:profileId,attendance_pending:attendance.pending,...salaryDistributionMath.calculateDistribution(expectedBasic,attendance.unpaid,draft?.other_allowances??row.other_allowances,draft?.staff_advance??row.staff_advance,attendance.weekoff,employmentCategory)};
  });
 }
 function distributionInput(row,key){return '<input type="number" min="0" max="10000000" step="0.01" aria-label="'+esc(key==='other_allowances'?'Other allowances for '+row.name:'Staff advance and deduction for '+row.name)+'" data-dist-input="'+key+'" value="'+(row[key]/100).toFixed(2)+'"'+(!row.profile_id?' disabled':'')+'>'+(key==='staff_advance'?'<button type="button" class="distribution-save" data-dist-save="'+row.user_id+'"'+(!row.profile_id?' disabled':'')+'>Save inputs</button>':'');}

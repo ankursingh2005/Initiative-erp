@@ -4,7 +4,7 @@ function setup(){
  function element(){return {value:'',textContent:'',hidden:false,style:{},dataset:{},addEventListener(){},focus(){},setAttribute(){},setCustomValidity(v){this.error=v;},querySelector(){return element();},querySelectorAll(){return [];},checkValidity(){return true;},elements:new Proxy({},{get:(t,k)=>t[k]??=element()})};}
  const context={console,Intl,Date,Number,String,Math,Set,Map,JSON,URL,setTimeout,setInterval(){},Blob,location:{pathname:'/ems'},localStorage:{getItem(){return null;}},window:{addEventListener(){},matchMedia(){return {matches:false};}},document:{getElementById:id=>{if(!nodes.has(id))nodes.set(id,element());return nodes.get(id);},querySelectorAll(){return [];},addEventListener(name,fn){(listeners[name]??=[]).push(fn);}}};
  vm.createContext(context);vm.runInContext(fs.readFileSync('static/salary-distribution-math.js','utf8'),context);vm.runInContext(fs.readFileSync('static/ems.js','utf8'),context);
- vm.runInContext(`state={month:'2026-09',closed_month:true,rows:[{user_id:1,name:'Synthetic Employee',employee_id:'TEST',category:'ids_emp',outlet:'Test',profile_id:1}],distribution:[{...salaryDistributionMath.calculateDistribution(1600000,0,0,10000),user_id:1,name:'Synthetic Employee',employee_id:'TEST',profile_id:1,missing_attendance:0,account_no:'000123456789',ifsc_code:'SBIN0001234'}]};renderDistribution();`,context);
+ vm.runInContext(`state={month:'2026-09',closed_month:true,rows:[{user_id:1,name:'Synthetic Employee',employee_id:'TEST',category:'ids_emp',employment_category:'Regular',outlet:'Test',profile_id:1}],distribution:[{...salaryDistributionMath.calculateDistribution(1600000,0,0,10000),user_id:1,name:'Synthetic Employee',employee_id:'TEST',profile_id:1,missing_attendance:0,account_no:'000123456789',ifsc_code:'SBIN0001234'}]};renderDistribution();`,context);
  return {context,nodes,listeners,element};
 }
 
@@ -223,4 +223,18 @@ test('salary, IDS and weekoff downloads request a single xlsx workbook',async()=
  const payload=JSON.parse(request.options.body);assert.equal(payload.ids_rows.length,payload.weekoff_rows.length);
  assert.equal(typeof nodes.get('idsExport').onclick,'function');assert.equal(typeof nodes.get('weekoffExport').onclick,'function');
  assert.match(nodes.get('message').textContent,/IDS and W\/O & Incentive/);
+});
+
+test('category controls bonus EPF and ESIC in both reports and Excel',()=>{
+ const {context,nodes}=setup();
+ vm.runInContext("state.profiles=[{id:1,user_id:1,effective_month:'2026-09',basic:1600000,allowances:0,employment_category:'Contract'}];renderDistribution();renderIDS();",context);
+ const contract=vm.runInContext('currentDistributionRows()[0]',context);
+ for(const k of ['bonus_payable','epf_employee','esic_employee'])assert.equal(contract[k],0);
+ assert.equal(contract.total_deductions,contract.staff_advance);assert.equal(contract.net_amount,contract.actual_gross_earning-contract.staff_advance);
+ const excel=vm.runInContext('salaryWorkbookPayload().ids_rows[0]',context);
+ for(const i of [14,16,17])assert.equal(excel[i],0);
+ vm.runInContext("state.profiles[0].employment_category='Regular';renderDistribution();renderIDS();",context);
+ const regular=vm.runInContext('currentDistributionRows()[0]',context);
+ assert.ok(regular.bonus_payable>0);assert.ok(regular.epf_employee>0);assert.ok(regular.esic_employee>0);
+ assert.equal(nodes.get('idsNet').textContent,nodes.get('distributionNet').textContent);
 });
