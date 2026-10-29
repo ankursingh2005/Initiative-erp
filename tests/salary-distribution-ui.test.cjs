@@ -8,12 +8,13 @@ function setup(){
  return {context,nodes,listeners,element};
 }
 
-test('manual employee attendance opens the Excel sheet with editable totals and keeps the selected employee on refresh',()=>{
+test('manual employee attendance opens the Excel sheet with calculated totals and keeps the selected employee on refresh',()=>{
  const {context,nodes}=setup();
  context.document.querySelector=()=>({click(){}});
  context.document.getElementById('attendanceRecord').scrollIntoView=()=>{};
  vm.runInContext(`state.rows=[{user_id:1,manual_employee:true,name:'Manual Person',employee_id:'M001',outlet:'Main',joining_date:'2026-09-01',counts:{present:0,absent:0,weekoff:0,leave:0},days:[{day:'2026-09-01',status:'unrecorded',entered:false}]},{user_id:2,name:'Other Person',days:[]}];openManualAttendance(1);`,context);
- for(const kind of ['present','absent','weekoff','leave'])assert.match(nodes.get('attendanceRecordRows').innerHTML,new RegExp('data-total-kind="'+kind+'"'));
+ for(const kind of ['present','absent','weekoff','leave'])assert.match(nodes.get('attendanceRecordRows').innerHTML,new RegExp('data-sheet-count="1:'+kind+'"'));
+ assert.doesNotMatch(nodes.get('attendanceRecordRows').innerHTML,/data-total-kind/);
  assert.match(nodes.get('attendanceRecordRows').innerHTML,/Manual Person/);
  assert.doesNotMatch(nodes.get('attendanceRecordRows').innerHTML,/Other Person/);
  vm.runInContext('renderAttendanceRecord();',context);
@@ -23,9 +24,9 @@ test('manual employee attendance opens the Excel sheet with editable totals and 
  assert.match(nodes.get('attendanceRecordRows').innerHTML,/Other Person/);
  assert.equal(nodes.get('showAllAttendanceEmployees').hidden,true);
 });
-test('distribution renders all 20 cells, leading-zero bank account and totals',()=>{
+test('distribution renders all 21 cells, leading-zero bank account and totals',()=>{
  const {nodes}=setup(),html=nodes.get('distributionRows').innerHTML;
- assert.equal((html.match(/<td\b/g)||[]).length,20);assert.match(html,/000123456789/);assert.match(html,/SBIN0001234/);assert.match(html,/data-dist-input="other_allowances"/);assert.match(html,/data-dist-save="1"/);
+ assert.equal((html.match(/<td\b/g)||[]).length,21);assert.match(html,/000123456789/);assert.match(html,/SBIN0001234/);assert.match(html,/data-dist-input="other_allowances"/);assert.match(html,/data-dist-save="1"/);
  assert.equal(nodes.get('distributionCount').textContent,1);assert.equal(nodes.get('distributionNet').textContent,new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR'}).format(16137.98));
 });
 test('editing allowances updates calculated cells and saves only monthly inputs',async()=>{
@@ -74,7 +75,7 @@ test('attendance sheet accepts codes and preserves unsaved edits across renderin
  const {context,nodes}=setup();
  assert.equal(vm.runInContext("attendanceStatus('p')",context),'present');
  assert.equal(vm.runInContext("attendanceStatus('WO')",context),'weekoff');
- assert.equal(vm.runInContext("attendanceStatus('AUTO')",context),'auto');
+ assert.equal(vm.runInContext("attendanceStatus('AUTO')",context),undefined);
  assert.equal(vm.runInContext("attendanceStatus('invalid')",context),undefined);
  vm.runInContext(`state.rows=[{user_id:1,name:'Sheet Employee',employee_id:'E001',outlet:'Main',joining_date:'2026-09-01',counts:{present:1,absent:0,weekoff:0,leave:0},days:[{day:'2026-09-01',status:'present',entered:true}]}];attendanceDrafts.set(attendanceKey(1,'2026-09-01'),{value:'L',status:'leave'});renderAttendanceRecord();`,context);
  assert.match(nodes.get('attendanceRecordRows').innerHTML,/value="L"/);
@@ -119,7 +120,7 @@ test('weekoff uses distribution gross, four days and monthly incentive',()=>{
  assert.match(nodes.get('weekoffRows').innerHTML,/value="500.00"/);
  assert.equal(vm.runInContext('currentWeekoffRows()[0].credit',context),3);
  assert.equal(vm.runInContext('weekoffValues(3000000,4,10000).payable',context),10000);
- assert.equal(vm.runInContext('weekoffValues(3000000,5,0).pay',context),-100000);
+ assert.equal(vm.runInContext('weekoffValues(3000000,5,0).pay',context),0);
  vm.runInContext("weekoffDrafts.set(state.month+':1',75000)",context);
  assert.equal(vm.runInContext('currentWeekoffRows()[0].incentive',context),75000);
 });
@@ -136,13 +137,13 @@ test('salary download All includes both categories regardless of dashboard categ
 });
 
 
-test('editable monthly totals override counts while daily cells stay unchanged',()=>{
+test('totals are read-only and count daily entries despite legacy overrides',()=>{
  const {context,nodes}=setup();
  vm.runInContext(`state.rows=[{user_id:1,name:'Test',joining_date:'2026-09-01',counts:{present:20,absent:4,weekoff:3,leave:0},totals_overridden:true,days:[{day:'2026-09-01',status:'absent',entered:true}]}];renderAttendanceRecord();`,context);
- assert.match(nodes.get('attendanceRecordRows').innerHTML,/data-total-kind="present" value="20"/);
+ assert.doesNotMatch(nodes.get('attendanceRecordRows').innerHTML,/data-total-kind/);
  assert.match(nodes.get('attendanceRecordRows').innerHTML,/data-sheet-day="2026-09-01"[^>]*value="A"/);
- assert.equal(vm.runInContext('attendanceSheetCounts(state.rows[0]).present',context),20);
+ assert.equal(vm.runInContext('attendanceSheetCounts(state.rows[0]).present',context),0);
  vm.runInContext("attendanceTotalDrafts.set(state.month+':1',{present:21,absent:3,weekoff:3,leave:0})",context);
- assert.equal(vm.runInContext('attendanceSheetCounts(state.rows[0]).present',context),21);
+ assert.equal(vm.runInContext('attendanceSheetCounts(state.rows[0]).present',context),0);
  assert.equal(vm.runInContext('state.rows[0].days[0].status',context),'absent');
 });

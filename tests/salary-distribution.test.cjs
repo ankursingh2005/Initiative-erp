@@ -25,3 +25,12 @@ test('all absent yields zero earnings and retains a fixed advance deduction',()=
  assert.equal(calc(2000000,31).working_days,0);
 });
 test('paise are rounded half up consistently',()=>{const r=calc(100,15,100,0);assert.equal(r.actual_basic,50);assert.equal(r.actual_oa,50);assert.equal(r.actual_vda,3);});
+
+test('unused weekoffs add gross-based pay to net without negative credit',()=>{
+ const base=calc(2000000,0,500000,100000,4);
+ const r=calc(2000000,0,500000,100000,2);
+ assert.equal(r.weekoff_credit,2);assert.equal(r.weekoff_pay,175000);
+ assert.equal(r.net_amount,base.net_amount+175000);
+ assert.equal(calc(2000000,0,500000,100000,5).weekoff_pay,0);
+ assert.equal(calc(2000000,30,0,0,0).weekoff_pay,0);
+});

@@ -12,7 +12,7 @@ Open **EMS Salary** from Home, or visit `/ems` (`/erp/ems` when hosted under `/e
 6. Open **Salary records** to print a payslip or save it as PDF. **Mark paid** records a payment made outside EMS; EMS does not transfer money.
 7. **Download CSV** exports the filtered attendance and salary preview. Published salary amounts are available from Salary records and their frozen payslips.
 
-Each employee is granted 4 weekoffs. Week Off Availed is fetched automatically from daily attendance for the selected salary month (only dates marked Week Off count; future dates do not). Week Off Credit is calculated automatically as max(0, 4 minus Week Off Availed) and saved with the effective salary setup; attendance pay rules continue to determine payroll, and credit pay is not automatically added. Restart the server after updating to add these columns to an existing database.
+Each employee is granted 4 weekoffs. Week Off Availed is fetched automatically from daily attendance for the selected salary month (only dates marked Week Off count; future dates do not). Week Off Credit is calculated automatically as max(0, 4 minus Week Off Availed) and saved with the effective salary setup; attendance pay rules continue to determine payroll, and unused weekoff pay is added to salary using earned gross. Restart the server after updating to add these columns to an existing database.
 
 ## Calculation rules
 
@@ -39,7 +39,7 @@ Automatic Exact Sales and Non-sales incentive distribution is intentionally pend
 
 `tests/ems_salary_preview.py` runs a local preview using synthetic in-memory data; `tests/ems-salary-ui.cjs` checks the ERP prefix, filters, attendance review, publication, payslip and mobile layout against that preview and an isolated Chrome debugger on port 9246.
 
-Week Off Pay is calculated automatically as (Expected Basic / 30) ? Week Off Credit, rounded to the nearest paise. Incentive is manually entered. Amount Payable is their sum, matching the reference sheet; Expected Basic is excluded from this total. These reference amounts do not add approved earnings or change published payroll.
+Week Off Pay is calculated automatically as (earned gross salary / 30) multiplied by Week Off Credit, rounded to the nearest paise. Incentive is manually entered. Amount Payable is their sum, matching the reference sheet; Expected Basic is excluded from this total. Unused weekoff pay is included when publishing new payroll. Previously published payroll stays unchanged.
 
 Choose Regular or Contract in Emp Category after Amount Payable, then save the salary setup. The Emp Category filter after Employee Group filters the register, payroll, CSV and employee totals for the selected month. Existing employees remain unclassified until assigned.
 
@@ -51,7 +51,7 @@ IDS NEW is no longer part of EMS. Regular and Contract employees use the standar
 
 ## Salary Distribution
 
-Open Salary Distribution for the selected salary month and employee filters. Absence comes from attendance (capped at 30); working days are 30 minus absence. Expected Basic and bank details come from Salary setup. Enter monthly Other Allowances and Staff Advance & Deduction, then select Save inputs in that row. Values are saved per employee and month and recalculate immediately.
+Open Salary Distribution for the selected salary month and employee filters. Unpaid days come from attendance and salary pay rules (capped at 30); salary days are 30 minus unpaid days. Expected Basic and bank details come from Salary setup. Enter monthly Other Allowances and Staff Advance & Deduction, then select Save inputs in that row. Values are saved per employee and month and recalculate immediately.
 
 VDA is 6.25% of Actual Basic; EPF is 12% of Actual Basic plus VDA. Bonus is 8.33% of Actual Pay (EPF) only when Total Earning is strictly below INR 21,000. ESIC is 0.75% of Actual Gross Earning only when gross is strictly below INR 21,000. Each component is rounded to paise. Net is gross less EPF, ESIC and the entered advance/deduction.
 
@@ -59,3 +59,8 @@ The table scrolls horizontally, with a fixed employee column, formula tooltips, 
 
 
 ?Delete from EMS only? permanently removes the employee from EMS, including EMS salary setups, earnings, payroll history, payslips and EMS manual attendance. Their registered ERP account, login, shared Attendance records and access to other modules remain unchanged. A deletion audit is retained.
+
+- **CL (Casual Leave)** is available between A and WO in Attendance Record. Type CL or choose Casual Leave in the attendance editor. CL totals are separate from L; both follow the salary profile's paid leave setting.
+
+## Paid unused weekoffs
+Each month allows 4 weekoffs. Unused weekoff days = max(0, 4 - WO availed). Additional weekoff pay = earned gross salary / 30 * unused weekoff days, rounded to paise. Monthly payroll adds this pay before fixed deductions; the payslip shows it separately. Salary Distribution uses Actual Gross Earning for the same formula and adds the pay to net. More than 4 weekoffs gives zero extra pay. Leave and CL follow the salary profile's paid leave rule; unpaid days, including ineligible days before joining, reduce salary. Open months remain provisional. Previously published payslips retain their saved values.

@@ -3,6 +3,14 @@ from salary_distribution import calculate_distribution as calc
 
 
 class DistributionCalculationTests(unittest.TestCase):
+    def test_unused_weekoffs_are_paid_on_gross(self):
+        base = calc(2000000, 0, 500000, 100000, 4)
+        result = calc(2000000, 0, 500000, 100000, 2)
+        self.assertEqual(result['weekoff_credit'], 2)
+        self.assertEqual(result['weekoff_pay'], 175000)
+        self.assertEqual(result['net_amount'], base['net_amount'] + 175000)
+        self.assertEqual(calc(2000000, 0, 0, 0, 5)['weekoff_pay'], 0)
+
     def test_above_threshold(self):
         r = calc(2000000, 0, 500000, 100000)
         self.assertEqual(r['total_earning'], 2625000)

@@ -133,7 +133,12 @@ class Payroll(Input):
 @pages.get('/ems', response_class=HTMLResponse)
 @pages.get('/ems.html', response_class=HTMLResponse)
 def ems_page():
+    from hashlib import sha256
     html = (ROOT / 'static' / 'ems.html').read_text(encoding='utf-8')
+    # Refresh the browser's script whenever the EMS implementation changes.
+    version = sha256((ROOT / 'static' / 'ems.js').read_bytes()).hexdigest()[:12]
+    import re
+    html = re.sub(r'static/ems\.js\?v=[^"\s]+', f'static/ems.js?v={version}', html)
     html = html.replace('<html lang="en">', '<html lang="en" data-erp="true">')
     html = html.replace('"/static/', '"ems-assets/')
     return HTMLResponse(html, headers={'Cache-Control': 'no-cache'})
@@ -196,7 +201,7 @@ def attendance_summary(day: date | None = None, month: str | None = None,
             if current <= datetime.now(IST).date():
                 state = manual.get((employee.id, current), 'unrecorded' if employee.role == 'EMSManual' else state)
             status = {'unrecorded': 'Not entered', 'present': 'Present', 'absent': 'Absent', 'weekoff': 'Week Off',
-                      'leave': 'Leave', 'upcoming': 'Upcoming'}[state]
+                      'casual_leave': 'Casual Leave', 'leave': 'Leave', 'upcoming': 'Upcoming'}[state]
             rows.append({'user_id': employee.id, 'name': employee.full_name or employee.username,
                          'employee_id': card.employee_id if card else '', 'day': current.isoformat(),
                          'outlet': store.name if store else 'Unassigned', 'department': employee.category_code or 'Unassigned',
@@ -437,7 +442,7 @@ def salary_preview(db, month):
         earnings.setdefault(uid, {})[kind] = amount
     for employee, card, store in employee_rows(db, include_excluded=False).filter(models.User.status == 'Active').order_by(models.User.full_name).all():
         joining = card.joining_date if card and card.joining_date else employee.created_date.date() if employee.created_date else start
-        counts = dict(present=0, absent=0, weekoff=0, leave=0, upcoming=0, before_joining=0)
+        counts = dict(present=0, absent=0, casual_leave=0, weekoff=0, leave=0, upcoming=0, before_joining=0)
         pay_counts = dict(counts)
         days = []
         missing_attendance = 0
@@ -459,11 +464,7 @@ def salary_preview(db, month):
                          'entered': bool(manual_day) if employee.role == 'EMSManual' else True,
                          'overridden': bool(manual_day),
                          'note': manual_day.note if manual_day else ''})
-        totals_override = totals.get(employee.id)
-        if totals_override:
-            for key in ('present', 'absent', 'weekoff', 'leave'):
-                counts[key] = getattr(totals_override, key)
-                pay_counts[key] = counts[key]
+        totals_override = None  # Totals always follow the daily attendance entries.
         profile = latest.get(employee.id)
         saved = published.get(employee.id)
         row = dict(user_id=employee.id, name=employee.full_name or employee.username,
@@ -482,8 +483,8 @@ def salary_preview(db, month):
                    incentive=earnings.get(employee.id, {}).get('incentive', 0),
                    bonus=earnings.get(employee.id, {}).get('bonus', 0))
         if profile:
-            payable = pay_counts['present'] + (pay_counts['weekoff'] if profile.paid_weekoff else 0) + (pay_counts['leave'] if profile.paid_leave else 0)
-            unpaid = pay_counts['absent'] + pay_counts['before_joining'] + (0 if profile.paid_weekoff else pay_counts['weekoff']) + (0 if profile.paid_leave else pay_counts['leave'])
+            payable = pay_counts['present'] + (pay_counts['weekoff'] if profile.paid_weekoff else 0) + ((pay_counts['leave'] + pay_counts['casual_leave']) if profile.paid_leave else 0)
+            unpaid = pay_counts['absent'] + pay_counts['before_joining'] + (0 if profile.paid_weekoff else pay_counts['weekoff']) + (0 if profile.paid_leave else pay_counts['leave'] + pay_counts['casual_leave'])
             divisor = 30
             # Deduct unpaid days; a fully paid month receives the full monthly salary.
             factor = max(Decimal(0), Decimal(1) - Decimal(unpaid)/Decimal(divisor))
@@ -491,11 +492,15 @@ def salary_preview(db, month):
                 factor = Decimal(0)
             prorate = lambda value: int((Decimal(value)*factor).quantize(Decimal('1'), rounding=ROUND_HALF_UP))
             basic, allowance = prorate(profile.basic), prorate(profile.allowances)
+            gross = basic + allowance
+            weekoff_pay = int((Decimal(gross) * row['weekoff_credit'] / 30).quantize(
+                Decimal('1'), rounding=ROUND_HALF_UP))
             row.update(basic=basic, allowances=allowance, deductions=profile.deductions,
+                       gross_salary=gross, weekoff_pay=weekoff_pay,
                        monthly_basic=profile.basic, monthly_allowances=profile.allowances,
                        divisor='30', paid_weekoff=bool(profile.paid_weekoff), paid_leave=bool(profile.paid_leave),
                        payable_days=payable, unpaid_days=unpaid,
-                       net=basic+allowance+row['incentive']+row['bonus']-profile.deductions)
+                       net=gross+weekoff_pay+row['incentive']+row['bonus']-profile.deductions)
         row['can_publish'] = bool(profile and end < today and not saved and row.get('net', -1) >= 0 and joining <= end and not missing_attendance)
         rows.append(row)
     return {'month': month, 'closed_month': end < today, 'rows': rows}
@@ -519,7 +524,7 @@ def publish_salary(payload: SalaryRun, db: Session = Depends(get_db), user=Depen
         raise HTTPException(409, 'Attendance or salary values changed. Refresh and review the preview again.')
     payroll = M.EMSPayroll(user_id=payload.user_id, month=payload.month, basic=row['basic'],
         allowances=row['allowances'], deductions=row['deductions'], incentives=row['incentive'],
-        bonuses=row['bonus'], net=row['net'], created_by=user.id)
+        bonuses=row['bonus'] + row['weekoff_pay'], net=row['net'], created_by=user.id)
     try:
         db.add(payroll); db.flush()
         db.add(M.EMSPayrollSnapshot(payroll_id=payroll.id, details=json.dumps(row)))
@@ -614,7 +619,7 @@ class ManualEmployee(Input):
 
 class ManualDay(Input):
     day: date
-    status: Literal['present', 'absent', 'weekoff', 'leave']
+    status: Literal['present', 'absent', 'casual_leave', 'weekoff', 'leave']
     note: str = Field(default='', max_length=300)
 
 
@@ -696,7 +701,7 @@ def save_manual_attendance(user_id: int, payload: ManualAttendanceInput,
     return {'message': 'Manual attendance saved and draft salary recalculated'}
 
 class AttendanceCorrectionDay(ManualDay):
-    status: Literal['present', 'absent', 'weekoff', 'leave', 'auto']
+    status: Literal['present', 'absent', 'casual_leave', 'weekoff', 'leave', 'auto']
 
 
 class AttendanceCorrectionInput(ManualAttendanceInput):
@@ -819,9 +824,10 @@ def salary_distribution(month: str, db: Session = Depends(get_db), user=Depends(
     for employee in preview['rows']:
         profile = profiles.get(employee['profile_id'])
         saved = inputs.get(employee['user_id'])
-        attendance_absent = employee['counts']['absent']
+        attendance_absent = employee.get('unpaid_days', employee['counts']['absent'])
         calculated = calculate_distribution(profile.basic + profile.allowances if profile else 0,
-            attendance_absent, saved.other_allowances if saved else 0, saved.staff_advance if saved else 0)
+            attendance_absent, saved.other_allowances if saved else 0, saved.staff_advance if saved else 0,
+            employee['counts']['weekoff'])
         rows.append(dict(**calculated, user_id=employee['user_id'], name=employee['name'],
             employee_id=employee['employee_id'], profile_id=employee['profile_id'],
             attendance_absent=attendance_absent, missing_attendance=employee['missing_attendance'],
@@ -892,21 +898,4 @@ class AttendanceTotalsInput(Input):
 @router.put('/attendance-totals/{user_id}')
 def save_attendance_totals(user_id: int, payload: AttendanceTotalsInput,
                            db: Session = Depends(get_db), user=Depends(manager)):
-    start, end = month_bounds(payload.month)
-    lock_employee(db, user_id)
-    if db.query(M.EMSPayroll).filter_by(user_id=user_id, month=payload.month).first():
-        raise HTTPException(409, 'Published salary attendance cannot be changed')
-    elapsed = max(0, (min(end, datetime.now(IST).date()) - start).days + 1)
-    if sum(getattr(payload, k) for k in ('present', 'absent', 'weekoff', 'leave')) > elapsed:
-        raise HTTPException(422, f'Attendance totals cannot exceed {elapsed} elapsed days in this month')
-    row = db.query(M.EMSAttendanceTotals).filter_by(user_id=user_id, month=payload.month).first()
-    if row is None:
-        row = M.EMSAttendanceTotals(user_id=user_id, month=payload.month)
-        db.add(row)
-    for key in ('present', 'absent', 'weekoff', 'leave'):
-        setattr(row, key, getattr(payload, key))
-    row.updated_by = user.id
-    row.updated_at = datetime.utcnow()
-    record(db, user, 'attendance_totals_saved', user_id, payload.model_dump_json())
-    db.commit()
-    return {'message': 'EMS totals saved; daily attendance unchanged'}
+    raise HTTPException(422, 'Edit daily P, A, CL, WO or L entries; totals are calculated automatically')
