@@ -14,6 +14,26 @@ from ems import router, pages
 
 
 class SalaryTests(unittest.TestCase):
+    def test_paid_cl_recalculates_distribution_without_changing_shared_attendance(self):
+        uid = self.users[2].id
+        self.assertEqual(self.setup_salary(uid, paid_leave=False).status_code, 200)
+        shared = [t for t in Base.metadata.sorted_tables if not t.name.startswith('ems_')]
+        original = {t.name: self.db.execute(t.select()).all() for t in shared}
+        before = self.preview(uid)
+        path = f'/api/ems/attendance-records/{uid}'
+        response = self.client.put(path, json={'month': '2026-09', 'days': [
+            {'day': '2026-09-01', 'status': 'casual_leave'}]})
+        self.assertEqual(response.status_code, 200, response.text)
+        after = self.preview(uid)
+        self.assertEqual(after['unpaid_days'], before['unpaid_days'] - 1)
+        self.assertEqual(after['counts']['absent'], before['counts']['absent'] - 1)
+        self.assertEqual(after['counts']['casual_leave'], 1)
+        distribution = self.client.get('/api/ems/salary-distribution?month=2026-09').json()
+        row = next(r for r in distribution['rows'] if r['user_id'] == uid)
+        self.assertEqual(row['absent'], after['unpaid_days'])
+        self.assertEqual(row['working_days'], 30 - after['unpaid_days'])
+        self.assertEqual({t.name: self.db.execute(t.select()).all() for t in shared}, original)
+
     def setUp(self):
         self.engine = create_engine('sqlite://', connect_args={'check_same_thread': False}, poolclass=StaticPool)
         event.listen(self.engine, 'connect', lambda connection, _: connection.execute('PRAGMA foreign_keys=ON'))

@@ -60,10 +60,10 @@ The table scrolls horizontally, with a fixed employee column, formula tooltips, 
 
 ?Delete from EMS only? permanently removes the employee from EMS, including EMS salary setups, earnings, payroll history, payslips and EMS manual attendance. Their registered ERP account, login, shared Attendance records and access to other modules remain unchanged. A deletion audit is retained.
 
-- **CL (Casual Leave)** is available between A and WO in Attendance Record. Type CL or choose Casual Leave in the attendance editor. CL totals are separate from L; both follow the salary profile's paid leave setting.
+- **CL (Casual Leave)** is available between A and WO in Attendance Record. Type CL or choose Casual Leave in the attendance editor. CL totals are separate from L. CL is always paid; L follows the salary profile's paid leave setting.
 
 ## Paid unused weekoffs
-Each month allows 4 weekoffs. Unused weekoff days = max(0, 4 - WO availed). Additional weekoff pay = earned gross salary / 30 * unused weekoff days, rounded to paise. Monthly payroll adds this pay before fixed deductions; the payslip shows it separately. IDS and Salary Distribution show Phase 1 net only. W/O & Incentive uses IDS Actual Gross Earning for the same formula and shows the separate Phase 2 payment. More than 4 weekoffs gives zero extra pay. Leave and CL follow the salary profile's paid leave rule; unpaid days, including ineligible days before joining, reduce salary. Open months remain provisional. Previously published payslips retain their saved values.
+Each month allows 4 weekoffs. Unused weekoff days = max(0, 4 - WO availed). Additional weekoff pay = earned gross salary / 30 * unused weekoff days, rounded to paise. Monthly payroll adds this pay before fixed deductions; the payslip shows it separately. IDS and Salary Distribution show Phase 1 net only. W/O & Incentive uses IDS Actual Gross Earning for the same formula and shows the separate Phase 2 payment. More than 4 weekoffs gives zero extra pay. CL is always paid; L follows the salary profile's paid leave rule; unpaid days, including ineligible days before joining, reduce salary. Open months remain provisional. Previously published payslips retain their saved values.
 
 ## Two-phase salary payments
 
@@ -74,3 +74,5 @@ Open **IDS**, immediately after **W/O & Incentive**, for the Phase 1 pay sheet. 
 - Example: IDS gross INR 29,063 and deductions INR 2,348 gives Phase 1 INR 26,715. With 3 weekoffs availed, Phase 2 weekoff credit pay is INR 968.77, plus the entered incentive. Amounts retain the existing paise rounding.
 
 Both tabs follow the selected month, employee group and category filters. The reports do not transfer money or change previously published payslips. The legacy Monthly payroll publication calculation is separate from these two payment reports.
+
+Attendance edits immediately recalculate Unpaid Days, Working Days, earnings and totals in Salary Distribution and IDS, and gross-based credit pay in W/O & Incentive. A to CL reduces unpaid days by one and increases working days by one (within the 30-day salary cap); CL is paid regardless of the L leave setting. WO edits also recalculate weekoff credit. Unsaved attendance is labelled provisional until automatic saving or Save now completes. Dates before joining stay unpaid, future dates stay Upcoming, and published attendance remains locked. These EMS corrections do not change original ERP punches or shared leave records.

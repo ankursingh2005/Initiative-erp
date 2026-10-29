@@ -483,8 +483,9 @@ def salary_preview(db, month):
                    incentive=earnings.get(employee.id, {}).get('incentive', 0),
                    bonus=earnings.get(employee.id, {}).get('bonus', 0))
         if profile:
-            payable = pay_counts['present'] + (pay_counts['weekoff'] if profile.paid_weekoff else 0) + ((pay_counts['leave'] + pay_counts['casual_leave']) if profile.paid_leave else 0)
-            unpaid = pay_counts['absent'] + pay_counts['before_joining'] + (0 if profile.paid_weekoff else pay_counts['weekoff']) + (0 if profile.paid_leave else pay_counts['leave'] + pay_counts['casual_leave'])
+            # CL is paid casual leave; the optional leave setting applies to L only.
+            payable = pay_counts['present'] + pay_counts['casual_leave'] + (pay_counts['weekoff'] if profile.paid_weekoff else 0) + (pay_counts['leave'] if profile.paid_leave else 0)
+            unpaid = pay_counts['absent'] + pay_counts['before_joining'] + (0 if profile.paid_weekoff else pay_counts['weekoff']) + (0 if profile.paid_leave else pay_counts['leave'])
             divisor = 30
             # Deduct unpaid days; a fully paid month receives the full monthly salary.
             factor = max(Decimal(0), Decimal(1) - Decimal(unpaid)/Decimal(divisor))

@@ -163,3 +163,36 @@ test('IDS shows phase 1 net and phase 2 stays separate on the same gross',()=>{
  assert.match(html,/data-tab="earnings"[^>]*>W\/O &amp; Incentive<\/button><button data-tab="ids">IDS/);
  assert.ok(!vm.runInContext('distributionKeys.includes("weekoff_pay")',context));
 });
+
+test('A to CL recalculates IDS, distribution and phase 2 immediately and after reload',()=>{
+ const {context,nodes}=setup();
+ context.clearTimeout=()=>{};context.setTimeout=fn=>{context.scheduledSave=fn;return 1;};
+ vm.runInContext(`state.rows[0].joining_date='2026-09-01';state.rows[0].paid_leave=false;state.rows[0].paid_weekoff=true;state.rows[0].days=Array.from({length:30},(_,i)=>({day:'2026-09-'+String(i+1).padStart(2,'0'),status:i<12?'absent':'present'}));state.distribution[0].absent=12;state.weekoffIncentives=[{user_id:1,incentive:50000}];`,context);
+ const before=vm.runInContext('currentDistributionRows()[0]',context);
+ assert.equal(before.absent,12);assert.equal(before.working_days,18);
+ context.input={value:'CL',dataset:{sheetUser:'1',sheetDay:'2026-09-01'},setCustomValidity(){},classList:{add(){},toggle(){}}};
+ vm.runInContext('stageAttendanceCell(input)',context);
+ const after=vm.runInContext('currentDistributionRows()[0]',context);
+ assert.equal(after.absent,11);assert.equal(after.working_days,19);assert.ok(after.net_amount>before.net_amount);
+ assert.equal(after.attendance_pending,true);
+ assert.equal(nodes.get('idsNet').textContent,vm.runInContext('money(currentDistributionRows()[0].net_amount)',context));
+ assert.equal(nodes.get('distributionNet').textContent,nodes.get('idsNet').textContent);
+ assert.equal(vm.runInContext('currentWeekoffRows()[0].gross',context),after.actual_gross_earning);
+ assert.match(nodes.get('idsRows').innerHTML,/Attendance saving/);
+ vm.runInContext(`state.rows[0].days[0].status='casual_leave';attendanceDrafts.clear();renderDistribution();renderIDS();renderWeekoffTable();`,context);
+ assert.equal(vm.runInContext('currentDistributionRows()[0].absent',context),11);
+ assert.equal(vm.runInContext('currentDistributionRows()[0].attendance_pending',context),false);
+ context.input.value='WO';vm.runInContext('stageAttendanceCell(input)',context);
+ assert.equal(vm.runInContext('currentWeekoffRows()[0].credit',context),3);
+ assert.equal(vm.runInContext('currentWeekoffRows()[0].pay',context),vm.runInContext('Math.round(currentDistributionRows()[0].actual_gross_earning*3/30)',context));
+ context.input.value='A';vm.runInContext('stageAttendanceCell(input)',context);
+ assert.equal(vm.runInContext('currentDistributionRows()[0].absent',context),12);
+ assert.equal(vm.runInContext('currentWeekoffRows()[0].credit',context),4);
+});
+test('CL is paid while ordinary leave, weekoff settings and joining dates are respected',()=>{
+ const {context}=setup();
+ vm.runInContext(`state.rows[0].joining_date='2026-09-02';state.rows[0].paid_weekoff=false;state.rows[0].paid_leave=false;state.rows[0].days=[{day:'2026-09-01',status:'casual_leave'},{day:'2026-09-02',status:'casual_leave'},{day:'2026-09-03',status:'leave'},{day:'2026-09-04',status:'weekoff'},{day:'2026-09-05',status:'upcoming'}];`,context);
+ assert.equal(vm.runInContext('currentDistributionRows()[0].absent',context),3);
+ vm.runInContext('state.rows[0].paid_weekoff=true;state.rows[0].paid_leave=true;',context);
+ assert.equal(vm.runInContext('currentDistributionRows()[0].absent',context),1);
+});
