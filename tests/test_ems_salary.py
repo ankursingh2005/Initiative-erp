@@ -14,6 +14,31 @@ from ems import router, pages
 
 
 class SalaryTests(unittest.TestCase):
+    def test_manual_monthly_totals_recalculate_salary_without_changing_erp(self):
+        uid = self.create_manual().json()['user_id']
+        self.assertEqual(self.setup_salary(uid, basic='30000', allowances='0',
+            deductions='0', employment_category='Contract').status_code, 200)
+        shared = [t for t in Base.metadata.sorted_tables if not t.name.startswith('ems_')]
+        before = {t.name: self.db.execute(t.select()).all() for t in shared}
+        payload = dict(month='2026-09', present=24, absent=2, casual_leave=1, weekoff=2, leave=1)
+        path = f'/api/ems/attendance-totals/{uid}'
+        self.assertEqual(self.client.put(path, json=payload).status_code, 200)
+        preview = self.preview(uid)
+        self.assertTrue(preview['monthly_attendance'])
+        self.assertEqual(preview['missing_attendance'], 0)
+        self.assertEqual(preview['unpaid_days'], 3)
+        self.assertEqual(preview['counts']['casual_leave'], 1)
+        rows = self.client.get('/api/ems/salary-distribution?month=2026-09').json()['rows']
+        row = next(r for r in rows if r['user_id'] == uid)
+        self.assertEqual(row['working_days'], 27)
+        self.assertEqual(row['weekoff_credit'], 2)
+        self.assertEqual(row['actual_basic'], 2700000)
+        self.assertEqual(self.client.put(path, json={**payload, 'present': 25}).status_code, 422)
+        self.assertEqual(self.client.put(f'/api/ems/attendance-totals/{self.users[2].id}',
+            json=payload).status_code, 422)
+        self.assertEqual({t.name: self.db.execute(t.select()).all() for t in shared}, before)
+        self.assertEqual(self.db.query(M.EMSManualAttendance).filter_by(user_id=uid).count(), 0)
+
     def test_workbook_export_is_authorized_and_does_not_write_any_records(self):
         from ems_workbook import IDS_HEADERS
         ids = ['EMP001', 'Synthetic employee', 'Test', 'Regular', 0, 30, 30,

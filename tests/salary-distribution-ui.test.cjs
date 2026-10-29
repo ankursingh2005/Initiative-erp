@@ -80,7 +80,7 @@ test('attendance sheet accepts codes and preserves unsaved edits across renderin
  vm.runInContext(`state.rows=[{user_id:1,name:'Sheet Employee',employee_id:'E001',outlet:'Main',joining_date:'2026-09-01',counts:{present:1,absent:0,weekoff:0,leave:0},days:[{day:'2026-09-01',status:'present',entered:true}]}];attendanceDrafts.set(attendanceKey(1,'2026-09-01'),{value:'L',status:'leave'});renderAttendanceRecord();`,context);
  assert.match(nodes.get('attendanceRecordRows').innerHTML,/value="L"/);
  assert.match(nodes.get('attendanceRecordRows').innerHTML,/sheet-dirty/);
- assert.equal(nodes.get('attendanceSheetStatus').textContent,'1 unsaved cells');
+ assert.equal(nodes.get('attendanceSheetStatus').textContent,'1 unsaved attendance changes');
 });
 
 
@@ -237,4 +237,33 @@ test('category controls bonus EPF and ESIC in both reports and Excel',()=>{
  const regular=vm.runInContext('currentDistributionRows()[0]',context);
  assert.ok(regular.bonus_payable>0);assert.ok(regular.epf_employee>0);assert.ok(regular.esic_employee>0);
  assert.equal(nodes.get('idsNet').textContent,nodes.get('distributionNet').textContent);
+});
+
+test('manual monthly totals are editable and feed IDS distribution weekoff and Excel',()=>{
+ const {context,nodes}=setup();context.clearTimeout=()=>{};context.setTimeout=fn=>{context.scheduledSave=fn;return 1;};
+ vm.runInContext(`Object.assign(state.rows[0],{manual_employee:true,monthly_attendance:true,elapsed_days:30,joining_date:'2026-09-01',counts:{present:24,absent:2,casual_leave:1,weekoff:2,leave:1},days:[{day:'2026-09-01',status:'absent'}]});renderAttendanceRecord();`,context);
+ assert.match(nodes.get('attendanceRecordRows').innerHTML,/data-manual-total-kind="casual_leave"/);
+ context.input={value:'2',dataset:{manualTotalUser:'1',manualTotalKind:'casual_leave'},setCustomValidity(v){this.error=v;}};
+ vm.runInContext('stageManualAttendanceTotal(input)',context);
+ assert.match(context.input.error,/cannot exceed/);
+ context.input={value:'1',dataset:{manualTotalUser:'1',manualTotalKind:'absent'},setCustomValidity(v){this.error=v;}};
+ vm.runInContext('stageManualAttendanceTotal(input)',context);
+ assert.equal(context.input.error,'');assert.equal(typeof context.scheduledSave,'function');
+ assert.equal(vm.runInContext('currentDistributionRows()[0].absent',context),2);
+ assert.equal(vm.runInContext('currentDistributionRows()[0].working_days',context),28);
+ assert.equal(vm.runInContext('currentWeekoffRows()[0].credit',context),2);
+ assert.equal(nodes.get('idsNet').textContent,nodes.get('distributionNet').textContent);
+ assert.equal(vm.runInContext('salaryWorkbookPayload().ids_rows[0][4]',context),2);
+ assert.equal(vm.runInContext('attendanceSheetCounts(state.rows[0]).casual_leave',context),2);
+ vm.runInContext('state.rows[0].published_id=99;renderAttendanceRecord();',context);
+ assert.match(nodes.get('attendanceRecordRows').innerHTML,/data-manual-total-kind="present"[^>]*disabled/);
+});
+test('saving manual overall attendance uses EMS totals endpoint',async()=>{
+ const {context}=setup();context.clearTimeout=()=>{};let request;
+ context.api=async(path,options)=>{request={path,payload:JSON.parse(options.body)};return {};};context.refresh=async()=>{};
+ vm.runInContext(`state.rows[0].manual_employee=true;attendanceTotalDrafts.set('2026-09:1',{month:'2026-09',user_id:1,valid:true,counts:{present:24,absent:2,casual_leave:1,weekoff:2,leave:1}});`,context);
+ await vm.runInContext('saveAttendanceSheet()',context);
+ assert.equal(request.path,'/attendance-totals/1');assert.equal(request.payload.casual_leave,1);
+ assert.equal(vm.runInContext('attendanceTotalDrafts.size',context),0);
+ assert.equal(vm.runInContext('state.rows[0].monthly_attendance',context),true);
 });

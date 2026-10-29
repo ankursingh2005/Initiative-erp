@@ -319,6 +319,14 @@ const distributionDrafts=new Map();
 const distributionKeys=['absent','no_of_days','working_days','expected_basic','actual_basic','other_allowances','actual_vda','actual_pay_epf','actual_oa','total_earning','bonus_payable','actual_gross_earning','epf_employee','esic_employee','staff_advance','total_deductions','net_amount','account_no','ifsc_code'];
 function distributionKey(uid){return state.month+':'+uid;}
 function salaryAttendance(employee,profile,fallback){
+ const totalDraft=employee?.manual_employee?attendanceTotalDrafts.get(state.month+':'+employee.user_id):null;
+ if(employee?.manual_employee&&(totalDraft?.valid||employee.monthly_attendance)){
+  const counts=totalDraft?.valid?totalDraft.counts:employee.counts;
+  const elapsed=employee.elapsed_days??employee.days.filter(d=>d.status!=='upcoming').length;
+  const entered=['present','absent','casual_leave','weekoff','leave'].reduce((n,k)=>n+(counts[k]||0),0);
+  return {unpaid:counts.absent+counts.leave+Math.max(0,elapsed-entered),weekoff:counts.weekoff,pending:Boolean(totalDraft)};
+ }
+
  if(!Array.isArray(employee?.days))return {unpaid:fallback.absent,weekoff:employee?.counts?.weekoff??fallback.weekoff_availed??4,pending:false};
  let unpaid=0,weekoff=0,pending=false;
  for(const day of employee.days){
@@ -408,7 +416,7 @@ function salaryWorkbookPayload(category){
  const ids=currentDistributionRows(category),employees=new Map(filtered(category).map(r=>[r.user_id,r])),weekoff=new Map(currentWeekoffRows(category).map(r=>[r.user_id,r]));
  const identity=r=>{const e=employees.get(r.user_id);return [e.employee_id||'',r.name,e.outlet||'',e.employment_category||groups[e.category]||''];};
  const textKeys=new Set(['account_no','ifsc_code']),dayKeys=new Set(['absent','no_of_days','working_days']);
- return {month:state.month,provisional:!state.closed_month||ids.some(r=>!r.profile_id||r.missing_attendance||r.attendance_pending||distributionDrafts.has(distributionKey(r.user_id))||weekoffDrafts.has(state.month+':'+r.user_id)),
+ return {month:state.month,provisional:!state.closed_month||ids.some(r=>!r.profile_id||r.missing_attendance||r.attendance_pending||attendanceTotalDrafts.has(state.month+':'+r.user_id)||distributionDrafts.has(distributionKey(r.user_id))||weekoffDrafts.has(state.month+':'+r.user_id)),
  ids_rows:ids.map(r=>[...identity(r),...distributionKeys.map(k=>textKeys.has(k)?String(r[k]??''):dayKeys.has(k)?r[k]:r.profile_id?r[k]/100:null)]),
  weekoff_rows:ids.map(r=>{const w=weekoff.get(r.user_id);return [...identity(r),4,w.weekoff_availed,w.credit,...[w.gross,w.pay,w.incentive,w.payable].map(v=>r.profile_id?v/100:null)];})};
 }
@@ -443,24 +451,28 @@ function effectiveAttendanceStatus(employee,day){
  return draft?.status&&draft.status!=='auto'?draft.status:day.status;
 }
 function attendanceSheetCounts(employee){
+ const draft=employee.manual_employee?attendanceTotalDrafts.get(state.month+':'+employee.user_id):null;
+ if(draft?.valid)return {...draft.counts};
+ if(employee.manual_employee&&employee.monthly_attendance)return Object.fromEntries(['present','absent','casual_leave','weekoff','leave'].map(k=>[k,employee.counts[k]||0]));
+
  const counts={present:0,absent:0,casual_leave:0,weekoff:0,leave:0};
  for(const day of employee.days){const status=effectiveAttendanceStatus(employee,day);if(status in counts)counts[status]++;}
  return counts;
 }
 function renderAttendanceRecord(){
- const active=document.activeElement,focus=active?.dataset?.sheetDay?{user:active.dataset.sheetUser,day:active.dataset.sheetDay}:null;
+ const active=document.activeElement,focus=active?.dataset?.manualTotalUser?{manualUser:active.dataset.manualTotalUser,kind:active.dataset.manualTotalKind}:active?.dataset?.sheetDay?{user:active.dataset.sheetUser,day:active.dataset.sheetDay}:null;
  const rows=attendanceSheetEmployee===null?filtered():state.rows.filter(r=>r.user_id===attendanceSheetEmployee),days=state.rows[0]?.days||[];
  $('showAllAttendanceEmployees').hidden=attendanceSheetEmployee===null;
  $('attendanceSheetHead').innerHTML='<tr><th class="attendance-employee">Employee / ID</th><th>Outlet</th>'+days.map(d=>'<th scope="col">'+esc(d.day.slice(8))+'<small>'+esc(new Intl.DateTimeFormat('en',{weekday:'short',timeZone:'UTC'}).format(new Date(d.day+'T00:00:00Z')))+'</small></th>').join('')+'<th>P</th><th>A</th><th>CL</th><th>WO</th><th>L</th></tr>';
  $('attendanceRecordRows').innerHTML=rows.map((r,ri)=>'<tr><th class="attendance-employee" scope="row"><b>'+esc(r.name)+'</b><small>'+esc(r.employee_id)+(r.published_id?' ? Locked':'')+'</small></th><td>'+esc(r.outlet)+'</td>'+r.days.map((d,ci)=>{
- const key=attendanceKey(r.user_id,d.day),draft=attendanceDrafts.get(key),disabled=Boolean(r.published_id||d.day<r.joining_date||d.status==='upcoming');
- const value=draft?draft.value:d.day<r.joining_date?'':d.entered===false?'':attendanceCodes[d.status]||'';
+ const key=attendanceKey(r.user_id,d.day),draft=attendanceDrafts.get(key),disabled=Boolean(r.published_id||r.monthly_attendance||attendanceTotalDrafts.has(state.month+':'+r.user_id)||d.day<r.joining_date||d.status==='upcoming');
+ const value=r.manual_employee&&(r.monthly_attendance||attendanceTotalDrafts.has(state.month+':'+r.user_id))?'':draft?draft.value:d.day<r.joining_date?'':d.entered===false?'':attendanceCodes[d.status]||'';
  return '<td class="attendance-cell"><input aria-label="'+esc(r.name+' '+d.day)+'" title="'+esc(d.day+' ? '+d.status+(d.note?' ? '+d.note:''))+'" data-sheet-user="'+r.user_id+'" data-sheet-day="'+d.day+'" data-sheet-row="'+ri+'" data-sheet-col="'+ci+'" class="sheet-code '+esc(effectiveAttendanceStatus(r,d))+(draft?' sheet-dirty':'')+'" value="'+esc(value)+'" autocomplete="off" spellcheck="false"'+(disabled?' disabled':'')+'></td>';
- }).join('')+['present','absent','casual_leave','weekoff','leave'].map(k=>'<td class="attendance-count" data-sheet-count="'+r.user_id+':'+k+'">'+attendanceSheetCounts(r)[k]+'</td>').join('')+'</tr>').join('')||empty(days.length+7);
+ }).join('')+['present','absent','casual_leave','weekoff','leave'].map(k=>'<td class="attendance-count" data-sheet-count="'+r.user_id+':'+k+'">'+(r.manual_employee?'<input type="number" min="0" max="31" step="1" style="width:64px" aria-label="'+esc(r.name+' total '+attendanceCodes[k])+'" data-manual-total-user="'+r.user_id+'" data-manual-total-kind="'+k+'" value="'+(attendanceTotalDrafts.get(state.month+':'+r.user_id)?.counts[k]??attendanceSheetCounts(r)[k])+'"'+(r.published_id?' disabled':'')+'>':attendanceSheetCounts(r)[k])+'</td>').join('')+'</tr>').join('')||empty(days.length+7);
  attendanceSheetMessage();
- if(focus){const input=$('attendanceRecordRows').querySelector('[data-sheet-user="'+focus.user+'"][data-sheet-day="'+focus.day+'"]');input?.focus();}
+ if(focus){const input=$('attendanceRecordRows').querySelector(focus.manualUser?'[data-manual-total-user="'+focus.manualUser+'"][data-manual-total-kind="'+focus.kind+'"]':'[data-sheet-user="'+focus.user+'"][data-sheet-day="'+focus.day+'"]');input?.focus();}
 }
-function attendanceSheetMessage(text){$('attendanceSheetStatus').textContent=text||(attendanceDrafts.size?attendanceDrafts.size+' unsaved cells':'Attendance fetched automatically');}
+function attendanceSheetMessage(text){$('attendanceSheetStatus').textContent=text||((attendanceDrafts.size+attendanceTotalDrafts.size)?(attendanceDrafts.size+attendanceTotalDrafts.size)+' unsaved attendance changes':'Attendance fetched automatically');}
 function stageAttendanceCell(input){
  if(attendanceSaving)attendanceSaveAgain=true;
  const value=input.value.trim().toUpperCase(),status=attendanceStatus(value),employee=state.rows.find(r=>r.user_id===Number(input.dataset.sheetUser)),day=employee.days.find(d=>d.day===input.dataset.sheetDay);
@@ -474,6 +486,22 @@ function stageAttendanceCell(input){
  clearTimeout(attendanceSaveTimer);
  if(status)attendanceSaveTimer=setTimeout(()=>saveAttendanceSheet(true),700);
 }
+function stageManualAttendanceTotal(input){
+ const employee=state.rows.find(r=>r.user_id===Number(input.dataset.manualTotalUser));
+ if(!employee?.manual_employee||employee.published_id)return;
+ const key=state.month+':'+employee.user_id,previous=attendanceTotalDrafts.get(key);
+ const counts={...(previous?.counts||attendanceSheetCounts(employee)),[input.dataset.manualTotalKind]:input.value===''?NaN:Number(input.value)};
+ const elapsed=employee.elapsed_days??employee.days.filter(d=>d.status!=='upcoming').length;
+ const valid=Object.values(counts).every(v=>Number.isInteger(v)&&v>=0&&v<=31)&&Object.values(counts).reduce((a,b)=>a+b,0)<=elapsed;
+ input.setCustomValidity(valid?'':'Enter whole days; P + A + CL + WO + L cannot exceed '+elapsed+'.');
+ attendanceTotalDrafts.set(key,{month:state.month,user_id:employee.user_id,counts,valid});
+ for(const [dayKey,day] of attendanceDrafts)if(day.month===state.month&&day.user_id===employee.user_id)attendanceDrafts.delete(dayKey);
+ if(attendanceSaving)attendanceSaveAgain=true;
+ attendanceSheetMessage(valid?'Manual totals updated; saving salary calculations...':'Check manual totals: the sum cannot exceed '+elapsed+' elapsed days.');
+ renderDistribution();renderIDS();renderWeekoffTable();
+ clearTimeout(attendanceSaveTimer);if(valid)attendanceSaveTimer=setTimeout(()=>saveAttendanceSheet(true),700);
+}
+$('attendanceRecordRows').addEventListener('input',event=>{if(event.target.matches('[data-manual-total-user]'))stageManualAttendanceTotal(event.target);});
 function selectAttendanceCell(event){
  const input=event.target;if(input.matches('[data-sheet-day]')&&!input.disabled)input.select();
 }
@@ -503,7 +531,8 @@ $('attendanceRecordRows').addEventListener('paste',event=>{
 async function saveAttendanceSheet(automatic=false){
  if(attendanceSaving)return;
  clearTimeout(attendanceSaveTimer);
- if(!attendanceDrafts.size){attendanceSheetMessage('No changes to save.');return;}
+ if(!attendanceDrafts.size&&!attendanceTotalDrafts.size){attendanceSheetMessage('No changes to save.');return;}
+ if([...attendanceTotalDrafts.values()].some(d=>!d.valid)){attendanceSheetMessage('Fix manual totals before saving.');return;}
  if([...attendanceDrafts.values()].some(d=>!d.status)){attendanceSheetMessage('Fix highlighted cells: use P, A, CL, WO, L or AUTO.');return;}
  const button=$('saveAttendanceSheet');button.disabled=true;attendanceSaving=true;
  const batches=new Map();for(const [key,d] of attendanceDrafts){const batchKey=d.month+':'+d.user_id;if(!batches.has(batchKey))batches.set(batchKey,[]);batches.get(batchKey).push([key,d]);}
@@ -514,10 +543,17 @@ async function saveAttendanceSheet(automatic=false){
   if(day&&d.status!=='auto')Object.assign(day,{status:d.status,entered:true,overridden:true,note:d.note});
   if(attendanceDrafts.get(key)===d)attendanceDrafts.delete(key);
  }
- }await refresh();attendanceSheetMessage(attendanceDrafts.size?'Saving latest changes?':'Attendance saved automatically. Salary totals updated.');}
+ }
+ for(const [key,d] of [...attendanceTotalDrafts]){
+  await api('/attendance-totals/'+d.user_id,{method:'PUT',body:JSON.stringify({month:d.month,...d.counts})});
+  const employee=state.rows.find(r=>r.user_id===d.user_id);
+  if(employee)Object.assign(employee,{monthly_attendance:true,counts:{...employee.counts,...d.counts}});
+  if(attendanceTotalDrafts.get(key)===d)attendanceTotalDrafts.delete(key);
+ }
+ await refresh();attendanceSheetMessage(attendanceDrafts.size||attendanceTotalDrafts.size?'Saving latest changes?':'Attendance saved automatically. Salary totals updated.');}
  catch(error){attendanceSheetMessage(error.message+' Remaining changes are kept for retry.');}
  finally{button.disabled=false;attendanceSaving=false;}
- if(attendanceDrafts.size&&[...attendanceDrafts.values()].every(d=>d.status)&&attendanceSaveAgain){attendanceSaveAgain=false;attendanceSaveTimer=setTimeout(()=>saveAttendanceSheet(true),700);}
+ if((attendanceDrafts.size||attendanceTotalDrafts.size)&&[...attendanceDrafts.values()].every(d=>d.status)&&[...attendanceTotalDrafts.values()].every(d=>d.valid)&&attendanceSaveAgain){attendanceSaveAgain=false;attendanceSaveTimer=setTimeout(()=>saveAttendanceSheet(true),700);}
 }
 $('saveAttendanceSheet').onclick=()=>saveAttendanceSheet();
 window.addEventListener('beforeunload',event=>{if(attendanceDrafts.size||attendanceTotalDrafts.size||weekoffDrafts.size){event.preventDefault();event.returnValue='';}});

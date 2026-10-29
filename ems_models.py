@@ -139,3 +139,18 @@ class EMSAttendanceTotals(Base):
     leave = Column(Integer, nullable=False)
     updated_by = Column(Integer, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class EMSManualMonthlyAttendance(Base):
+    __tablename__ = 'ems_manual_monthly_attendance'
+    __table_args__ = (UniqueConstraint('user_id', 'month', name='uq_ems_manual_monthly_attendance'),)
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    month = Column(String(7), nullable=False, index=True)
+    present = Column(Integer, nullable=False)
+    absent = Column(Integer, nullable=False)
+    casual_leave = Column(Integer, nullable=False)
+    weekoff = Column(Integer, nullable=False)
+    leave = Column(Integer, nullable=False)
+    updated_by = Column(Integer, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
