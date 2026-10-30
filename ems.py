@@ -65,6 +65,10 @@ def user_data(user, card, store):
             'joining_date': card.joining_date if card else None, 'photo': card.photo if card else None}
 
 
+def ems_employee_names(db):
+    return dict(db.query(M.EMSEmployeeName.user_id, M.EMSEmployeeName.display_name).all())
+
+
 def employee_rows(db, include_excluded=True):
     query = (db.query(models.User, models.IdentityCard, models.Store)
             .outerjoin(models.IdentityCard, models.IdentityCard.user_id == models.User.id)
@@ -90,7 +94,8 @@ def scoped_rows(db, model, user):
     if not auth.has_admin_access(user):
         query = query.filter(model.user_id == user.id)
     query = query.order_by(model.month.desc(), model.id.desc()) if hasattr(model, 'month') else query.order_by(model.id.desc())
-    result = [serialize(row, name or username) for row, name, username in query.all()]
+    salary_names = ems_employee_names(db)
+    result = [serialize(row, salary_names.get(row.user_id, name or username)) for row, name, username in query.all()]
     if model is M.EMSPayroll and result:
         ids = {row['user_id'] for row in result}
         cards = dict(db.query(models.IdentityCard.user_id, models.IdentityCard.employee_id).filter(models.IdentityCard.user_id.in_(ids)).all())
@@ -184,7 +189,13 @@ def me(db: Session = Depends(get_db), user=Depends(member)):
 
 @router.get('/employees')
 def employees(db: Session = Depends(get_db), user=Depends(manager)):
-    return [user_data(*row) for row in employee_rows(db).order_by(models.User.full_name).all()]
+    salary_names = ems_employee_names(db)
+    result = []
+    for employee, card, store in employee_rows(db).order_by(models.User.full_name).all():
+        data = user_data(employee, card, store)
+        data['name'] = salary_names.get(employee.id, data['name'])
+        result.append(data)
+    return result
 
 
 @router.get('/attendance')
@@ -223,6 +234,7 @@ def attendance_summary(day: date | None = None, month: str | None = None,
     leave_days = {(item.user_id, item.leave_date) for item in db.query(models.AttendanceLeave).filter(
         models.AttendanceLeave.user_id.in_(ids), models.AttendanceLeave.leave_date.between(start, end)).all()}
     manual = {(r.user_id, r.day): r.status for r in db.query(M.EMSManualAttendance).filter(M.EMSManualAttendance.day.between(start, end)).all()}
+    salary_names = ems_employee_names(db)
     rows = []
     for offset in range((end - start).days + 1):
         current = start + timedelta(days=offset)
@@ -234,7 +246,7 @@ def attendance_summary(day: date | None = None, month: str | None = None,
                 state = manual.get((employee.id, current), 'unrecorded' if employee.role == 'EMSManual' else state)
             status = {'unrecorded': 'Not entered', 'present': 'Present', 'absent': 'Absent', 'weekoff': 'Week Off',
                       'casual_leave': 'Casual Leave', 'leave': 'Leave', 'upcoming': 'Upcoming'}[state]
-            rows.append({'user_id': employee.id, 'name': employee.full_name or employee.username,
+            rows.append({'user_id': employee.id, 'name': salary_names.get(employee.id, employee.full_name or employee.username),
                          'employee_id': card.employee_id if card else '', 'day': current.isoformat(),
                          'outlet': store.name if store else 'Unassigned', 'department': employee.category_code or 'Unassigned',
                          'weekoff_day': employee.weekoff_day or '', 'status': status,
@@ -453,6 +465,7 @@ def salary_preview(db, month):
     start, end = month_bounds(month)
     today = datetime.now(IST).date()
     rows = []
+    salary_names = ems_employee_names(db)
     profiles = db.query(M.EMSSalaryProfile).filter(M.EMSSalaryProfile.effective_month <= month).order_by(
         M.EMSSalaryProfile.effective_month.desc()).all()
     latest = {}
@@ -513,7 +526,8 @@ def salary_preview(db, month):
             joining = start
         profile = latest.get(employee.id)
         saved = published.get(employee.id)
-        row = dict(user_id=employee.id, name=employee.full_name or employee.username,
+        row = dict(user_id=employee.id, name=salary_names.get(employee.id, employee.full_name or employee.username),
+                   registered_name=employee.full_name or employee.username,
                    employee_id=card.employee_id if card else '',
                    category=employee.category_code if employee.role == 'EMSManual' else employee_category(employee),
                    outlet=store.name if store else 'Unassigned', department=employee.category_code or '',
@@ -595,7 +609,8 @@ def salary_slip(payroll_id: int, db: Session = Depends(get_db), user=Depends(man
 
 @router.get('/excluded-employees')
 def excluded_salary_employees(db: Session = Depends(get_db), user=Depends(manager)):
-    return [dict(user_id=employee.id, name=employee.full_name or employee.username,
+    salary_names = ems_employee_names(db)
+    return [dict(user_id=employee.id, name=salary_names.get(employee.id, employee.full_name or employee.username),
                  employee_id=card.employee_id if card else '')
             for employee, card, store in employee_rows(db, include_excluded=True).filter(
                 models.User.id.in_(db.query(M.EMSExcludedEmployee.user_id))).all()]
@@ -808,7 +823,7 @@ def permanently_delete_ems_employee(user_id: int, payload: EMSPermanentDeletion,
     # Remove employee-specific audit payloads which duplicate salary/profile details.
     audit_groups = [
         (['salary_profile_saved', 'employee_excluded_from_salary', 'employee_restored_to_salary',
-          'manual_employee_created', 'manual_attendance_saved', 'salary_distribution_inputs_saved'], [user_id]),
+          'manual_employee_created', 'manual_attendance_saved', 'salary_distribution_inputs_saved', 'ems_salary_name_saved'], [user_id]),
         (['payroll_published', 'payroll_marked_paid', 'salary_published_from_attendance'], payroll_ids),
         (['earning_approved', 'earning_voided'], earning_ids),
         (['leave_requested', 'leave_approved', 'leave_rejected'], leave_ids),
@@ -816,7 +831,7 @@ def permanently_delete_ems_employee(user_id: int, payload: EMSPermanentDeletion,
     for actions, targets in audit_groups:
         db.query(M.EMSAudit).filter(M.EMSAudit.action.in_(actions),
             M.EMSAudit.target.in_([str(value) for value in targets])).delete(synchronize_session=False)
-    for model in (M.EMSManualMonthlyAttendance, M.EMSAttendanceTotals, M.EMSWeekoffIncentive, M.EMSDistributionInput, M.EMSManualAttendance, M.EMSExcludedEmployee, M.EMSLeaveRequest,
+    for model in (M.EMSEmployeeName, M.EMSManualMonthlyAttendance, M.EMSAttendanceTotals, M.EMSWeekoffIncentive, M.EMSDistributionInput, M.EMSManualAttendance, M.EMSExcludedEmployee, M.EMSLeaveRequest,
                   M.EMSEarning, M.EMSSalaryProfile, M.EMSPayroll):
         db.query(model).filter_by(user_id=user_id).delete(synchronize_session=False)
     # Tombstone prevents an ERP account from automatically reappearing in EMS.
@@ -971,3 +986,25 @@ def save_attendance_totals(user_id: int, payload: AttendanceTotalsInput,
     record(db, user, 'manual_monthly_attendance_saved', user_id, payload.model_dump_json())
     db.commit()
     return {'message': 'Manual attendance totals saved; EMS salary reports recalculated'}
+
+class EmployeeSalaryName(Input):
+    display_name: str = Field(min_length=2, max_length=150, pattern=r'^[^\x00-\x1f\x7f]+$')
+
+
+@router.put('/employees/{user_id}/salary-name')
+def save_employee_salary_name(user_id: int, payload: EmployeeSalaryName,
+                              db: Session = Depends(get_db), user=Depends(manager)):
+    if not employee_rows(db, include_excluded=True).filter(models.User.id == user_id).first():
+        raise HTTPException(404, 'EMS employee not found')
+    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+    from sqlalchemy.dialects.postgresql import insert as postgres_insert
+    insert = postgres_insert if db.bind.dialect.name == 'postgresql' else sqlite_insert
+    values = dict(user_id=user_id, display_name=payload.display_name,
+                  updated_by=user.id, updated_at=datetime.utcnow())
+    statement = insert(M.EMSEmployeeName).values(**values)
+    db.execute(statement.on_conflict_do_update(index_elements=['user_id'], set_={
+        key: value for key, value in values.items() if key != 'user_id'}))
+    record(db, user, 'ems_salary_name_saved', user_id, payload.model_dump_json())
+    db.commit()
+    return {'message': 'EMS salary name saved. Registered account and login are unchanged.',
+            'user_id': user_id, 'name': payload.display_name}

@@ -20,3 +20,5 @@
 /static/attendance.html text eol=lf
 /tests/attendance-capture.test.cjs text eol=lf
 /tests/test_attendance_anywhere.py text eol=lf
+
+/static/ems-dashboard.css text eol=lf

@@ -350,7 +350,7 @@ function currentDistributionRows(category){
   const profileId=Array.isArray(state.profiles)?(profile?.id??null):row.profile_id;
   const employee=state.rows.find(r=>r.user_id===row.user_id),attendance=salaryAttendance(employee,profile,row);
   const employmentCategory=profile?.employment_category??employee?.employment_category??row.employment_category??null;
-  return {...row,profile_id:profileId,attendance_pending:attendance.pending,...salaryDistributionMath.calculateDistribution(expectedBasic,attendance.unpaid,draft?.other_allowances??row.other_allowances,draft?.staff_advance??row.staff_advance,attendance.weekoff,employmentCategory)};
+  return {...row,name:employee?.name||row.name,profile_id:profileId,attendance_pending:attendance.pending,...salaryDistributionMath.calculateDistribution(expectedBasic,attendance.unpaid,draft?.other_allowances??row.other_allowances,draft?.staff_advance??row.staff_advance,attendance.weekoff,employmentCategory)};
  });
 }
 function distributionInput(row,key){return '<input type="number" min="0" max="10000000" step="0.01" aria-label="'+esc(key==='other_allowances'?'Other allowances for '+row.name:'Staff advance and deduction for '+row.name)+'" data-dist-input="'+key+'" value="'+(row[key]/100).toFixed(2)+'"'+(!row.profile_id?' disabled':'')+'>'+(key==='staff_advance'?'<button type="button" class="distribution-save" data-dist-save="'+row.user_id+'"'+(!row.profile_id?' disabled':'')+'>Save inputs</button>':'');}
@@ -466,7 +466,7 @@ function renderAttendanceRecord(){
  const rows=attendanceSheetEmployee===null?filtered():state.rows.filter(r=>r.user_id===attendanceSheetEmployee),days=state.rows[0]?.days||[];
  $('showAllAttendanceEmployees').hidden=attendanceSheetEmployee===null;
  $('attendanceSheetHead').innerHTML='<tr><th class="attendance-employee">Employee / ID</th><th>Outlet</th>'+days.map(d=>'<th scope="col">'+esc(d.day.slice(8))+'<small>'+esc(new Intl.DateTimeFormat('en',{weekday:'short',timeZone:'UTC'}).format(new Date(d.day+'T00:00:00Z')))+'</small></th>').join('')+'<th>P</th><th>A</th><th>CL</th><th>WO</th><th>L</th></tr>';
- $('attendanceRecordRows').innerHTML=rows.map((r,ri)=>'<tr><th class="attendance-employee" scope="row"><b>'+esc(r.name)+'</b><small>'+esc(r.employee_id)+(r.published_id?' ? Locked':'')+'</small></th><td>'+esc(r.outlet)+'</td>'+r.days.map((d,ci)=>{
+ $('attendanceRecordRows').innerHTML=rows.map((r,ri)=>'<tr><th class="attendance-employee" scope="row"><span class="ems-attendance-name"><b>'+esc(r.name)+'</b><button type="button" class="ems-name-edit" data-edit-ems-name="'+r.user_id+'" aria-label="Edit EMS name for '+esc(r.name)+'">Edit</button></span><small>'+esc(r.employee_id)+(r.published_id?' ? Locked':'')+'</small></th><td>'+esc(r.outlet)+'</td>'+r.days.map((d,ci)=>{
  const key=attendanceKey(r.user_id,d.day),draft=attendanceDrafts.get(key),disabled=Boolean(r.published_id||r.monthly_attendance||attendanceTotalDrafts.has(state.month+':'+r.user_id)||d.day<r.joining_date||d.status==='upcoming');
  const value=r.manual_employee&&(r.monthly_attendance||attendanceTotalDrafts.has(state.month+':'+r.user_id))?'':draft?draft.value:d.day<r.joining_date?'':d.entered===false?'':attendanceCodes[d.status]||'';
  return '<td class="attendance-cell"><input aria-label="'+esc(r.name+' '+d.day)+'" title="'+esc(d.day+' ? '+d.status+(d.note?' ? '+d.note:''))+'" data-sheet-user="'+r.user_id+'" data-sheet-day="'+d.day+'" data-sheet-row="'+ri+'" data-sheet-col="'+ci+'" class="sheet-code '+esc(effectiveAttendanceStatus(r,d))+(draft?' sheet-dirty':'')+'" value="'+esc(value)+'" autocomplete="off" spellcheck="false"'+(disabled?' disabled':'')+'></td>';
@@ -600,3 +600,34 @@ $('weekoffRows').addEventListener('click',async event=>{
 });
 
 $('showAllAttendanceEmployees').onclick=()=>{attendanceSheetEmployee=null;renderAttendanceRecord();};
+
+let emsNameEmployeeId=null,emsNameSaving=false;
+function applyEMSSalaryName(uid,name){
+ for(const collection of ['rows','distribution','records','earnings','excluded']){
+  for(const row of state[collection]||[])if(row.user_id===uid)row.name=name;
+ }
+ const form=$('setupForm'),employee=state.rows.find(row=>row.user_id===uid);
+ if(employee&&String(form.elements.user_id.value)===String(uid))$('setupEmployeeSearch').value=employeeOptionLabel(employee);
+ if(selected?.user_id===uid)selected.name=name;
+ render();
+ if($('employeeListDialog').open)renderEmployeeList();
+}
+function closeEMSSalaryName(){if(emsNameSaving)return;$('emsSalaryNameDialog').close();emsNameEmployeeId=null;}
+$('closeEMSSalaryName').onclick=closeEMSSalaryName;
+$('emsSalaryNameDialog').addEventListener('cancel',event=>{event.preventDefault();closeEMSSalaryName();});
+document.addEventListener('click',event=>{
+ const button=event.target.closest('[data-edit-ems-name]');if(!button)return;
+ const uid=Number(button.dataset.editEmsName),employee=state.rows.find(row=>row.user_id===uid);if(!employee)return;
+ emsNameEmployeeId=uid;$('emsSalaryNameInput').value=employee.name;
+ $('emsSalaryNameEmployee').textContent=(employee.employee_id||'Employee ID not assigned')+(employee.registered_name?' | Registered name: '+employee.registered_name:'');
+ $('emsSalaryNameError').textContent='';$('emsSalaryNameDialog').showModal();$('emsSalaryNameInput').focus();
+});
+$('emsSalaryNameForm').onsubmit=async event=>{
+ event.preventDefault();if(emsNameSaving||emsNameEmployeeId===null)return;
+ const uid=emsNameEmployeeId,input=$('emsSalaryNameInput'),name=input.value.trim(),button=event.target.querySelector('button.primary');
+ if(name.length<2||name.length>150){$('emsSalaryNameError').textContent='Enter a full name between 2 and 150 characters.';return;}
+ emsNameSaving=true;button.disabled=true;$('closeEMSSalaryName').disabled=true;input.disabled=true;$('emsSalaryNameError').textContent='';
+ try{const result=await api('/employees/'+uid+'/salary-name',{method:'PUT',body:JSON.stringify({display_name:name})});applyEMSSalaryName(uid,result.name);$('emsSalaryNameDialog').close();emsNameEmployeeId=null;message(result.message);}
+ catch(error){$('emsSalaryNameError').textContent=error.message;}
+ finally{emsNameSaving=false;button.disabled=false;$('closeEMSSalaryName').disabled=false;input.disabled=false;}
+};

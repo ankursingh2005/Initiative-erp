@@ -220,3 +220,5 @@ button[data-delete-ems],#excludedEmployeeRows button[data-delete-ems]{color:#a33
 @media(max-width:380px){.toolbar{grid-template-columns:minmax(0,1fr)}}
 
 #attendanceSheet .attendance-count input{width:58px;min-width:58px;padding:6px 3px;text-align:center;font-weight:700;border:1px solid #b6c9d6;border-radius:4px;background:white}#attendanceSheet .attendance-count{padding:4px}
+
+.ems-attendance-name{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}.ems-attendance-name b{min-width:0;overflow-wrap:anywhere}#attendanceSheet .ems-name-edit{flex-shrink:0;min-height:24px;padding:3px 7px;margin:0;border:1px solid #bcd8d1;border-radius:5px;font-size:10px;line-height:1.4;color:#087768;background:#edf8f4}#emsSalaryNameDialog{max-width:460px}#emsSalaryNameForm label input{width:100%;margin-top:3px}#emsSalaryNameForm p{font-size:12px;line-height:1.7}#emsSalaryNameForm>button{margin-top:8px}

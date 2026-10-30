@@ -154,3 +154,11 @@ class EMSManualMonthlyAttendance(Base):
     leave = Column(Integer, nullable=False)
     updated_by = Column(Integer, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class EMSEmployeeName(Base):
+    """Salary display name; never changes the registered account or identity card."""
+    __tablename__ = 'ems_employee_names'
+    user_id = Column(Integer, ForeignKey('users.id'), primary_key=True)
+    display_name = Column(String(150), nullable=False)
+    updated_by = Column(Integer, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

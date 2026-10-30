@@ -306,3 +306,26 @@ test('clearing A to zero makes manual totals valid and updates every salary repo
  }
  assert.equal(vm.runInContext('currentDistributionRows()[0].attendance_pending',context),true);
 });
+
+test('EMS full-name edit propagates to attendance IDS weekoff and Excel without account endpoints',async()=>{
+ const {context,nodes,listeners}=setup();
+ vm.runInContext(`state.rows[0].name='Short';state.rows[0].registered_name='Registered Name';state.rows[0].days=[{day:'2026-09-01',status:'present'}];state.rows[0].joining_date='2026-01-01';state.rows[0].counts={present:1,absent:0,casual_leave:0,weekoff:0,leave:0};state.weekoffIncentives=[];state.records=[];state.earnings=[];state.profiles=[];renderAttendanceRecord();`,context);
+ assert.match(nodes.get('attendanceRecordRows').innerHTML,/data-edit-ems-name="1"/);
+ const dialog=context.document.getElementById('emsSalaryNameDialog');dialog.showModal=function(){this.open=true;};dialog.close=function(){this.open=false;};
+ for(const fn of listeners.click||[])await fn({target:{closest:selector=>selector==='[data-edit-ems-name]'?{dataset:{editEmsName:'1'}}:null}});
+ assert.equal(nodes.get('emsSalaryNameInput').value,'Short');
+ assert.match(nodes.get('emsSalaryNameEmployee').textContent,/Registered Name/);
+ nodes.get('emsSalaryNameInput').value='Synthetic Employee Full Name';
+ vm.runInContext(`globalThis.nameCalls=[];api=async(path,options)=>{nameCalls.push({path,body:JSON.parse(options.body)});return {name:'Synthetic Employee Full Name',message:'EMS name saved'};};`,context);
+ await nodes.get('emsSalaryNameForm').onsubmit({preventDefault(){},target:nodes.get('emsSalaryNameForm')});
+ assert.equal(vm.runInContext('nameCalls.length',context),1);
+ assert.equal(vm.runInContext('nameCalls[0].path',context),'/employees/1/salary-name');
+ assert.equal(vm.runInContext('nameCalls[0].body.display_name',context),'Synthetic Employee Full Name');
+ assert.equal(vm.runInContext('state.rows[0].registered_name',context),'Registered Name');
+ assert.equal(vm.runInContext('currentDistributionRows()[0].name',context),'Synthetic Employee Full Name');
+ assert.equal(vm.runInContext('currentWeekoffRows()[0].name',context),'Synthetic Employee Full Name');
+ const payload=vm.runInContext('salaryWorkbookPayload()',context);
+ assert.equal(payload.ids_rows[0][1],'Synthetic Employee Full Name');assert.equal(payload.weekoff_rows[0][1],'Synthetic Employee Full Name');
+ assert.match(nodes.get('attendanceRecordRows').innerHTML,/Synthetic Employee Full Name/);
+ assert.equal(dialog.open,false);
+});

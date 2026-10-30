@@ -263,6 +263,42 @@ class SalaryTests(unittest.TestCase):
         self.assertEqual(self.client.get('/api/ems/salary-distribution?month=2026-09').status_code, 403)
         self.assertEqual(self.client.put(path, json=dict(month='2026-09', other_allowances='0', staff_advance='0')).status_code, 403)
 
+    def test_salary_name_is_ems_only_persistent_and_used_by_reports(self):
+        uid = self.users[2].id
+        self.setup_salary(uid)
+        self.db.add(models.IdentityCard(user_id=uid, employee_id='NAME-TEST',
+            employee_name='Registered short name', designation='Employee', mobile='12345'))
+        self.db.commit()
+        tables = [t for t in Base.metadata.sorted_tables if not t.name.startswith('ems_')]
+        def shared_snapshot():
+            return {t.name: self.db.execute(t.select()).all() for t in tables}
+        before = shared_snapshot()
+        original = self.preview(uid)
+        path = f'/api/ems/employees/{uid}/salary-name'
+        response = self.client.put(path, json=dict(display_name='  Synthetic Employee Full Name  '))
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()['name'], 'Synthetic Employee Full Name')
+        self.assertEqual(shared_snapshot(), before)
+        row = self.preview(uid)
+        self.assertEqual(row['name'], 'Synthetic Employee Full Name')
+        original.pop('name'); row.pop('name')
+        self.assertEqual(row, original)
+        distribution = self.client.get('/api/ems/salary-distribution?month=2026-09').json()
+        self.assertEqual(next(r for r in distribution['rows'] if r['user_id'] == uid)['name'], 'Synthetic Employee Full Name')
+        staff = self.client.get('/api/ems/employees').json()
+        self.assertEqual(next(r for r in staff if r['id'] == uid)['name'], 'Synthetic Employee Full Name')
+        self.db.expire_all()
+        self.assertEqual(self.db.get(M.EMSEmployeeName, uid).display_name, 'Synthetic Employee Full Name')
+        self.assertEqual(self.client.put(path, json=dict(display_name='Updated Full Name')).status_code, 200)
+        self.assertEqual(self.db.query(M.EMSEmployeeName).filter_by(user_id=uid).count(), 1)
+        self.assertEqual(self.preview(uid)['name'], 'Updated Full Name')
+        self.assertEqual(shared_snapshot(), before)
+        for value in ('', 'X', 'x'*151, 'Invalid\nName'):
+            self.assertEqual(self.client.put(path, json=dict(display_name=value)).status_code, 422)
+        self.actor = self.users[2]
+        self.assertEqual(self.client.put(path, json=dict(display_name='Not permitted')).status_code, 403)
+        self.assertEqual(shared_snapshot(), before)
+
     def create_manual(self, **changes):
         payload = dict(full_name='Synthetic manual employee',
                        joining_date='2026-09-01', employee_group='ids_emp')
