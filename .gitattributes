@@ -14,3 +14,9 @@
 /tests/test_salary_distribution.py text eol=lf
 /tests/test_ems_salary.py text eol=lf
 /tests/test_ems_workbook.py text eol=lf
+
+/main.py text eol=lf
+/static/attendance-capture.js text eol=lf
+/static/attendance.html text eol=lf
+/tests/attendance-capture.test.cjs text eol=lf
+/tests/test_attendance_anywhere.py text eol=lf

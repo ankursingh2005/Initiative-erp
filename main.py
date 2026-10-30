@@ -3440,13 +3440,22 @@ def save_attendance(
 ):
     if attendance.action not in {"checkin", "checkout"}:
         raise HTTPException(status_code=400, detail="Action must be checkin or checkout")
+    captured_at = india_datetime(attendance.captured_at)
+    now = datetime.now(INDIA_TZ).replace(tzinfo=None)
+    if captured_at < now - timedelta(minutes=2) or captured_at > now + timedelta(seconds=30):
+        raise HTTPException(status_code=422, detail="Punch time is expired or ahead of server time. Enable automatic date/time on your device and capture a new selfie.")
+    if not attendance.selfie.strip():
+        raise HTTPException(status_code=422, detail="Capture a selfie before marking attendance")
+    # Serialize punches for this employee across tabs, devices and workers.
+    # The user anchor also works for the first punch, before any daily row exists.
+    db.query(models.User).filter(models.User.id == current_user.id).update(
+        {models.User.id: current_user.id}, synchronize_session=False)
     distance_to_store = lambda outlet: attendance_distance(attendance.latitude, attendance.longitude, outlet)
     store = attendance_reference_store(db, current_user, distance_to_store)
     actual_distance = distance_to_store(store)
     allowed_radius = store.geofence_radius_m or 100
     if current_user.role not in ATTENDANCE_ANYWHERE_ROLES and actual_distance > allowed_radius:
         raise HTTPException(status_code=403, detail=f"Attendance blocked: you are {round(actual_distance)} m from {store.name}; maximum allowed distance is {round(allowed_radius)} m")
-    captured_at = india_datetime(attendance.captured_at)
     record = db.query(models.AttendanceRecord).filter(
         models.AttendanceRecord.user_id == current_user.id,
         models.AttendanceRecord.attendance_date == captured_at.date(),
@@ -3462,6 +3471,8 @@ def save_attendance(
         db.add(record)
     if attendance.action == "checkout" and record.checkin_at is None:
         raise HTTPException(status_code=409, detail="Punch in is required before punch out")
+    if attendance.action == "checkout" and captured_at < record.checkin_at:
+        raise HTTPException(status_code=409, detail="Punch-out time cannot be earlier than punch-in time. Check your device clock and capture again.")
     prefix = "checkin" if attendance.action == "checkin" else "checkout"
     if getattr(record, f"{prefix}_at") is not None:
         raise HTTPException(status_code=409, detail=f"{attendance.action.title()} already recorded")

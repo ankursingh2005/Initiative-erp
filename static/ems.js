@@ -492,7 +492,8 @@ function stageManualAttendanceTotal(input){
  const employee=state.rows.find(r=>r.user_id===Number(input.dataset.manualTotalUser));
  if(!employee?.manual_employee||employee.published_id)return;
  const key=state.month+':'+employee.user_id,previous=attendanceTotalDrafts.get(key);
- const counts={...(previous?.counts||attendanceSheetCounts(employee)),[input.dataset.manualTotalKind]:input.value===''?NaN:Number(input.value)};
+ // A cleared monthly total means zero, rather than blocking all linked reports.
+ const counts={...(previous?.counts||attendanceSheetCounts(employee)),[input.dataset.manualTotalKind]:Number(input.value.trim()||0)};
  const elapsed=employee.elapsed_days??employee.days.filter(d=>d.status!=='upcoming').length;
  const valid=Object.values(counts).every(v=>Number.isInteger(v)&&v>=0&&v<=31)&&Object.values(counts).reduce((a,b)=>a+b,0)<=elapsed;
  input.setCustomValidity(valid?'':'Enter whole days; P + A + CL + WO + L cannot exceed '+elapsed+'.');

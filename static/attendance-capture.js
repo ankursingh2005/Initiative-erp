@@ -125,7 +125,10 @@
         headers:{Authorization:'Bearer '+current.token,'Content-Type':'application/json'},
         body:JSON.stringify(payload)});
       const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.detail || 'Attendance was not saved. Refresh and try again.');
+      if (!response.ok) {
+        const detail = Array.isArray(result.detail) ? result.detail.map(item => item.msg || 'Invalid attendance data').join('; ') : result.detail;
+        throw new Error(typeof detail === 'string' ? detail : 'Attendance was not saved. Refresh and try again.');
+      }
       if (!await syncAttendanceHistory()) {
         $('sync').textContent = 'Attendance saved. Refresh to load the latest record.';
         $('sync').className = 'badge warn';

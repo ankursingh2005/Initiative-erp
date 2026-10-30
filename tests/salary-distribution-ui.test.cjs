@@ -287,3 +287,22 @@ test('outlet then natural employee name order matches All Regular and Contract w
  const picker=nodes.get('setupEmployeeOptions').innerHTML;
  assert.ok(picker.indexOf('IDS-4 - Alice')<picker.indexOf('IDS-3 - Zara'));
 });
+
+test('clearing A to zero makes manual totals valid and updates every salary report',()=>{
+ const {context,nodes}=setup();context.clearTimeout=()=>{};context.setTimeout=fn=>{context.scheduledSave=fn;return 1;};
+ vm.runInContext(`Object.assign(state.rows[0],{manual_employee:true,monthly_attendance:true,elapsed_days:29,days:[],counts:{present:0,absent:29,casual_leave:0,weekoff:0,leave:0}});`,context);
+ const before=vm.runInContext('currentDistributionRows()[0].actual_basic',context);
+ context.input={value:'10',dataset:{manualTotalUser:'1',manualTotalKind:'present'},setCustomValidity(v){this.error=v;}};
+ vm.runInContext('stageManualAttendanceTotal(input)',context);assert.notEqual(context.input.error,'');
+ context.input.value='';context.input.dataset.manualTotalKind='absent';vm.runInContext('stageManualAttendanceTotal(input)',context);
+ assert.equal(context.input.error,'');assert.equal(vm.runInContext("attendanceTotalDrafts.get('2026-09:1').counts.absent",context),0);
+ assert.equal(vm.runInContext("attendanceTotalDrafts.get('2026-09:1').valid",context),true);
+ assert.ok(vm.runInContext('currentDistributionRows()[0].actual_basic',context)>before);
+ assert.equal(nodes.get('idsNet').textContent,nodes.get('distributionNet').textContent);
+ assert.equal(vm.runInContext('currentWeekoffRows()[0].gross',context),vm.runInContext('currentDistributionRows()[0].actual_gross_earning',context));
+ for(const kind of ['present','absent','casual_leave','weekoff','leave']){
+  context.input.dataset.manualTotalKind=kind;context.input.value='0';vm.runInContext('stageManualAttendanceTotal(input)',context);
+  assert.equal(context.input.error,'');
+ }
+ assert.equal(vm.runInContext('currentDistributionRows()[0].attendance_pending',context),true);
+});

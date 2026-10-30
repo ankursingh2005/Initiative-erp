@@ -202,3 +202,10 @@ test('GPS failure stops a camera stream that arrives after the session closes',a
   assert.equal(t.stopped(),1);assert.equal(t.$('camera').srcObject,null);
   assert.equal(t.$('capture').disabled,true);assert.equal(t.posts(),0);
 });
+
+test('server validation errors show readable messages instead of object text',async()=>{
+ const t=setup();t.context.fetch=async()=>({ok:false,json:async()=>({detail:[{msg:'Invalid GPS coordinates'},{msg:'Capture a selfie'}]})});
+ await openCamera(t);await t.$('capture').onclick();
+ assert.equal(t.$('sync').textContent,'Invalid GPS coordinates; Capture a selfie');
+ assert.equal(t.$('sync').className,'badge bad');
+});
