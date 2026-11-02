@@ -9,8 +9,8 @@ for(const [file,expected] of [
 ])assert.equal(context.incentiveMonthFromFilename(file),expected,file);
 const html=fs.readFileSync('static/incentive.html','utf8');
 for(const m of html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g))new vm.Script(m[1]);
-assert.match(html,/syncIncentiveMonth\(shared.file_name\)/);
-assert.match(html,/syncIncentiveMonth\(selectedFile.name\)/);
+assert.match(html,/syncIncentiveMonth\(shared.file_name,/);
+assert.match(html,/syncIncentiveMonth\(selectedFile.name,/);
 assert.match(html,/syncIncentiveMonth\(file.name\)/);
 assert.doesNotMatch(html,/allowParts/);
 console.log('Uploaded and restored filename month checks passed; October 2026 selects 2026-10.');

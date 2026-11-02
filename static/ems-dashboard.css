@@ -222,3 +222,39 @@ button[data-delete-ems],#excludedEmployeeRows button[data-delete-ems]{color:#a33
 #attendanceSheet .attendance-count input{width:58px;min-width:58px;padding:6px 3px;text-align:center;font-weight:700;border:1px solid #b6c9d6;border-radius:4px;background:white}#attendanceSheet .attendance-count{padding:4px}
 
 .ems-attendance-name{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}.ems-attendance-name b{min-width:0;overflow-wrap:anywhere}#attendanceSheet .ems-name-edit{flex-shrink:0;min-height:24px;padding:3px 7px;margin:0;border:1px solid #bcd8d1;border-radius:5px;font-size:10px;line-height:1.4;color:#087768;background:#edf8f4}#emsSalaryNameDialog{max-width:460px}#emsSalaryNameForm label input{width:100%;margin-top:3px}#emsSalaryNameForm p{font-size:12px;line-height:1.7}#emsSalaryNameForm>button{margin-top:8px}
+
+/* Monthly Incentive dashboard: scoped layout and controls. */
+#monthlyIncentive .monthly-incentive-dashboard{margin-top:30px}
+#monthlyIncentive .monthly-incentive-dashboard h3{font-size:19px;letter-spacing:-.3px;margin:0 0 18px;display:flex;align-items:center;gap:10px}
+#monthlyIncentive .monthly-incentive-dashboard h3::before{content:"";height:20px;width:4px;border-radius:4px;background:#00a58e}
+#monthlyIncentive .monthly-incentive-dashboard>.scroll{border:1px solid #d7e4ea;border-radius:14px;box-shadow:0 5px 20px #19475a08;max-height:68vh;scrollbar-width:thin;scrollbar-color:#a3bac4 #f1f6f8}
+#monthlyIncentiveDashboard{table-layout:fixed;width:100%;min-width:1200px;border:0;border-collapse:separate;border-spacing:0;font-size:13px}
+#monthlyIncentiveDashboard thead{background:linear-gradient(100deg,#153f51,#216173)}
+#monthlyIncentiveDashboard th{position:sticky;top:0;z-index:2;background:#194e60;color:#fff;text-transform:none;letter-spacing:.15px;font-size:12px;font-weight:700;padding:19px 12px;text-align:left;line-height:1.4;border-bottom:3px solid #39baa6;white-space:normal}
+#monthlyIncentiveDashboard th:first-child{width:16%}
+#monthlyIncentiveDashboard th:nth-child(2){width:19%}
+#monthlyIncentiveDashboard th:nth-child(3){width:10%}
+#monthlyIncentiveDashboard th:nth-child(4){width:18%}
+#monthlyIncentiveDashboard th:nth-child(5){width:14%}
+#monthlyIncentiveDashboard th:nth-child(6){width:9%;text-align:center}
+#monthlyIncentiveDashboard th:nth-child(7){width:14%;text-align:right;padding-right:18px}
+#monthlyIncentiveDashboard td{position:relative;padding:20px 12px 32px;vertical-align:top;border-bottom:1px solid #e2ebef;background:#fff;transition:background .15s ease;color:#526d7d;font-weight:400}
+#monthlyIncentiveDashboard tbody tr:nth-child(even) td{background:#f5f9fb}
+#monthlyIncentiveDashboard tbody tr:hover td,#monthlyIncentiveDashboard tbody tr:focus-within td{background:#edf8f6}
+#monthlyIncentiveDashboard tbody tr:last-child td{border-bottom:0}
+#monthlyIncentiveDashboard td:first-child{white-space:normal;overflow-wrap:anywhere;padding-left:18px}
+#monthlyIncentiveDashboard th:first-child{padding-left:18px}
+#monthlyIncentiveDashboard td b{display:block;color:#087f75;font-size:14px;font-weight:700;line-height:20px;margin:1px 0 5px}
+#monthlyIncentiveDashboard td small{color:#78909f;font-size:11px;font-weight:400;margin-top:0;line-height:16px}
+#monthlyIncentiveDashboard [data-incentive-type-status],#monthlyIncentiveDashboard [data-percentage-status]{position:absolute;bottom:10px;left:12px;right:12px;line-height:14px;white-space:normal}
+#monthlyIncentiveDashboard select,#monthlyIncentiveDashboard input[data-incentive-percentage]{display:block;width:100%;max-width:100%;min-width:0;height:42px;box-sizing:border-box;border:1px solid #ccdce5;border-radius:8px;background-color:#fff;color:#24495d;font:inherit;font-size:12px;line-height:normal;padding:0 10px;box-shadow:0 1px 2px #19475a04;transition:border-color .15s,box-shadow .15s}
+#monthlyIncentiveDashboard select{padding-right:23px;text-overflow:ellipsis}
+#monthlyIncentiveDashboard select:focus,#monthlyIncentiveDashboard input:focus{outline:none;border-color:#009b87;box-shadow:0 0 0 3px #009b871c}
+#monthlyIncentiveDashboard select:disabled,#monthlyIncentiveDashboard input:disabled{background-color:#f0f4f6;color:#8a9ca7;cursor:wait;opacity:.8}
+#monthlyIncentiveDashboard td:nth-child(4),#monthlyIncentiveDashboard td:nth-child(5){line-height:42px}
+#monthlyIncentiveDashboard input[data-incentive-percentage]{padding-right:25px;text-align:center;font-weight:600;font-variant-numeric:tabular-nums;appearance:textfield;-moz-appearance:textfield}
+#monthlyIncentiveDashboard input[data-incentive-percentage]::-webkit-inner-spin-button,#monthlyIncentiveDashboard input[data-incentive-percentage]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+#monthlyIncentiveDashboard td:nth-child(6):has(input)::after{content:"%";position:absolute;right:22px;top:33px;font-size:11px;color:#7c929e;pointer-events:none}
+#monthlyIncentiveDashboard td:last-child{text-align:right;padding-right:18px;font-variant-numeric:tabular-nums}
+#monthlyIncentiveDashboard .monthly-incentive-amount{display:inline-flex;align-items:center;justify-content:flex-end;min-height:42px;max-width:100%;padding:0 12px;border:1px solid #cde9df;border-radius:8px;background:#e8f5ef;color:#08755d;font-size:14px;font-weight:700;white-space:nowrap;line-height:1.2}
+#monthlyIncentiveDashboard .monthly-incentive-amount.is-empty{background:transparent;border-color:transparent;color:#8ba0aa;font-weight:400}

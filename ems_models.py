@@ -4,6 +4,53 @@ from sqlalchemy import Column, Integer, BigInteger, String, Date, DateTime, Fore
 from database import Base
 
 
+class EMSWeekoffIncentiveOverride(Base):
+    __tablename__ = 'ems_weekoff_incentive_overrides'
+    user_id = Column(Integer, ForeignKey('users.id'), primary_key=True)
+    month = Column(String(7), primary_key=True)
+    incentive = Column(BigInteger, nullable=False)
+    updated_by = Column(Integer, ForeignKey('users.id'), nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class EMSMonthlyIncentivePercentage(Base):
+    __tablename__ = 'ems_monthly_incentive_percentages'
+    user_id = Column(Integer, ForeignKey('users.id'), primary_key=True)
+    month = Column(String(7), primary_key=True)
+    percentage_basis_points = Column(Integer, nullable=False, default=10000)
+    updated_by = Column(Integer, ForeignKey('users.id'), nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class EMSMonthlyNonSalesSelection(Base):
+    __tablename__ = 'ems_monthly_non_sales_selections'
+    user_id = Column(Integer, ForeignKey('users.id'), primary_key=True)
+    month = Column(String(7), primary_key=True)
+    location = Column(String(100), nullable=False, default='')
+    field = Column(String(30), nullable=False, default='')
+    updated_by = Column(Integer, ForeignKey('users.id'), nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class EMSMonthlySalesSelection(Base):
+    __tablename__ = 'ems_monthly_sales_selections'
+    user_id = Column(Integer, ForeignKey('users.id'), primary_key=True)
+    month = Column(String(7), primary_key=True)
+    outlet = Column(String(100), nullable=False, default='')
+    category_group = Column(String(150), nullable=False, default='')
+    updated_by = Column(Integer, ForeignKey('users.id'), nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class EMSMonthlyIncentiveType(Base):
+    __tablename__ = 'ems_monthly_incentive_types'
+    user_id = Column(Integer, ForeignKey('users.id'), primary_key=True)
+    month = Column(String(7), primary_key=True)
+    incentive_type = Column(String(20), nullable=False)
+    updated_by = Column(Integer, ForeignKey('users.id'), nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 class EMSSalaryProfile(Base):
     __tablename__ = 'ems_salary_profiles'
     __table_args__ = (UniqueConstraint('user_id', 'effective_month', name='uq_ems_salary_effective'),)

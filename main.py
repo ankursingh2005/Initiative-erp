@@ -1662,13 +1662,28 @@ def calculate_incentive_endpoint(
     file: UploadFile = File(...),
     profit_rate: float = Form(7),
     incentive_rate: float = Form(2.5),
+    report_month: str = Form(""),
     current_user: models.User = Depends(auth.require_roles(*INCENTIVE_ACCESS_ROLES)),
     db: Session = Depends(get_db),
 ):
     raw = file.file.read()
     if not raw:
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
+    from incentive_period import detect_incentive_month
+    detected_month = detect_incentive_month(file.filename)
+    if detected_month and report_month and detected_month != report_month:
+        raise HTTPException(422, "Selected month does not match the uploaded file month")
+    month = detected_month or report_month
+    if not month:
+        source_rows = parse_incentive_upload(SimpleNamespace(filename=file.filename or "incentive_upload", file=BytesIO(raw)))
+        months = {detect_incentive_month(r.get("month")) for r in source_rows} - {""}
+        if len(months) == 1:
+            month = months.pop()
+    if not month:
+        raise HTTPException(422, "Unable to identify one report month. Select the incentive month and click Calculate.")
+    ems.month_bounds(month)
     report = calculate_incentive_report_from_bytes(file.filename or "incentive_upload", raw, profit_rate, incentive_rate)
+    report["report_month"] = month
     db.query(models.IncentiveUpload).delete()
     db.add(models.IncentiveUpload(
         source_file=file.filename or "incentive_upload",
@@ -1682,6 +1697,14 @@ def calculate_incentive_endpoint(
         uploaded_by_username=current_user.username,
         uploaded_at=datetime.utcnow(),
     ))
+    release = db.get(models.MonthlyIncentiveRelease, month)
+    if release is None:
+        release = models.MonthlyIncentiveRelease(month=month)
+        db.add(release)
+    release.report_json = json.dumps(report)
+    release.source_file = file.filename or "incentive_upload"
+    release.allowed = True
+    release.allowed_by, release.updated_at = current_user.id, datetime.utcnow()
     db.commit()
     return report
 

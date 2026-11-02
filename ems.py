@@ -113,6 +113,155 @@ class MonthlyIncentiveAllow(Input):
     allowed: bool
 
 
+class MonthlyIncentiveTypeInput(Input):
+    month: str
+    incentive_type: Literal['', 'sales', 'non-sales']
+
+
+def effective_incentive_settings(db, model, month, ids):
+    """Use the last saved employee setting, effective from its month onward."""
+    result = {}
+    for row in db.query(model).filter(model.month <= month, model.user_id.in_(ids)).order_by(model.month.desc()).all():
+        result.setdefault(row.user_id, row)
+    return result
+
+
+@router.get('/monthly-incentive-types')
+def monthly_incentive_types(month: str, db: Session = Depends(get_db), user=Depends(manager)):
+    month_bounds(month)
+    ids = [row.id for row, _, _ in employee_rows(db, include_excluded=False).all()]
+    types = effective_incentive_settings(db, M.EMSMonthlyIncentiveType, month, ids)
+    selections = effective_incentive_settings(db, M.EMSMonthlySalesSelection, month, ids)
+    non_sales = effective_incentive_settings(db, M.EMSMonthlyNonSalesSelection, month, ids)
+    percentages = effective_incentive_settings(db, M.EMSMonthlyIncentivePercentage, month, ids)
+    return [{**serialize(row), 'month': month, 'effective_month': row.month,
+             'outlet': selections[uid].outlet if uid in selections else '',
+             'category_group': selections[uid].category_group if uid in selections else '',
+             'non_sales_location': non_sales[uid].location if uid in non_sales else '',
+             'non_sales_field': non_sales[uid].field if uid in non_sales else '',
+             'percentage': percentages[uid].percentage_basis_points / 100 if uid in percentages else 100}
+            for uid, row in types.items()]
+
+
+class MonthlyIncentivePercentageInput(Input):
+    month: str
+    percentage: Decimal = Field(ge=0, le=100, decimal_places=2)
+
+
+@router.put('/monthly-incentive-percentage/{user_id}')
+def save_monthly_incentive_percentage(user_id: int, payload: MonthlyIncentivePercentageInput,
+                                      db: Session = Depends(get_db), user=Depends(manager)):
+    month_bounds(payload.month)
+    lock_employee(db, user_id)
+    kind = effective_incentive_settings(db, M.EMSMonthlyIncentiveType, payload.month, [user_id]).get(user_id)
+    if not kind or kind.incentive_type not in ('sales', 'non-sales'):
+        raise HTTPException(422, 'Choose an incentive category first')
+    row = db.get(M.EMSMonthlyIncentivePercentage, (user_id, payload.month))
+    if row is None:
+        row = M.EMSMonthlyIncentivePercentage(user_id=user_id, month=payload.month)
+        db.add(row)
+    row.percentage_basis_points = int(payload.percentage * 100)
+    row.updated_by, row.updated_at = user.id, datetime.utcnow()
+    record(db, user, 'monthly_incentive_percentage_saved', user_id, payload.model_dump_json())
+    db.commit()
+    return {'message': 'Percentage saved', 'percentage': row.percentage_basis_points / 100}
+
+
+class MonthlyNonSalesSelectionInput(Input):
+    month: str
+    location: str = Field(max_length=100)
+    field: Literal['', 'ids_fund', 'accounts', 'ware_house', 'customer_care', 'support', 'ho']
+
+
+@router.put('/monthly-incentive-non-sales/{user_id}')
+def save_monthly_non_sales_selection(user_id: int, payload: MonthlyNonSalesSelectionInput,
+                                     db: Session = Depends(get_db), user=Depends(manager)):
+    month_bounds(payload.month)
+    lock_employee(db, user_id)
+    kind = effective_incentive_settings(db, M.EMSMonthlyIncentiveType, payload.month, [user_id]).get(user_id)
+    if not kind or kind.incentive_type != 'non-sales':
+        raise HTTPException(422, 'Choose NON SALES INCENTIVE for this employee first')
+    release = db.get(models.MonthlyIncentiveRelease, payload.month)
+    if not release or not release.allowed:
+        raise HTTPException(422, 'Allow the incentive report for this month first')
+    report = json.loads(release.report_json).get('ids_fund_report', {}).get('non_sales_report') or {}
+    locations = {r.get('location') for r in report.get('rows', [])}
+    if report.get('rows'):
+        locations.add('Central Service')
+    if report.get('insufficient_data') or (payload.location and payload.location not in locations):
+        raise HTTPException(422, 'Choose a location from the allowed non-sales report')
+    if payload.field and not payload.location:
+        raise HTTPException(422, 'Choose an outlet first')
+    row = db.get(M.EMSMonthlyNonSalesSelection, (user_id, payload.month))
+    if row is None:
+        row = M.EMSMonthlyNonSalesSelection(user_id=user_id, month=payload.month)
+        db.add(row)
+    row.location, row.field = payload.location, payload.field
+    row.updated_by, row.updated_at = user.id, datetime.utcnow()
+    record(db, user, 'monthly_non_sales_selection_saved', user_id, payload.model_dump_json())
+    db.commit()
+    return {'message': 'Non-sales incentive selection saved'}
+
+
+class MonthlySalesSelectionInput(Input):
+    month: str
+    outlet: str = Field(max_length=100)
+    category_group: str = Field(max_length=150)
+
+
+@router.put('/monthly-incentive-sales/{user_id}')
+def save_monthly_sales_selection(user_id: int, payload: MonthlySalesSelectionInput,
+                                 db: Session = Depends(get_db), user=Depends(manager)):
+    month_bounds(payload.month)
+    lock_employee(db, user_id)
+    kind = effective_incentive_settings(db, M.EMSMonthlyIncentiveType, payload.month, [user_id]).get(user_id)
+    if not kind or kind.incentive_type != 'sales':
+        raise HTTPException(422, 'Choose SALES INCENTIVE for this employee first')
+    release = db.get(models.MonthlyIncentiveRelease, payload.month)
+    if not release or not release.allowed:
+        raise HTTPException(422, 'Allow the incentive report for this month first')
+    rows = json.loads(release.report_json).get('exact_summary', [])
+    if payload.outlet and not any(r.get('outlet') == payload.outlet and
+            (not payload.category_group or r.get('group') == payload.category_group) for r in rows):
+        raise HTTPException(422, 'Choose an outlet and category group from the allowed sales report')
+    if payload.category_group and not payload.outlet:
+        raise HTTPException(422, 'Choose an outlet first')
+    row = db.get(M.EMSMonthlySalesSelection, (user_id, payload.month))
+    if row is None:
+        row = M.EMSMonthlySalesSelection(user_id=user_id, month=payload.month)
+        db.add(row)
+    row.outlet, row.category_group = payload.outlet, payload.category_group
+    row.updated_by, row.updated_at = user.id, datetime.utcnow()
+    record(db, user, 'monthly_sales_selection_saved', user_id, payload.model_dump_json())
+    db.commit()
+    return {'message': 'Sales incentive selection saved'}
+
+
+@router.put('/monthly-incentive-types/{user_id}')
+def save_monthly_incentive_type(user_id: int, payload: MonthlyIncentiveTypeInput,
+                                db: Session = Depends(get_db), user=Depends(manager)):
+    month_bounds(payload.month)
+    lock_employee(db, user_id)
+    row = db.get(M.EMSMonthlyIncentiveType, (user_id, payload.month))
+    if row is None:
+        row = M.EMSMonthlyIncentiveType(user_id=user_id, month=payload.month)
+        db.add(row)
+    row.incentive_type = payload.incentive_type
+    row.updated_by = user.id
+    row.updated_at = datetime.utcnow()
+    record(db, user, 'monthly_incentive_type_saved', user_id, payload.model_dump_json())
+    db.commit()
+    return {'message': 'Incentive selection saved'}
+
+
+@router.get('/monthly-incentive-months')
+def monthly_incentive_months(db: Session = Depends(get_db), user=Depends(manager)):
+    return [{'month': row.month, 'source_file': row.source_file}
+            for row in db.query(models.MonthlyIncentiveRelease).filter(
+                models.MonthlyIncentiveRelease.allowed == True).order_by(
+                models.MonthlyIncentiveRelease.month.desc()).all()]
+
+
 @router.get('/monthly-incentive')
 def monthly_incentive(month: str, db: Session = Depends(get_db), user=Depends(manager)):
     month_bounds(month)
@@ -846,7 +995,7 @@ def permanently_delete_ems_employee(user_id: int, payload: EMSPermanentDeletion,
     for actions, targets in audit_groups:
         db.query(M.EMSAudit).filter(M.EMSAudit.action.in_(actions),
             M.EMSAudit.target.in_([str(value) for value in targets])).delete(synchronize_session=False)
-    for model in (M.EMSEmployeeName, M.EMSManualMonthlyAttendance, M.EMSAttendanceTotals, M.EMSWeekoffIncentive, M.EMSDistributionInput, M.EMSManualAttendance, M.EMSExcludedEmployee, M.EMSLeaveRequest,
+    for model in (M.EMSWeekoffIncentiveOverride, M.EMSMonthlyIncentivePercentage, M.EMSMonthlyNonSalesSelection, M.EMSMonthlySalesSelection, M.EMSMonthlyIncentiveType, M.EMSEmployeeName, M.EMSManualMonthlyAttendance, M.EMSAttendanceTotals, M.EMSWeekoffIncentive, M.EMSDistributionInput, M.EMSManualAttendance, M.EMSExcludedEmployee, M.EMSLeaveRequest,
                   M.EMSEarning, M.EMSSalaryProfile, M.EMSPayroll):
         db.query(model).filter_by(user_id=user_id).delete(synchronize_session=False)
     # Tombstone prevents an ERP account from automatically reappearing in EMS.
@@ -947,12 +1096,65 @@ class WeekoffIncentiveInput(Input):
     incentive: Decimal = Field(ge=0, le=10000000, decimal_places=2)
 
 
+def monthly_incentive_amount(report, kind, sales=None, non_sales=None, percentage=10000):
+    """Return saved monthly incentive in paise, using the same report cells as EMS."""
+    amount = None
+    if kind == 'sales' and sales:
+        match = next((r for r in report.get('exact_summary', [])
+                      if r.get('outlet') == sales.outlet and r.get('group') == sales.category_group), None)
+        if match:
+            amount = match.get('exact_incentive')
+    elif kind == 'non-sales' and non_sales:
+        ns = report.get('ids_fund_report', {}).get('non_sales_report') or {}
+        if ns.get('insufficient_data'):
+            return 0
+        central = non_sales.location == 'Central Service'
+        row = next((r for r in ns.get('rows', []) if r.get('location') == non_sales.location), None)
+        fields = ['accounts', 'ware_house', 'customer_care', 'support', 'ho']
+        if non_sales.field == 'ids_fund' and row and row.get('outlet') != 'MWH':
+            amount = row.get('ids_fund')
+        elif non_sales.field in fields:
+            index = fields.index(non_sales.field)
+            values = ns.get('totals', []) if central else (row or {}).get('values', [])
+            rates = (row or {}).get('rates', [])
+            if central or (index < len(rates) and rates[index] is not None):
+                amount = values[index] if index < len(values) else None
+    if amount is None:
+        return 0
+    paise = (Decimal(str(amount)) * 100).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
+    return int((paise * percentage / 10000).quantize(Decimal('1'), rounding=ROUND_HALF_UP))
+
+
+def monthly_weekoff_amounts(db, month, ids):
+    release = db.get(models.MonthlyIncentiveRelease, month)
+    if not release or not release.allowed:
+        return {}
+    report = json.loads(release.report_json)
+    def rows(model):
+        return effective_incentive_settings(db, model, month, ids)
+    types = rows(M.EMSMonthlyIncentiveType)
+    sales, non_sales = rows(M.EMSMonthlySalesSelection), rows(M.EMSMonthlyNonSalesSelection)
+    percentages = rows(M.EMSMonthlyIncentivePercentage)
+    return {uid: monthly_incentive_amount(report, row.incentive_type, sales.get(uid), non_sales.get(uid),
+                percentages[uid].percentage_basis_points if uid in percentages else 10000)
+            for uid, row in types.items() if row.incentive_type in ('sales', 'non-sales')}
+
+
 @router.get('/weekoff-incentives')
 def weekoff_incentives(month: str, db: Session = Depends(get_db), user=Depends(manager)):
     month_bounds(month)
     ids = [row.id for row, _, _ in employee_rows(db, include_excluded=False).all()]
-    return [serialize(row) for row in db.query(M.EMSWeekoffIncentive).filter(
-        M.EMSWeekoffIncentive.month == month, M.EMSWeekoffIncentive.user_id.in_(ids)).all()]
+    saved = {row.user_id: serialize(row) for row in db.query(M.EMSWeekoffIncentive).filter(
+        M.EMSWeekoffIncentive.month == month, M.EMSWeekoffIncentive.user_id.in_(ids)).all()}
+    for uid, amount in monthly_weekoff_amounts(db, month, ids).items():
+        saved[uid] = {**saved.get(uid, {}), 'user_id': uid, 'month': month,
+                      'incentive': amount, 'source': 'monthly', 'monthly_amount': amount}
+    overrides = db.query(M.EMSWeekoffIncentiveOverride).filter(
+        M.EMSWeekoffIncentiveOverride.month == month, M.EMSWeekoffIncentiveOverride.user_id.in_(ids)).all()
+    for row in overrides:
+        saved[row.user_id] = {**saved.get(row.user_id, {}), 'user_id': row.user_id, 'month': month,
+            'incentive': row.incentive, 'manual_override': True}
+    return list(saved.values())
 
 
 @router.put('/weekoff-incentives/{user_id}')
@@ -960,6 +1162,16 @@ def save_weekoff_incentive(user_id: int, payload: WeekoffIncentiveInput,
                           db: Session = Depends(get_db), user=Depends(manager)):
     month_bounds(payload.month)
     lock_employee(db, user_id)
+    override = db.get(M.EMSWeekoffIncentiveOverride, (user_id, payload.month))
+    if override is not None or user_id in monthly_weekoff_amounts(db, payload.month, [user_id]):
+        if override is None:
+            override = M.EMSWeekoffIncentiveOverride(user_id=user_id, month=payload.month)
+            db.add(override)
+        override.incentive = int(payload.incentive * 100)
+        override.updated_by, override.updated_at = user.id, datetime.utcnow()
+        record(db, user, 'weekoff_incentive_adjusted', user_id, payload.model_dump_json())
+        db.commit()
+        return {'message': 'Adjusted incentive saved'}
     row = db.query(M.EMSWeekoffIncentive).filter_by(user_id=user_id, month=payload.month).first()
     if row is None:
         row = M.EMSWeekoffIncentive(user_id=user_id, month=payload.month)
@@ -970,6 +1182,19 @@ def save_weekoff_incentive(user_id: int, payload: WeekoffIncentiveInput,
     record(db, user, 'weekoff_incentive_saved', user_id, payload.model_dump_json())
     db.commit()
     return {'message': 'Weekoff incentive saved'}
+
+
+@router.delete('/weekoff-incentives/{user_id}/override')
+def reset_weekoff_incentive_override(user_id: int, month: str,
+                                     db: Session = Depends(get_db), user=Depends(manager)):
+    month_bounds(month)
+    lock_employee(db, user_id)
+    row = db.get(M.EMSWeekoffIncentiveOverride, (user_id, month))
+    if row is not None:
+        db.delete(row)
+        record(db, user, 'weekoff_incentive_adjustment_reset', user_id, month)
+        db.commit()
+    return {'message': 'Calculated incentive restored'}
 
 
 class AttendanceTotalsInput(Input):

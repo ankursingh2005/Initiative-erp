@@ -31,3 +31,10 @@
 /tests/incentive-restore.test.cjs text eol=lf
 /tests/monthly-incentive-ui.test.cjs text eol=lf
 /tests/test_monthly_incentive_isolated.py text eol=lf
+/tests/test_monthly_sales_selection_isolated.py text eol=lf
+/tests/test_monthly_non_sales_selection_isolated.py text eol=lf
+/tests/test_monthly_percentage_isolated.py text eol=lf
+/tests/test_monthly_weekoff_link_isolated.py text eol=lf
+/tests/test_weekoff_override_isolated.py text eol=lf
+/incentive_period.py text eol=lf
+/tests/test_incentive_recurring_isolated.py text eol=lf

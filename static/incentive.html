@@ -162,8 +162,9 @@ function incentiveMonthFromFilename(filename){
   }
   document.getElementById('file').addEventListener('change',async event=>{
     const file=event.target.files[0];if(!file)return;
-    uploadVersion++;selectedFile=file;resetReport();document.getElementById('savedFileName').textContent=file.name;syncIncentiveMonth(file.name);
-    try{await persistUpload();setMessage('File selected. Click Calculate to save the report for all authorized users.')}catch(e){setMessage('File selected. Click Calculate to save the shared report.')}
+    const version=++uploadVersion;selectedFile=file;resetReport();document.getElementById('savedFileName').textContent=file.name;syncIncentiveMonth(file.name);
+    try{await persistUpload();}catch(e){setMessage('Saving the upload on the server...');}
+    if(version===uploadVersion)await calculate();
   });
   for(const id of ['profitRate','incentiveRate'])document.getElementById(id).addEventListener('change',async()=>{
     uploadVersion++;resetReport();if(selectedFile){try{await persistUpload();setMessage('Rates saved. Click Calculate to update reports.')}catch(e){setMessage('Could not save rates: '+e.message,true)}}
@@ -182,7 +183,7 @@ function incentiveMonthFromFilename(filename){
           selectedFile=null;savedReport=shared.report;
           document.getElementById('profitRate').value=shared.profit_rate;
           document.getElementById('incentiveRate').value=shared.incentive_rate;
-          document.getElementById('savedFileName').textContent='Shared file: '+(shared.file_name||'Incentive upload');syncIncentiveMonth(shared.file_name);
+          document.getElementById('savedFileName').textContent='Shared file: '+(shared.file_name||'Incentive upload');syncIncentiveMonth(shared.file_name,shared.report?.report_month);
           const needsUpdate=savedReport?.report_version!==REPORT_VERSION;
           if(!needsUpdate)renderIncentive(savedReport);
           const fileResponse=await fetch('/api/incentive/saved-file',{headers:{Authorization:'Bearer '+token}});
@@ -203,7 +204,7 @@ function incentiveMonthFromFilename(filename){
       const saved=await storageOperation('readonly',store=>store.get(storageKey));
       if(saved?.file){
         selectedFile=saved.file;savedReport=saved.report;
-        document.getElementById('savedFileName').textContent='Saved file: '+selectedFile.name;syncIncentiveMonth(selectedFile.name);
+        document.getElementById('savedFileName').textContent='Saved file: '+selectedFile.name;syncIncentiveMonth(selectedFile.name,savedReport?.report_month);
         document.getElementById('profitRate').value=saved.profitRate;document.getElementById('incentiveRate').value=saved.incentiveRate;
         if(savedReport?.report_version===REPORT_VERSION){
           renderIncentive(savedReport);
@@ -219,7 +220,7 @@ function incentiveMonthFromFilename(filename){
     }
   }
   const money=new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:2});
-  function formData(){const file=selectedFile;if(!file)throw new Error('Please select an Excel or PDF file.');const fd=new FormData();fd.append('file',file);fd.append('profit_rate',document.getElementById('profitRate').value);fd.append('incentive_rate',document.getElementById('incentiveRate').value);return fd}
+  function formData(){const file=selectedFile;if(!file)throw new Error('Please select an Excel or PDF file.');const fd=new FormData();fd.append('file',file);fd.append('profit_rate',document.getElementById('profitRate').value);fd.append('incentive_rate',document.getElementById('incentiveRate').value);fd.append('report_month',document.getElementById('allowMonth').value);return fd}
   function setMessage(text,error=false){const el=document.getElementById('message');el.textContent=text;el.className='message'+(error?' error':'')}
   function renderIncentive(data){renderIdsFund(data.ids_fund_report);renderIncentiveBalances(data);document.getElementById('totalSales').textContent=money.format(data.totals.total_sales);document.getElementById('totalProfit').textContent=money.format(data.totals.avg_profit);document.getElementById('totalIncentive').textContent=money.format(data.totals.total_incentive);document.getElementById('kpis').hidden=false;document.getElementById('rows').innerHTML=data.summary.map(r=>`<tr><td>${escapeHtml(r.outlet)}</td><td class="num">${money.format(r.total_sales)}</td><td class="num">${money.format(r.avg_profit)}</td><td class="num">${money.format(r.total_incentive)}</td></tr>`).join('');document.getElementById('categoryRows').innerHTML=data.category_summary.map(r=>`<tr><td>${escapeHtml(r.outlet)}</td>${['HA','HE','MOB','COM','DC','ACC'].map(category=>categoryCell(r.categories[category])).join('')}${categoryCell(r.total)}</tr>`).join('');document.getElementById('groupedRows').innerHTML=data.grouped_summary.map(r=>`<tr><td>${escapeHtml(r.outlet)}</td><td>${escapeHtml(r.group)}</td><td class="num">${money.format(r.total_sales)}</td><td class="num">${money.format(r.avg_profit)}</td><td class="num">${money.format(r.total_incentive)}</td></tr>`).join('');document.getElementById('categoryReport').hidden=false;document.getElementById('groupedReport').hidden=false;renderExactIncentive(data.exact_summary);document.getElementById('download').disabled=false;hideIncentiveReports();document.getElementById('incentiveDownloads').hidden=false;}
   function hideIncentiveReports(){
@@ -347,7 +348,18 @@ function incentiveMonthFromFilename(filename){
     }).join('');
     document.getElementById('remainingReport').hidden=false;
   }
-  async function calculate(){const btn=document.getElementById('calculate'),version=uploadVersion;try{btn.disabled=true;setMessage('Reading file and calculating incentives…');const response=await fetch('/api/incentive/calculate',{method:'POST',headers:{Authorization:`Bearer ${token}`},body:formData()});const data=await response.json();if(!response.ok)throw new Error(data.detail||'Calculation failed.');if(version!==uploadVersion)return;renderIncentive(data);savedReport=data;await persistUpload();setMessage(`${data.summary.length} outlets calculated and saved for all authorized users.`)}catch(e){setMessage(e.message,true)}finally{btn.disabled=false}}
+  async function calculate(){
+    const version=uploadVersion,controls=['calculate','file','clearUpload','profitRate','incentiveRate'].map(id=>document.getElementById(id));
+    try{
+      controls.forEach(el=>el.disabled=true);setMessage('Reading file, calculating and updating EMS...');
+      const response=await fetch('/api/incentive/calculate',{method:'POST',headers:{Authorization:'Bearer '+token},body:formData()});
+      const data=await response.json();if(!response.ok)throw new Error(data.detail||'Calculation failed.');if(version!==uploadVersion)return;
+      renderIncentive(data);savedReport=data;
+      if(data.report_month){document.getElementById('allowMonth').value=data.report_month;await loadAllow();}
+      try{await persistUpload();}catch(e){setMessage('Saved on server; browser cache unavailable.');}
+      setMessage(data.summary.length+' outlets calculated and saved. EMS updated for '+(data.report_month||document.getElementById('allowMonth').value)+'. Employee incentive settings carry forward until changed.');
+    }catch(e){setMessage(e.message,true)}finally{controls.forEach(el=>el.disabled=false)}
+  }
   async function downloadExactReport(format,button){
     try{
       button.disabled=true;
@@ -368,7 +380,7 @@ function incentiveMonthFromFilename(filename){
 <script>
 const allowMonth=document.getElementById('allowMonth'),allowEMS=document.getElementById('allowEMS'),allowStatus=document.getElementById('allowStatus'),saveAllow=document.getElementById('saveAllow');
 allowMonth.value='';
-function syncIncentiveMonth(filename){allowMonth.value=incentiveMonthFromFilename(filename);loadAllow();}
+function syncIncentiveMonth(filename,reportMonth=''){allowMonth.value=reportMonth||incentiveMonthFromFilename(filename);loadAllow();}
 let allowRequest=0;
 async function loadAllow(){const version=++allowRequest,month=allowMonth.value;saveAllow.disabled=true;allowEMS.checked=false;if(!month){allowStatus.textContent='Select the month of the uploaded report';saveAllow.disabled=false;return;}try{const response=await fetch('/api/incentive/allow?month='+encodeURIComponent(month),{headers:{Authorization:'Bearer '+localStorage.getItem('token')},cache:'no-store'});const data=await response.json();if(!response.ok)throw Error(data.detail||'Unable to load Allow');if(version!==allowRequest)return;allowEMS.checked=data.allowed;allowStatus.textContent=data.allowed?'Allowed in EMS':'Not allowed in EMS';}catch(e){if(version===allowRequest)allowStatus.textContent=e.message;}finally{if(version===allowRequest)saveAllow.disabled=false;}}
 allowMonth.addEventListener('change',loadAllow);

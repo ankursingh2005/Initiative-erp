@@ -1,6 +1,6 @@
 const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict');
 const nodes=new Map();
-function element(){return {value:'',textContent:'',hidden:false,style:{},dataset:{},addEventListener(){},focus(){},setAttribute(){},setCustomValidity(){},querySelector(){return element();},querySelectorAll(){return [];},checkValidity(){return true;},elements:new Proxy({},{get:(t,k)=>t[k]??=(element())})};}
+function element(){return {value:'',textContent:'',hidden:false,style:{},dataset:{},addEventListener(type,fn){this[type]=fn;},focus(){},setAttribute(){},setCustomValidity(){},querySelector(){return element();},querySelectorAll(){return [];},checkValidity(){return true;},elements:new Proxy({},{get:(t,k)=>t[k]??=(element())})};}
 const context={setInterval(){},console,Intl,Date,Number,String,Math,Set,JSON,URL,setTimeout,Blob,
  location:{pathname:'/ems'},localStorage:{getItem(){return null;}},
  document:{getElementById:id=>{if(!nodes.has(id))nodes.set(id,element());return nodes.get(id);},querySelectorAll(){return [];},addEventListener(){}},
@@ -9,15 +9,125 @@ vm.createContext(context);vm.runInContext(fs.readFileSync('static/salary-distrib
 
 (async()=>{
  nodes.get('month').value='2026-09';
- context.fetch=async()=>({ok:true,status:200,text:async()=>JSON.stringify({allowed:true,source_file:'test.xlsx',report:{exact_summary:[{outlet:'ALM',group:'ALL',exact_incentive:50}],ids_fund_report:{non_sales_report:{rows:[{location:'ALM',outlet:'ALM',ids_fund:100,rates:[35,null,12,15,15],values:[35,null,12,15,15]}],totals:[35,16,12,15,15]}}}})});
+ vm.runInContext("state.rows=[{user_id:1,name:'Aditi Sharma',employee_id:'IDS-ALM-26042',outlet:'ALM',category:'ids_emp'},{user_id:2,name:'Jagriti',employee_id:'IDS-ALM-26029',outlet:'ALM',category:'ids_emp'}];",context);
+ context.fetch=async(url)=>url.includes('/monthly-incentive-types?')?{ok:true,status:200,text:async()=>JSON.stringify([{user_id:1,incentive_type:'sales'}])}:({ok:true,status:200,text:async()=>JSON.stringify({allowed:true,source_file:'test.xlsx',report:{exact_summary:[{outlet:'ALM',group:'ALL',exact_incentive:50}],ids_fund_report:{non_sales_report:{rows:[{location:'ALM',outlet:'ALM',ids_fund:100,rates:[35,null,12,15,15],values:[35,null,12,15,15]}],totals:[35,16,12,15,15]}}}})});
  await vm.runInContext('loadMonthlyIncentive()',context);
  assert.match(nodes.get('monthlyIncentiveReports').innerHTML,/SALES INCENTIVE/);
  assert.match(nodes.get('monthlyIncentiveReports').innerHTML,/NON SALES INCENTIVE/);
  assert.match(nodes.get('monthlyIncentiveReports').innerHTML,/Central Service/);
  assert.match(nodes.get('monthlyIncentiveReports').innerHTML,/50/);
- context.fetch=async()=>({ok:true,status:200,text:async()=>JSON.stringify({allowed:false})});
+ vm.runInContext("monthlySalesSelections.set('2026-09:1',{outlet:'ALM',category_group:'ALL'});renderMonthlyIncentiveEmployees();",context);
+ assert.match(nodes.get('monthlyIncentiveEmployees').innerHTML,/<option value="ALM" selected>ALM/);
+ assert.match(nodes.get('monthlyIncentiveEmployees').innerHTML,/<option value="ALL" selected>ALL/);
+ assert.match(nodes.get('monthlyIncentiveEmployees').innerHTML,/50.00/);
+ vm.runInContext("monthlyPercentages.set('2026-09:1',25);",context);
+ assert.match(vm.runInContext("monthlySalesCells(state.rows[0],'sales','2026-09')[2]",context),/12.50/);
+ assert.equal(vm.runInContext("monthlySalesCells(state.rows[0],'sales','2026-09').length",context),5);
+ assert.match(vm.runInContext("monthlySalesCells(state.rows[0],'sales','2026-09')[4]",context),/value="25"/);
+ vm.runInContext("monthlyPercentages.set('2026-09:1',0);",context);
+ assert.match(vm.runInContext("monthlySalesCells(state.rows[0],'sales','2026-09')[2]",context),/0.00/);
+ vm.runInContext("monthlyPercentages.delete('2026-09:1');",context);
+ vm.runInContext("monthlyNonSalesSelections.set('2026-09:1',{location:'ALM',field:'accounts'});",context);
+ assert.match(vm.runInContext("monthlySalesCells(state.rows[0],'non-sales','2026-09')[2]",context),/35.00/);
+ assert.match(vm.runInContext("monthlySalesCells(state.rows[0],'non-sales','2026-09')[3]",context),/Customer Care/);
+ vm.runInContext("monthlyNonSalesSelections.set('2026-09:1',{location:'ALM',field:'ware_house'});",context);
+ assert.equal(vm.runInContext("monthlySalesCells(state.rows[0],'non-sales','2026-09')[2]",context),'&mdash;');
+ vm.runInContext("monthlyNonSalesSelections.set('2026-09:1',{location:'Central Service',field:'ware_house'});",context);
+ assert.match(vm.runInContext("monthlySalesCells(state.rows[0],'non-sales','2026-09')[2]",context),/16.00/);
+ vm.runInContext("monthlyNonSalesSelections.set('2026-09:1',{location:'ALM',field:'ids_fund'});",context);
+ assert.match(vm.runInContext("monthlySalesCells(state.rows[0],'non-sales','2026-09')[2]",context),/100.00/);
+ vm.runInContext("monthlyPercentages.set('2026-09:1',12.5);",context);
+ assert.match(vm.runInContext("monthlySalesCells(state.rows[0],'non-sales','2026-09')[2]",context),/12.50/);
+ vm.runInContext("monthlyPercentages.delete('2026-09:1');",context);
+ assert.equal(vm.runInContext("monthlySalesCells(state.rows[0],'sales','2026-10')[2]",context),'&mdash;');
+ vm.runInContext("monthlySalesSelections.set('2026-09:1',{outlet:'ALM',category_group:'MISSING'});",context);
+ assert.equal(vm.runInContext("monthlySalesCells(state.rows[0],'sales','2026-09')[2]",context),'&mdash;');
+ assert.match(nodes.get('monthlyIncentiveEmployees').innerHTML,/<option value="sales" selected>SALES INCENTIVE/);
+ assert.match(nodes.get('monthlyIncentiveEmployees').innerHTML,/NON SALES INCENTIVE/);
+ assert.match(nodes.get('monthlyIncentiveEmployees').innerHTML,/<b>Aditi Sharma<\/b><small>IDS-ALM-26042<\/small>/);
+ nodes.get('search').value='Jagriti';
+ vm.runInContext('renderMonthlyIncentiveEmployees()',context);
+ assert.match(nodes.get('monthlyIncentiveEmployees').innerHTML,/Jagriti/);
+ assert.doesNotMatch(nodes.get('monthlyIncentiveEmployees').innerHTML,/Aditi/);
+ nodes.get('search').value='';
+ context.fetch=async(url)=>({ok:true,status:200,text:async()=>JSON.stringify(url.includes('/monthly-incentive-types?')?[]:{allowed:false})});
  await vm.runInContext('loadMonthlyIncentive()',context);
  assert.equal(nodes.get('monthlyIncentiveReports').innerHTML,'');
- assert.match(nodes.get('monthlyIncentiveStatus').textContent,/not been allowed/);
- console.log('Monthly Incentive allowed and hidden UI checks passed.');
+ assert.match(nodes.get('monthlyIncentiveStatus').textContent,/No allowed report/);
+ const status={textContent:''};let submitted;
+ const select={value:'non-sales',dataset:{monthlyIncentiveType:'1'},matches:selector=>selector==='[data-monthly-incentive-type]',closest:()=>null,parentElement:{querySelector:()=>status}};
+ context.fetch=async(url,opts)=>{submitted=JSON.parse(opts.body);return {ok:true,status:200,text:async()=>JSON.stringify({})};};
+ await nodes.get('monthlyIncentiveEmployees').change({target:select});
+ assert.deepEqual(submitted,{month:'2026-09',incentive_type:'non-sales'});
+ assert.equal(status.textContent,'Saved');
+ assert.equal(vm.runInContext("monthlyIncentiveTypes.get('2026-09:1')",context),'non-sales');
+ context.fetch=async()=>({ok:false,status:500,text:async()=>JSON.stringify({detail:'Save failed'})});select.value='sales';
+ await nodes.get('monthlyIncentiveEmployees').change({target:select});
+ assert.equal(select.value,'non-sales');assert.equal(status.textContent,'Save failed');
+ context.fetch=async(url,opts)=>{submitted=JSON.parse(opts.body);return {ok:true,status:200,text:async()=>JSON.stringify({})};};
+ select.value='';await nodes.get('monthlyIncentiveEmployees').change({target:select});
+ assert.deepEqual(submitted,{month:'2026-09',incentive_type:''});
+ vm.runInContext('renderMonthlyIncentiveEmployees()',context);
+ assert.match(nodes.get('monthlyIncentiveEmployees').innerHTML,/<option value="" selected>Choose category<\/option>/);
+ assert.equal(vm.runInContext("monthlyIncentiveTypes.get('2026-09:1')",context),'');
+
+ // Follow the full non-sales selection -> saved amount and sales outlet -> group flow.
+ const liveStatus={textContent:''},row={querySelector:()=>liveStatus,querySelectorAll:()=>[]};
+ nodes.get('monthlyIncentiveEmployees').querySelector=()=>({closest:()=>row,parentElement:{querySelector:()=>liveStatus}});
+ context.fetch=async(url,opts)=>{submitted=JSON.parse(opts.body);return {ok:true,status:200,text:async()=>JSON.stringify({})};};
+ const nonSalesSelect={value:'ALM',dataset:{nonSalesUser:'1',nonSalesField:'location'},closest:()=>row,matches:selector=>selector==='[data-non-sales-field]'};
+ await nodes.get('monthlyIncentiveEmployees').change({target:nonSalesSelect});
+ assert.deepEqual(submitted,{month:'2026-09',location:'ALM',field:''});
+ nonSalesSelect.dataset.nonSalesField='field';nonSalesSelect.value='accounts';
+ await nodes.get('monthlyIncentiveEmployees').change({target:nonSalesSelect});
+ assert.deepEqual(submitted,{month:'2026-09',location:'ALM',field:'accounts'});
+ assert.equal(liveStatus.textContent,'Saved');
+ const salesSelect={value:'ALM',dataset:{salesUser:'1',salesField:'outlet'},closest:()=>row,matches:selector=>selector==='[data-sales-field]'};
+ await nodes.get('monthlyIncentiveEmployees').change({target:salesSelect});
+ assert.deepEqual(submitted,{month:'2026-09',outlet:'ALM',category_group:''});
+ salesSelect.dataset.salesField='category_group';salesSelect.value='ALL';
+ await nodes.get('monthlyIncentiveEmployees').change({target:salesSelect});
+ assert.deepEqual(submitted,{month:'2026-09',outlet:'ALM',category_group:'ALL'});
+ // Percentage edits preview and persist independently for this employee/month.
+ row.cells=[{},{},{},{},{},{},{innerHTML:''}];
+ vm.runInContext("monthlySalesReports.set('2026-09',[{outlet:'ALM',group:'ALL',exact_incentive:1000}]);monthlyIncentiveTypes.set('2026-09:1','sales');",context);
+ const percentInput={value:'25',dataset:{incentivePercentage:'1'},checkValidity:()=>true,reportValidity:()=>true,closest:()=>row,parentElement:{querySelector:()=>liveStatus},matches:selector=>selector==='[data-incentive-percentage]'};
+ nodes.get('monthlyIncentiveEmployees').input({target:percentInput});
+ assert.match(row.cells[6].innerHTML,/250.00/);
+ await nodes.get('monthlyIncentiveEmployees').change({target:percentInput});
+ assert.deepEqual(submitted,{month:'2026-09',percentage:25});
+ assert.equal(vm.runInContext("monthlyPercentages.get('2026-09:1')",context),25);
+ assert.equal(liveStatus.textContent,'Saved');
+ // Entering from November opens October's allowed report, rather than dead outlets.
+ nodes.get('month').value='2026-11';
+ vm.runInContext('refresh=async()=>{}',context);
+ context.fetch=async(url)=>({ok:true,status:200,text:async()=>JSON.stringify(url.includes('/monthly-incentive-months')?[{month:'2026-10',source_file:'October.xlsx'}]:url.includes('/monthly-incentive-types?')?[{user_id:1,incentive_type:'sales',outlet:'ALM',category_group:'ALL'}]:{allowed:true,source_file:'October.xlsx',report:{exact_summary:[{outlet:'ALM',group:'ALL',exact_incentive:123.45}]}})});
+ await vm.runInContext('openMonthlyIncentive()',context);
+ assert.equal(nodes.get('month').value,'2026-10');
+ assert.equal(nodes.get('monthlyIncentiveMonth').value,'2026-10');
+ assert.match(nodes.get('monthlyIncentiveEmployees').innerHTML,/123.45/);
+ assert.match(nodes.get('monthlyIncentiveEmployees').innerHTML,/<option value="ALM" selected>ALM/);
+ assert.doesNotMatch(nodes.get('monthlyIncentiveStatus').textContent,/No allowed report/);
+
+ nodes.get('month').value='2026-11';
+ context.fetch=async(url)=>({ok:true,status:200,text:async()=>JSON.stringify(url.includes('/monthly-incentive-months')?[]:url.includes('/monthly-incentive-types?')?[{user_id:1,incentive_type:'sales'}]:{allowed:false})});
+ await vm.runInContext('openMonthlyIncentive()',context);
+ assert.equal(nodes.get('month').value,'2026-11');
+ assert.match(nodes.get('monthlyIncentiveStatus').textContent,/No allowed report/);
+ assert.match(nodes.get('monthlyIncentiveEmployees').innerHTML,/Choose outlet for Aditi Sharma" disabled/);
+ assert.equal(vm.runInContext("monthlySalesCells(state.rows[0],'sales','2026-11')[2]",context),'&mdash;');
+
+ vm.runInContext("state.month='2026-10';currentDistributionRows=()=>[{user_id:1,actual_gross_earning:3000000,weekoff_availed:3}];state.weekoffIncentives=[{user_id:1,incentive:264300,source:'monthly'},{user_id:2,incentive:4500}];weekoffDrafts.delete('2026-10:1');renderWeekoffTable();",context);
+ assert.equal(vm.runInContext('currentWeekoffRows()[0].incentive',context),264300);
+ assert.equal(vm.runInContext('currentWeekoffRows()[0].payable',context),364300);
+ assert.equal(vm.runInContext('currentWeekoffRows()[1].incentive',context),4500);
+ assert.match(nodes.get('weekoffRows').innerHTML,/value="2643.00"/);
+ assert.doesNotMatch(nodes.get('weekoffRows').innerHTML,/readonly|data-weekoff-save="1" disabled/);
+ vm.runInContext("weekoffDrafts.set('2026-10:1',300000);renderWeekoffTable();",context);
+ assert.equal(vm.runInContext('currentWeekoffRows()[0].incentive',context),300000);
+ assert.equal(vm.runInContext('currentWeekoffRows()[0].payable',context),400000);
+ vm.runInContext("weekoffDrafts.delete('2026-10:1');state.weekoffIncentives[0]={user_id:1,incentive:200000,source:'monthly',monthly_amount:264300,manual_override:true};renderWeekoffTable();",context);
+ assert.match(nodes.get('weekoffRows').innerHTML,/data-weekoff-reset="1">Use monthly/);
+ assert.equal(vm.runInContext('currentWeekoffRows()[0].payable',context),300000);
+ console.log('Incentive dropdowns, percentage, saved W/O amounts and payable totals passed.');
 })().catch(e=>{console.error(e);process.exitCode=1;});
