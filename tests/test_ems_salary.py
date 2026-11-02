@@ -231,7 +231,7 @@ class SalaryTests(unittest.TestCase):
         self.assertEqual(self.db.query(M.EMSSalaryProfile).count(), 1)
         self.assertEqual(self.setup_salary(uid, ids_attributes=dict(branch='REMOVED')).status_code, 422)
 
-    def test_salary_distribution_inputs_are_monthly_and_do_not_change_other_projects(self):
+    def test_salary_distribution_allowances_carry_forward_and_advances_stay_monthly(self):
         from salary_distribution import calculate_distribution
         uid = self.users[2].id
         response = self.setup_salary(uid, basic='16000', allowances='0', deductions='0',
@@ -254,8 +254,24 @@ class SalaryTests(unittest.TestCase):
         self.assertEqual(row['ifsc_code'], 'SBIN0001234')
         october = self.client.get('/api/ems/salary-distribution?month=2026-10').json()
         row = next(r for r in october['rows'] if r['user_id'] == uid)
-        self.assertEqual(row['other_allowances'], 0)
+        self.assertEqual(row['other_allowances'], 100000)
         self.assertEqual(row['staff_advance'], 0)
+        # Changing an allowance affects that month onward, preserving history.
+        self.assertEqual(self.client.put(path, json=dict(month='2026-10',
+            other_allowances='2500.00', staff_advance='300.00')).status_code, 200)
+        def distribution_row(month):
+            return next(r for r in self.client.get(
+                '/api/ems/salary-distribution?month='+month).json()['rows'] if r['user_id'] == uid)
+        self.assertEqual(distribution_row('2026-09')['other_allowances'], 100000)
+        self.assertEqual(distribution_row('2026-10')['other_allowances'], 250000)
+        self.assertEqual(distribution_row('2026-10')['staff_advance'], 30000)
+        self.assertEqual(distribution_row('2026-11')['other_allowances'], 250000)
+        self.assertEqual(distribution_row('2026-11')['staff_advance'], 0)
+        # Explicitly setting zero stops the recurring allowance.
+        self.assertEqual(self.client.put(path, json=dict(month='2026-12',
+            other_allowances='0', staff_advance='0')).status_code, 200)
+        self.assertEqual(distribution_row('2027-01')['other_allowances'], 0)
+        self.assertEqual(distribution_row('2026-11')['other_allowances'], 250000)
         self.assertEqual({t.name: self.db.execute(t.select()).all() for t in shared}, before)
         self.assertEqual(self.db.query(M.EMSPayroll).count(), 0)
         self.assertEqual(self.client.put(path, json=dict(month='2026-09', other_allowances='-1', staff_advance='0')).status_code, 422)

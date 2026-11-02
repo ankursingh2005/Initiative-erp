@@ -881,7 +881,13 @@ class DistributionInput(Input):
 def salary_distribution(month: str, db: Session = Depends(get_db), user=Depends(manager)):
     from salary_distribution import calculate_distribution
     preview = salary_preview(db, month)
-    inputs = {row.user_id: row for row in db.query(M.EMSDistributionInput).filter_by(month=month).all()}
+    # Allowances recur from their effective month. Advances remain monthly.
+    # Reuse existing saved inputs so historical allowances carry forward too.
+    inputs = {}
+    for row in db.query(M.EMSDistributionInput).filter(
+            M.EMSDistributionInput.month <= month).order_by(
+                M.EMSDistributionInput.month, M.EMSDistributionInput.id).all():
+        inputs[row.user_id] = row
     profiles = {row.id: row for row in db.query(M.EMSSalaryProfile).all()}
     rows = []
     for employee in preview['rows']:
@@ -889,7 +895,8 @@ def salary_distribution(month: str, db: Session = Depends(get_db), user=Depends(
         saved = inputs.get(employee['user_id'])
         attendance_absent = employee.get('unpaid_days', employee['counts']['absent'])
         calculated = calculate_distribution(profile.basic + profile.allowances if profile else 0,
-            attendance_absent, saved.other_allowances if saved else 0, saved.staff_advance if saved else 0,
+            attendance_absent, saved.other_allowances if saved else 0,
+            saved.staff_advance if saved and saved.month == month else 0,
             employee['counts']['weekoff'], profile.employment_category if profile else None)
         rows.append(dict(**calculated, user_id=employee['user_id'], name=employee['name'],
             employee_id=employee['employee_id'], profile_id=employee['profile_id'],
