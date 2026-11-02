@@ -318,6 +318,37 @@ $('verifySalaryRemovalPassword').onclick=async()=>{
 };
 
 const distributionDrafts=new Map();
+const distributionSaveTimers=new Map(),distributionSaving=new Set();
+function distributionStatus(uid,text){
+ const row=document.querySelector?.('[data-dist-user="'+uid+'"]');
+ if(row)row.querySelector('[data-dist-status]').textContent=text;
+}
+async function saveDistributionDraft(uid,month=state.month){
+ const key=month+':'+uid;
+ if(distributionSaving.has(key))return;
+ distributionSaving.add(key);
+ try{
+  while(distributionDrafts.has(key)){
+   const draft=distributionDrafts.get(key);
+   if(state.month===month)distributionStatus(uid,'Saving...');
+   await api('/salary-distribution/'+uid,{method:'PUT',body:JSON.stringify({month,other_allowances:(draft.other_allowances/100).toFixed(2),staff_advance:(draft.staff_advance/100).toFixed(2)})});
+   if(state.month===month){
+    const original=state.distribution.find(row=>row.user_id===uid);
+    if(original)Object.assign(original,draft);
+   }
+   if(distributionDrafts.get(key)===draft)distributionDrafts.delete(key);
+  }
+  if(state.month===month){distributionStatus(uid,'Saved');renderIDS();renderWeekoffTable();}
+ }catch(error){
+  if(state.month===month)distributionStatus(uid,'Not saved: '+error.message+' — edit to retry');
+  message('Salary inputs not saved: '+error.message,true);
+ }finally{distributionSaving.delete(key);}
+}
+function scheduleDistributionSave(uid){
+ const month=state.month,key=month+':'+uid;
+ if(distributionSaveTimers.has(key))clearTimeout(distributionSaveTimers.get(key));
+ distributionSaveTimers.set(key,setTimeout(()=>{distributionSaveTimers.delete(key);saveDistributionDraft(uid,month);},400));
+}
 const distributionKeys=['absent','no_of_days','working_days','expected_basic','actual_basic','other_allowances','actual_vda','actual_pay_epf','actual_oa','total_earning','bonus_payable','actual_gross_earning','epf_employee','esic_employee','staff_advance','total_deductions','net_amount','account_no','ifsc_code'];
 function distributionKey(uid){return state.month+':'+uid;}
 function salaryAttendance(employee,profile,fallback){
@@ -400,19 +431,25 @@ document.addEventListener('input',event=>{
   distributionDrafts.set(distributionKey(uid),{...previous,[input.dataset.distInput]:value});
   const row=currentDistributionRows().find(row=>row.user_id===uid);
   for(const key of distributionKeys){if(['absent','no_of_days','working_days','account_no','ifsc_code','other_allowances','staff_advance'].includes(key))continue;tr.querySelector('[data-dist-value="'+key+'"]').textContent=money(row[key]);}
-  tr.querySelector('[data-dist-status]').textContent='Unsaved inputs';renderDistributionTotals();renderIDS();renderWeekoffTable();
+  tr.querySelector('[data-dist-status]').textContent='Saving...';renderDistributionTotals();renderIDS();renderWeekoffTable();scheduleDistributionSave(uid);
  }catch(error){input.setCustomValidity(error.message);tr.querySelector('[data-dist-status]').textContent=error.message;}
 });
 document.addEventListener('click',async event=>{
  const button=event.target.closest('[data-dist-save]');if(!button)return;
- const tr=button.closest('[data-dist-user]'),inputs=Array.from(tr.querySelectorAll('[data-dist-input]')),uid=Number(button.dataset.distSave),month=state.month,key=distributionKey(uid);
+ const tr=button.closest('[data-dist-user]'),inputs=Array.from(tr.querySelectorAll('[data-dist-input]')),uid=Number(button.dataset.distSave);
  try{
-  const values=Object.fromEntries(inputs.map(input=>{input.setCustomValidity('');return [input.dataset.distInput,(parseDistributionAmount(input)/100).toFixed(2)];}));
-  button.disabled=true;inputs.forEach(input=>input.disabled=true);tr.querySelector('[data-dist-status]').textContent='Saving...';
-  await api('/salary-distribution/'+uid,{method:'PUT',body:JSON.stringify({month,...values})});
-  distributionDrafts.delete(key);await refresh();message('Salary distribution inputs saved.');
+  const values=Object.fromEntries(inputs.map(input=>{input.setCustomValidity('');return [input.dataset.distInput,parseDistributionAmount(input)];}));
+  distributionDrafts.set(distributionKey(uid),values);
+  await saveDistributionDraft(uid);
  }catch(error){tr.querySelector('[data-dist-status]').textContent=error.message;message(error.message,true);}
- finally{button.disabled=false;inputs.forEach(input=>input.disabled=false);}
+});
+document.addEventListener('focusout',event=>{
+ const input=event.target.closest('[data-dist-input]');if(!input)return;
+ saveDistributionDraft(Number(input.closest('[data-dist-user]').dataset.distUser));
+});
+window.addEventListener('beforeunload',event=>{
+ if(!distributionDrafts.size)return;
+ event.preventDefault();event.returnValue='';
 });
 function salaryWorkbookPayload(category){
  const ids=currentDistributionRows(category),employees=new Map(filtered(category).map(r=>[r.user_id,r])),weekoff=new Map(currentWeekoffRows(category).map(r=>[r.user_id,r]));

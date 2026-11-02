@@ -31,17 +31,39 @@ test('distribution renders all 20 cells, leading-zero bank account and totals',(
 });
 test('editing allowances updates calculated cells and saves only monthly inputs',async()=>{
  const {context,nodes,listeners,element}=setup(),cells=new Map();
+ context.clearTimeout=()=>{};context.setTimeout=fn=>{context.scheduledSave=fn;return 1;};
  const row={dataset:{distUser:'1'},querySelector(selector){if(!cells.has(selector))cells.set(selector,element());return cells.get(selector);},querySelectorAll(){return [allowance,advance];}};
  const allowance={...element(),value:'2000.00',dataset:{distInput:'other_allowances'},closest:()=>row};
  const advance={...element(),value:'100.00',dataset:{distInput:'staff_advance'},closest:()=>row};
  for(const fn of listeners.input||[])fn({target:{closest:selector=>selector==='[data-dist-input]'?allowance:null}});
  assert.equal(cells.get('[data-dist-value="net_amount"]').textContent,new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR'}).format(18122.98));
- assert.equal(cells.get('[data-dist-status]').textContent,'Unsaved inputs');
+ assert.equal(cells.get('[data-dist-status]').textContent,'Saving...');
  vm.runInContext(`globalThis.saved=null;api=async(path,options)=>{saved={path,body:JSON.parse(options.body)};return {message:'Saved'};};refresh=async()=>{};`,context);
- const button={...element(),dataset:{distSave:'1'},closest:()=>row};
- for(const fn of listeners.click||[])await fn({target:{closest:selector=>selector==='[data-dist-save]'?button:null}});
+ context.document.querySelector=()=>row;
+ await context.scheduledSave();
+ await vm.runInContext('saveDistributionDraft(1)',context);
  const saved=vm.runInContext('saved',context);assert.equal(saved.path,'/salary-distribution/1');assert.equal(saved.body.month,'2026-09');assert.equal(saved.body.other_allowances,'2000.00');assert.equal(saved.body.staff_advance,'100.00');assert.equal(Object.keys(saved.body).length,3);
- assert.equal(button.disabled,false);assert.equal(allowance.disabled,false);
+ assert.equal(cells.get('[data-dist-status]').textContent,'Saved');
+ assert.equal(vm.runInContext('distributionDrafts.size',context),0);
+ assert.equal(vm.runInContext('state.distribution[0].other_allowances',context),200000);
+});
+test('autosave preserves newer edits while a request is in flight and keeps the original month',async()=>{
+ const {context}=setup();
+ vm.runInContext(`globalThis.requests=[];globalThis.release=null;api=async(path,options)=>{requests.push(JSON.parse(options.body));if(requests.length===1)await new Promise(resolve=>release=resolve);};distributionDrafts.set('2026-09:1',{other_allowances:10000,staff_advance:0});globalThis.pending=saveDistributionDraft(1);distributionDrafts.set('2026-09:1',{other_allowances:25000,staff_advance:500});state.month='2026-10';release();`,context);
+ await vm.runInContext('pending',context);
+ assert.equal(vm.runInContext('requests.length',context),2);
+ assert.equal(vm.runInContext('requests[1].other_allowances',context),'250.00');
+ assert.equal(vm.runInContext('requests[1].month',context),'2026-09');
+ assert.equal(vm.runInContext('distributionDrafts.size',context),0);
+});
+test('failed autosave retains the amount for retry',async()=>{
+ const {context}=setup();
+ vm.runInContext(`api=async()=>{throw Error('Connection lost');};distributionDrafts.set('2026-09:1',{other_allowances:25000,staff_advance:0});`,context);
+ await vm.runInContext('saveDistributionDraft(1)',context);
+ assert.equal(vm.runInContext("distributionDrafts.get('2026-09:1').other_allowances",context),25000);
+ vm.runInContext('api=async()=>({});',context);
+ await vm.runInContext('saveDistributionDraft(1)',context);
+ assert.equal(vm.runInContext('distributionDrafts.size',context),0);
 });
 test('distribution applies existing employee filters and labels missing setup',()=>{
  const {context,nodes}=setup();vm.runInContext(`$('group').value='ac_projects';renderDistribution();`,context);assert.match(nodes.get('distributionRows').innerHTML,/No records/);
