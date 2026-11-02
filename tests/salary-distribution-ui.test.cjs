@@ -24,6 +24,25 @@ test('manual employee attendance opens the Excel sheet with calculated totals an
  assert.match(nodes.get('attendanceRecordRows').innerHTML,/Other Person/);
  assert.equal(nodes.get('showAllAttendanceEmployees').hidden,true);
 });
+test('month input loads immediately and ignores a slower previous month response',async()=>{
+ const {context,nodes}=setup();
+ vm.runInContext(`globalThis.pendingPreviews={};globalThis.renderedMonths=[];
+ api=async path=>{if(path.startsWith('/salary-preview?'))return new Promise(resolve=>pendingPreviews[path.split('=')[1]]=resolve);if(path.startsWith('/salary-distribution?'))return {rows:[]};return [];};
+ render=()=>renderedMonths.push(state.month);filterSetupEmployees=()=>{};syncAttendanceWeekoffs=()=>{};`,context);
+ nodes.get('month').value='2026-10';
+ const october=nodes.get('month').oninput();
+ assert.notEqual(nodes.get('month').disabled,true);
+ nodes.get('month').value='2026-11';
+ const november=nodes.get('month').oninput();
+ vm.runInContext(`pendingPreviews['2026-11']({month:'2026-11',rows:[]});`,context);
+ await november;
+ assert.equal(vm.runInContext('state.month',context),'2026-11');
+ vm.runInContext(`pendingPreviews['2026-10']({month:'2026-10',rows:[]});`,context);
+ await october;
+ assert.equal(vm.runInContext('state.month',context),'2026-11');
+ assert.equal(vm.runInContext('renderedMonths.join()',context),'2026-11');
+ assert.equal(nodes.get('setupForm').elements.effective_month.value,'2026-11');
+});
 test('distribution renders all 20 cells, leading-zero bank account and totals',()=>{
  const {nodes}=setup(),html=nodes.get('distributionRows').innerHTML;
  assert.equal((html.match(/<td\b/g)||[]).length,20);assert.match(html,/000123456789/);assert.match(html,/SBIN0001234/);assert.match(html,/data-dist-input="other_allowances"/);assert.match(html,/data-dist-save="1"/);
