@@ -129,5 +129,26 @@ vm.createContext(context);vm.runInContext(fs.readFileSync('static/salary-distrib
  vm.runInContext("weekoffDrafts.delete('2026-10:1');state.weekoffIncentives[0]={user_id:1,incentive:200000,source:'monthly',monthly_amount:264300,manual_override:true};renderWeekoffTable();",context);
  assert.match(nodes.get('weekoffRows').innerHTML,/data-weekoff-reset="1">Use monthly/);
  assert.equal(vm.runInContext('currentWeekoffRows()[0].payable',context),300000);
- console.log('Incentive dropdowns, percentage, saved W/O amounts and payable totals passed.');
+
+ // Deployment regression: employee names load even when the salary preview never loaded.
+ nodes.get('month').value='2026-10';
+ vm.runInContext("state={rows:[],profiles:[],earnings:[],records:[]};monthlyIncentiveRosterMonth=null;",context);
+ const roster=[{user_id:1,name:'Aditi Sharma',employee_id:'IDS-ALM-26042',outlet:'ALM',category:'ids_emp'},{user_id:3,name:'No Salary Setup',employee_id:'IDS-ALM-26099',outlet:'ALM',category:'ids_emp'}];
+ context.fetch=async(url)=>({ok:true,status:200,text:async()=>JSON.stringify(url.includes('/monthly-incentive-employees?')?roster:url.includes('/monthly-incentive-types?')?[]:{allowed:true,report:{exact_summary:[]}})});
+ await vm.runInContext('loadMonthlyIncentive()',context);
+ assert.match(nodes.get('monthlyIncentiveEmployees').innerHTML,/Aditi Sharma/);
+ assert.match(nodes.get('monthlyIncentiveEmployees').innerHTML,/No Salary Setup/);
+ assert.match(nodes.get('monthlyIncentiveEmployees').innerHTML,/IDS-ALM-26099/);
+ assert.equal(vm.runInContext('state.rows.length',context),0);
+ nodes.get('search').value='No Salary';vm.runInContext('renderMonthlyIncentiveEmployees()',context);
+ assert.match(nodes.get('monthlyIncentiveEmployees').innerHTML,/No Salary Setup/);
+ assert.doesNotMatch(nodes.get('monthlyIncentiveEmployees').innerHTML,/Aditi/);
+ nodes.get('search').value='';
+ // Independent settings/report failures must never erase the successfully loaded roster.
+ context.fetch=async(url)=>url.includes('/monthly-incentive-employees?')?{ok:true,status:200,text:async()=>JSON.stringify(roster)}:{ok:false,status:500,text:async()=>JSON.stringify({detail:'Preview unavailable'})};
+ await vm.runInContext('loadMonthlyIncentive()',context);
+ assert.match(nodes.get('monthlyIncentiveEmployees').innerHTML,/Aditi Sharma/);
+ assert.match(nodes.get('monthlyIncentiveEmployees').innerHTML,/No Salary Setup/);
+ assert.match(nodes.get('monthlyIncentiveEmployeeStatus').textContent,/Unable to load incentive settings/);
+ console.log('Incentive fields, W/O amounts and independent EMS employee roster checks passed.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

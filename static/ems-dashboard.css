@@ -258,3 +258,5 @@ button[data-delete-ems],#excludedEmployeeRows button[data-delete-ems]{color:#a33
 #monthlyIncentiveDashboard td:last-child{text-align:right;padding-right:18px;font-variant-numeric:tabular-nums}
 #monthlyIncentiveDashboard .monthly-incentive-amount{display:inline-flex;align-items:center;justify-content:flex-end;min-height:42px;max-width:100%;padding:0 12px;border:1px solid #cde9df;border-radius:8px;background:#e8f5ef;color:#08755d;font-size:14px;font-weight:700;white-space:nowrap;line-height:1.2}
 #monthlyIncentiveDashboard .monthly-incentive-amount.is-empty{background:transparent;border-color:transparent;color:#8ba0aa;font-weight:400}
+
+#monthlyIncentiveEmployeeStatus:empty{display:none}

@@ -38,3 +38,4 @@
 /tests/test_weekoff_override_isolated.py text eol=lf
 /incentive_period.py text eol=lf
 /tests/test_incentive_recurring_isolated.py text eol=lf
+/tests/test_monthly_employee_roster_isolated.py text eol=lf

@@ -126,6 +126,23 @@ def effective_incentive_settings(db, model, month, ids):
     return result
 
 
+@router.get('/monthly-incentive-employees')
+def monthly_incentive_employees(month: str, db: Session = Depends(get_db), user=Depends(manager)):
+    """Same active, included roster as salary_preview, without attendance/payroll dependencies."""
+    month_bounds(month)
+    salary_names = ems_employee_names(db)
+    latest = {}
+    for profile in db.query(M.EMSSalaryProfile).filter(
+            M.EMSSalaryProfile.effective_month <= month).order_by(M.EMSSalaryProfile.effective_month.desc()).all():
+        latest.setdefault(profile.user_id, profile)
+    return [{'user_id': employee.id, 'name': salary_names.get(employee.id, employee.full_name or employee.username),
+             'employee_id': card.employee_id if card else '', 'outlet': store.name if store else '',
+             'category': employee.category_code if employee.role == 'EMSManual' else employee_category(employee),
+             'employment_category': latest[employee.id].employment_category if employee.id in latest else None}
+            for employee, card, store in employee_rows(db, include_excluded=False).filter(
+                models.User.status == 'Active').order_by(models.User.full_name).all()]
+
+
 @router.get('/monthly-incentive-types')
 def monthly_incentive_types(month: str, db: Session = Depends(get_db), user=Depends(manager)):
     month_bounds(month)
@@ -340,6 +357,9 @@ def ems_page():
     version = sha256((ROOT / 'static' / 'ems.js').read_bytes()).hexdigest()[:12]
     import re
     html = re.sub(r'static/ems\.js\?v=[^"\s]+', f'static/ems.js?v={version}', html)
+    style_version = sha256((ROOT / 'static' / 'ems-dashboard.css').read_bytes()).hexdigest()[:12]
+    html = re.sub(r'static/ems-dashboard\.css\?v=[^"\s]+',
+                  f'static/ems-dashboard.css?v={style_version}', html)
     html = html.replace('<html lang="en">', '<html lang="en" data-erp="true">')
     html = html.replace('"/static/', '"ems-assets/')
     return HTMLResponse(html, headers={'Cache-Control': 'no-cache'})

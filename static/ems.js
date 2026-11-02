@@ -17,7 +17,8 @@ async function api(path, options={}) {
 }
 const employeeSort=new Intl.Collator('en-IN',{numeric:true,sensitivity:'base'});
 function compareEmployees(a,b){return employeeSort.compare(String(a.outlet||'Unassigned').trim(),String(b.outlet||'Unassigned').trim())||employeeSort.compare(String(a.name||'').trim(),String(b.name||'').trim())||employeeSort.compare(a.employee_id||'',b.employee_id||'')||a.user_id-b.user_id;}
-function filtered(category=$('employmentCategory').value){const query=$('search').value.toLowerCase();return state.rows.filter(r=>(!$('group').value||r.category===$('group').value)&&(!category||r.employment_category===category)&&[r.name,r.employee_id,r.outlet].some(v=>String(v).toLowerCase().includes(query))).sort(compareEmployees);}
+function filtered(category=$('employmentCategory').value){return filterEmployeeRows(state.rows,category);}
+function filterEmployeeRows(rows,category=$('employmentCategory').value){const query=$('search').value.toLowerCase();return rows.filter(r=>(!$('group').value||r.category===$('group').value)&&(!category||r.employment_category===category)&&[r.name,r.employee_id,r.outlet].some(v=>String(v).toLowerCase().includes(query))).sort(compareEmployees);}
 function cells(values){return '<tr>'+values.map(v=>'<td>'+v+'</td>').join('')+'</tr>';}
 function empty(columns){return `<tr><td colspan="${columns}">No records for this selection.</td></tr>`;}
 function render(){
@@ -679,6 +680,7 @@ $('emsSalaryNameForm').onsubmit=async event=>{
 let monthlyIncentiveRequest=0,monthlyIncentiveOpening=0;
 async function openMonthlyIncentive(){
  const opening=++monthlyIncentiveOpening,originalMonth=$('month').value;
+ renderMonthlyIncentiveEmployees();
  $('monthlyIncentiveStatus').textContent='Loading allowed incentive months...';
  try{
   const months=await api('/monthly-incentive-months');
@@ -687,7 +689,7 @@ async function openMonthlyIncentive(){
   const chosen=months.some(r=>r.month===originalMonth)?originalMonth:months[0]?.month;
   if(chosen&&chosen!==originalMonth){$('month').value=chosen;await refresh();}
   if(opening===monthlyIncentiveOpening)await loadMonthlyIncentive();
- }catch(e){$('monthlyIncentiveStatus').textContent=e.message;}
+ }catch(e){if(opening===monthlyIncentiveOpening)await loadMonthlyIncentive();}
 }
 $('monthlyIncentiveMonth').addEventListener('change',async()=>{
  const month=$('monthlyIncentiveMonth').value;if(!month)return;
@@ -695,13 +697,19 @@ $('monthlyIncentiveMonth').addEventListener('change',async()=>{
  const request=++monthlyIncentiveRequest;await refresh();
  if(request===monthlyIncentiveRequest&&month===$('month').value)await loadMonthlyIncentive();
 });
+let monthlyIncentiveRoster=[],monthlyIncentiveRosterMonth=null;
+function monthlyIncentiveEmployeeRows(){
+ const month=$('month').value;
+ if(state.month===month&&state.rows.length)return state.rows;
+ return monthlyIncentiveRosterMonth===month?monthlyIncentiveRoster:state.rows;
+}
 const monthlyPercentages=new Map(),monthlyPercentageDrafts=new Map();
 const monthlyNonSalesReports=new Map(),monthlyNonSalesSelections=new Map();
 const monthlySalesReports=new Map(),monthlySalesSelections=new Map();
 const monthlyIncentiveTypes=new Map(),monthlyIncentiveSaving=new Set(),monthlyIncentiveLoaded=new Set();
 function renderMonthlyIncentiveEmployees(){
  const month=$('month').value;
- $('monthlyIncentiveEmployees').innerHTML=filtered().map(r=>{
+ $('monthlyIncentiveEmployees').innerHTML=filterEmployeeRows(monthlyIncentiveEmployeeRows()).map(r=>{
   const key=month+':'+r.user_id,value=monthlyIncentiveTypes.get(key)||'',pending=monthlyIncentiveSaving.has(key);
   return cells(['<b>'+esc(r.name)+'</b><small>'+esc(r.employee_id||'ID not assigned')+'</small>',
    '<select data-monthly-incentive-type="'+r.user_id+'" aria-label="Incentive for '+esc(r.name)+'"'+(pending||!monthlyIncentiveLoaded.has(month)?' disabled':'')+'><option value=""'+(!value?' selected':'')+'>Choose category</option><option value="sales"'+(value==='sales'?' selected':'')+'>SALES INCENTIVE</option><option value="non-sales"'+(value==='non-sales'?' selected':'')+'>NON SALES INCENTIVE</option></select><small data-incentive-type-status role="status">'+(pending?'Saving...':'')+'</small>',...monthlyDashboardCells(r,value,month)]);
@@ -715,7 +723,7 @@ $('monthlyIncentiveEmployees').addEventListener('change',async event=>{
  monthlyIncentiveSaving.add(key);select.disabled=true;select.closest('tr')?.querySelectorAll('select,input').forEach(el=>el.disabled=true);status.textContent='Saving...';
  try{await api('/monthly-incentive-types/'+uid,{method:'PUT',body:JSON.stringify({month,incentive_type:value})});monthlyIncentiveTypes.set(key,value);await syncMonthlyWeekoff(month);status.textContent='Saved';}
  catch(e){select.value=monthlyIncentiveTypes.get(key)||'';status.textContent=e.message;}
- finally{monthlyIncentiveSaving.delete(key);select.disabled=false;if(month===$('month').value){const tr=select.closest('tr');if(tr){const employee=state.rows.find(r=>r.user_id===uid);const fields=monthlyDashboardCells(employee,monthlyIncentiveTypes.get(key)||'',month);[...tr.cells].slice(2).forEach((cell,i)=>cell.innerHTML=fields[i]);}}}
+ finally{monthlyIncentiveSaving.delete(key);select.disabled=false;if(month===$('month').value){const tr=select.closest('tr');if(tr){const employee=monthlyIncentiveEmployeeRows().find(r=>r.user_id===uid);const fields=monthlyDashboardCells(employee,monthlyIncentiveTypes.get(key)||'',month);[...tr.cells].slice(2).forEach((cell,i)=>cell.innerHTML=fields[i]);}}}
 });
 async function loadMonthlyIncentive(){
  monthlyIncentiveLoaded.delete($('month').value);monthlySalesReports.delete($('month').value);monthlyNonSalesReports.delete($('month').value);
@@ -724,17 +732,29 @@ async function loadMonthlyIncentive(){
  $('monthlyIncentiveMonth').value=month;
  $('monthlyIncentiveReports').innerHTML='';$('monthlyIncentiveStatus').textContent='Loading incentives...';
  try{
-  const [data,types]=await Promise.all([api('/monthly-incentive?month='+encodeURIComponent(month)),api('/monthly-incentive-types?month='+encodeURIComponent(month))]);
+  $('monthlyIncentiveEmployeeStatus').textContent='Loading EMS employees...';
+  const roster=api('/monthly-incentive-employees?month='+encodeURIComponent(month)).then(rows=>{
+   if(!Array.isArray(rows))throw Error('Invalid EMS employee response');
+   if(request===monthlyIncentiveRequest&&month===$('month').value){monthlyIncentiveRoster=rows;monthlyIncentiveRosterMonth=month;renderMonthlyIncentiveEmployees();$('monthlyIncentiveEmployeeStatus').textContent='';}
+   return rows;
+  });
+  const [reportResult,settingsResult,rosterResult]=await Promise.allSettled([api('/monthly-incentive?month='+encodeURIComponent(month)),api('/monthly-incentive-types?month='+encodeURIComponent(month)),roster]);
   if(request!==monthlyIncentiveRequest||month!==$('month').value)return;
-  for(const employee of state.rows){const key=month+':'+employee.user_id;if(!monthlyIncentiveSaving.has(key)){monthlyIncentiveTypes.delete(key);monthlySalesSelections.delete(key);monthlyNonSalesSelections.delete(key);monthlyPercentages.delete(key);}}
+  const data=reportResult.status==='fulfilled'?reportResult.value:{allowed:false};
+  const types=settingsResult.status==='fulfilled'&&Array.isArray(settingsResult.value)?settingsResult.value:[];
+  const errors=[];
+  if(rosterResult.status==='rejected')errors.push('Unable to refresh EMS employees: '+rosterResult.reason.message);
+  if(settingsResult.status==='rejected')errors.push('Unable to load incentive settings: '+settingsResult.reason.message);
+  $('monthlyIncentiveEmployeeStatus').textContent=errors.join(' ');
+  for(const employee of monthlyIncentiveEmployeeRows()){const key=month+':'+employee.user_id;if(!monthlyIncentiveSaving.has(key)){monthlyIncentiveTypes.delete(key);monthlySalesSelections.delete(key);monthlyNonSalesSelections.delete(key);monthlyPercentages.delete(key);}}
   for(const row of types){const key=month+':'+row.user_id;if(!monthlyIncentiveSaving.has(key))monthlyIncentiveTypes.set(key,row.incentive_type);}
   for(const row of types){const key=month+':'+row.user_id;if(!monthlyIncentiveSaving.has(key))monthlySalesSelections.set(key,{outlet:row.outlet||'',category_group:row.category_group||''});}
   for(const row of types){const key=month+':'+row.user_id;if(!monthlyIncentiveSaving.has(key))monthlyNonSalesSelections.set(key,{location:row.non_sales_location||'',field:row.non_sales_field||''});}
   for(const row of types){const key=month+':'+row.user_id;if(!monthlyIncentiveSaving.has(key))monthlyPercentages.set(key,row.percentage??100);}
   monthlyNonSalesReports.set(month,data.allowed?data.report.ids_fund_report?.non_sales_report:null);
   monthlySalesReports.set(month,data.allowed?(data.report.exact_summary||[]):[]);
-  monthlyIncentiveLoaded.add(month);renderMonthlyIncentiveEmployees();
-  $('monthlyIncentiveStatus').textContent=data.allowed?month+' | '+(data.source_file||'Allowed report'):month+' | No allowed report. Choose an allowed incentive month above, or enable Allow in EMS in the Incentive project.';
+  if(settingsResult.status==='fulfilled')monthlyIncentiveLoaded.add(month);renderMonthlyIncentiveEmployees();
+  $('monthlyIncentiveStatus').textContent=reportResult.status==='rejected'?reportResult.reason.message:data.allowed?month+' | '+(data.source_file||'Allowed report'):month+' | No allowed report. Choose an allowed incentive month above, or enable Allow in EMS in the Incentive project.';
   if(!data.allowed)return;
   const report=data.report,amount=n=>n==null?'Need Detail':money(Math.round(Number(n)*100));
   const table=(title,headers,rows)=>'<h3>'+title+'</h3><div class="scroll"><table><thead><tr>'+headers.map(h=>'<th>'+h+'</th>').join('')+'</tr></thead><tbody>'+rows+'</tbody></table></div>';
@@ -812,7 +832,7 @@ $('monthlyIncentiveEmployees').addEventListener('input',event=>{
  const uid=Number(input.dataset.incentivePercentage),month=$('month').value,key=month+':'+uid,status=input.parentElement.querySelector('[data-percentage-status]');
  if(!input.checkValidity()){status.textContent='Enter a percentage from 0 to 100 (up to 2 decimals)';return;}
  monthlyPercentageDrafts.set(key,Number(input.value));status.textContent='Unsaved percentage';
- const employee=state.rows.find(r=>r.user_id===uid),fields=monthlySalesCells(employee,monthlyIncentiveTypes.get(key)||'',month);
+ const employee=monthlyIncentiveEmployeeRows().find(r=>r.user_id===uid),fields=monthlySalesCells(employee,monthlyIncentiveTypes.get(key)||'',month);
  input.closest('tr').cells[6].innerHTML=monthlyAmountBadge(fields[2]);
 });
 async function saveMonthlyPercentage(event){
