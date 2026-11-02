@@ -22,3 +22,12 @@
 /tests/test_attendance_anywhere.py text eol=lf
 
 /static/ems-dashboard.css text eol=lf
+
+# Incentive integration source and regression tests.
+/models.py text eol=lf
+/static/incentive.html text eol=lf
+/static/incentive-month.js text eol=lf
+/tests/incentive-month.test.cjs text eol=lf
+/tests/incentive-restore.test.cjs text eol=lf
+/tests/monthly-incentive-ui.test.cjs text eol=lf
+/tests/test_monthly_incentive_isolated.py text eol=lf

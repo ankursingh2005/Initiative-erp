@@ -1697,6 +1697,38 @@ def get_saved_incentive_upload(
     return serialize_incentive_upload(upload)
 
 
+@app.get("/api/incentive/allow")
+def incentive_allow_status(month: str,
+    current_user: models.User = Depends(auth.require_roles(*INCENTIVE_ACCESS_ROLES)),
+    db: Session = Depends(get_db)):
+    ems.month_bounds(month)
+    row = db.get(models.MonthlyIncentiveRelease, month)
+    return {"month": month, "allowed": bool(row and row.allowed)}
+
+
+@app.put("/api/incentive/allow")
+def allow_monthly_incentive(payload: ems.MonthlyIncentiveAllow,
+    current_user: models.User = Depends(auth.require_roles(*INCENTIVE_ACCESS_ROLES)),
+    db: Session = Depends(get_db)):
+    ems.month_bounds(payload.month)
+    row = db.get(models.MonthlyIncentiveRelease, payload.month)
+    if payload.allowed:
+        upload = latest_incentive_upload(db)
+        if not upload:
+            raise HTTPException(422, "Calculate and save an incentive report first")
+        if not row:
+            row = models.MonthlyIncentiveRelease(month=payload.month)
+            db.add(row)
+        row.report_json = upload.report_json
+        row.source_file = upload.source_file
+    if row:
+        row.allowed = payload.allowed
+        row.allowed_by = current_user.id
+        row.updated_at = datetime.utcnow()
+    db.commit()
+    return {"month": payload.month, "allowed": payload.allowed}
+
+
 @app.get("/api/incentive/saved-file")
 def get_saved_incentive_file(
     current_user: models.User = Depends(auth.require_roles(*INCENTIVE_ACCESS_ROLES)),

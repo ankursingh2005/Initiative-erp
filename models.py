@@ -730,6 +730,17 @@ class AgeingStockItem(Base):
     source_file = Column(String(255), nullable=True)
 
 
+class MonthlyIncentiveRelease(Base):
+    """Monthly report snapshots independent of source uploads and payroll."""
+    __tablename__ = "monthly_incentive_releases"
+    month = Column(String(7), primary_key=True)
+    allowed = Column(Boolean, nullable=False, default=False)
+    report_json = Column(Text, nullable=False)
+    source_file = Column(String(255), nullable=True)
+    allowed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 class IncentiveUpload(Base):
     """Latest shared Incentive Project upload and calculated report."""
     __tablename__ = "incentive_uploads"

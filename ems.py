@@ -108,6 +108,21 @@ class Input(BaseModel):
     model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
 
 
+class MonthlyIncentiveAllow(Input):
+    month: str
+    allowed: bool
+
+
+@router.get('/monthly-incentive')
+def monthly_incentive(month: str, db: Session = Depends(get_db), user=Depends(manager)):
+    month_bounds(month)
+    row = db.get(models.MonthlyIncentiveRelease, month)
+    if not row or not row.allowed:
+        return {'month': month, 'allowed': False}
+    return {'month': month, 'allowed': True, 'source_file': row.source_file,
+            'updated_at': row.updated_at.isoformat(), 'report': json.loads(row.report_json)}
+
+
 class SalaryWorkbookInput(Input):
     month: str = Field(pattern=r'^\d{4}-(0[1-9]|1[0-2])$')
     ids_rows: list[list[str | int | float | None]] = Field(min_length=1, max_length=5000)

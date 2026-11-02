@@ -52,7 +52,7 @@
     <button type="button" class="kpi kpi-link" id="nonSalesCard" aria-controls="nonSalesReport" aria-expanded="false" onclick="toggleIncentiveReport('non-sales')"><span>Non-sales Incentive</span><strong id="nonSalesIncentive">Upload File</strong><small>Central Service Total ? Click to view report</small></button>
     <div class="kpi"><span>Remaining Amount</span><strong id="remainingIncentive">Upload File</strong><small>Group-wise Total Incentive − (Sales Incentive + Non-sales Incentive)</small></div>
   </section>
-  <div id="incentiveDownloads" class="table-head" hidden>
+  <section class="card"><div class="table-head"><label>Incentive month <input id="allowMonth" type="month" required></label><label><input id="allowEMS" type="checkbox"> Allow in EMS</label><button id="saveAllow" type="button" class="btn primary">Save Allow</button><span id="allowStatus" role="status"></span></div></section><div id="incentiveDownloads" class="table-head" hidden>
     <div><select id="incentiveSelection" aria-label="Reports to view and download" onchange="showSelectedIncentiveReports()" onclick="showSelectedIncentiveReports()"><option value="both">BOTH</option><option value="sales">SALES</option><option value="non-sales">NON SALES</option></select></div>
     <details class="exact-download" id="incentiveDownloadMenu"><summary class="btn download">Download &#9662;</summary><div class="exact-download-options"><button type="button" onclick="document.getElementById('incentiveDownloadMenu').open=false;downloadSelectedIncentives('xlsx',this)">Excel</button><button type="button" onclick="document.getElementById('incentiveDownloadMenu').open=false;downloadSelectedIncentives('pdf',this)">PDF</button></div></details>
     <button type="button" class="btn primary" id="showAllReports" aria-expanded="false" onclick="toggleAllIncentiveReports()">Show</button>
@@ -96,6 +96,21 @@
   </section>
 </main>
 <script>
+// Infer only an unambiguous month/year; never substitute today's month.
+function incentiveMonthFromFilename(filename){
+ const text=String(filename||'').replace(/[_-]/g,' ').toLowerCase();
+ const years=[...new Set(text.match(/\b(?:19|20)\d{2}\b/g)||[])];
+ if(years.length!==1)return '';
+ const names=['jan(?:uary)?','feb(?:ruary)?','mar(?:ch)?','apr(?:il)?','may','jun(?:e)?','jul(?:y)?','aug(?:ust)?','sep(?:t(?:ember)?)?','oct(?:ober)?','nov(?:ember)?','dec(?:ember)?'];
+ const months=names.map((name,i)=>new RegExp('\\b'+name+'\\b','i').test(text)?i+1:null).filter(Boolean);
+ if(months.length===1)return years[0]+'-'+String(months[0]).padStart(2,'0');
+ if(months.length>1)return '';
+ const numeric=text.match(/\b((?:19|20)\d{2})\s+(0?[1-9]|1[0-2])\b/)||text.match(/\b(0?[1-9]|1[0-2])\s+((?:19|20)\d{2})\b/);
+ if(!numeric)return '';
+ const year=numeric[1].length===4?numeric[1]:numeric[2],month=numeric[1].length===4?numeric[2]:numeric[1];
+ return year+'-'+month.padStart(2,'0');
+}
+
   const token=localStorage.getItem('token'); if(!token) location.href='/login';
   const REPORT_VERSION=7;
   let selectedFile=null,savedReport=null,uploadVersion=0,storageKey=null;
@@ -141,13 +156,13 @@
       const response=await fetch('/api/incentive/saved',{method:'DELETE',headers:{Authorization:'Bearer '+token}});
       if(!response.ok){const data=await response.json().catch(()=>({}));throw new Error(data.detail||'Unable to clear shared upload.')}
       if(storageKey)await storageOperation('readwrite',store=>store.delete(storageKey));
-      uploadVersion++;selectedFile=null;document.getElementById('file').value='';document.getElementById('savedFileName').textContent='';resetReport();
+      uploadVersion++;selectedFile=null;document.getElementById('file').value='';document.getElementById('savedFileName').textContent='';syncIncentiveMonth('');resetReport();
       setMessage('Shared incentive upload and saved reports cleared.');
     }catch(e){setMessage('Unable to clear saved upload: '+e.message,true)}finally{button.disabled=false}
   }
   document.getElementById('file').addEventListener('change',async event=>{
     const file=event.target.files[0];if(!file)return;
-    uploadVersion++;selectedFile=file;resetReport();document.getElementById('savedFileName').textContent=file.name;
+    uploadVersion++;selectedFile=file;resetReport();document.getElementById('savedFileName').textContent=file.name;syncIncentiveMonth(file.name);
     try{await persistUpload();setMessage('File selected. Click Calculate to save the report for all authorized users.')}catch(e){setMessage('File selected. Click Calculate to save the shared report.')}
   });
   for(const id of ['profitRate','incentiveRate'])document.getElementById(id).addEventListener('change',async()=>{
@@ -167,7 +182,7 @@
           selectedFile=null;savedReport=shared.report;
           document.getElementById('profitRate').value=shared.profit_rate;
           document.getElementById('incentiveRate').value=shared.incentive_rate;
-          document.getElementById('savedFileName').textContent='Shared file: '+(shared.file_name||'Incentive upload');
+          document.getElementById('savedFileName').textContent='Shared file: '+(shared.file_name||'Incentive upload');syncIncentiveMonth(shared.file_name);
           const needsUpdate=savedReport?.report_version!==REPORT_VERSION;
           if(!needsUpdate)renderIncentive(savedReport);
           const fileResponse=await fetch('/api/incentive/saved-file',{headers:{Authorization:'Bearer '+token}});
@@ -188,7 +203,7 @@
       const saved=await storageOperation('readonly',store=>store.get(storageKey));
       if(saved?.file){
         selectedFile=saved.file;savedReport=saved.report;
-        document.getElementById('savedFileName').textContent='Saved file: '+selectedFile.name;
+        document.getElementById('savedFileName').textContent='Saved file: '+selectedFile.name;syncIncentiveMonth(selectedFile.name);
         document.getElementById('profitRate').value=saved.profitRate;document.getElementById('incentiveRate').value=saved.incentiveRate;
         if(savedReport?.report_version===REPORT_VERSION){
           renderIncentive(savedReport);
@@ -350,4 +365,13 @@
   restoreUpload();
   function escapeHtml(value){const div=document.createElement('div');div.textContent=value;return div.innerHTML}
 </script>
-</body></html>
+<script>
+const allowMonth=document.getElementById('allowMonth'),allowEMS=document.getElementById('allowEMS'),allowStatus=document.getElementById('allowStatus'),saveAllow=document.getElementById('saveAllow');
+allowMonth.value='';
+function syncIncentiveMonth(filename){allowMonth.value=incentiveMonthFromFilename(filename);loadAllow();}
+let allowRequest=0;
+async function loadAllow(){const version=++allowRequest,month=allowMonth.value;saveAllow.disabled=true;allowEMS.checked=false;if(!month){allowStatus.textContent='Select the month of the uploaded report';saveAllow.disabled=false;return;}try{const response=await fetch('/api/incentive/allow?month='+encodeURIComponent(month),{headers:{Authorization:'Bearer '+localStorage.getItem('token')},cache:'no-store'});const data=await response.json();if(!response.ok)throw Error(data.detail||'Unable to load Allow');if(version!==allowRequest)return;allowEMS.checked=data.allowed;allowStatus.textContent=data.allowed?'Allowed in EMS':'Not allowed in EMS';}catch(e){if(version===allowRequest)allowStatus.textContent=e.message;}finally{if(version===allowRequest)saveAllow.disabled=false;}}
+allowMonth.addEventListener('change',loadAllow);
+saveAllow.onclick=async()=>{if(!allowMonth.reportValidity())return;saveAllow.disabled=true;allowMonth.disabled=true;allowEMS.disabled=true;try{const response=await fetch('/api/incentive/allow',{method:'PUT',headers:{Authorization:'Bearer '+localStorage.getItem('token'),'Content-Type':'application/json'},body:JSON.stringify({month:allowMonth.value,allowed:allowEMS.checked})});const data=await response.json();if(!response.ok)throw Error(data.detail||'Unable to save Allow');allowStatus.textContent=data.allowed?'Sales and non-sales report allowed in EMS':'Hidden from EMS';}catch(e){allowStatus.textContent=e.message;}finally{saveAllow.disabled=false;allowMonth.disabled=false;allowEMS.disabled=false;}};
+loadAllow();
+</script></body></html>
