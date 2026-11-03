@@ -237,7 +237,8 @@ button[data-delete-ems],#excludedEmployeeRows button[data-delete-ems]{color:#a33
 #monthlyIncentiveDashboard th:nth-child(4){width:18%}
 #monthlyIncentiveDashboard th:nth-child(5){width:14%}
 #monthlyIncentiveDashboard th:nth-child(6){width:9%;text-align:center}
-#monthlyIncentiveDashboard th:nth-child(7){width:14%;text-align:right;padding-right:18px}
+#monthlyIncentiveDashboard th:nth-child(7){width:10%;text-align:center}
+#monthlyIncentiveDashboard th:nth-child(8){width:14%;text-align:right;padding-right:18px}
 #monthlyIncentiveDashboard td{position:relative;padding:20px 12px 32px;vertical-align:top;border-bottom:1px solid #e2ebef;background:#fff;transition:background .15s ease;color:#526d7d;font-weight:400}
 #monthlyIncentiveDashboard tbody tr:nth-child(even) td{background:#f5f9fb}
 #monthlyIncentiveDashboard tbody tr:hover td,#monthlyIncentiveDashboard tbody tr:focus-within td{background:#edf8f6}
@@ -260,3 +261,6 @@ button[data-delete-ems],#excludedEmployeeRows button[data-delete-ems]{color:#a33
 #monthlyIncentiveDashboard .monthly-incentive-amount.is-empty{background:transparent;border-color:transparent;color:#8ba0aa;font-weight:400}
 
 #monthlyIncentiveEmployeeStatus:empty{display:none}
+
+#monthlyIncentiveDashboard input[data-incentive-addition]{width:100%;min-width:0;height:42px;box-sizing:border-box;border:1px solid #ccdce5;border-radius:8px;padding:0 8px;color:#24495d;text-align:right}
+#monthlyIncentiveDashboard [data-addition-status]{position:absolute;bottom:10px;left:12px;right:12px;line-height:14px}

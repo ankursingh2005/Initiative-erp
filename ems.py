@@ -151,11 +151,13 @@ def monthly_incentive_types(month: str, db: Session = Depends(get_db), user=Depe
     selections = effective_incentive_settings(db, M.EMSMonthlySalesSelection, month, ids)
     non_sales = effective_incentive_settings(db, M.EMSMonthlyNonSalesSelection, month, ids)
     percentages = effective_incentive_settings(db, M.EMSMonthlyIncentivePercentage, month, ids)
+    additions = effective_incentive_settings(db, M.EMSMonthlyIncentiveAddition, month, ids)
     return [{**serialize(row), 'month': month, 'effective_month': row.month,
              'outlet': selections[uid].outlet if uid in selections else '',
              'category_group': selections[uid].category_group if uid in selections else '',
              'non_sales_location': non_sales[uid].location if uid in non_sales else '',
              'non_sales_field': non_sales[uid].field if uid in non_sales else '',
+             'additional_amount': additions[uid].amount / 100 if uid in additions else 0,
              'percentage': percentages[uid].percentage_basis_points / 100 if uid in percentages else 100}
             for uid, row in types.items()]
 
@@ -182,6 +184,30 @@ def save_monthly_incentive_percentage(user_id: int, payload: MonthlyIncentivePer
     record(db, user, 'monthly_incentive_percentage_saved', user_id, payload.model_dump_json())
     db.commit()
     return {'message': 'Percentage saved', 'percentage': row.percentage_basis_points / 100}
+
+
+class MonthlyIncentiveAdditionInput(Input):
+    month: str
+    additional_amount: Decimal = Field(ge=0, le=10000000, decimal_places=2)
+
+
+@router.put('/monthly-incentive-addition/{user_id}')
+def save_monthly_incentive_addition(user_id: int, payload: MonthlyIncentiveAdditionInput,
+                                      db: Session = Depends(get_db), user=Depends(manager)):
+    month_bounds(payload.month)
+    lock_employee(db, user_id)
+    kind = effective_incentive_settings(db, M.EMSMonthlyIncentiveType, payload.month, [user_id]).get(user_id)
+    if not kind or kind.incentive_type not in ('sales', 'non-sales'):
+        raise HTTPException(422, 'Choose an incentive category first')
+    row = db.get(M.EMSMonthlyIncentiveAddition, (user_id, payload.month))
+    if row is None:
+        row = M.EMSMonthlyIncentiveAddition(user_id=user_id, month=payload.month)
+        db.add(row)
+    row.amount = int(payload.additional_amount * 100)
+    row.updated_by, row.updated_at = user.id, datetime.utcnow()
+    record(db, user, 'monthly_incentive_addition_saved', user_id, payload.model_dump_json())
+    db.commit()
+    return {'message': 'Amount saved', 'additional_amount': row.amount / 100}
 
 
 class MonthlyNonSalesSelectionInput(Input):
@@ -1015,7 +1041,7 @@ def permanently_delete_ems_employee(user_id: int, payload: EMSPermanentDeletion,
     for actions, targets in audit_groups:
         db.query(M.EMSAudit).filter(M.EMSAudit.action.in_(actions),
             M.EMSAudit.target.in_([str(value) for value in targets])).delete(synchronize_session=False)
-    for model in (M.EMSWeekoffIncentiveOverride, M.EMSMonthlyIncentivePercentage, M.EMSMonthlyNonSalesSelection, M.EMSMonthlySalesSelection, M.EMSMonthlyIncentiveType, M.EMSEmployeeName, M.EMSManualMonthlyAttendance, M.EMSAttendanceTotals, M.EMSWeekoffIncentive, M.EMSDistributionInput, M.EMSManualAttendance, M.EMSExcludedEmployee, M.EMSLeaveRequest,
+    for model in (M.EMSMonthlyIncentiveAddition, M.EMSWeekoffIncentiveOverride, M.EMSMonthlyIncentivePercentage, M.EMSMonthlyNonSalesSelection, M.EMSMonthlySalesSelection, M.EMSMonthlyIncentiveType, M.EMSEmployeeName, M.EMSManualMonthlyAttendance, M.EMSAttendanceTotals, M.EMSWeekoffIncentive, M.EMSDistributionInput, M.EMSManualAttendance, M.EMSExcludedEmployee, M.EMSLeaveRequest,
                   M.EMSEarning, M.EMSSalaryProfile, M.EMSPayroll):
         db.query(model).filter_by(user_id=user_id).delete(synchronize_session=False)
     # Tombstone prevents an ERP account from automatically reappearing in EMS.
@@ -1154,9 +1180,10 @@ def monthly_weekoff_amounts(db, month, ids):
         return effective_incentive_settings(db, model, month, ids)
     types = rows(M.EMSMonthlyIncentiveType)
     sales, non_sales = rows(M.EMSMonthlySalesSelection), rows(M.EMSMonthlyNonSalesSelection)
+    additions = rows(M.EMSMonthlyIncentiveAddition)
     percentages = rows(M.EMSMonthlyIncentivePercentage)
     return {uid: monthly_incentive_amount(report, row.incentive_type, sales.get(uid), non_sales.get(uid),
-                percentages[uid].percentage_basis_points if uid in percentages else 10000)
+                percentages[uid].percentage_basis_points if uid in percentages else 10000) + (additions[uid].amount if uid in additions else 0)
             for uid, row in types.items() if row.incentive_type in ('sales', 'non-sales')}
 
 

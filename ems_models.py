@@ -22,6 +22,15 @@ class EMSMonthlyIncentivePercentage(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+class EMSMonthlyIncentiveAddition(Base):
+    __tablename__ = 'ems_monthly_incentive_additions'
+    user_id = Column(Integer, ForeignKey('users.id'), primary_key=True)
+    month = Column(String(7), primary_key=True)
+    amount = Column(BigInteger, nullable=False, default=0)
+    updated_by = Column(Integer, ForeignKey('users.id'), nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 class EMSMonthlyNonSalesSelection(Base):
     __tablename__ = 'ems_monthly_non_sales_selections'
     user_id = Column(Integer, ForeignKey('users.id'), primary_key=True)

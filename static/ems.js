@@ -703,6 +703,7 @@ function monthlyIncentiveEmployeeRows(){
  if(state.month===month&&state.rows.length)return state.rows;
  return monthlyIncentiveRosterMonth===month?monthlyIncentiveRoster:state.rows;
 }
+const monthlyAdditions=new Map(),monthlyAdditionDrafts=new Map();
 const monthlyPercentages=new Map(),monthlyPercentageDrafts=new Map();
 const monthlyNonSalesReports=new Map(),monthlyNonSalesSelections=new Map();
 const monthlySalesReports=new Map(),monthlySalesSelections=new Map();
@@ -713,10 +714,10 @@ function renderMonthlyIncentiveEmployees(){
   const key=month+':'+r.user_id,value=monthlyIncentiveTypes.get(key)||'',pending=monthlyIncentiveSaving.has(key);
   return cells(['<b>'+esc(r.name)+'</b><small>'+esc(r.employee_id||'ID not assigned')+'</small>',
    '<select data-monthly-incentive-type="'+r.user_id+'" aria-label="Incentive for '+esc(r.name)+'"'+(pending||!monthlyIncentiveLoaded.has(month)?' disabled':'')+'><option value=""'+(!value?' selected':'')+'>Choose category</option><option value="sales"'+(value==='sales'?' selected':'')+'>SALES INCENTIVE</option><option value="non-sales"'+(value==='non-sales'?' selected':'')+'>NON SALES INCENTIVE</option></select><small data-incentive-type-status role="status">'+(pending?'Saving...':'')+'</small>',...monthlyDashboardCells(r,value,month)]);
- }).join('')||empty(7);
+ }).join('')||empty(8);
 }
 $('monthlyIncentiveEmployees').addEventListener('change',async event=>{
- const select=event.target;if(select.matches('[data-incentive-percentage]'))return saveMonthlyPercentage(event);if(select.matches('[data-non-sales-field]'))return saveMonthlyNonSalesSelection(event);if(select.matches('[data-sales-field]'))return saveMonthlySalesSelection(event);if(!select.matches('[data-monthly-incentive-type]'))return;
+ const select=event.target;if(select.matches('[data-incentive-addition]'))return saveMonthlyAddition(event);if(select.matches('[data-incentive-percentage]'))return saveMonthlyPercentage(event);if(select.matches('[data-non-sales-field]'))return saveMonthlyNonSalesSelection(event);if(select.matches('[data-sales-field]'))return saveMonthlySalesSelection(event);if(!select.matches('[data-monthly-incentive-type]'))return;
  const uid=Number(select.dataset.monthlyIncentiveType),month=$('month').value,key=month+':'+uid,value=select.value;
  if(monthlyIncentiveSaving.has(key))return;
  const status=select.parentElement.querySelector('[data-incentive-type-status]');
@@ -746,11 +747,11 @@ async function loadMonthlyIncentive(){
   if(rosterResult.status==='rejected')errors.push('Unable to refresh EMS employees: '+rosterResult.reason.message);
   if(settingsResult.status==='rejected')errors.push('Unable to load incentive settings: '+settingsResult.reason.message);
   $('monthlyIncentiveEmployeeStatus').textContent=errors.join(' ');
-  for(const employee of monthlyIncentiveEmployeeRows()){const key=month+':'+employee.user_id;if(!monthlyIncentiveSaving.has(key)){monthlyIncentiveTypes.delete(key);monthlySalesSelections.delete(key);monthlyNonSalesSelections.delete(key);monthlyPercentages.delete(key);}}
+  for(const employee of monthlyIncentiveEmployeeRows()){const key=month+':'+employee.user_id;if(!monthlyIncentiveSaving.has(key)){monthlyIncentiveTypes.delete(key);monthlySalesSelections.delete(key);monthlyNonSalesSelections.delete(key);monthlyPercentages.delete(key);monthlyAdditions.delete(key);}}
   for(const row of types){const key=month+':'+row.user_id;if(!monthlyIncentiveSaving.has(key))monthlyIncentiveTypes.set(key,row.incentive_type);}
   for(const row of types){const key=month+':'+row.user_id;if(!monthlyIncentiveSaving.has(key))monthlySalesSelections.set(key,{outlet:row.outlet||'',category_group:row.category_group||''});}
   for(const row of types){const key=month+':'+row.user_id;if(!monthlyIncentiveSaving.has(key))monthlyNonSalesSelections.set(key,{location:row.non_sales_location||'',field:row.non_sales_field||''});}
-  for(const row of types){const key=month+':'+row.user_id;if(!monthlyIncentiveSaving.has(key))monthlyPercentages.set(key,row.percentage??100);}
+  for(const row of types){const key=month+':'+row.user_id;if(!monthlyIncentiveSaving.has(key)){monthlyPercentages.set(key,row.percentage??100);monthlyAdditions.set(key,row.additional_amount??0);}}
   monthlyNonSalesReports.set(month,data.allowed?data.report.ids_fund_report?.non_sales_report:null);
   monthlySalesReports.set(month,data.allowed?(data.report.exact_summary||[]):[]);
   if(settingsResult.status==='fulfilled')monthlyIncentiveLoaded.add(month);renderMonthlyIncentiveEmployees();
@@ -821,19 +822,19 @@ async function saveMonthlyNonSalesSelection(event){
 
 function monthlyAppliedAmount(baseAmount,employee,month){
  const key=month+':'+employee.user_id,percentage=monthlyPercentageDrafts.get(key)??monthlyPercentages.get(key)??100;
- return money(Math.round(Math.round(Number(baseAmount)*100)*Math.round(percentage*100)/10000));
+ return money(Math.round(Math.round(Number(baseAmount)*100)*Math.round(percentage*100)/10000)+Math.round((monthlyAdditionDrafts.get(key)??monthlyAdditions.get(key)??0)*100));
 }
 function monthlyPercentageInput(employee,month){
  const key=month+':'+employee.user_id,value=monthlyPercentageDrafts.get(key)??monthlyPercentages.get(key)??100;
  return '<input type="number" min="0" max="100" step="0.01" required data-incentive-percentage="'+employee.user_id+'" aria-label="Percentage for '+esc(employee.name)+'" value="'+value+'"'+(monthlyIncentiveSaving.has(key)||!monthlyIncentiveLoaded.has(month)?' disabled':'')+'><small data-percentage-status role="status"></small>';
 }
 $('monthlyIncentiveEmployees').addEventListener('input',event=>{
- const input=event.target;if(!input.matches('[data-incentive-percentage]'))return;
+ const input=event.target;if(input.matches('[data-incentive-addition]'))return previewMonthlyAddition(event);if(!input.matches('[data-incentive-percentage]'))return;
  const uid=Number(input.dataset.incentivePercentage),month=$('month').value,key=month+':'+uid,status=input.parentElement.querySelector('[data-percentage-status]');
  if(!input.checkValidity()){status.textContent='Enter a percentage from 0 to 100 (up to 2 decimals)';return;}
  monthlyPercentageDrafts.set(key,Number(input.value));status.textContent='Unsaved percentage';
  const employee=monthlyIncentiveEmployeeRows().find(r=>r.user_id===uid),fields=monthlySalesCells(employee,monthlyIncentiveTypes.get(key)||'',month);
- input.closest('tr').cells[6].innerHTML=monthlyAmountBadge(fields[2]);
+ input.closest('tr').cells[7].innerHTML=monthlyAmountBadge(fields[2]);
 });
 async function saveMonthlyPercentage(event){
  const input=event.target,uid=Number(input.dataset.incentivePercentage),month=$('month').value,key=month+':'+uid;
@@ -846,9 +847,32 @@ async function saveMonthlyPercentage(event){
  finally{monthlyIncentiveSaving.delete(key);if(month===$('month').value){renderMonthlyIncentiveEmployees();const current=$('monthlyIncentiveEmployees').querySelector('[data-incentive-percentage="'+uid+'"]').parentElement;current.querySelector('[data-percentage-status]').textContent=error?error+' - percentage not saved':'Saved';}}
 }
 
+function monthlyAdditionInput(employee,month){
+ const key=month+':'+employee.user_id,value=monthlyAdditionDrafts.get(key)??monthlyAdditions.get(key)??0;
+ return '<input type="number" min="0" max="10000000" step="0.01" data-incentive-addition="'+employee.user_id+'" aria-label="Additional amount for '+esc(employee.name)+'" value="'+value+'"'+(monthlyIncentiveSaving.has(key)||!monthlyIncentiveLoaded.has(month)?' disabled':'')+'><small data-addition-status role="status"></small>';
+}
+function previewMonthlyAddition(event){
+ const input=event.target;
+ const uid=Number(input.dataset.incentiveAddition),month=$('month').value,key=month+':'+uid,status=input.parentElement.querySelector('[data-addition-status]');
+ if(!input.checkValidity()){status.textContent='Enter an amount from 0 to 10000000 (up to 2 decimals)';return;}
+ monthlyAdditionDrafts.set(key,Number(input.value));status.textContent='Unsaved amount';
+ const employee=monthlyIncentiveEmployeeRows().find(r=>r.user_id===uid),fields=monthlySalesCells(employee,monthlyIncentiveTypes.get(key)||'',month);
+ input.closest('tr').cells[7].innerHTML=monthlyAmountBadge(fields[2]);
+}
+async function saveMonthlyAddition(event){
+ const input=event.target,uid=Number(input.dataset.incentiveAddition),month=$('month').value,key=month+':'+uid;
+ if(monthlyIncentiveSaving.has(key)||!input.reportValidity())return;
+ const value=Number(input.value),row=input.closest('tr'),status=input.parentElement.querySelector('[data-addition-status]');
+ monthlyAdditionDrafts.set(key,value);monthlyIncentiveSaving.add(key);row.querySelectorAll('select,input').forEach(el=>el.disabled=true);status.textContent='Saving...';
+ let error='';
+ try{await api('/monthly-incentive-addition/'+uid,{method:'PUT',body:JSON.stringify({month,additional_amount:value})});monthlyAdditions.set(key,value);monthlyAdditionDrafts.delete(key);await syncMonthlyWeekoff(month);}
+ catch(e){error=e.message;}
+ finally{monthlyIncentiveSaving.delete(key);if(month===$('month').value){renderMonthlyIncentiveEmployees();const current=$('monthlyIncentiveEmployees').querySelector('[data-incentive-addition="'+uid+'"]').parentElement;current.querySelector('[data-addition-status]').textContent=error?error+' - amount not saved':'Saved';}}
+}
+
 function monthlyDashboardCells(employee,type,month){
  const fields=monthlySalesCells(employee,type,month);
- return [fields[0],fields[1],fields[3],fields[4],monthlyAmountBadge(fields[2])];
+ return [fields[0],fields[1],fields[3],fields[4],(type?monthlyAdditionInput(employee,month):'&mdash;'),monthlyAmountBadge(fields[2])];
 }
 
 function monthlyAmountBadge(amount){

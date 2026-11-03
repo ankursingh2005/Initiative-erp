@@ -27,6 +27,7 @@ class Type(Row):pass
 class Sales(Row):pass
 class NonSales(Row):pass
 class Percentage(Row):pass
+class Addition(Row):pass
 class Release(Row):pass
 class Upload(Row):pass
 class Query:
@@ -45,7 +46,7 @@ class DB:
         return next((r for r in self.rows.get(model,[]) if ((r.user_id,r.month) if isinstance(key,tuple) else r.month)==key),None)
     def commit(self):pass
 
-M=NS(EMSMonthlyIncentiveType=Type,EMSMonthlySalesSelection=Sales,EMSMonthlyNonSalesSelection=NonSales,EMSMonthlyIncentivePercentage=Percentage)
+M=NS(EMSMonthlyIncentiveType=Type,EMSMonthlySalesSelection=Sales,EMSMonthlyNonSalesSelection=NonSales,EMSMonthlyIncentivePercentage=Percentage,EMSMonthlyIncentiveAddition=Addition)
 models=NS(MonthlyIncentiveRelease=Release,IncentiveUpload=Upload)
 scope=dict(datetime=datetime,calendar=calendar,Decimal=Decimal,ROUND_HALF_UP=ROUND_HALF_UP,BytesIO=BytesIO,SimpleNamespace=NS,json=json,HTTPException=HTTPException,M=M,models=models,serialize=lambda r:dict(vars(r)),employee_rows=lambda *args,**kwargs:NS(all=lambda:[(NS(id=i),None,None) for i in [1,2]]))
 def load(file,names):
@@ -70,6 +71,14 @@ class RecurringTests(unittest.TestCase):
         self.db.add(Percentage(user_id=1,month='2026-10',percentage_basis_points=2500))
     def upload(self,name,month=''):
         return scope['calculate_incentive_endpoint'](NS(filename=name,content_type='test',file=BytesIO(b'workbook')),7,2.5,month,self.actor,self.db)
+    def test_addition_is_applied_after_percentage_and_can_be_cleared(self):
+        self.upload('OCTOBER incentive Data 2026.xlsx')
+        self.db.add(Addition(user_id=1,month='2026-10',amount=10000))
+        self.assertEqual(scope['monthly_weekoff_amounts'](self.db,'2026-10',[1]),{1:35000})
+        self.assertEqual(scope['monthly_incentive_types']('2026-10',self.db,self.actor)[0]['additional_amount'],100)
+        self.db.add(Addition(user_id=1,month='2026-10',amount=0))
+        self.assertEqual(scope['monthly_weekoff_amounts'](self.db,'2026-10',[1]),{1:25000})
+
     def test_upload_auto_releases_and_reuses_settings(self):
         self.upload('OCTOBER incentive Data 2026.xlsx')
         self.assertEqual(scope['monthly_weekoff_amounts'](self.db,'2026-10',[1]),{1:25000})
