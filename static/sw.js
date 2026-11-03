@@ -1,4 +1,4 @@
-const CACHE = 'idspl-static-v28';
+const CACHE = 'idspl-static-v29';
 const BASE = new URL('./', self.registration.scope).pathname.replace(/\/$/, '');
 const asset = path => BASE + path;
 const STATIC = [asset('/offline'), asset('/manifest.webmanifest'), asset('/static/app-shell.css'), asset('/static/app-shell.js'), asset('/static/Initiative%20logo.png'), asset('/static/icons/icon-192.png'), asset('/static/icons/icon-512.png'), asset('/static/icons/icon-maskable-512.png')];
@@ -24,7 +24,8 @@ self.addEventListener('fetch', event => {
   // an offline fallback. API responses never enter this cache.
   event.respondWith(caches.open(CACHE).then(async cache => {
     try {
-      const response = await fetch(request);
+      const emsAsset = /^\/static\/(?:ems\.js|ems-dashboard\.css|salary-distribution-math\.js)$/.test(relative);
+      const response = await fetch(request, emsAsset ? {cache: 'no-cache'} : undefined);
       if (response.ok && response.type === 'basic' && response.status !== 206) {
         event.waitUntil(cache.put(request, response.clone()));
       }

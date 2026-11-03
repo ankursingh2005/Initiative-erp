@@ -388,7 +388,7 @@ def ems_page():
                   f'static/ems-dashboard.css?v={style_version}', html)
     html = html.replace('<html lang="en">', '<html lang="en" data-erp="true">')
     html = html.replace('"/static/', '"ems-assets/')
-    return HTMLResponse(html, headers={'Cache-Control': 'no-cache'})
+    return HTMLResponse(html, headers={'Cache-Control': 'no-store, max-age=0', 'Pragma': 'no-cache'})
 
 
 @router.get('/me')

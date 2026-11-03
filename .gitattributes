@@ -41,3 +41,5 @@
 /tests/test_monthly_employee_roster_isolated.py text eol=lf
 
 /tests/total-salary-ui.test.cjs text eol=lf
+
+/static/sw.js text eol=lf
