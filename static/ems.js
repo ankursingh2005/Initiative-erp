@@ -291,7 +291,7 @@ function openManualAttendance(uid){
  const part=k=>todayParts.find(p=>p.type===k).value,today=part('year')+'-'+part('month')+'-'+part('day');
  $('manualAttendanceRows').innerHTML=employee.days.map(d=>{
  const disabled=Boolean(employee.published_id||d.day<employee.joining_date||d.day>today);
- return cells([esc(d.day)+'<small>'+esc(d.entered===false?'Not entered':d.status.replace('_',' '))+'</small>','<select aria-label="Attendance '+esc(d.day)+'" data-manual-day="'+esc(d.day)+'" data-original="'+esc(d.overridden||employee.manual_employee&&d.entered?d.status:"auto")+'"'+(disabled?' disabled':'')+'><option value="auto">Automatic</option><option value="">'+(d.day<employee.joining_date?'Before joining':d.day>today?'Upcoming':'Not entered')+'</option>'+['present','absent','casual_leave','weekoff','leave'].map(status=>'<option value="'+status+'"'+((employee.manual_employee?d.entered:d.overridden)&&d.status===status?' selected':'')+'>'+({present:'Present',absent:'Absent',casual_leave:'Casual Leave',weekoff:'W/O',leave:'Leave'}[status])+'</option>').join('')+'</select>','<input aria-label="Note '+esc(d.day)+'" data-manual-note="'+esc(d.day)+'" value="'+esc(d.note||'')+'" data-original-note="'+esc(d.note||'')+'" maxlength="300"'+(disabled?' disabled':'')+'>']);
+ return cells([esc(d.day)+'<small>'+esc(d.entered===false?'Not entered':d.status.replace('_',' '))+'</small>','<select aria-label="Attendance '+esc(d.day)+'" data-manual-day="'+esc(d.day)+'" data-original="'+esc(d.overridden||employee.manual_employee&&d.entered?d.status:"auto")+'"'+(disabled?' disabled':'')+'><option value="auto">Automatic</option><option value="">'+(d.day<employee.joining_date?'Before joining':d.day>today?'Upcoming':'Not entered')+'</option>'+['present','half_day','absent','casual_leave','weekoff','leave'].map(status=>'<option value="'+status+'"'+((employee.manual_employee?d.entered:d.overridden)&&d.status===status?' selected':'')+'>'+({half_day:'Half Day (P/2)',present:'Present',absent:'Absent',casual_leave:'Casual Leave',weekoff:'W/O',leave:'Leave'}[status])+'</option>').join('')+'</select>','<input aria-label="Note '+esc(d.day)+'" data-manual-note="'+esc(d.day)+'" value="'+esc(d.note||'')+'" data-original-note="'+esc(d.note||'')+'" maxlength="300"'+(disabled?' disabled':'')+'>']);
  }).join('');
  $('manualAttendanceError').textContent='';$('manualAttendanceForm').querySelector('button.primary').disabled=Boolean(employee.published_id);$('manualAttendanceDialog').showModal();
 }
@@ -373,6 +373,7 @@ function salaryAttendance(employee,profile,fallback){
   pending ||= Boolean(draft);
   const status=effectiveAttendanceStatus(employee,day);
   if(status==='weekoff')weekoff++;
+  if(status==='half_day'&&day.day>=employee.joining_date)unpaid+=0.5;
   if(day.day<employee.joining_date||status==='before_joining'||status==='absent'||status==='unrecorded'||status==='leave')unpaid++;
  }
  return {unpaid,weekoff,pending};
@@ -509,8 +510,8 @@ $('weekoffExport').onclick=()=>downloadSalaryWorkbook();
 const attendanceDrafts=new Map();
 const attendanceTotalDrafts=new Map();
 let attendanceSaveTimer=null,attendanceSaving=false,attendanceSaveAgain=false;
-const attendanceCodes={present:'P',absent:'A',casual_leave:'CL',weekoff:'WO',leave:'L',upcoming:'',before_joining:''};
-function attendanceStatus(value){return {P:'present',A:'absent',CL:'casual_leave',WO:'weekoff',L:'leave'}[value.trim().toUpperCase()];}
+const attendanceCodes={half_day:'P/2',present:'P',absent:'A',casual_leave:'CL',weekoff:'WO',leave:'L',upcoming:'',before_joining:''};
+function attendanceStatus(value){return {'P/2':'half_day',P:'present',A:'absent',CL:'casual_leave',WO:'weekoff',L:'leave'}[value.trim().toUpperCase()];}
 function attendanceKey(uid,day){return state.month+':'+uid+':'+day;}
 function effectiveAttendanceStatus(employee,day){
  const draft=attendanceDrafts.get(attendanceKey(employee.user_id,day.day));
@@ -522,7 +523,7 @@ function attendanceSheetCounts(employee){
  if(employee.manual_employee&&employee.monthly_attendance)return Object.fromEntries(['present','absent','casual_leave','weekoff','leave'].map(k=>[k,employee.counts[k]||0]));
 
  const counts={present:0,absent:0,casual_leave:0,weekoff:0,leave:0};
- for(const day of employee.days){const status=effectiveAttendanceStatus(employee,day);if(status in counts)counts[status]++;}
+ for(const day of employee.days){const status=effectiveAttendanceStatus(employee,day);if(status==='half_day'){counts.present+=0.5;counts.absent+=0.5;}else if(status in counts)counts[status]++;}
  return counts;
 }
 function renderAttendanceRecord(){
@@ -542,12 +543,12 @@ function attendanceSheetMessage(text){$('attendanceSheetStatus').textContent=tex
 function stageAttendanceCell(input){
  if(attendanceSaving)attendanceSaveAgain=true;
  const value=input.value.trim().toUpperCase(),status=attendanceStatus(value),employee=state.rows.find(r=>r.user_id===Number(input.dataset.sheetUser)),day=employee.days.find(d=>d.day===input.dataset.sheetDay);
- input.value=value;input.setCustomValidity(status?'':'Use P, A, CL, WO or L');input.classList.toggle('sheet-invalid',!status);
+ input.value=value;input.setCustomValidity(status?'':'Use P, P/2, A, CL, WO or L');input.classList.toggle('sheet-invalid',!status);
  attendanceDrafts.set(attendanceKey(employee.user_id,day.day),{month:state.month,user_id:employee.user_id,day:day.day,value,status,note:day.note||''});input.classList.add('sheet-dirty');
  for(const name of ['present','absent','casual_leave','weekoff','leave'])input.classList.toggle(name,status===name);
  const counts=attendanceSheetCounts(employee);
  for(const name of Object.keys(counts)){const cell=$('attendanceRecordRows').querySelector('[data-sheet-count="'+employee.user_id+':'+name+'"]');if(cell){const total=cell.querySelector?.('input');if(total)total.value=counts[name];else cell.textContent=counts[name];}}
- attendanceSheetMessage(status?'Updating attendance and salary calculations?':'Use P, A, CL, WO or L.');
+ attendanceSheetMessage(status?'Updating attendance and salary calculations?':'Use P, P/2, A, CL, WO or L.');
  renderDistribution();renderIDS();renderWeekoffTable();
  clearTimeout(attendanceSaveTimer);
  if(status)attendanceSaveTimer=setTimeout(()=>saveAttendanceSheet(true),700);
@@ -600,7 +601,7 @@ async function saveAttendanceSheet(automatic=false){
  clearTimeout(attendanceSaveTimer);
  if(!attendanceDrafts.size&&!attendanceTotalDrafts.size){attendanceSheetMessage('No changes to save.');return;}
  if([...attendanceTotalDrafts.values()].some(d=>!d.valid)){attendanceSheetMessage('Fix manual totals before saving.');return;}
- if([...attendanceDrafts.values()].some(d=>!d.status)){attendanceSheetMessage('Fix highlighted cells: use P, A, CL, WO, L or AUTO.');return;}
+ if([...attendanceDrafts.values()].some(d=>!d.status)){attendanceSheetMessage('Fix highlighted cells: use P, P/2, A, CL, WO, L or AUTO.');return;}
  const button=$('saveAttendanceSheet');button.disabled=true;attendanceSaving=true;
  const batches=new Map();for(const [key,d] of attendanceDrafts){const batchKey=d.month+':'+d.user_id;if(!batches.has(batchKey))batches.set(batchKey,[]);batches.get(batchKey).push([key,d]);}
  try{for(const entries of batches.values()){

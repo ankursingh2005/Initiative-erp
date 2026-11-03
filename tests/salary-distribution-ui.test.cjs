@@ -383,3 +383,17 @@ test('net salary headline equals IDS and Total Salary net even when legacy previ
  vm.runInContext("$('search').value='No matching employee';renderIDS();renderTotalSalary();",context);
  assert.equal(nodes.get('netTotal').textContent,new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR'}).format(0));
 });
+
+
+test('P/2 counts half present and half unpaid before and after reload',()=>{
+ const {context}=setup();
+ vm.runInContext(`state.rows[0].joining_date='2026-09-01';state.rows[0].days=[{day:'2026-09-01',status:'present'}];attendanceDrafts.set(attendanceKey(1,'2026-09-01'),{value:'P/2',status:attendanceStatus('p/2')});`,context);
+ assert.equal(vm.runInContext("attendanceStatus('p/2')",context),'half_day');
+ for(const saved of [false,true]){
+  if(saved)vm.runInContext("attendanceDrafts.clear();state.rows[0].days[0].status='half_day';",context);
+  assert.equal(vm.runInContext('attendanceSheetCounts(state.rows[0]).present',context),0.5);
+  assert.equal(vm.runInContext('attendanceSheetCounts(state.rows[0]).absent',context),0.5);
+  assert.equal(vm.runInContext('currentDistributionRows()[0].working_days',context),29.5);
+  assert.equal(vm.runInContext('currentDistributionRows()[0].actual_basic',context),1573333);
+ }
+});

@@ -2,9 +2,9 @@
  'use strict';
  function calculateDistribution(expectedBasic,absent,otherAllowances=0,staffAdvance=0,weekoffAvailed=4,employmentCategory='Regular'){
   const regular=employmentCategory==='Regular';
-  absent=Math.min(30,Math.max(0,Math.trunc(absent)));
+  absent=Math.min(30,Math.max(0,Number(absent)));
   const working=30-absent;
-  const ratio=(value,n,d)=>Number((BigInt(value)*BigInt(n)+BigInt(d)/2n)/BigInt(d));
+  const ratio=(value,n,d)=>Number((BigInt(value)*BigInt(Math.round(n*2))+BigInt(d))/(BigInt(d)*2n));
   const actualBasic=ratio(expectedBasic,working,30),vda=ratio(actualBasic,625,10000),epfPay=actualBasic+vda;
   const actualOA=ratio(otherAllowances,working,30),earning=epfPay+actualOA;
   const proposedBonus=ratio(epfPay,833,10000);

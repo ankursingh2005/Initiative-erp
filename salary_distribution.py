@@ -4,7 +4,7 @@ from decimal import Decimal, ROUND_HALF_UP
 
 def calculate_distribution(expected_basic, absent, other_allowances=0, staff_advance=0, weekoff_availed=4, employment_category='Regular'):
     regular = employment_category == 'Regular'
-    absent = min(30, max(0, int(absent)))
+    absent = min(30, max(0, Decimal(str(absent))))
     working_days = 30 - absent
     def ratio(value, numerator, denominator):
         return int((Decimal(value) * Decimal(numerator) / Decimal(denominator)).quantize(

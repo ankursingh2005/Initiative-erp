@@ -14,6 +14,24 @@ from ems import router, pages
 
 
 class SalaryTests(unittest.TestCase):
+    def test_half_day_saved_and_prorated_without_changing_shared_records(self):
+        uid = self.users[2].id
+        self.assertEqual(self.setup_salary(uid).status_code, 200)
+        shared = [t for t in Base.metadata.sorted_tables if not t.name.startswith('ems_')]
+        original = {t.name: self.db.execute(t.select()).all() for t in shared}
+        before = self.preview(uid)
+        response = self.client.put(f'/api/ems/attendance-records/{uid}', json={
+            'month': '2026-09', 'days': [{'day': '2026-09-01', 'status': 'half_day'}]})
+        self.assertEqual(response.status_code, 200, response.text)
+        after = self.preview(uid)
+        self.assertEqual(after['unpaid_days'], before['unpaid_days'] - 0.5)
+        self.assertEqual(after['counts']['present'], before['counts']['present'] + 0.5)
+        row = next(r for r in self.client.get('/api/ems/salary-distribution?month=2026-09').json()['rows']
+                   if r['user_id'] == uid)
+        self.assertEqual(row['absent'], after['unpaid_days'])
+        self.assertEqual(row['working_days'], 30 - after['unpaid_days'])
+        self.assertEqual({t.name: self.db.execute(t.select()).all() for t in shared}, original)
+
     def test_manual_monthly_totals_recalculate_salary_without_changing_erp(self):
         uid = self.create_manual().json()['user_id']
         self.assertEqual(self.setup_salary(uid, basic='30000', allowances='0',

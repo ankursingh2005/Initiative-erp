@@ -454,7 +454,7 @@ def attendance_summary(day: date | None = None, month: str | None = None,
                                             bool(record and record.checkin_at), (employee.id, current) in leave_days)
             if current <= datetime.now(IST).date():
                 state = manual.get((employee.id, current), 'unrecorded' if employee.role == 'EMSManual' else state)
-            status = {'unrecorded': 'Not entered', 'present': 'Present', 'absent': 'Absent', 'weekoff': 'Week Off',
+            status = {'unrecorded': 'Not entered', 'half_day': 'Half Day (P/2)', 'present': 'Present', 'absent': 'Absent', 'weekoff': 'Week Off',
                       'casual_leave': 'Casual Leave', 'leave': 'Leave', 'upcoming': 'Upcoming'}[state]
             rows.append({'user_id': employee.id, 'name': salary_names.get(employee.id, employee.full_name or employee.username),
                          'employee_id': card.employee_id if card else '', 'day': current.isoformat(),
@@ -712,10 +712,18 @@ def salary_preview(db, month):
                 missing_attendance += int(manual_day is None)
             if manual_day and joining <= day <= today:
                 state = manual_day.status
-            counts[state] += 1
+            if state == 'half_day':
+                counts['present'] += 0.5
+                counts['absent'] += 0.5
+            else:
+                counts[state] += 1
             before_joining = day < joining
             counts['before_joining'] += int(before_joining)
-            pay_counts['before_joining' if before_joining else state] += 1
+            if state == 'half_day' and not before_joining:
+                pay_counts['present'] += 0.5
+                pay_counts['absent'] += 0.5
+            else:
+                pay_counts['before_joining' if before_joining else state] += 1
             days.append({'day': day.isoformat(), 'status': state,
                          'entered': bool(manual_day) if employee.role == 'EMSManual' else True,
                          'overridden': bool(manual_day),
@@ -892,7 +900,7 @@ class ManualEmployee(Input):
 
 class ManualDay(Input):
     day: date
-    status: Literal['present', 'absent', 'casual_leave', 'weekoff', 'leave']
+    status: Literal['present', 'half_day', 'absent', 'casual_leave', 'weekoff', 'leave']
     note: str = Field(default='', max_length=300)
 
 
@@ -974,7 +982,7 @@ def save_manual_attendance(user_id: int, payload: ManualAttendanceInput,
     return {'message': 'Manual attendance saved and draft salary recalculated'}
 
 class AttendanceCorrectionDay(ManualDay):
-    status: Literal['present', 'absent', 'casual_leave', 'weekoff', 'leave', 'auto']
+    status: Literal['present', 'half_day', 'absent', 'casual_leave', 'weekoff', 'leave', 'auto']
 
 
 class AttendanceCorrectionInput(ManualAttendanceInput):
