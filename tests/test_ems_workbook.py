@@ -6,7 +6,7 @@ from ems_workbook import build_salary_workbook, IDS_HEADERS
 
 
 class SalaryWorkbookTests(unittest.TestCase):
-    def test_three_ordered_sheets_preserve_money_accounts_and_literal_names(self):
+    def test_salary_sheets_preserve_money_accounts_and_literal_names(self):
         ids = ['EMP001', '=Literal employee', 'Branch', 'Regular', 2, 30, 28,
                *([100.25] * 14), '000123456789', 'SBIN0001234']
         self.assertEqual(len(ids), len(IDS_HEADERS))
@@ -15,8 +15,8 @@ class SalaryWorkbookTests(unittest.TestCase):
         data = build_salary_workbook('2026-09', [ids], [phase2], True)
         self.assertTrue(data.startswith(b'PK'))
         workbook = load_workbook(BytesIO(data))
-        self.assertEqual(workbook.sheetnames, ['IDS', 'W-O & Incentive', 'Total Salary'])
-        first, second, third = workbook.worksheets
+        self.assertEqual(workbook.sheetnames, ['IDS', 'W-O & Incentive', 'Total Salary', 'Contract', 'Regular'])
+        first, second, third = workbook.worksheets[:3]
         self.assertEqual(first['U4'].value, '000123456789')
         self.assertEqual(first['U4'].data_type, 's')
         self.assertEqual(first['B4'].data_type, 's')
@@ -58,6 +58,26 @@ class SalaryWorkbookTests(unittest.TestCase):
                                  for row in sheet for cell in row))
         self.assertEqual(first.freeze_panes, 'D4')
         self.assertEqual(first.auto_filter.ref, 'A3:V4')
+
+    def test_category_sheets_separate_employees_and_totals(self):
+        categories = ['Contract', 'Regular', 'Contract', 'Not set']
+        ids_rows, weekoff_rows = [], []
+        for index, category in enumerate(categories, 1):
+            ids_rows.append([f'EMP{index}', f'Employee {index}', 'Branch', category,
+                             0, 30, 30, *([100 * index] * 14), '00123', 'IFSC'])
+            weekoff_rows.append([f'EMP{index}', f'Employee {index}', 'Branch', category,
+                                 4, 3, 1, 100, 10, 0, 10 * index])
+        workbook = load_workbook(BytesIO(build_salary_workbook('2026-09', ids_rows, weekoff_rows)))
+        for category, employees, total in (
+            ('Contract', ['EMP1', 'EMP3'], 440),
+            ('Regular', ['EMP2'], 220),
+        ):
+            sheet = workbook[category]
+            self.assertEqual([sheet.cell(row, 1).value for row in range(4, sheet.max_row)], employees)
+            self.assertEqual(sheet.cell(sheet.max_row, 8).value, total)
+            self.assertEqual(sheet.max_column, 8)
+            self.assertEqual(sheet.freeze_panes, 'C4')
+        self.assertEqual(workbook['Total Salary']['H8'].value, 1100)
 
     def test_total_salary_preserves_missing_setup_and_decimal_accuracy(self):
         from ems_workbook import total_salary_rows
