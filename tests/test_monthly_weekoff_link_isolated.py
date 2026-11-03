@@ -8,12 +8,12 @@ scope=dict(Decimal=Decimal,ROUND_HALF_UP=ROUND_HALF_UP)
 node=next(n for n in ast.parse(Path('ems.py').read_text(encoding='utf-8')).body if isinstance(n,ast.FunctionDef) and n.name=='monthly_incentive_amount')
 exec(compile(ast.Module(body=[node],type_ignores=[]),'ems.py','exec'),scope)
 amount=scope['monthly_incentive_amount']
-report={'exact_summary':[{'outlet':'HZT','group':'HA + HE','exact_incentive':5771.23}], 'ids_fund_report':{'non_sales_report':{'rows':[{'outlet':'HZT','location':'HZT','ids_fund':7551.21,'rates':[35,None,12,15,12],'values':[2643,None,906,1133,906]},{'outlet':'MWH','location':'Ware House','ids_fund':17127.81,'rates':[None,16,None,None,None],'values':[None,2740.45,None,None,None]}],'totals':[5996,2740.45,2055,2570,2219]}}}
+report={'exact_summary':[{'outlet':'HZT','group':'HA + HE','total_incentive':8878.82,'exact_incentive':5771.23}], 'ids_fund_report':{'non_sales_report':{'rows':[{'outlet':'HZT','location':'HZT','ids_fund':7551.21,'rates':[35,None,12,15,12],'values':[2643,None,906,1133,906]},{'outlet':'MWH','location':'Ware House','ids_fund':17127.81,'rates':[None,16,None,None,None],'values':[None,2740.45,None,None,None]}],'totals':[5996,2740.45,2055,2570,2219]}}}
 class AmountTests(unittest.TestCase):
     def test_sales_percentage_rounding_zero_and_missing_pair(self):
         sale=NS(outlet='HZT',category_group='HA + HE')
-        self.assertEqual(amount(report,'sales',sales=sale),577123)
-        self.assertEqual(amount(report,'sales',sales=sale,percentage=2500),144281)
+        self.assertEqual(amount(report,'sales',sales=sale),887882)
+        self.assertEqual(amount(report,'sales',sales=sale,percentage=2500),221971)
         self.assertEqual(amount(report,'sales',sales=sale,percentage=0),0)
         self.assertEqual(amount(report,'sales',sales=NS(outlet='ALM',category_group='ALL')),0)
         self.assertEqual(amount(report,'sales'),0)

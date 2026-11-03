@@ -25,10 +25,7 @@
 #nonSalesReport table{table-layout:fixed;min-width:1000px}
 #nonSalesReport th:first-child{width:18%}
 #nonSalesReport th:not(:first-child){text-align:right}
-#exactReport[data-view="summary"] th:nth-child(3),
-#exactReport[data-view="summary"] td:nth-child(3),
-#exactReport[data-view="summary"] th:nth-child(4),
-#exactReport[data-view="summary"] td:nth-child(4){display:none}
+
 #incentiveDownloads{justify-content:flex-start;gap:12px}
 </style>
 </head>
@@ -234,7 +231,7 @@ function incentiveMonthFromFilename(filename){
   function toggleIncentiveReport(kind){
     const id=kind==='sales'?'exactReport':'nonSalesReport',open=document.getElementById(id).hidden||document.getElementById('showAllReports').getAttribute('aria-expanded')==='true';
     hideIncentiveReports();
-    if(kind==='sales'&&open)document.getElementById('exactReport').setAttribute('data-view','summary');
+    if(kind==='sales'&&open)document.getElementById('exactReport').setAttribute('data-view','full');
     document.getElementById(id).hidden=!open;
     document.getElementById(kind==='sales'?'salesCard':'nonSalesCard').setAttribute('aria-expanded',String(open));
     document.getElementById('incentiveSelection').value=kind;
@@ -255,7 +252,7 @@ function incentiveMonthFromFilename(filename){
     const sales=selection==='both'||selection==='sales';
     const nonSales=selection==='both'||selection==='non-sales';
     document.getElementById('exactReport').hidden=!sales;
-    document.getElementById('exactReport').setAttribute('data-view','summary');
+    document.getElementById('exactReport').setAttribute('data-view','full');
     document.getElementById('nonSalesReport').hidden=!nonSales;
     document.getElementById('salesCard').setAttribute('aria-expanded',String(sales));
     document.getElementById('nonSalesCard').setAttribute('aria-expanded',String(nonSales));

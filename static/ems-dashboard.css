@@ -270,3 +270,14 @@ button[data-delete-ems],#excludedEmployeeRows button[data-delete-ems]{color:#a33
 #totalSalaryTable th:nth-child(n+3),#totalSalaryTable td:nth-child(n+3){text-align:right;font-variant-numeric:tabular-nums}
 #totalSalaryTable td:last-child,#totalSalaryTable tfoot{font-weight:700;color:#08755d;background:#e8f5ef}
 #totalSalaryTable td small{display:block;margin-top:4px;color:#78909f;font-weight:400}
+
+/* Sales Total sits between category group and non-sales selection. */
+#monthlyIncentiveDashboard{min-width:1400px}
+#monthlyIncentiveDashboard th:nth-child(5){width:10%;text-align:right}
+#monthlyIncentiveDashboard th:nth-child(6){width:13%;text-align:left}
+#monthlyIncentiveDashboard th:nth-child(7){width:8%;text-align:center}
+#monthlyIncentiveDashboard th:nth-child(8){width:9%;text-align:center;padding-right:12px}
+#monthlyIncentiveDashboard th:nth-child(9){width:12%;text-align:right;padding-right:18px}
+#monthlyIncentiveDashboard td:nth-child(5){text-align:right;font-variant-numeric:tabular-nums}
+#monthlyIncentiveDashboard td:nth-child(6):has(input)::after{content:none}
+#monthlyIncentiveDashboard td:nth-child(7):has(input[data-incentive-percentage])::after{content:"%";position:absolute;right:22px;top:33px;font-size:11px;color:#7c929e;pointer-events:none}

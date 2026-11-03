@@ -59,7 +59,7 @@ load('ems.py',{'month_bounds','effective_incentive_settings','monthly_incentive_
 scope['lock_employee']=lambda *args:None
 scope['record']=lambda *args:None
 scope['ems']=NS(month_bounds=scope['month_bounds'])
-scope['calculate_incentive_report_from_bytes']=lambda filename,raw,p,i:{'report_version':7,'exact_summary':[{'outlet':'HZT','group':'ALL','exact_incentive':1000 if 'OCT' in filename else 2000}]}
+scope['calculate_incentive_report_from_bytes']=lambda filename,raw,p,i:{'report_version':7,'exact_summary':[{'outlet':'HZT','group':'ALL','total_incentive':1000 if 'OCT' in filename else 2000,'exact_incentive':650 if 'OCT' in filename else 1300}]}
 scope['parse_incentive_upload']=lambda file:[{'month':'2026-12'}]
 load('main.py',{'calculate_incentive_endpoint'})
 

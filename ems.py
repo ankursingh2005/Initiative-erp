@@ -1149,7 +1149,7 @@ def monthly_incentive_amount(report, kind, sales=None, non_sales=None, percentag
         match = next((r for r in report.get('exact_summary', [])
                       if r.get('outlet') == sales.outlet and r.get('group') == sales.category_group), None)
         if match:
-            amount = match.get('exact_incentive')
+            amount = match.get('total_incentive')
     elif kind == 'non-sales' and non_sales:
         ns = report.get('ids_fund_report', {}).get('non_sales_report') or {}
         if ns.get('insufficient_data'):

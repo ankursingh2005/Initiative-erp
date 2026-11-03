@@ -10,9 +10,11 @@ vm.createContext(context);vm.runInContext(fs.readFileSync('static/salary-distrib
 (async()=>{
  nodes.get('month').value='2026-09';
  vm.runInContext("state.rows=[{user_id:1,name:'Aditi Sharma',employee_id:'IDS-ALM-26042',outlet:'ALM',category:'ids_emp'},{user_id:2,name:'Jagriti',employee_id:'IDS-ALM-26029',outlet:'ALM',category:'ids_emp'}];",context);
- context.fetch=async(url)=>url.includes('/monthly-incentive-types?')?{ok:true,status:200,text:async()=>JSON.stringify([{user_id:1,incentive_type:'sales'}])}:({ok:true,status:200,text:async()=>JSON.stringify({allowed:true,source_file:'test.xlsx',report:{exact_summary:[{outlet:'ALM',group:'ALL',exact_incentive:50}],ids_fund_report:{non_sales_report:{rows:[{location:'ALM',outlet:'ALM',ids_fund:100,rates:[35,null,12,15,15],values:[35,null,12,15,15]}],totals:[35,16,12,15,15]}}}})});
+ context.fetch=async(url)=>url.includes('/monthly-incentive-types?')?{ok:true,status:200,text:async()=>JSON.stringify([{user_id:1,incentive_type:'sales'}])}:({ok:true,status:200,text:async()=>JSON.stringify({allowed:true,source_file:'test.xlsx',report:{exact_summary:[{outlet:'ALM',group:'ALL',total_incentive:50,applied_rate:100,exact_incentive:50}],ids_fund_report:{non_sales_report:{rows:[{location:'ALM',outlet:'ALM',ids_fund:100,rates:[35,null,12,15,15],values:[35,null,12,15,15]}],totals:[35,16,12,15,15]}}}})});
  await vm.runInContext('loadMonthlyIncentive()',context);
  assert.match(nodes.get('monthlyIncentiveReports').innerHTML,/SALES INCENTIVE/);
+ assert.match(nodes.get('monthlyIncentiveReports').innerHTML,/<th>Total Incentive<\/th><th>Applied Percentage<\/th><th>Exact Incentive<\/th>/);
+ assert.match(nodes.get('monthlyIncentiveReports').innerHTML,/<td>\u20b950\.00<\/td><td>100%<\/td><td>\u20b950\.00<\/td>/);
  assert.match(nodes.get('monthlyIncentiveReports').innerHTML,/NON SALES INCENTIVE/);
  assert.match(nodes.get('monthlyIncentiveReports').innerHTML,/Central Service/);
  assert.match(nodes.get('monthlyIncentiveReports').innerHTML,/50/);
@@ -89,25 +91,26 @@ vm.createContext(context);vm.runInContext(fs.readFileSync('static/salary-distrib
  await nodes.get('monthlyIncentiveEmployees').change({target:salesSelect});
  assert.deepEqual(submitted,{month:'2026-09',outlet:'ALM',category_group:'ALL'});
  // Additional amount previews immediately, saves, and clears without changing percentage.
- row.cells=[{},{},{},{},{},{},{},{innerHTML:''}];
- vm.runInContext("monthlySalesReports.set('2026-09',[{outlet:'ALM',group:'ALL',exact_incentive:141}]);monthlyIncentiveTypes.set('2026-09:1','sales');monthlyPercentages.set('2026-09:1',10);",context);
+ row.cells=[{},{},{},{},{},{},{},{},{innerHTML:''}];
+ vm.runInContext("monthlySalesReports.set('2026-09',[{outlet:'ALM',group:'ALL',total_incentive:141,exact_incentive:100}]);monthlyIncentiveTypes.set('2026-09:1','sales');monthlyPercentages.set('2026-09:1',10);",context);
  const additionInput={value:'100',dataset:{incentiveAddition:'1'},checkValidity:()=>true,reportValidity:()=>true,closest:()=>row,parentElement:{querySelector:()=>liveStatus},matches:selector=>selector==='[data-incentive-addition]'};
  nodes.get('monthlyIncentiveEmployees').input({target:additionInput});
- assert.match(row.cells[7].innerHTML,/114.10/);
+ assert.match(row.cells[8].innerHTML,/114.10/);
+ assert.match(vm.runInContext("monthlyDashboardCells(state.rows[0],'sales','2026-09')[2]",context),/141.00/);
  await nodes.get('monthlyIncentiveEmployees').change({target:additionInput});
  assert.deepEqual(submitted,{month:'2026-09',additional_amount:100});
  assert.equal(vm.runInContext("monthlyAdditions.get('2026-09:1')",context),100);
- assert.match(vm.runInContext("monthlyDashboardCells(state.rows[0],'sales','2026-09')[4]",context),/data-incentive-addition/);
+ assert.match(vm.runInContext("monthlyDashboardCells(state.rows[0],'sales','2026-09')[5]",context),/data-incentive-addition/);
  additionInput.value='';nodes.get('monthlyIncentiveEmployees').input({target:additionInput});
- assert.match(row.cells[7].innerHTML,/14.10/);
+ assert.match(row.cells[8].innerHTML,/14.10/);
  await nodes.get('monthlyIncentiveEmployees').change({target:additionInput});
  assert.deepEqual(submitted,{month:'2026-09',additional_amount:0});
  // Percentage edits preview and persist independently for this employee/month.
- row.cells=[{},{},{},{},{},{},{},{innerHTML:''}];
- vm.runInContext("monthlySalesReports.set('2026-09',[{outlet:'ALM',group:'ALL',exact_incentive:1000}]);monthlyIncentiveTypes.set('2026-09:1','sales');",context);
+ row.cells=[{},{},{},{},{},{},{},{},{innerHTML:''}];
+ vm.runInContext("monthlySalesReports.set('2026-09',[{outlet:'ALM',group:'ALL',total_incentive:1000,exact_incentive:650}]);monthlyIncentiveTypes.set('2026-09:1','sales');",context);
  const percentInput={value:'25',dataset:{incentivePercentage:'1'},checkValidity:()=>true,reportValidity:()=>true,closest:()=>row,parentElement:{querySelector:()=>liveStatus},matches:selector=>selector==='[data-incentive-percentage]'};
  nodes.get('monthlyIncentiveEmployees').input({target:percentInput});
- assert.match(row.cells[7].innerHTML,/250.00/);
+ assert.match(row.cells[8].innerHTML,/250.00/);
  await nodes.get('monthlyIncentiveEmployees').change({target:percentInput});
  assert.deepEqual(submitted,{month:'2026-09',percentage:25});
  assert.equal(vm.runInContext("monthlyPercentages.get('2026-09:1')",context),25);
@@ -115,7 +118,7 @@ vm.createContext(context);vm.runInContext(fs.readFileSync('static/salary-distrib
  // Entering from November opens October's allowed report, rather than dead outlets.
  nodes.get('month').value='2026-11';
  vm.runInContext('refresh=async()=>{}',context);
- context.fetch=async(url)=>({ok:true,status:200,text:async()=>JSON.stringify(url.includes('/monthly-incentive-months')?[{month:'2026-10',source_file:'October.xlsx'}]:url.includes('/monthly-incentive-types?')?[{user_id:1,incentive_type:'sales',outlet:'ALM',category_group:'ALL'}]:{allowed:true,source_file:'October.xlsx',report:{exact_summary:[{outlet:'ALM',group:'ALL',exact_incentive:123.45}]}})});
+ context.fetch=async(url)=>({ok:true,status:200,text:async()=>JSON.stringify(url.includes('/monthly-incentive-months')?[{month:'2026-10',source_file:'October.xlsx'}]:url.includes('/monthly-incentive-types?')?[{user_id:1,incentive_type:'sales',outlet:'ALM',category_group:'ALL'}]:{allowed:true,source_file:'October.xlsx',report:{exact_summary:[{outlet:'ALM',group:'ALL',total_incentive:123.45,exact_incentive:100}]}})});
  await vm.runInContext('openMonthlyIncentive()',context);
  assert.equal(nodes.get('month').value,'2026-10');
  assert.equal(nodes.get('monthlyIncentiveMonth').value,'2026-10');

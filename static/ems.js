@@ -736,7 +736,7 @@ function renderMonthlyIncentiveEmployees(){
   const key=month+':'+r.user_id,value=monthlyIncentiveTypes.get(key)||'',pending=monthlyIncentiveSaving.has(key);
   return cells(['<b>'+esc(r.name)+'</b><small>'+esc(r.employee_id||'ID not assigned')+'</small>',
    '<select data-monthly-incentive-type="'+r.user_id+'" aria-label="Incentive for '+esc(r.name)+'"'+(pending||!monthlyIncentiveLoaded.has(month)?' disabled':'')+'><option value=""'+(!value?' selected':'')+'>Choose category</option><option value="sales"'+(value==='sales'?' selected':'')+'>SALES INCENTIVE</option><option value="non-sales"'+(value==='non-sales'?' selected':'')+'>NON SALES INCENTIVE</option></select><small data-incentive-type-status role="status">'+(pending?'Saving...':'')+'</small>',...monthlyDashboardCells(r,value,month)]);
- }).join('')||empty(8);
+ }).join('')||empty(9);
 }
 $('monthlyIncentiveEmployees').addEventListener('change',async event=>{
  const select=event.target;if(select.matches('[data-incentive-addition]'))return saveMonthlyAddition(event);if(select.matches('[data-incentive-percentage]'))return saveMonthlyPercentage(event);if(select.matches('[data-non-sales-field]'))return saveMonthlyNonSalesSelection(event);if(select.matches('[data-sales-field]'))return saveMonthlySalesSelection(event);if(!select.matches('[data-monthly-incentive-type]'))return;
@@ -781,10 +781,10 @@ async function loadMonthlyIncentive(){
   if(!data.allowed)return;
   const report=data.report,amount=n=>n==null?'Need Detail':money(Math.round(Number(n)*100));
   const table=(title,headers,rows)=>'<h3>'+title+'</h3><div class="scroll"><table><thead><tr>'+headers.map(h=>'<th>'+h+'</th>').join('')+'</tr></thead><tbody>'+rows+'</tbody></table></div>';
-  const sales=(report.exact_summary||[]).map(r=>cells([esc(r.outlet),esc(r.group),amount(r.exact_incentive)])).join('')||empty(3);
+  const sales=(report.exact_summary||[]).map(r=>cells([esc(r.outlet),esc(r.group),amount(r.total_incentive),r.applied_rate==null?'Need Detail':esc(Number(r.applied_rate).toFixed(2).replace(/\.?0+$/,'')+'%'),amount(r.exact_incentive)])).join('')||empty(5);
   const ns=report.ids_fund_report?.non_sales_report;
   const nonSales=ns&&!ns.insufficient_data?(ns.rows||[]).map(r=>cells([esc(r.location),r.outlet==='MWH'?'':amount(r.ids_fund),...r.values.map((n,i)=>r.rates[i]==null?'-':amount(n))])).join('')+cells(['Central Service','',...(ns.totals||[]).map(amount)]):empty(7);
-  $('monthlyIncentiveReports').innerHTML=table('SALES INCENTIVE',['Outlet','Category Group','Exact Incentive'],sales)+table('NON SALES INCENTIVE',['Location','IDS Fund','Accounts','Ware House','Customer Care','Support','HO'],nonSales);
+  $('monthlyIncentiveReports').innerHTML=table('SALES INCENTIVE',['Outlet','Category Group','Total Incentive','Applied Percentage','Exact Incentive'],sales)+table('NON SALES INCENTIVE',['Location','IDS Fund','Accounts','Ware House','Customer Care','Support','HO'],nonSales);
  }catch(e){if(request===monthlyIncentiveRequest)$('monthlyIncentiveStatus').textContent=e.message;}
 }
 $('month').addEventListener('input',()=>{if(!$('monthlyIncentive').hidden)loadMonthlyIncentive();});
@@ -799,7 +799,7 @@ function monthlySalesCells(employee,type,month){
  const options=(values,current)=>values.map(v=>'<option value="'+esc(v)+'"'+(v===current?' selected':'')+'>'+esc(v)+'</option>').join('');
  const select=(field,placeholder,values,current,disabled)=>'<select data-sales-field="'+field+'" data-sales-user="'+employee.user_id+'" aria-label="'+placeholder+' for '+esc(employee.name)+'"'+(disabled?' disabled':'')+'><option value="">'+placeholder+'</option>'+options(values,current)+'</select>';
  const match=groups.find(r=>r.group===group);
- return [select('outlet','Choose outlet',[...new Set(rows.map(r=>r.outlet))],outlet,pending||!rows.length),select('category_group','Choose category group',[...new Set(groups.map(r=>r.group))],group,pending||!outlet),match?(match.exact_incentive==null?'Need Detail':monthlyAppliedAmount(match.exact_incentive,employee,month)):'&mdash;','&mdash;',monthlyPercentageInput(employee,month)];
+ return [select('outlet','Choose outlet',[...new Set(rows.map(r=>r.outlet))],outlet,pending||!rows.length),select('category_group','Choose category group',[...new Set(groups.map(r=>r.group))],group,pending||!outlet),match?(match.total_incentive==null?'Need Detail':monthlyAppliedAmount(match.total_incentive,employee,month)):'&mdash;','&mdash;',monthlyPercentageInput(employee,month)];
 }
 async function saveMonthlySalesSelection(event){
  const select=event.target;
@@ -856,7 +856,7 @@ $('monthlyIncentiveEmployees').addEventListener('input',event=>{
  if(!input.checkValidity()){status.textContent='Enter a percentage from 0 to 100 (up to 2 decimals)';return;}
  monthlyPercentageDrafts.set(key,Number(input.value));status.textContent='Unsaved percentage';
  const employee=monthlyIncentiveEmployeeRows().find(r=>r.user_id===uid),fields=monthlySalesCells(employee,monthlyIncentiveTypes.get(key)||'',month);
- input.closest('tr').cells[7].innerHTML=monthlyAmountBadge(fields[2]);
+ input.closest('tr').cells[8].innerHTML=monthlyAmountBadge(fields[2]);
 });
 async function saveMonthlyPercentage(event){
  const input=event.target,uid=Number(input.dataset.incentivePercentage),month=$('month').value,key=month+':'+uid;
@@ -879,7 +879,7 @@ function previewMonthlyAddition(event){
  if(!input.checkValidity()){status.textContent='Enter an amount from 0 to 10000000 (up to 2 decimals)';return;}
  monthlyAdditionDrafts.set(key,Number(input.value));status.textContent='Unsaved amount';
  const employee=monthlyIncentiveEmployeeRows().find(r=>r.user_id===uid),fields=monthlySalesCells(employee,monthlyIncentiveTypes.get(key)||'',month);
- input.closest('tr').cells[7].innerHTML=monthlyAmountBadge(fields[2]);
+ input.closest('tr').cells[8].innerHTML=monthlyAmountBadge(fields[2]);
 }
 async function saveMonthlyAddition(event){
  const input=event.target,uid=Number(input.dataset.incentiveAddition),month=$('month').value,key=month+':'+uid;
@@ -894,7 +894,10 @@ async function saveMonthlyAddition(event){
 
 function monthlyDashboardCells(employee,type,month){
  const fields=monthlySalesCells(employee,type,month);
- return [fields[0],fields[1],fields[3],fields[4],(type?monthlyAdditionInput(employee,month):'&mdash;'),monthlyAmountBadge(fields[2])];
+ const selected=monthlySalesSelections.get(month+':'+employee.user_id);
+ const match=type==='sales'?(monthlySalesReports.get(month)||[]).find(r=>r.outlet===selected?.outlet&&r.group===selected?.category_group):null;
+ const total=type!=='sales'?'&mdash;':!match?'&mdash;':match.total_incentive==null?'Need Detail':money(Math.round(Number(match.total_incentive)*100));
+ return [fields[0],fields[1],total,fields[3],fields[4],(type?monthlyAdditionInput(employee,month):'&mdash;'),monthlyAmountBadge(fields[2])];
 }
 
 function monthlyAmountBadge(amount){
