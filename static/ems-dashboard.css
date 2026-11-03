@@ -264,3 +264,9 @@ button[data-delete-ems],#excludedEmployeeRows button[data-delete-ems]{color:#a33
 
 #monthlyIncentiveDashboard input[data-incentive-addition]{width:100%;min-width:0;height:42px;box-sizing:border-box;border:1px solid #ccdce5;border-radius:8px;padding:0 8px;color:#24495d;text-align:right}
 #monthlyIncentiveDashboard [data-addition-status]{position:absolute;bottom:10px;left:12px;right:12px;line-height:14px}
+
+#totalSalaryTable{min-width:1050px;width:100%}
+#totalSalaryTable th,#totalSalaryTable td{padding:16px 14px}
+#totalSalaryTable th:nth-child(n+3),#totalSalaryTable td:nth-child(n+3){text-align:right;font-variant-numeric:tabular-nums}
+#totalSalaryTable td:last-child,#totalSalaryTable tfoot{font-weight:700;color:#08755d;background:#e8f5ef}
+#totalSalaryTable td small{display:block;margin-top:4px;color:#78909f;font-weight:400}

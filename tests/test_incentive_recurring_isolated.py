@@ -79,6 +79,19 @@ class RecurringTests(unittest.TestCase):
         self.db.add(Addition(user_id=1,month='2026-10',amount=0))
         self.assertEqual(scope['monthly_weekoff_amounts'](self.db,'2026-10',[1]),{1:25000})
 
+    def test_addition_carries_forward_until_changed_without_changing_past(self):
+        self.db.add(Addition(user_id=1,month='2026-10',amount=10000))
+        getter=scope['monthly_incentive_types']
+        self.assertEqual(getter('2026-11',self.db,self.actor)[0]['additional_amount'],100)
+        self.assertEqual(getter('2027-06',self.db,self.actor)[0]['additional_amount'],100)
+        self.db.add(Addition(user_id=1,month='2026-12',amount=25000))
+        self.assertEqual(getter('2026-11',self.db,self.actor)[0]['additional_amount'],100)
+        self.assertEqual(getter('2026-12',self.db,self.actor)[0]['additional_amount'],250)
+        self.assertEqual(getter('2027-06',self.db,self.actor)[0]['additional_amount'],250)
+        self.db.add(Addition(user_id=1,month='2027-02',amount=0))
+        self.assertEqual(getter('2027-01',self.db,self.actor)[0]['additional_amount'],250)
+        self.assertEqual(getter('2027-06',self.db,self.actor)[0]['additional_amount'],0)
+
     def test_upload_auto_releases_and_reuses_settings(self):
         self.upload('OCTOBER incentive Data 2026.xlsx')
         self.assertEqual(scope['monthly_weekoff_amounts'](self.db,'2026-10',[1]),{1:25000})

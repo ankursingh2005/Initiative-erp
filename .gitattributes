@@ -39,3 +39,5 @@
 /incentive_period.py text eol=lf
 /tests/test_incentive_recurring_isolated.py text eol=lf
 /tests/test_monthly_employee_roster_isolated.py text eol=lf
+
+/tests/total-salary-ui.test.cjs text eol=lf

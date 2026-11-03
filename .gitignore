@@ -15,3 +15,7 @@ venv/
 .env
 .env.*
 .vscode/*.local.json
+
+/tmp/add-total-salary.cjs
+
+/tmp/add-total-salary-export.cjs

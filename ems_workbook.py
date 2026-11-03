@@ -1,5 +1,6 @@
 """Format EMS report snapshots as Excel; never read or write ERP records."""
 from io import BytesIO
+from decimal import Decimal
 
 IDS_HEADERS = ['Employee ID', 'Employee Name', 'Branch', 'Category', 'Absent',
     'No. of Days', 'Working Days', 'Expected Basic', 'Actual Basic', 'Other Allowances',
@@ -8,6 +9,17 @@ IDS_HEADERS = ['Employee ID', 'Employee Name', 'Branch', 'Category', 'Absent',
     'Staff Advance & Deduction', 'Total Deductions', 'Net Amount', 'Account No.', 'IFSC Code']
 WEEKOFF_HEADERS = ['Employee ID', 'Employee Name', 'Branch', 'Category', 'Total W/O',
     'W/O Availed', 'W/O Credit', 'Gross Salary', 'W/O Credit Pay', 'Incentive', 'Amount Payable']
+
+TOTAL_SALARY_HEADERS = ['Emp ID', 'Emp Name', 'Absent', 'Working Days',
+    'Weekoff Credit', 'NET AMOUNT', 'W/O & INCENTIVE', 'Total Salary']
+
+def total_salary_rows(ids_rows, weekoff_rows):
+    result = []
+    for ids, weekoff in zip(ids_rows, weekoff_rows):
+        net, payable = ids[20], weekoff[10]
+        total = None if net is None or payable is None else float(Decimal(str(net)) + Decimal(str(payable)))
+        result.append([ids[0], ids[1], ids[4], ids[6], weekoff[6], net, payable, total])
+    return result
 
 
 def build_salary_workbook(month, ids_rows, weekoff_rows, provisional=False):
@@ -20,6 +32,7 @@ def build_salary_workbook(month, ids_rows, weekoff_rows, provisional=False):
     for name, title, headers, rows, money_columns in (
         ('IDS', 'IDS - Phase 1 Salary', IDS_HEADERS, ids_rows, range(8, 22)),
         ('W-O & Incentive', 'W/O & Incentive - Phase 2', WEEKOFF_HEADERS, weekoff_rows, range(8, 12)),
+        ('Total Salary', 'Total Salary', TOTAL_SALARY_HEADERS, total_salary_rows(ids_rows, weekoff_rows), range(6, 9)),
     ):
         sheet = workbook.create_sheet(name)
         sheet.append([f'Initiative Data Systems Pvt. Ltd. | {title}'])
@@ -54,7 +67,7 @@ def build_salary_workbook(month, ids_rows, weekoff_rows, provisional=False):
             sheet.column_dimensions[get_column_letter(column)].width = min(29, max(16, len(header) + 2))
         sheet.column_dimensions['B'].width = 28
         sheet.row_dimensions[4].height = 42
-        sheet.freeze_panes = 'E5'
+        sheet.freeze_panes = 'C5' if name == 'Total Salary' else 'E5'
         sheet.auto_filter.ref = f'A4:{get_column_letter(len(headers))}{last_data}'
         sheet.sheet_view.showGridLines = False
         sheet.print_title_rows = '1:4'

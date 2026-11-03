@@ -263,7 +263,7 @@ test('salary, IDS and weekoff downloads request a single xlsx workbook',async()=
  assert.equal(download,'IDSPL_Salary_2026-09.xlsx');
  const payload=JSON.parse(request.options.body);assert.equal(payload.ids_rows.length,payload.weekoff_rows.length);
  assert.equal(typeof nodes.get('idsExport').onclick,'function');assert.equal(typeof nodes.get('weekoffExport').onclick,'function');
- assert.match(nodes.get('message').textContent,/IDS and W\/O & Incentive/);
+ assert.match(nodes.get('message').textContent,/IDS, W\/O & Incentive and Total Salary/);
 });
 
 test('category controls bonus EPF and ESIC in both reports and Excel',()=>{
