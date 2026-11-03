@@ -24,7 +24,7 @@ function empty(columns){return `<tr><td colspan="${columns}">No records for this
 function render(){
  const rows=filtered(), ids=new Set(rows.map(r=>r.user_id));
  $('employeeCount').textContent=rows.length;$('missingCount').textContent=rows.filter(r=>!r.profile_id).length;
- $('netTotal').textContent=money(rows.filter(r=>!r.published_id).reduce((s,r)=>s+(r.net||0),0));$('publishedCount').textContent=rows.filter(r=>r.published_id).length;
+ $('publishedCount').textContent=rows.filter(r=>r.published_id).length;
  $('periodNote').textContent=state.closed_month?'Closed month: review attendance and salary before publication.':'Open or future month: provisional totals only. Publication is available after month end.';
  $('monthlyRows').innerHTML=rows.map(r=>cells([`<b>${esc(r.name)}</b><small>${esc(r.employee_id||'ID not assigned')}</small>`,`${esc(r.outlet)}<small>${groups[r.category]}</small>`,r.counts.present,r.counts.absent,r.counts.casual_leave??0,r.counts.weekoff,r.counts.leave,r.profile_id?money(r.basic+r.allowances):'Setup needed',money(r.weekoff_pay||0),money(r.incentive),money(r.bonus),r.profile_id?money(r.deductions):'—',r.profile_id?money(r.net):'—',`${r.manual_employee?'<button data-manual-attendance="'+r.user_id+'">Attendance</button> ':''}<button data-review="${r.user_id}">${r.published_id?'Attendance':'Review'}</button>${r.status==='draft'?'':'<small>'+esc(r.status)+'</small>'}`])).join('')||empty(14);
  renderDistribution();renderIDS();
@@ -420,6 +420,8 @@ function renderIDS(){
  const totals=new Set(distributionKeys.filter(k=>!plain.has(k)));
  $('idsTotals').innerHTML=cells(['Total',...distributionKeys.map(k=>totals.has(k)?money(sum(k)):'')]);
  $('idsCount').textContent=rows.length;$('idsGross').textContent=money(sum('actual_gross_earning'));$('idsDeductions').textContent=money(sum('total_deductions'));$('idsNet').textContent=money(sum('net_amount'));
+ // Keep the headline and IDS/Total Salary net column on the same calculation and filters.
+ $('netTotal').textContent=money(sum('net_amount'));
  $('idsNote').textContent=state.month+' | '+(state.closed_month?'Closed month':'Provisional: month not closed')+' | Phase 1: gross less deductions; W/O and incentive excluded';
 }
 

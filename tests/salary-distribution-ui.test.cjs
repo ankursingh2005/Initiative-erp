@@ -370,3 +370,16 @@ test('EMS full-name edit propagates to attendance IDS weekoff and Excel without 
  assert.match(nodes.get('attendanceRecordRows').innerHTML,/Synthetic Employee Full Name/);
  assert.equal(dialog.open,false);
 });
+
+test('net salary headline equals IDS and Total Salary net even when legacy preview differs',()=>{
+ const {context,nodes}=setup();
+ vm.runInContext('state.rows[0].net=32288461;renderIDS();renderTotalSalary();',context);
+ assert.equal(nodes.get('netTotal').textContent,nodes.get('idsNet').textContent);
+ assert.match(nodes.get('totalSalaryTotals').innerHTML,new RegExp(nodes.get('netTotal').textContent.replace(/[.*+?^$()|[\]\\]/g,'\\$&')));
+ const before=nodes.get('netTotal').textContent;
+ vm.runInContext("const r=state.distribution[0];distributionDrafts.set(distributionKey(r.user_id),{other_allowances:r.other_allowances+100000,staff_advance:r.staff_advance});renderIDS();renderTotalSalary();",context);
+ assert.notEqual(nodes.get('netTotal').textContent,before);
+ assert.equal(nodes.get('netTotal').textContent,nodes.get('idsNet').textContent);
+ vm.runInContext("$('search').value='No matching employee';renderIDS();renderTotalSalary();",context);
+ assert.equal(nodes.get('netTotal').textContent,new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR'}).format(0));
+});
