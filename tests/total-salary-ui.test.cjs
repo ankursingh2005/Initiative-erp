@@ -36,3 +36,16 @@ assert.match(nodes.get('totalSalaryNote').textContent,/2026-12/);
 vm.runInContext('salaryRows=[];renderWeekoffTable();',context);
 assert.match(nodes.get('totalSalaryRows').innerHTML,/colspan="8"/);
 console.log('Total Salary source amounts, live updates, month changes, missing setup and totals passed.');
+
+// Report-only employees cannot appear; EMS employees without a distribution row still appear.
+vm.runInContext(`
+ salaryRows=[{user_id:1,name:'EMS Member',employee_id:'EMS-001',counts:{present:20,absent:2}},{user_id:2,name:'Removed',employee_id:'EMS-002',counts:{}}];
+ state.excluded=[{user_id:2}];
+ currentDistributionRows=()=>[{user_id:99,name:'Outside EMS',profile_id:1,net_amount:900000}];
+ renderTotalSalary();
+`,context);
+assert.match(nodes.get('totalSalaryRows').innerHTML,/EMS Member/);
+assert.match(nodes.get('totalSalaryRows').innerHTML,/Setup needed/);
+assert.doesNotMatch(nodes.get('totalSalaryRows').innerHTML,/Outside EMS|Removed/);
+assert.equal(vm.runInContext('currentTotalSalaryRows().length',context),1);
+console.log('Total Salary includes only the EMS roster and handles missing report rows.');
