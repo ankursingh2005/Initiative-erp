@@ -37,6 +37,11 @@ def build_salary_workbook(month, ids_rows, weekoff_rows, provisional=False):
         ('W-O & Incentive', 'W/O & Incentive - Phase 2', WEEKOFF_HEADERS, weekoff_rows, range(8, 12)),
         ('Total Salary', 'Total Salary', TOTAL_SALARY_HEADERS, total_salary_rows(ids_rows, weekoff_rows), range(6, 9)),
     ):
+        if name != 'Total Salary':
+            # Branch is part of the EMS snapshot, but omitted from downloads.
+            headers = headers[:2] + headers[3:]
+            rows = [values[:2] + values[3:] for values in rows]
+            money_columns = range(money_columns.start - 1, money_columns.stop - 1)
         sheet = workbook.create_sheet(name)
         sheet.append([f'Initiative Data Systems Pvt. Ltd. | {title}'])
         sheet.append([f'Salary month: {month}'])
@@ -86,7 +91,7 @@ def build_salary_workbook(month, ids_rows, weekoff_rows, provisional=False):
             for row in range(4, sheet.max_row + 1):
                 sheet.cell(row, column).alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
         sheet.row_dimensions[3].height = max(36, header_lines * 16 + 12)
-        sheet.freeze_panes = 'C4' if name == 'Total Salary' else 'E4'
+        sheet.freeze_panes = 'C4' if name == 'Total Salary' else 'D4'
         sheet.auto_filter.ref = f'A3:{get_column_letter(len(headers))}{last_data}'
         sheet.sheet_view.showGridLines = False
         sheet.print_title_rows = '1:3'
