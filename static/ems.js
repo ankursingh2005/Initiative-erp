@@ -748,7 +748,20 @@ $('monthlyIncentiveEmployees').addEventListener('change',async event=>{
  catch(e){select.value=monthlyIncentiveTypes.get(key)||'';status.textContent=e.message;}
  finally{monthlyIncentiveSaving.delete(key);select.disabled=false;if(month===$('month').value){const tr=select.closest('tr');if(tr){const employee=monthlyIncentiveEmployeeRows().find(r=>r.user_id===uid);const fields=monthlyDashboardCells(employee,monthlyIncentiveTypes.get(key)||'',month);[...tr.cells].slice(2).forEach((cell,i)=>cell.innerHTML=fields[i]);}}}
 });
+let monthlyReportsVisible=true;
+function updateMonthlyReportsToggle(available){
+ const button=$('monthlyIncentiveReportsToggle');
+ button.disabled=!available;
+ button.textContent=monthlyReportsVisible?'Hide reports':'Show reports';
+ button.setAttribute('aria-expanded',String(monthlyReportsVisible));
+ $('monthlyIncentiveReports').hidden=!monthlyReportsVisible;
+}
+$('monthlyIncentiveReportsToggle').addEventListener('click',()=>{
+ monthlyReportsVisible=!monthlyReportsVisible;
+ updateMonthlyReportsToggle(true);
+});
 async function loadMonthlyIncentive(){
+ updateMonthlyReportsToggle(false);
  monthlyIncentiveLoaded.delete($('month').value);monthlySalesReports.delete($('month').value);monthlyNonSalesReports.delete($('month').value);
  renderMonthlyIncentiveEmployees();
  const request=++monthlyIncentiveRequest,month=$('month').value;
@@ -778,6 +791,7 @@ async function loadMonthlyIncentive(){
   monthlySalesReports.set(month,data.allowed?(data.report.exact_summary||[]):[]);
   if(settingsResult.status==='fulfilled')monthlyIncentiveLoaded.add(month);renderMonthlyIncentiveEmployees();
   $('monthlyIncentiveStatus').textContent=reportResult.status==='rejected'?reportResult.reason.message:data.allowed?month+' | '+(data.source_file||'Allowed report'):month+' | No allowed report. Choose an allowed incentive month above, or enable Allow in EMS in the Incentive project.';
+  updateMonthlyReportsToggle(Boolean(data.allowed));
   if(!data.allowed)return;
   const report=data.report,amount=n=>n==null?'Need Detail':money(Math.round(Number(n)*100));
   const table=(title,headers,rows)=>'<h3>'+title+'</h3><div class="scroll"><table><thead><tr>'+headers.map(h=>'<th>'+h+'</th>').join('')+'</tr></thead><tbody>'+rows+'</tbody></table></div>';

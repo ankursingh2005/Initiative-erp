@@ -228,27 +228,27 @@ button[data-delete-ems],#excludedEmployeeRows button[data-delete-ems]{color:#a33
 #monthlyIncentive .monthly-incentive-dashboard h3{font-size:19px;letter-spacing:-.3px;margin:0 0 18px;display:flex;align-items:center;gap:10px}
 #monthlyIncentive .monthly-incentive-dashboard h3::before{content:"";height:20px;width:4px;border-radius:4px;background:#00a58e}
 #monthlyIncentive .monthly-incentive-dashboard>.scroll{border:1px solid #d7e4ea;border-radius:14px;box-shadow:0 5px 20px #19475a08;max-height:68vh;overflow:auto;scrollbar-width:thin;scrollbar-color:#a3bac4 #f1f6f8}
-#monthlyIncentiveDashboard{table-layout:fixed;width:100%;min-width:1640px;border:0;border-collapse:separate;border-spacing:0;font-size:13px}
-#monthlyIncentiveDashboard th{position:sticky;top:0;z-index:2;background:#194e60;color:#fff;text-transform:none;letter-spacing:.15px;font-size:12px;font-weight:700;padding:20px 12px;text-align:left;line-height:1.5;border-bottom:3px solid #39baa6;white-space:nowrap;box-sizing:border-box}
+#monthlyIncentiveDashboard{table-layout:fixed;width:100%;min-width:1120px;border:0;border-collapse:separate;border-spacing:0;font-size:13px}
+#monthlyIncentiveDashboard th{position:sticky;top:0;z-index:2;background:#194e60;color:#fff;text-transform:none;letter-spacing:.15px;font-size:12px;font-weight:700;padding:14px 7px;text-align:left;line-height:1.4;border-bottom:3px solid #39baa6;white-space:normal;box-sizing:border-box}
 #monthlyIncentiveDashboard th:nth-child(1){width:13%}
-#monthlyIncentiveDashboard th:nth-child(2){width:16%}
+#monthlyIncentiveDashboard th:nth-child(2){width:14%}
 #monthlyIncentiveDashboard th:nth-child(3){width:9%}
-#monthlyIncentiveDashboard th:nth-child(4){width:17%}
-#monthlyIncentiveDashboard th:nth-child(5){width:9%}
+#monthlyIncentiveDashboard th:nth-child(4){width:13%}
+#monthlyIncentiveDashboard th:nth-child(5){width:10%}
 #monthlyIncentiveDashboard th:nth-child(6){width:12%}
-#monthlyIncentiveDashboard th:nth-child(7){width:7%}
-#monthlyIncentiveDashboard th:nth-child(8){width:7%}
-#monthlyIncentiveDashboard th:nth-child(9){width:10%}
-#monthlyIncentiveDashboard td{position:relative;padding:22px 12px 34px;vertical-align:top;border-bottom:1px solid #e2ebef;background:#fff;color:#526d7d;font-weight:400;line-height:42px;box-sizing:border-box}
+#monthlyIncentiveDashboard th:nth-child(7){width:8%}
+#monthlyIncentiveDashboard th:nth-child(8){width:8%}
+#monthlyIncentiveDashboard th:nth-child(9){width:13%}
+#monthlyIncentiveDashboard td{position:relative;padding:16px 7px 30px;vertical-align:top;border-bottom:1px solid #e2ebef;background:#fff;color:#526d7d;font-weight:400;line-height:42px;box-sizing:border-box}
 #monthlyIncentiveDashboard tbody tr:nth-child(even) td{background:#f6fafb}
 #monthlyIncentiveDashboard tbody tr:hover td,#monthlyIncentiveDashboard tbody tr:focus-within td{background:#edf8f6}
 #monthlyIncentiveDashboard tbody tr:last-child td{border-bottom:0}
-#monthlyIncentiveDashboard th:first-child,#monthlyIncentiveDashboard td:first-child{padding-left:20px}
-#monthlyIncentiveDashboard th:last-child,#monthlyIncentiveDashboard td:last-child{padding-right:20px}
+#monthlyIncentiveDashboard th:first-child,#monthlyIncentiveDashboard td:first-child{padding-left:12px}
+#monthlyIncentiveDashboard th:last-child,#monthlyIncentiveDashboard td:last-child{padding-right:12px}
 #monthlyIncentiveDashboard td:first-child{white-space:normal;overflow-wrap:anywhere;line-height:20px}
 #monthlyIncentiveDashboard td b{display:block;color:#087f75;font-size:14px;font-weight:700;line-height:20px;margin:0 0 4px}
 #monthlyIncentiveDashboard td small{display:block;color:#78909f;font-size:11px;font-weight:400;line-height:16px}
-#monthlyIncentiveDashboard [data-incentive-type-status],#monthlyIncentiveDashboard [data-percentage-status],#monthlyIncentiveDashboard [data-addition-status]{position:absolute;top:68px;left:12px;right:12px;line-height:14px;white-space:normal}
+#monthlyIncentiveDashboard [data-incentive-type-status],#monthlyIncentiveDashboard [data-percentage-status],#monthlyIncentiveDashboard [data-addition-status]{position:absolute;top:59px;left:7px;right:7px;line-height:14px;white-space:normal}
 #monthlyIncentiveDashboard select,#monthlyIncentiveDashboard input{display:block;width:100%;max-width:100%;min-width:0;height:42px;box-sizing:border-box;margin:0;border:1px solid #ccdce5;border-radius:8px;background:#fff;color:#24495d;font:inherit;font-size:12px;line-height:normal;padding:0 10px;box-shadow:0 1px 2px #19475a04}
 #monthlyIncentiveDashboard select{padding-right:26px;text-overflow:ellipsis}
 #monthlyIncentiveDashboard select:focus,#monthlyIncentiveDashboard input:focus{outline:none;border-color:#009b87;box-shadow:0 0 0 3px #009b871c}
@@ -259,7 +259,7 @@ button[data-delete-ems],#excludedEmployeeRows button[data-delete-ems]{color:#a33
 #monthlyIncentiveDashboard input::-webkit-inner-spin-button,#monthlyIncentiveDashboard input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
 #monthlyIncentiveDashboard input[data-incentive-percentage]{padding-right:24px;text-align:center}
 #monthlyIncentiveDashboard input[data-incentive-addition]{text-align:right}
-#monthlyIncentiveDashboard td:nth-child(7):has(input)::after{content:"%";position:absolute;right:22px;top:22px;height:42px;line-height:42px;font-size:11px;color:#7c929e;pointer-events:none}
+#monthlyIncentiveDashboard td:nth-child(7):has(input)::after{content:"%";position:absolute;right:14px;top:16px;height:38px;line-height:38px;font-size:11px;color:#7c929e;pointer-events:none}
 #monthlyIncentiveDashboard .monthly-incentive-amount{display:inline-flex;align-items:center;justify-content:flex-end;min-height:42px;max-width:100%;box-sizing:border-box;padding:0 12px;border:1px solid #cde9df;border-radius:8px;background:#e8f5ef;color:#08755d;font-size:14px;font-weight:700;white-space:nowrap;line-height:1.2}
 #monthlyIncentiveDashboard .monthly-incentive-amount.is-empty{background:transparent;border-color:transparent;color:#8ba0aa;font-weight:400}
 #monthlyIncentiveEmployeeStatus:empty{display:none}
@@ -269,3 +269,69 @@ button[data-delete-ems],#excludedEmployeeRows button[data-delete-ems]{color:#a33
 #totalSalaryTable th:nth-child(n+3),#totalSalaryTable td:nth-child(n+3){text-align:right;font-variant-numeric:tabular-nums}
 #totalSalaryTable td:last-child,#totalSalaryTable tfoot{font-weight:700;color:#08755d;background:#e8f5ef}
 #totalSalaryTable td small{display:block;margin-top:4px;color:#78909f;font-weight:400}
+
+/* Keep IDS employee identity visible during horizontal scrolling. */
+#idsTable{border-collapse:separate;border-spacing:0}
+#idsTable th:first-child,#idsTable td:first-child{position:sticky;left:0;z-index:2;min-width:180px;max-width:220px;white-space:normal;background:#fff;box-shadow:3px 0 6px #183b4c14}
+#idsTable thead th:first-child{z-index:4;background:#e9f0f5}
+#idsTable tbody tr:nth-child(even) td:first-child{background:#f9fbfd}
+#idsTable tbody tr:hover td:first-child{background:#f0f8f6}
+#idsTable tfoot td:first-child{background:#e8f5ef;font-weight:700}
+
+#monthlyIncentive .monthly-report-actions{display:flex;justify-content:flex-end;margin:12px 0 18px}
+#monthlyIncentiveReportsToggle{min-width:120px;padding:10px 18px;border:1px solid #b8d8d2;background:#edf8f5;color:#08755d}
+
+/* Separate report browsing from employee incentive allocation. */
+#monthlyIncentive>.panel{margin:20px 0 24px;padding:26px;background:#fff;min-width:0}
+#monthlyIncentive .monthly-incentive-dashboard{margin-top:24px}
+#monthlyIncentive .monthly-incentive-controls{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:end;padding:18px 20px;background:#f6fafb;border:1px solid #e0eaf0;border-radius:12px}
+#monthlyIncentive .monthly-incentive-controls>label{grid-column:1;min-width:0;margin:0}
+#monthlyIncentiveMonth{width:100%;height:44px}
+#monthlyIncentiveStatus{grid-column:1;grid-row:2;margin:0;color:#6c7e90;font-size:12px;overflow-wrap:anywhere}
+#monthlyIncentive .monthly-report-actions{grid-column:2;grid-row:1 / span 2;align-self:center;margin:0}
+#monthlyIncentiveReports>h3{margin:24px 0 14px;font-size:15px;color:#24495d}
+#monthlyIncentiveReports>.scroll{border:1px solid #e0eaf0;border-radius:10px}
+#monthlyIncentive .monthly-incentive-dashboard h2{margin-bottom:20px}
+@media(max-width:700px){#monthlyIncentive>.panel{padding:18px 14px}#monthlyIncentive .monthly-incentive-controls{grid-template-columns:minmax(0,1fr);padding:14px}#monthlyIncentive .monthly-report-actions{grid-column:1;grid-row:3;justify-content:flex-start}#monthlyIncentiveReportsToggle{width:100%}}
+
+/* Keep employee names visible while scrolling incentive allocations. */
+#monthlyIncentiveDashboard th:first-child,#monthlyIncentiveDashboard td:first-child{position:sticky;left:0;box-shadow:3px 0 6px #183b4c14}
+#monthlyIncentiveDashboard th:first-child{z-index:5;background:#194e60}
+#monthlyIncentiveDashboard td:first-child{z-index:3;background:#fff}
+#monthlyIncentiveDashboard tbody tr:nth-child(even) td:first-child{background:#f6fafb}
+#monthlyIncentiveDashboard tbody tr:hover td:first-child,#monthlyIncentiveDashboard tbody tr:focus-within td:first-child{background:#edf8f6}
+
+/* Compact allocation controls fit the desktop card without excessive scrolling. */
+#monthlyIncentiveDashboard{font-size:12px}
+#monthlyIncentiveDashboard td b{font-size:13px}
+#monthlyIncentiveDashboard td small{font-size:10px}
+#monthlyIncentiveDashboard select,#monthlyIncentiveDashboard input{height:38px;font-size:11px;padding-left:7px;padding-right:7px}
+#monthlyIncentiveDashboard select{padding-right:20px}
+#monthlyIncentiveDashboard input[data-incentive-percentage]{padding-left:4px;padding-right:20px}
+#monthlyIncentiveDashboard td{line-height:38px}
+#monthlyIncentiveDashboard .monthly-incentive-amount{min-height:38px;padding:0 7px;font-size:12px}
+#monthlyIncentiveDashboard th:nth-child(9){white-space:normal}
+
+/* Compact fields use only the space needed for their values. */
+#monthlyIncentiveDashboard th{padding:12px 6px}
+#monthlyIncentiveDashboard td{padding:12px 6px 26px;line-height:34px}
+#monthlyIncentiveDashboard select,#monthlyIncentiveDashboard input{height:34px;padding-left:6px;padding-right:6px;border-radius:6px}
+#monthlyIncentiveDashboard select{padding-right:20px}
+#monthlyIncentiveDashboard select[data-monthly-incentive-type]{max-width:190px}
+#monthlyIncentiveDashboard select[data-sales-field="outlet"],#monthlyIncentiveDashboard select[data-non-sales-field="location"]{max-width:130px}
+#monthlyIncentiveDashboard select[data-sales-field="category_group"]{max-width:200px}
+#monthlyIncentiveDashboard select[data-non-sales-field="field"]{max-width:145px}
+#monthlyIncentiveDashboard input[data-incentive-percentage]{max-width:78px;margin-left:auto;margin-right:auto;padding-right:20px}
+#monthlyIncentiveDashboard input[data-incentive-addition]{max-width:100px;margin-left:auto;margin-right:auto}
+#monthlyIncentiveDashboard [data-incentive-type-status],#monthlyIncentiveDashboard [data-percentage-status],#monthlyIncentiveDashboard [data-addition-status]{top:49px;left:6px;right:6px}
+#monthlyIncentiveDashboard td:nth-child(7):has(input)::after{right:calc((100% - min(78px, 100% - 12px))/2 + 8px);top:12px;height:34px;line-height:34px}
+#monthlyIncentiveDashboard .monthly-incentive-amount{min-height:34px;padding:0 6px;border-radius:6px}
+
+/* Align headings with their fields and separate adjacent amount/selection columns. */
+#monthlyIncentiveDashboard th,#monthlyIncentiveDashboard td{padding-left:10px;padding-right:10px}
+#monthlyIncentiveDashboard th:nth-child(5),#monthlyIncentiveDashboard td:nth-child(5){text-align:center;padding-left:14px;padding-right:14px}
+#monthlyIncentiveDashboard th:nth-child(6),#monthlyIncentiveDashboard td:nth-child(6){padding-left:16px;border-left:1px solid #dbe8ec}
+#monthlyIncentiveDashboard th:nth-child(6){border-left-color:#ffffff26}
+#monthlyIncentiveDashboard th:nth-child(7),#monthlyIncentiveDashboard th:nth-child(8),#monthlyIncentiveDashboard td:nth-child(7),#monthlyIncentiveDashboard td:nth-child(8){text-align:center}
+#monthlyIncentiveDashboard th:nth-child(9),#monthlyIncentiveDashboard td:nth-child(9){text-align:right;padding-right:16px}
+#monthlyIncentiveDashboard td:nth-child(7):has(input)::after{right:calc((100% - min(78px, 100% - 20px))/2 + 8px)}

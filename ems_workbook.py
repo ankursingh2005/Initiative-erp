@@ -1,6 +1,7 @@
 """Format EMS report snapshots as Excel; never read or write ERP records."""
 from io import BytesIO
 from decimal import Decimal
+from textwrap import wrap
 
 IDS_HEADERS = ['Employee ID', 'Employee Name', 'Branch', 'Category', 'Absent',
     'No. of Days', 'Working Days', 'Expected Basic', 'Actual Basic', 'Other Allowances',
@@ -24,9 +25,11 @@ def total_salary_rows(ids_rows, weekoff_rows):
 
 def build_salary_workbook(month, ids_rows, weekoff_rows, provisional=False):
     from openpyxl import Workbook
-    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
     from openpyxl.utils import get_column_letter
 
+    grid = Side(style='thin', color='A9BBC5')
+    table_border = Border(left=grid, right=grid, top=grid, bottom=grid)
     workbook = Workbook()
     workbook.remove(workbook.active)
     for name, title, headers, rows, money_columns in (
@@ -37,10 +40,8 @@ def build_salary_workbook(month, ids_rows, weekoff_rows, provisional=False):
         sheet = workbook.create_sheet(name)
         sheet.append([f'Initiative Data Systems Pvt. Ltd. | {title}'])
         sheet.append([f'Salary month: {month}'])
-        sheet.append(['Provisional: open month, incomplete attendance or unsaved inputs'
-                      if provisional else 'Current EMS report snapshot'])
         sheet.append(headers)
-        for row_number in (1, 2, 3):
+        for row_number in (1, 2):
             sheet.merge_cells(start_row=row_number, start_column=1,
                               end_row=row_number, end_column=len(headers))
         for values in rows:
@@ -55,22 +56,40 @@ def build_salary_workbook(month, ids_rows, weekoff_rows, provisional=False):
                 if isinstance(cell.value, str):
                     # Names, IDs and account numbers must remain literal text.
                     cell.data_type = 's'
-                cell.alignment = Alignment(vertical='center')
-                if cell.row >= 5 and cell.column in money_columns:
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+                cell.border = table_border
+                if cell.row >= 4 and cell.column in money_columns:
                     cell.number_format = '#,##0.00;[Red](#,##0.00);"-"'
-                if cell.row in (1, 4, sheet.max_row):
-                    cell.font = Font(bold=True, color='FFFFFF' if cell.row == 4 else '153349')
-                    cell.fill = PatternFill('solid', fgColor='19485A' if cell.row == 4 else 'EAF3F5')
-                if cell.row == 4:
-                    cell.alignment = Alignment(wrap_text=True, vertical='center')
+                if cell.row in (1, 3, sheet.max_row):
+                    cell.font = Font(bold=True, color='FFFFFF' if cell.row == 3 else '153349')
+                    cell.fill = PatternFill('solid', fgColor='19485A' if cell.row == 3 else 'EAF3F5')
+                if cell.row == 3:
+                    cell.alignment = Alignment(horizontal='center', wrap_text=True, vertical='center')
+        header_lines = 1
         for column, header in enumerate(headers, 1):
-            sheet.column_dimensions[get_column_letter(column)].width = min(29, max(16, len(header) + 2))
-        sheet.column_dimensions['B'].width = 28
-        sheet.row_dimensions[4].height = 42
-        sheet.freeze_panes = 'C5' if name == 'Total Salary' else 'E5'
-        sheet.auto_filter.ref = f'A4:{get_column_letter(len(headers))}{last_data}'
+            # Fit data (including formatted totals), rather than the full header sentence.
+            values = [sheet.cell(row, column).value for row in range(4, sheet.max_row + 1)]
+            def display(value):
+                if value is None:
+                    return ''
+                if column in money_columns and isinstance(value, (int, float)):
+                    return f'{value:,.2f}'
+                return str(value)
+            data_width = max((len(display(value)) for value in values), default=0)
+            longest_word = max(map(len, header.split()), default=0)
+            width = min(38, max(10, data_width + 3, longest_word + 3))
+            sheet.column_dimensions[get_column_letter(column)].width = width
+            lines = wrap(header, width=max(7, int(width) - 3),
+                         break_long_words=False, break_on_hyphens=False)
+            sheet.cell(3, column).value = '\n'.join(lines)
+            header_lines = max(header_lines, len(lines))
+            for row in range(4, sheet.max_row + 1):
+                sheet.cell(row, column).alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        sheet.row_dimensions[3].height = max(36, header_lines * 16 + 12)
+        sheet.freeze_panes = 'C4' if name == 'Total Salary' else 'E4'
+        sheet.auto_filter.ref = f'A3:{get_column_letter(len(headers))}{last_data}'
         sheet.sheet_view.showGridLines = False
-        sheet.print_title_rows = '1:4'
+        sheet.print_title_rows = '1:3'
         sheet.sheet_properties.pageSetUpPr.fitToPage = True
         sheet.page_setup.orientation = 'landscape'
         sheet.page_setup.paperSize = sheet.PAPERSIZE_A3

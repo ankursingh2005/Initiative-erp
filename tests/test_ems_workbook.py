@@ -17,23 +17,39 @@ class SalaryWorkbookTests(unittest.TestCase):
         workbook = load_workbook(BytesIO(data))
         self.assertEqual(workbook.sheetnames, ['IDS', 'W-O & Incentive', 'Total Salary'])
         first, second, third = workbook.worksheets
-        self.assertEqual(first['V5'].value, '000123456789')
-        self.assertEqual(first['V5'].data_type, 's')
-        self.assertEqual(first['B5'].data_type, 's')
-        self.assertEqual(first['H5'].value, 100.25)
-        self.assertEqual(first['U6'].value, first['U5'].value)
+        self.assertEqual(first['V4'].value, '000123456789')
+        self.assertEqual(first['V4'].data_type, 's')
+        self.assertEqual(first['B4'].data_type, 's')
+        self.assertEqual(first['H4'].value, 100.25)
+        self.assertEqual(first['U5'].value, first['U4'].value)
+        self.assertEqual(second['K4'].value, 506.68)
         self.assertEqual(second['K5'].value, 506.68)
-        self.assertEqual(second['K6'].value, 506.68)
-        self.assertEqual([cell.value for cell in third[5]],
+        self.assertEqual([cell.value for cell in third[4]],
                          ['EMP001', '=Literal employee', 2, 28, 2, 100.25, 506.68, 606.93])
-        self.assertEqual(third['B5'].data_type, 's')
-        self.assertEqual(third['H6'].value, 606.93)
-        self.assertEqual(third['F5'].number_format, first['U5'].number_format)
-        self.assertEqual(third.freeze_panes, 'C5')
-        self.assertEqual(third.auto_filter.ref, 'A4:H5')
-        self.assertIn('Provisional', first['A3'].value)
-        self.assertEqual(first.freeze_panes, 'E5')
-        self.assertEqual(first.auto_filter.ref, 'A4:W5')
+        self.assertEqual(third['B4'].data_type, 's')
+        self.assertEqual(third['H5'].value, 606.93)
+        self.assertEqual(third['F4'].number_format, first['U4'].number_format)
+        self.assertEqual(third.freeze_panes, 'C4')
+        self.assertEqual(third.auto_filter.ref, 'A3:H4')
+        self.assertEqual(third['D3'].value, 'Working\nDays')
+        self.assertTrue(third['D3'].alignment.wrap_text)
+        self.assertLess(third.column_dimensions['D'].width, third.column_dimensions['B'].width)
+        self.assertGreaterEqual(third.row_dimensions[3].height, 44)
+        for sheet in workbook.worksheets:
+            self.assertEqual(sheet['A1'].alignment.horizontal, 'center')
+            self.assertEqual(sheet['A2'].alignment.horizontal, 'center')
+            self.assertIn('ID', sheet['A3'].value)
+            self.assertEqual(sheet.print_title_rows, '$1:$3')
+            for row in sheet.iter_rows(min_row=3):
+                for cell in row:
+                    self.assertEqual(cell.alignment.horizontal, 'center')
+                    self.assertEqual(cell.alignment.vertical, 'center')
+                    for side in ('left', 'right', 'top', 'bottom'):
+                        self.assertEqual(getattr(cell.border, side).style, 'thin')
+            self.assertFalse(any(isinstance(cell.value, str) and 'Provisional:' in cell.value
+                                 for row in sheet for cell in row))
+        self.assertEqual(first.freeze_panes, 'E4')
+        self.assertEqual(first.auto_filter.ref, 'A3:W4')
 
     def test_total_salary_preserves_missing_setup_and_decimal_accuracy(self):
         from ems_workbook import total_salary_rows
