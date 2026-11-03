@@ -17,15 +17,14 @@ vm.createContext(context);vm.runInContext(fs.readFileSync('static/salary-distrib
  assert.match(nodes.get('monthlyIncentiveReports').innerHTML,/<td>\u20b950\.00<\/td><td>100%<\/td><td>\u20b950\.00<\/td>/);
  assert.match(nodes.get('monthlyIncentiveReports').innerHTML,/NON SALES INCENTIVE/);
  assert.equal(nodes.get('monthlyIncentiveReportsToggle').disabled,false);
- nodes.get('monthlyIncentiveReportsToggle').click();
  assert.equal(nodes.get('monthlyIncentiveReports').hidden,true);
  assert.equal(nodes.get('monthlyIncentiveReportsToggle').textContent,'Show reports');
- assert.match(nodes.get('monthlyIncentiveReports').innerHTML,/SALES INCENTIVE/);
- assert.match(nodes.get('monthlyIncentiveReports').innerHTML,/NON SALES INCENTIVE/);
  nodes.get('monthlyIncentiveReportsToggle').click();
  assert.equal(nodes.get('monthlyIncentiveReports').hidden,false);
  assert.equal(nodes.get('monthlyIncentiveReportsToggle').textContent,'Hide reports');
-
+ nodes.get('monthlyIncentiveReportsToggle').click();
+ assert.equal(nodes.get('monthlyIncentiveReports').hidden,true);
+ assert.equal(nodes.get('monthlyIncentiveReportsToggle').textContent,'Show reports');
  assert.match(nodes.get('monthlyIncentiveReports').innerHTML,/Central Service/);
  assert.match(nodes.get('monthlyIncentiveReports').innerHTML,/50/);
  vm.runInContext("monthlySalesSelections.set('2026-09:1',{outlet:'ALM',category_group:'ALL'});renderMonthlyIncentiveEmployees();",context);

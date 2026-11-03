@@ -748,7 +748,7 @@ $('monthlyIncentiveEmployees').addEventListener('change',async event=>{
  catch(e){select.value=monthlyIncentiveTypes.get(key)||'';status.textContent=e.message;}
  finally{monthlyIncentiveSaving.delete(key);select.disabled=false;if(month===$('month').value){const tr=select.closest('tr');if(tr){const employee=monthlyIncentiveEmployeeRows().find(r=>r.user_id===uid);const fields=monthlyDashboardCells(employee,monthlyIncentiveTypes.get(key)||'',month);[...tr.cells].slice(2).forEach((cell,i)=>cell.innerHTML=fields[i]);}}}
 });
-let monthlyReportsVisible=true;
+let monthlyReportsVisible=false;
 function updateMonthlyReportsToggle(available){
  const button=$('monthlyIncentiveReportsToggle');
  button.disabled=!available;

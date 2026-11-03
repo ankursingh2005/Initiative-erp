@@ -338,5 +338,8 @@ button[data-delete-ems],#excludedEmployeeRows button[data-delete-ems]{color:#a33
 
 /* Keep the full header above employee cells during vertical scrolling. */
 #monthlyIncentiveDashboard thead{position:sticky;top:0;z-index:10}
-#monthlyIncentiveDashboard thead th{position:sticky;top:0;z-index:11;background:#194e60}
-#monthlyIncentiveDashboard thead th:first-child{left:0;z-index:12}
+#monthlyIncentiveDashboard thead th{position:relative;top:auto;z-index:11;background:#194e60}
+#monthlyIncentiveDashboard thead th:first-child{position:sticky;left:0;z-index:12}
+
+#monthlyIncentive .monthly-incentive-dashboard>.scroll{position:relative;isolation:isolate;max-height:62vh;overflow:auto;overscroll-behavior:contain}
+#monthlyIncentiveDashboard thead{position:sticky;inset-block-start:0;z-index:10;box-shadow:0 2px 0 #39baa6;background:#194e60}
