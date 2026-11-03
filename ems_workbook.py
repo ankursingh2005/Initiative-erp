@@ -14,6 +14,9 @@ WEEKOFF_HEADERS = ['Employee ID', 'Employee Name', 'Branch', 'Category', 'Total 
 TOTAL_SALARY_HEADERS = ['Emp ID', 'Emp Name', 'Absent', 'Working Days',
     'Weekoff Credit', 'NET AMOUNT', 'W/O & INCENTIVE', 'Total Salary']
 
+MONTH_NAMES = ('Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+               'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec')
+
 def total_salary_rows(ids_rows, weekoff_rows):
     result = []
     for ids, weekoff in zip(ids_rows, weekoff_rows):
@@ -28,6 +31,8 @@ def build_salary_workbook(month, ids_rows, weekoff_rows, provisional=False):
     from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
     from openpyxl.utils import get_column_letter
 
+    year, month_number = month.split('-')
+    month_label = f'{MONTH_NAMES[int(month_number) - 1]} {year}'
     grid = Side(style='thin', color='A9BBC5')
     table_border = Border(left=grid, right=grid, top=grid, bottom=grid)
     workbook = Workbook()
@@ -53,7 +58,7 @@ def build_salary_workbook(month, ids_rows, weekoff_rows, provisional=False):
             money_columns = range(money_columns.start - 1, money_columns.stop - 1)
         sheet = workbook.create_sheet(name)
         sheet.append([f'Initiative Data Systems Pvt. Ltd. | {title}'])
-        sheet.append([f'Salary month: {month}'])
+        sheet.append([f'Salary month: {month_label}'])
         sheet.append(headers)
         for row_number in (1, 2):
             sheet.merge_cells(start_row=row_number, start_column=1,

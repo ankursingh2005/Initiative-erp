@@ -44,6 +44,7 @@ class SalaryWorkbookTests(unittest.TestCase):
         self.assertLess(third.column_dimensions['D'].width, third.column_dimensions['B'].width)
         self.assertGreaterEqual(third.row_dimensions[3].height, 44)
         for sheet in workbook.worksheets:
+            self.assertEqual(sheet['A2'].value, 'Salary month: Sep 2026')
             self.assertEqual(sheet['A1'].alignment.horizontal, 'center')
             self.assertEqual(sheet['A2'].alignment.horizontal, 'center')
             self.assertIn('ID', sheet['A3'].value)
