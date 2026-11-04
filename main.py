@@ -9987,6 +9987,9 @@ from attendance_exports import router as attendance_exports_router
 app.include_router(attendance_exports_router)
 from identity_cards import router as identity_cards_router
 app.include_router(identity_cards_router)
+from ems import router as ems_router, pages as ems_pages
+app.include_router(ems_router)
+app.include_router(ems_pages)
 
 
 if __name__ == "__main__":
