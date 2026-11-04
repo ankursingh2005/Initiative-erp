@@ -90,17 +90,33 @@ class ManagerAttendanceTests(unittest.TestCase):
             self.assertEqual(self.client.get('/selfies/'+str(record.id)).status_code, 403)
 
     def test_exports_cannot_leak_other_outlet_users_or_records(self):
+        employee = self.users[1]
+        employee.weekoff_day = 'Sunday'
+        employee_record = self.records[0]
+        employee_record.checkin_at = datetime(2026, 9, 23, 9)
+        employee_record.checkout_at = datetime(2026, 9, 23, 17, 30)
+        self.db.commit()
         for path in ['/api/attendance/admin-export?date=2026-09-23', '/api/attendance/monthly-export?month=2026-09']:
             response = self.client.get(path)
             self.assertEqual(response.status_code, 200, response.text if response.status_code != 200 else '')
             if 'monthly-export' in path:
                 workbook = load_workbook(BytesIO(response.content))
-                self.assertEqual(workbook.sheetnames, ['Monthly Summary', 'Attendance Detail'])
+                self.assertEqual(workbook.sheetnames, ['Monthly Summary', 'Attendance Detail', 'Working Hrs'])
                 self.assertEqual([workbook['Monthly Summary'].cell(4, column).value for column in range(1, 7)],
                                  ['Emp ID', 'Employee', '1', '2', '3', '4'])
                 self.assertEqual(list(workbook['Attendance Detail'].values)[0],
                                  ('Emp ID', 'Employee', 'Date', 'Day', 'Status', 'Punch In', 'Punch Out',
-                                  'Punch In Distance (m)', 'Punch Out Distance (m)', 'Punch In Photo', 'Punch Out Photo'))
+                                  'Working Hrs', 'Punch In Distance (m)', 'Punch Out Distance (m)',
+                                  'Punch In Photo', 'Punch Out Photo'))
+                detail_row = next(row for row in list(workbook['Attendance Detail'].values)[1:]
+                                  if row[0] == 'IDS-TEST-26002')
+                self.assertEqual(detail_row[7], 8.5)
+                working_sheet = workbook['Working Hrs']
+                self.assertEqual(list(working_sheet.values)[0],
+                                 ('Emp ID', 'Emp Name', 'Total Present', 'Weekoff', 'Total Absent',
+                                  'Working Days', 'Total Working Hrs'))
+                totals = next(row for row in list(working_sheet.values)[1:] if row[0] == 'IDS-TEST-26002')
+                self.assertEqual(totals, ('IDS-TEST-26002', 'user1', 1, 4, 24, 25, 8.5))
             emp_ids = attendance_export_emp_ids(response.content)
             self.assertTrue(emp_ids)
             self.assertTrue(emp_ids <= {'IDS-TEST-26001', 'IDS-TEST-26002'})
@@ -111,6 +127,8 @@ class ManagerAttendanceTests(unittest.TestCase):
         rows = list(load_workbook(BytesIO(response.content)).active.values)[1:]
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0][0], 'IDS-TEST-26002')
+        self.assertEqual(list(load_workbook(BytesIO(response.content)).active.values)[0][-1], 'Working Hrs')
+        self.assertEqual(rows[0][-1], 8.5)
 
     def test_manager_only_sees_ids_and_brand_categories(self):
         brand = models.User(username='Promoter', email='promoter@example.test', role='BrandPartner', store_id=self.stores[0].id, status='Active', password_hash='unused')

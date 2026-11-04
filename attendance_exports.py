@@ -14,9 +14,11 @@ from database import get_db
 from attendance_categories import filter_employee_category, filter_manager_employees
 
 router = APIRouter(prefix='/api/attendance')
-HEADERS = ['Emp ID', 'Employee', 'Date', 'Status', 'Punch in', 'Punch out', 'Hours']
-DETAIL_HEADERS = ['Emp ID', 'Employee', 'Date', 'Day', 'Status', 'Punch In', 'Punch Out',
+HEADERS = ['Emp ID', 'Employee', 'Date', 'Status', 'Punch in', 'Punch out', 'Working Hrs']
+DETAIL_HEADERS = ['Emp ID', 'Employee', 'Date', 'Day', 'Status', 'Punch In', 'Punch Out', 'Working Hrs',
                   'Punch In Distance (m)', 'Punch Out Distance (m)', 'Punch In Photo', 'Punch Out Photo']
+WORKING_HOURS_HEADERS = ['Emp ID', 'Emp Name', 'Total Present', 'Weekoff', 'Total Absent',
+                         'Working Days', 'Total Working Hrs']
 
 
 def render_export(rows, format, filename):
@@ -89,6 +91,10 @@ def _photo_status(value):
     return 'Yes' if value else 'No'
 
 
+def _working_hours(checkin, checkout):
+    return round((checkout - checkin).total_seconds() / 3600, 2) if checkin and checkout else ''
+
+
 def _build_monthly_workbook(db, start, end, store_id=None, weekoff_day=None, status=None,
                             emp_category=None, assigned_store_id=None, monthly_group=None):
     from openpyxl import Workbook
@@ -123,6 +129,7 @@ def _build_monthly_workbook(db, start, end, store_id=None, weekoff_day=None, sta
     summary = workbook.active
     summary.title = 'Monthly Summary'
     detail = workbook.create_sheet('Attendance Detail')
+    working_hours = workbook.create_sheet('Working Hrs')
 
     navy_fill = PatternFill('solid', fgColor='17365D')
     month_fill = PatternFill('solid', fgColor='DDEBF7')
@@ -150,11 +157,15 @@ def _build_monthly_workbook(db, start, end, store_id=None, weekoff_day=None, sta
     summary.append(['Emp ID', 'Employee'] + [str(day.day) for day in days] + ['Present', 'Absent', 'Week Off', 'Total'])
 
     detail.append(DETAIL_HEADERS)
+    working_hours.append(WORKING_HOURS_HEADERS)
     summary_rows = []
     detail_rows = []
+    working_hours_rows = []
     users_by_id = {user.id: user for user in users}
     for user in users:
         present = absent = weekoff = 0
+        total_working_hours = 0
+        working_days = 0
         marks = []
         include_user = store_id is None
         for day in days:
@@ -164,6 +175,8 @@ def _build_monthly_workbook(db, start, end, store_id=None, weekoff_day=None, sta
                 marks.append('-')
                 continue
             include_user = True
+            if not is_weekoff(user, day):
+                working_days += 1
             if day > today:
                 mark = '-'
             else:
@@ -180,9 +193,17 @@ def _build_monthly_workbook(db, start, end, store_id=None, weekoff_day=None, sta
                     elif state == 'Week Off':
                         weekoff += 1
             marks.append(mark)
+            if record and record.checkin_at and (not status or status == 'Present'):
+                hours = _working_hours(record.checkin_at, record.checkout_at)
+                if hours != '':
+                    total_working_hours += hours
         if include_user and (not status or any(mark == _short_status(status) for mark in marks)):
             summary_rows.append([_employee_id(user, identity_cards), _display_name(user, identity_cards)] + marks +
                                 [present, absent, weekoff, f'{present}/{len(days)}'])
+            working_hours_rows.append([
+                _employee_id(user, identity_cards), _display_name(user, identity_cards),
+                present, weekoff, absent, working_days, round(total_working_hours, 2)
+            ])
 
     for record in sorted(by_day.values(), key=lambda item: (stores.get(item.store_id, ''), item.user_id, item.attendance_date, item.id)):
         user = users_by_id.get(record.user_id)
@@ -196,7 +217,8 @@ def _build_monthly_workbook(db, start, end, store_id=None, weekoff_day=None, sta
             continue
         detail_rows.append([_employee_id(user, identity_cards), _display_name(user, identity_cards), record.attendance_date,
                             record.attendance_date.strftime('%A'), _short_status(state),
-                            record.checkin_at, record.checkout_at, record.checkin_distance_m or 0,
+                            record.checkin_at, record.checkout_at, _working_hours(record.checkin_at, record.checkout_at),
+                            record.checkin_distance_m or 0,
                             record.checkout_distance_m or 0, _photo_status(record.checkin_selfie),
                             _photo_status(record.checkout_selfie)])
 
@@ -204,8 +226,10 @@ def _build_monthly_workbook(db, start, end, store_id=None, weekoff_day=None, sta
         summary.append(row)
     for row in detail_rows:
         detail.append(row)
+    for row in sorted(working_hours_rows, key=lambda item: (str(item[0]).lower(), str(item[1]).lower())):
+        working_hours.append(row)
 
-    for sheet in (summary, detail):
+    for sheet in (summary, detail, working_hours):
         for row in sheet.iter_rows():
             for cell in row:
                 if isinstance(cell.value, str):
@@ -262,7 +286,6 @@ def _build_monthly_workbook(db, start, end, store_id=None, weekoff_day=None, sta
             status_cell.fill = absent_fill
         elif status_cell.value == 'WO':
             status_cell.fill = weekoff_fill
-        detail.cell(row, 8).number_format = '0.0'
         detail.cell(row, 9).number_format = '0.0'
 
     summary.freeze_panes = 'A5'
@@ -273,12 +296,21 @@ def _build_monthly_workbook(db, start, end, store_id=None, weekoff_day=None, sta
         summary.column_dimensions[get_column_letter(column)].width = 6
     for column in range(3 + len(days), total_columns + 1):
         summary.column_dimensions[get_column_letter(column)].width = 12
-    for index, width in enumerate([18, 25, 14, 14, 11, 18, 18, 22, 23, 17, 18], 1):
+    for index, width in enumerate([18, 25, 14, 14, 11, 18, 18, 14, 22, 23, 17, 18], 1):
         detail.column_dimensions[get_column_letter(index)].width = width
     for row in range(2, detail.max_row + 1):
         detail.cell(row, 3).number_format = 'dd-mmm-yyyy'
         detail.cell(row, 6).number_format = 'hh:mm AM/PM'
         detail.cell(row, 7).number_format = 'hh:mm AM/PM'
+        detail.cell(row, 8).number_format = '0.00'
+    working_hours.freeze_panes = 'A2'
+    working_hours.row_dimensions[1].height = 24
+    for column, width in enumerate([20, 25, 16, 14, 16, 16, 20], 1):
+        working_hours.column_dimensions[get_column_letter(column)].width = width
+    for row in range(2, working_hours.max_row + 1):
+        for column in range(3, 8):
+            working_hours.cell(row, column).alignment = Alignment(horizontal='center', vertical='center')
+        working_hours.cell(row, 7).number_format = '0.00'
 
     output = BytesIO()
     workbook.save(output)
@@ -321,7 +353,7 @@ def export_rows(db, start=None, end=None, user_id=None, store_id=None, weekoff_d
             if status and state != status:
                 continue
             checkin, checkout = (record.checkin_at, record.checkout_at) if record else (None, None)
-            hours = round((checkout-checkin).total_seconds()/3600, 2) if checkin and checkout else ''
+            hours = _working_hours(checkin, checkout)
             rows.append([_employee_id(user, identity_cards), _display_name(user, identity_cards), day.isoformat(), state,
                          checkin.strftime('%H:%M') if checkin else '', checkout.strftime('%H:%M') if checkout else '', hours])
     return rows

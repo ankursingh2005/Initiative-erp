@@ -43,3 +43,9 @@
 /tests/total-salary-ui.test.cjs text eol=lf
 
 /static/sw.js text eol=lf
+
+# Attendance export files use LF consistently across Windows and Linux.
+/ATTENDANCE_USER_GUIDE.md text eol=lf
+/attendance_exports.py text eol=lf
+/scheme_engine.py text eol=lf
+/tests/test_manager_attendance.py text eol=lf

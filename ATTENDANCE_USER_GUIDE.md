@@ -141,7 +141,7 @@ The punch-time averages use available saved times. Average Time Spent can includ
 
 ### Download your month
 
-Select the required month, then tap **Monthly Attendance**. Wait for the Excel file to download, open it, and check the month and records. The filename follows **my-attendance-YYYY-MM.xlsx**.
+Select the required month, then tap **Monthly Attendance**. Wait for the Excel file to download, open it, and check the month and records. The filename follows **my-attendance-YYYY-MM.xlsx**. Monthly attendance workbooks include **Monthly Summary**, **Attendance Detail** (with **Working Hrs** after Punch Out), and **Working Hrs** sheets. Working hours are the elapsed time from punch in to punch out, shown as decimal hours. The Working Hrs sheet lists each employee's present, week-off, and absent totals, scheduled working days for the selected month (excluding that employee's weekly-off days), and total completed working hours.
 
 ## 7. Use the admin dashboard
 

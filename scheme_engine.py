@@ -12,7 +12,6 @@ def _compare(actual, op, value):
         return actual == value
     return False
 
-
 def _condition_matches(sale: models.Sale, condition: models.SchemeCondition) -> bool:
     field = condition.field_name
     op = condition.operator
