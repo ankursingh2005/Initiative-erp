@@ -181,7 +181,13 @@
 .personal-status-options label{display:flex;flex-direction:column;align-items:stretch;gap:7px;min-width:0;font-size:12px;font-weight:800;color:var(--muted)}
 .personal-status-options label>span{display:block}
 .personal-status-options select{width:100%;min-width:0;min-height:48px;font-size:14px}
-@media(max-width:380px){.personal-status-options{grid-template-columns:1fr}}
+@media(max-width:760px){
+  .personal-status-options{grid-template-columns:minmax(0,1fr)}
+  .admin-weekoff-days{width:100%;min-width:0}
+  .admin-weekoff-days summary{min-width:0;line-height:1.45;overflow-wrap:anywhere}
+  .admin-weekoff-days>div{position:static;max-height:45vh;overflow-y:auto;margin-top:6px;box-shadow:none}
+  .admin-weekoff-days label{min-height:44px;gap:12px}
+}
 </style><style>
 .employee-profile{display:flex;align-items:center;gap:16px;margin:12px 0 20px}.employee-profile h2{text-transform:uppercase;margin:0 0 8px;font-size:22px;overflow-wrap:anywhere}.employee-avatar{width:72px;height:72px;flex:0 0 72px;border-radius:50%;object-fit:cover;background:#eaf1ff;display:grid;place-items:center;font-size:28px;font-weight:800;color:#155eef}.employee-id,.employee-contact{color:#475467;line-height:1.7}.employee-outlet{margin:14px 0 20px;line-height:1.6}.employee-outlet strong{display:block;text-transform:uppercase}.employee-attendance .selfie-gallery{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.employee-attendance .selfie-gallery img{width:100%;height:130px;object-fit:cover}.employee-attendance .selfie-gallery .selfie-missing{min-height:100px;height:130px}.employee-attendance .record-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.monthly-view-toggle{display:flex;justify-content:space-between;align-items:center;width:100%;padding:18px 0;margin-top:20px;border:0;border-top:1px solid #e4e7ec;background:white;color:#173b73;font:inherit;font-weight:700;cursor:pointer}.employee-monthly table{width:100%;border-collapse:collapse;font-size:13px}.employee-monthly th,.employee-monthly td{padding:10px 4px;text-align:left;border-bottom:1px solid #eee}.employee-monthly input{max-width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;margin-bottom:12px}
 </style>

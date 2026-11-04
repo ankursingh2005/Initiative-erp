@@ -20,11 +20,15 @@ class WeekoffPreferenceTests(unittest.TestCase):
         days = ['Saturday', 'Sunday']
         response = self.client.put('/api/me/weekoff', json={'weekoff_days': days})
         self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json(), {'weekoff_day': 'Saturday', 'weekoff_days': days})
         self.db.expire_all()
         response = self.client.get('/api/me')
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json()['weekoff_days'], days)
         self.assertEqual(response.json()['weekoff_day'], 'Saturday')
+        self.assertEqual(self.client.put('/api/me/weekoff', json={
+            'weekoff_days': ['Saturday', 'Saturday']
+        }).status_code, 400)
 
     def test_other_roles_keep_single_day_only(self):
         self.register_routes()

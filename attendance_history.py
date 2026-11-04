@@ -16,8 +16,19 @@ def weekoff_on(user, day):
     return value
 
 
+def weekoff_days_on(user, day):
+    value = weekoff_on(user, day)
+    if isinstance(value, list):
+        return value
+    return [value] if value else []
+
+
 def change_weekoff(user, day, effective_date=None):
-    if weekoff_on(user, effective_date or datetime.now(timezone(timedelta(hours=5, minutes=30))).date()) == day:
+    if isinstance(day, list):
+        day = list(dict.fromkeys(day))
+    current = weekoff_on(user, effective_date or datetime.now(timezone(timedelta(hours=5, minutes=30))).date())
+    unchanged = set(current) == set(day) if isinstance(current, list) and isinstance(day, list) else current == day
+    if unchanged:
         return
     effective_date = effective_date or datetime.now(timezone(timedelta(hours=5, minutes=30))).date()
     history = weekoff_history(user)
@@ -42,5 +53,4 @@ def daily_attendance_status(user, day, today, present=False, leave=False):
 
 
 def is_weekoff(user, day):
-    value = weekoff_on(user, day)
-    return day.strftime('%A') in (value if isinstance(value, list) else [value])
+    return day.strftime('%A') in weekoff_days_on(user, day)

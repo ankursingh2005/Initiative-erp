@@ -1,5 +1,5 @@
 """Attendance downloads built from saved user IDs and attendance records."""
-from attendance_history import weekoff_on, is_weekoff
+from attendance_history import weekoff_days_on, is_weekoff
 from attendance_access import dashboard_outlet, dashboard_category, can_view_attendance
 import calendar
 from datetime import date, timedelta
@@ -105,13 +105,13 @@ def _build_monthly_workbook(db, start, end, store_id=None, weekoff_day=None, sta
     users = users.filter(models.User.status == 'Active')
     if assigned_store_id is not None:
         users = filter_manager_employees(users.filter(models.User.store_id == assigned_store_id), emp_category)
-    if weekoff_day:
-        users = users.filter(models.User.weekoff_day == weekoff_day)
     users = filter_employee_category(users, emp_category)
     if monthly_group:
         users = users.filter(models.User.role == 'BrandPartner' if monthly_group == 'isp'
                              else models.User.role != 'BrandPartner')
     users = users.order_by(models.User.username, models.User.id).all()
+    if weekoff_day:
+        users = [user for user in users if weekoff_day in weekoff_days_on(user, date.today())]
     ids = [user.id for user in users]
     stores = {s.id: s.name for s in db.query(models.Store).all()}
     identity_cards = {card.user_id: card for card in db.query(models.IdentityCard).filter(models.IdentityCard.user_id.in_(ids)).all()} if ids else {}
@@ -326,10 +326,10 @@ def export_rows(db, start=None, end=None, user_id=None, store_id=None, weekoff_d
         users = users.filter(models.User.status == 'Active')
     if assigned_store_id is not None:
         users = filter_manager_employees(users.filter(models.User.store_id == assigned_store_id), emp_category)
-    if weekoff_day:
-        users = users.filter(models.User.weekoff_day == weekoff_day)
     users = filter_employee_category(users, emp_category)
     users = users.order_by(models.User.username, models.User.id).all()
+    if weekoff_day:
+        users = [user for user in users if weekoff_day in weekoff_days_on(user, date.today())]
     ids = [user.id for user in users]
     identity_cards = {card.user_id: card for card in db.query(models.IdentityCard).filter(models.IdentityCard.user_id.in_(ids)).all()} if ids else {}
     records = db.query(models.AttendanceRecord).filter(models.AttendanceRecord.user_id.in_(ids))

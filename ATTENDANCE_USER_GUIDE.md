@@ -111,10 +111,10 @@ You cannot change today to Leave after attendance has already been marked. This 
 ### Choose your weekly off day
 
 1. Find **Weekly off day**.
-2. Select the weekday agreed with your team.
+2. Select the weekday agreed with your team. Admin accounts can choose more than one day by checking each required weekday.
 3. Wait for the saved indication and check the selected day.
 
-Weekly off repeats on the selected weekday. It is not a one-day leave selection. If the control is hidden, loading, or cannot be saved, ask your administrator to check your account.
+Weekly off repeats on the selected weekday or weekdays. It is not a one-day leave selection. On mobile, the choices expand vertically to prevent overlap. If the control is hidden, loading, or cannot be saved, ask your administrator to check your account.
 
 **Remember:** selecting **Working** does not itself mark you Present. You still need to punch in successfully.
 

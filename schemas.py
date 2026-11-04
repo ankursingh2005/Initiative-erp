@@ -329,6 +329,7 @@ class PasswordVerify(BaseModel):
 
 class WeekoffUpdate(BaseModel):
     weekoff_day: Optional[str] = None
+    weekoff_days: Optional[List[str]] = None
 
 
 class MyAttendanceStatusUpdate(BaseModel):
@@ -353,6 +354,7 @@ class MyProfileOut(BaseModel):
     category_code: Optional[str]
     brand_ids: List[int] = []
     weekoff_day: Optional[str] = None
+    weekoff_days: List[str] = Field(default_factory=list)
 
 
 class AttendanceCreate(BaseModel):
