@@ -184,7 +184,6 @@ class SchemeOut(BaseModel):
     class Config:
         from_attributes = True
 
-
 class SaleCreate(BaseModel):
     invoice_no: str
     invoice_date: Optional[date] = None
@@ -330,7 +329,6 @@ class PasswordVerify(BaseModel):
 
 class WeekoffUpdate(BaseModel):
     weekoff_day: Optional[str] = None
-    weekoff_days: Optional[list[str]] = None
 
 
 class MyAttendanceStatusUpdate(BaseModel):
@@ -355,7 +353,6 @@ class MyProfileOut(BaseModel):
     category_code: Optional[str]
     brand_ids: List[int] = []
     weekoff_day: Optional[str] = None
-    weekoff_days: List[str] = Field(default_factory=list)
 
 
 class AttendanceCreate(BaseModel):
@@ -434,14 +431,12 @@ class UserAssignmentUpdate(BaseModel):
 class AttendanceOutletUpdate(BaseModel):
     store_id: int = Field(gt=0)
 
-
 class UserRoleUpdate(BaseModel):
     role: str = Field(min_length=1, max_length=50)
     category_code: Optional[str] = None
     category_codes: Optional[List[str]] = None
     brand_ids: Optional[List[int]] = None
     brand_name_other: Optional[str] = Field(default=None, max_length=100)
-
 
 class UserDetailsUpdate(BaseModel):
     username: str = Field(min_length=1, max_length=50)
@@ -450,7 +445,6 @@ class UserDetailsUpdate(BaseModel):
 
     class Config:
         extra = "forbid"
-
 
 class PriceListItemCreate(BaseModel):
     """Admin/Accounts/MISExecutive: add one item by hand."""
@@ -463,7 +457,6 @@ class PriceListItemCreate(BaseModel):
     purchase_price: Optional[float] = None
     msp: Optional[float] = None
     isp: Optional[float] = None
-
 
 class PriceListItemUpdate(BaseModel):
     """Admin/Accounts/MISExecutive: edit any subset of fields on one item."""

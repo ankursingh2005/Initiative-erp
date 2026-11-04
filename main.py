@@ -1,5 +1,5 @@
 from attendance_access import dashboard_outlet, dashboard_category, can_view_attendance, is_ac_project_manager, service_dashboard_category
-from attendance_history import change_weekoff, weekoff_on, weekoff_history, is_weekoff
+from attendance_history import change_weekoff, weekoff_on, weekoff_history
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Query, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, Response, RedirectResponse
@@ -48,7 +48,6 @@ load_dotenv()  # reads a local .env file (if present) into os.environ before
                 # anything below calls os.getenv() - e.g. SMTP_*, SECRET_KEY.
 
 import models
-import ems
 import schemas
 import scheme_engine
 import auth
@@ -114,17 +113,6 @@ def ensure_username_not_unique():
 
 
 def ensure_database_schema():
-    ensure_column("users", "erp_deleted", "BOOLEAN NOT NULL DEFAULT FALSE")
-    ensure_column("users", "ems_deleted", "BOOLEAN NOT NULL DEFAULT FALSE")
-    ensure_column("ems_salary_profiles", "weekoff_availed", "INTEGER NOT NULL DEFAULT 0")
-    ensure_column("ems_salary_profiles", "weekoff_credit", "INTEGER NOT NULL DEFAULT 0")
-    ensure_column("ems_salary_profiles", "weekoff_pay", "BIGINT NOT NULL DEFAULT 0")
-    ensure_column("ems_salary_profiles", "setup_incentive", "BIGINT NOT NULL DEFAULT 0")
-    ensure_column("ems_salary_profiles", "employment_category", "VARCHAR(10)")
-    ensure_column("ems_salary_profiles", "account_no", "VARCHAR(40)")
-    ensure_column("ems_salary_profiles", "ifsc_code", "VARCHAR(11)")
-    with engine.begin() as connection:
-        ems.remove_retired_ids_data(connection)
     ensure_column("identity_cards", "dob", "DATE")
     ensure_column("users", "weekoff_day", "VARCHAR(10)")
     ensure_column("users", "weekoff_history", "TEXT")
@@ -652,8 +640,6 @@ async def handle_unexpected_error(request: Request, exc: Exception):
 # Serves the login.html / signup.html / dashboard.html pages from the
 # "static" folder sitting next to this file.
 app.mount("/static", StaticFiles(directory="static"), name="static")
-app.include_router(ems.router)
-app.include_router(ems.pages)
 
 VALID_ROLES = ["Accounts","AccountsManager","AC Technician A","AC Technician B","Admin","Assistant","AsstSalesManager","BrandManager","BrandPartner","Cashier","CategoryManager","CEO","CustomerCare","Director","Employee","AC Helper A", "AC Helper B","HR","ITEngineer","Loader","LogisticManager","MISExecutive","SalesExecutive","ServiceCoordinator","ServiceHead","Service Manager A", "Service Manager B","SupportingStaff","Supervisor","Other"]
 
@@ -1662,28 +1648,13 @@ def calculate_incentive_endpoint(
     file: UploadFile = File(...),
     profit_rate: float = Form(7),
     incentive_rate: float = Form(2.5),
-    report_month: str = Form(""),
     current_user: models.User = Depends(auth.require_roles(*INCENTIVE_ACCESS_ROLES)),
     db: Session = Depends(get_db),
 ):
     raw = file.file.read()
     if not raw:
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
-    from incentive_period import detect_incentive_month
-    detected_month = detect_incentive_month(file.filename)
-    if detected_month and report_month and detected_month != report_month:
-        raise HTTPException(422, "Selected month does not match the uploaded file month")
-    month = detected_month or report_month
-    if not month:
-        source_rows = parse_incentive_upload(SimpleNamespace(filename=file.filename or "incentive_upload", file=BytesIO(raw)))
-        months = {detect_incentive_month(r.get("month")) for r in source_rows} - {""}
-        if len(months) == 1:
-            month = months.pop()
-    if not month:
-        raise HTTPException(422, "Unable to identify one report month. Select the incentive month and click Calculate.")
-    ems.month_bounds(month)
     report = calculate_incentive_report_from_bytes(file.filename or "incentive_upload", raw, profit_rate, incentive_rate)
-    report["report_month"] = month
     db.query(models.IncentiveUpload).delete()
     db.add(models.IncentiveUpload(
         source_file=file.filename or "incentive_upload",
@@ -1697,14 +1668,6 @@ def calculate_incentive_endpoint(
         uploaded_by_username=current_user.username,
         uploaded_at=datetime.utcnow(),
     ))
-    release = db.get(models.MonthlyIncentiveRelease, month)
-    if release is None:
-        release = models.MonthlyIncentiveRelease(month=month)
-        db.add(release)
-    release.report_json = json.dumps(report)
-    release.source_file = file.filename or "incentive_upload"
-    release.allowed = True
-    release.allowed_by, release.updated_at = current_user.id, datetime.utcnow()
     db.commit()
     return report
 
@@ -1718,38 +1681,6 @@ def get_saved_incentive_upload(
     if not upload:
         return {"has_data": False}
     return serialize_incentive_upload(upload)
-
-
-@app.get("/api/incentive/allow")
-def incentive_allow_status(month: str,
-    current_user: models.User = Depends(auth.require_roles(*INCENTIVE_ACCESS_ROLES)),
-    db: Session = Depends(get_db)):
-    ems.month_bounds(month)
-    row = db.get(models.MonthlyIncentiveRelease, month)
-    return {"month": month, "allowed": bool(row and row.allowed)}
-
-
-@app.put("/api/incentive/allow")
-def allow_monthly_incentive(payload: ems.MonthlyIncentiveAllow,
-    current_user: models.User = Depends(auth.require_roles(*INCENTIVE_ACCESS_ROLES)),
-    db: Session = Depends(get_db)):
-    ems.month_bounds(payload.month)
-    row = db.get(models.MonthlyIncentiveRelease, payload.month)
-    if payload.allowed:
-        upload = latest_incentive_upload(db)
-        if not upload:
-            raise HTTPException(422, "Calculate and save an incentive report first")
-        if not row:
-            row = models.MonthlyIncentiveRelease(month=payload.month)
-            db.add(row)
-        row.report_json = upload.report_json
-        row.source_file = upload.source_file
-    if row:
-        row.allowed = payload.allowed
-        row.allowed_by = current_user.id
-        row.updated_at = datetime.utcnow()
-    db.commit()
-    return {"month": payload.month, "allowed": payload.allowed}
 
 
 @app.get("/api/incentive/saved-file")
@@ -2931,7 +2862,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         .filter((models.User.username == identifier) | (models.User.email == identifier))
         .first()
     )
-    if not user or user.erp_deleted or user.role == "EMSManual" or not auth.verify_password(form_data.password, user.password_hash):
+    if not user or not auth.verify_password(form_data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Incorrect username/email or password")
     if user.status != "Active":
         raise HTTPException(status_code=403, detail="This account is not active")
@@ -3319,7 +3250,7 @@ def user_export_role_label(user_data: dict) -> str:
 
 
 def build_user_export_rows(db: Session) -> list[dict]:
-    users = db.query(models.User).filter(models.User.erp_deleted.is_(False), models.User.role != "EMSManual").order_by(models.User.username, models.User.email).all()
+    users = db.query(models.User).order_by(models.User.username, models.User.email).all()
     rows = []
     for user in users:
         data = serialize_user_with_brands(user, db)
@@ -3405,7 +3336,6 @@ def get_my_profile(current_user: models.User = Depends(auth.get_current_user)):
         "username": current_user.username,
         "full_name": current_user.full_name,
         "weekoff_day": current_user.weekoff_day,
-        "weekoff_days": (lambda v: v if isinstance(v, list) else ([v] if v else []))(weekoff_on(current_user, india_today())),
         "role": current_user.role,
         "store_id": current_user.store_id,
         "category_code": current_user.category_code,
@@ -3422,16 +3352,9 @@ def update_my_weekoff(
     day = (payload.weekoff_day or "").strip() or None
     if day not in {None, "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}:
         raise HTTPException(400, "Choose a valid weekly off day")
-    if payload.weekoff_days is not None:
-        if current_user.role != "Admin":
-            raise HTTPException(403, "Only Admin can select multiple weekly off days")
-        day = list(dict.fromkeys(payload.weekoff_days))
-        if any(value not in {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"} for value in day):
-            raise HTTPException(400, "Choose valid weekly off days")
     change_weekoff(current_user, day)
     db.commit()
-    value = weekoff_on(current_user, india_today())
-    return {"weekoff_day": current_user.weekoff_day, "weekoff_days": value if isinstance(value, list) else ([value] if value else [])}
+    return {"weekoff_day": day}
 
 
 @app.get("/api/me/attendance-status")
@@ -3440,7 +3363,7 @@ def my_attendance_status(db: Session = Depends(get_db), current_user: models.Use
     record = db.query(models.AttendanceRecord).filter_by(user_id=current_user.id, attendance_date=today).first()
     leave = db.query(models.AttendanceLeave).filter_by(user_id=current_user.id, leave_date=today).first()
     status = ("Present" if record and record.checkin_at else "Leave" if leave else
-              "Week Off" if is_weekoff(current_user, today) else "Working")
+              "Week Off" if current_user.weekoff_day == today.strftime("%A") else "Working")
     return {"status": status, "weekoff_day": current_user.weekoff_day}
 
 
@@ -3495,22 +3418,13 @@ def save_attendance(
 ):
     if attendance.action not in {"checkin", "checkout"}:
         raise HTTPException(status_code=400, detail="Action must be checkin or checkout")
-    captured_at = india_datetime(attendance.captured_at)
-    now = datetime.now(INDIA_TZ).replace(tzinfo=None)
-    if captured_at < now - timedelta(minutes=2) or captured_at > now + timedelta(seconds=30):
-        raise HTTPException(status_code=422, detail="Punch time is expired or ahead of server time. Enable automatic date/time on your device and capture a new selfie.")
-    if not attendance.selfie.strip():
-        raise HTTPException(status_code=422, detail="Capture a selfie before marking attendance")
-    # Serialize punches for this employee across tabs, devices and workers.
-    # The user anchor also works for the first punch, before any daily row exists.
-    db.query(models.User).filter(models.User.id == current_user.id).update(
-        {models.User.id: current_user.id}, synchronize_session=False)
     distance_to_store = lambda outlet: attendance_distance(attendance.latitude, attendance.longitude, outlet)
     store = attendance_reference_store(db, current_user, distance_to_store)
     actual_distance = distance_to_store(store)
     allowed_radius = store.geofence_radius_m or 100
     if current_user.role not in ATTENDANCE_ANYWHERE_ROLES and actual_distance > allowed_radius:
         raise HTTPException(status_code=403, detail=f"Attendance blocked: you are {round(actual_distance)} m from {store.name}; maximum allowed distance is {round(allowed_radius)} m")
+    captured_at = india_datetime(attendance.captured_at)
     record = db.query(models.AttendanceRecord).filter(
         models.AttendanceRecord.user_id == current_user.id,
         models.AttendanceRecord.attendance_date == captured_at.date(),
@@ -3526,8 +3440,6 @@ def save_attendance(
         db.add(record)
     if attendance.action == "checkout" and record.checkin_at is None:
         raise HTTPException(status_code=409, detail="Punch in is required before punch out")
-    if attendance.action == "checkout" and captured_at < record.checkin_at:
-        raise HTTPException(status_code=409, detail="Punch-out time cannot be earlier than punch-in time. Check your device clock and capture again.")
     prefix = "checkin" if attendance.action == "checkin" else "checkout"
     if getattr(record, f"{prefix}_at") is not None:
         raise HTTPException(status_code=409, detail=f"{attendance.action.title()} already recorded")
@@ -3549,8 +3461,7 @@ def list_attendance(
     scope: str = "all",
     include_selfies: bool = True,
 ):
-    query = db.query(models.AttendanceRecord).filter(models.AttendanceRecord.user_id.in_(
-        db.query(models.User.id).filter(models.User.role != "EMSManual", models.User.erp_deleted.is_(False))))
+    query = db.query(models.AttendanceRecord)
     if current_user.role != "Admin" or scope == "self":
         query = query.filter(models.AttendanceRecord.user_id == current_user.id)
     selfie_fields = {"checkin_selfie", "second_punch_selfie", "checkout_selfie"}
@@ -3880,7 +3791,7 @@ def attendance_admin_summary(
         leave_dates = leaves_by_user.get(user.id, set()) - present_dates
         weekoff_dates = {
             start_date + timedelta(days=offset) for offset in range(days_in_range)
-            if is_weekoff(user, start_date + timedelta(days=offset))
+            if (start_date + timedelta(days=offset)).strftime("%A") == weekoff_on(user, start_date + timedelta(days=offset))
         } - present_dates - leave_dates
         present_days = len(present_dates)
         leave_days = len(leave_dates)
@@ -3998,7 +3909,7 @@ def list_users_for_admin(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.require_user_management_admin),
 ):
-    users = db.query(models.User).filter(models.User.erp_deleted.is_(False), models.User.role != "EMSManual").order_by(models.User.username).all()
+    users = db.query(models.User).order_by(models.User.username).all()
     cards = {user_id: (employee_id, name) for user_id, employee_id, name in db.query(
         models.IdentityCard.user_id, models.IdentityCard.employee_id, models.IdentityCard.employee_name).all()}
     return [{**serialize_user_with_brands(u), "employee_id": cards.get(u.id, (None, None))[0],
@@ -4131,7 +4042,7 @@ def admin_reset_user_password(
     a user who's locked out should ask an Admin to reset their password
     here instead."""
     target_user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not target_user or target_user.erp_deleted:
+    if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
 
     new_password = (payload.new_password or "").strip()
@@ -4155,7 +4066,7 @@ def update_user_details(
     current_user: models.User = Depends(auth.require_user_management_admin),
 ):
     target_user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not target_user or target_user.erp_deleted:
+    if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
     if current_user.role == "HR" and target_user.role == "Admin":
         raise HTTPException(status_code=403, detail="Only Admin can edit Admin accounts")
@@ -4202,7 +4113,7 @@ def update_user_assignments(
     """Assign which store, category (division), and brands a user — typically
     a CategoryManager — can see on the Purchase Orders page."""
     target_user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not target_user or target_user.erp_deleted:
+    if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
 
     if payload.store_id is not None:
@@ -4226,9 +4137,16 @@ def delete_user(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.require_user_management_admin),
 ):
-    """Remove ERP login access while preserving the employee and all EMS history."""
+    """Admin and HR: permanently delete a user account, regardless of what
+    they've submitted/uploaded in the past. Purchase orders require an
+    owning user (that column is NOT NULL), so any the deleted user
+    submitted or approved are reassigned to the admin doing the deletion,
+    with a note recording who originally submitted them - the order itself
+    and its history are kept, just no longer tied to the removed login.
+    Other historical references (uploaded scheme attachments, price list
+    edits, etc.) are simply detached from the deleted user."""
     target_user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not target_user or target_user.erp_deleted:
+    if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
 
     if target_user.id == current_user.id:
@@ -4276,7 +4194,14 @@ def delete_user(
             {"uploaded_by": None}
         )
 
-        # Identity and attendance remain linked to the retained employee for EMS.
+        # Personal account records are removed explicitly for existing databases
+        # whose foreign keys do not have ON DELETE CASCADE.
+        for model in (models.AttendanceLocationPoint, models.AttendanceRecord,
+                      models.AttendanceLeave, models.IdentityCard):
+            db.query(model).filter(model.user_id == target_user.id).delete(synchronize_session=False)
+        # Keep leave entries belonging to other employees.
+        db.query(models.AttendanceLeave).filter(models.AttendanceLeave.created_by == target_user.id).update(
+            {"created_by": current_user.id}, synchronize_session=False)
         db.query(models.PurchaseOrder).filter(models.PurchaseOrder.verified_by_user_id == target_user.id).update(
             {"verified_by_user_id": None}, synchronize_session=False)
         for receipt in db.query(models.PurchaseOrderReceipt).filter(
@@ -4286,12 +4211,14 @@ def delete_user(
             receipt.received_by_user_id = current_user.id
         db.query(models.PurchaseOrderReceipt).filter(models.PurchaseOrderReceipt.voided_by_user_id == target_user.id).update(
             {"voided_by_user_id": None}, synchronize_session=False)
-        # Keep the internal employee ID stable; revoke the ERP account independently.
-        target_user.erp_deleted = True
-        target_user.session_version = (target_user.session_version or 1) + 1
-        target_user.reset_token = None
-        target_user.reset_token_expires = None
-        ems.record(db, current_user, 'erp_account_deleted_ems_preserved', target_user.id)
+        # EMS is optional; clean its employee records only when its tables exist.
+        import ems_models
+        existing_tables = set(inspect(db.connection()).get_table_names())
+        for model in (ems_models.EMSLeaveRequest, ems_models.EMSEarning, ems_models.EMSPayroll):
+            if model.__tablename__ in existing_tables:
+                db.query(model).filter(model.user_id == target_user.id).delete(synchronize_session=False)
+
+        db.delete(target_user)
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -4300,7 +4227,7 @@ def delete_user(
             detail=f"Unable to delete {deleted_username}: this account still has linked records.",
         )
 
-    return {"message": f"Account '{deleted_username}' removed from User Management. EMS employee records and history are preserved."}
+    return {"message": f"Account '{deleted_username}' deleted"}
 
 
 # ============================================================
@@ -8035,8 +7962,6 @@ AGEING_MH_DEMOTE_TO_OTHER_KEYWORDS = [
     "STRAP", "BATTERY", "BATTERIES", "GIFT", "BOTTLE", "TIFIN", "TIFFIN",
     " PEN ", "ROUTER", "MAGSAFE",
 ]
-
-
 def _enforce_mobile_category_is_phones_only(result: dict, padded: str, brand_lookup: List[tuple]) -> dict:
     if result.get("category_code") != "MH":
         return result
@@ -8126,16 +8051,17 @@ def _enforce_ac_is_not_a_brand(result: dict, padded: str, brand_lookup: List[tup
     if (result.get("brand_name") or "").strip().upper() != "AC":
         return result
     fixed = dict(result)
+    3
     fixed["category_code"] = "OTHER"
     fixed["category_name"] = "Accessories"
     fixed["brand_name"] = _resolve_known_brand_only(padded, brand_lookup)
     fixed["classification_source"] = "Accessory"
     return fixed
 
-
+ 
 # Words that are a generic product-type descriptor rather than a real
 # registered Brand, but can still get guessed as the brand (via the
-# item's first word) when no known Brand record matches - e.g. "Angle
+# item's first word) when no known-35*-*gf--/vvvvvvvvvvvv*-------------------------------------------------------------------------------/+++/ Brand record matches - e.g. "Angle
 # Grinder" has no "Angle" brand on file, so the fallback in
 # _resolve_ageing_brand_name would otherwise invent an "Angle" brand
 # grouping. Unlike the AC case above, these items ARE genuinely correctly
@@ -8718,7 +8644,6 @@ def upload_ageing_stock_file(
         "unclassified_count": unclassified_count,
         "reconciliation_mismatch_count": reconciliation_mismatch_count,
     }
-
 
 @app.get("/api/ageing-stock/meta")
 def ageing_stock_meta(
