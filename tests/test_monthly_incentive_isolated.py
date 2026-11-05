@@ -18,11 +18,11 @@ class DB:
     def commit(self): pass
 
 class Release:
-    def __init__(self, month): self.month = month
+    def __init__(self, **values): self.__dict__.update(values)
 
 scope = dict(datetime=datetime, calendar=calendar, json=json, HTTPException=HTTPException,
              models=NS(MonthlyIncentiveRelease=Release), latest_incentive_upload=lambda db: db.upload)
-for file, names in [('ems.py', {'month_bounds', 'monthly_incentive'}), ('main.py', {'allow_monthly_incentive', 'incentive_allow_status'})]:
+for file, names in [('ems.py', {'month_bounds', 'monthly_incentive'}), ('main.py', {'allow_monthly_incentive', 'incentive_allow_status', 'validate_incentive_month'})]:
     tree=ast.parse(Path(file).read_text(encoding='utf-8'))
     for node in tree.body:
         if isinstance(node, ast.FunctionDef) and node.name in names:

@@ -4,6 +4,7 @@ from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Que
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, Response, RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, defer
 from sqlalchemy import inspect, text, func, or_
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -1178,6 +1179,74 @@ INCENTIVE_ACCESS_ROLES = ("Admin", "Owner", "HR", "Accounts", "MISExecutive", "C
 INCENTIVE_CATEGORIES = ["HA", "HE", "MOB", "COM", "DC", "ACC"]
 INCENTIVE_OUTLETS = {"ALM", "ASH", "HZT", "GNG", "VKN"}
 IDS_FUND_SHARES = {"MOB": 30, "COM": 20, "DC": 25, "HA": 20, "HE": 25, "ACC COM": 25, "ACC": 25}
+
+
+class IncentiveAllowInput(BaseModel):
+    month: str = Field(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
+    allowed: bool
+
+
+def validate_incentive_month(month: str):
+    if (len(month) != 7 or month[4] != "-" or not month[:4].isdigit()
+            or not month[5:].isdigit() or int(month[:4]) < 1
+            or not 1 <= int(month[5:]) <= 12):
+        raise HTTPException(status_code=422, detail="Month must use YYYY-MM format")
+
+
+@app.get("/api/incentive/allow")
+def incentive_allow_status(
+    month: str,
+    current_user: models.User = Depends(auth.require_roles(*INCENTIVE_ACCESS_ROLES)),
+    db: Session = Depends(get_db),
+):
+    validate_incentive_month(month)
+    release = db.get(models.MonthlyIncentiveRelease, month)
+    if not release or not release.allowed:
+        return {"month": month, "allowed": False}
+    return {
+        "month": month,
+        "allowed": True,
+        "source_file": release.source_file,
+        "updated_at": release.updated_at.isoformat(),
+        "report": json.loads(release.report_json),
+    }
+
+
+@app.put("/api/incentive/allow")
+def allow_monthly_incentive(
+    payload: IncentiveAllowInput,
+    current_user: models.User = Depends(auth.require_roles(*INCENTIVE_ACCESS_ROLES)),
+    db: Session = Depends(get_db),
+):
+    validate_incentive_month(payload.month)
+    release = db.get(models.MonthlyIncentiveRelease, payload.month)
+    if payload.allowed:
+        upload = latest_incentive_upload(db)
+        if not upload:
+            raise HTTPException(status_code=422, detail="Calculate an incentive report before allowing it in EMS")
+        if release is None:
+            release = models.MonthlyIncentiveRelease(
+                month=payload.month,
+                allowed=False,
+                report_json=upload.report_json,
+            )
+            db.add(release)
+        release.report_json = upload.report_json
+        release.source_file = upload.source_file
+    elif release is None:
+        return {"month": payload.month, "allowed": False}
+
+    release.allowed = payload.allowed
+    release.allowed_by = current_user.id
+    release.updated_at = datetime.utcnow()
+    db.commit()
+    return {
+        "month": release.month,
+        "allowed": release.allowed,
+        "source_file": release.source_file,
+    }
+
+
 INCENTIVE_APPLIED_RATE_HEADERS = {
     "appliedpercentage", "appliedpercent", "appliedpct", "appliedrate", "applied",
     "applypercentage", "applypercent", "applypct", "applyrate", "apply",
