@@ -629,16 +629,16 @@ setInterval(()=>{if(!document.hidden&&!document.querySelector('dialog[open]')&&!
 
 
 const weekoffDrafts=new Map();
-function weekoffValues(gross,availed,incentive){
- const credit=Math.max(0,4-availed),pay=Math.sign(gross*credit)*Math.round(Math.abs(gross*credit)/30);
+function weekoffValues(totalEarning,availed,incentive){
+ const credit=Math.max(0,4-availed),pay=Math.sign(totalEarning*credit)*Math.round(Math.abs(totalEarning*credit)/30);
  return {credit,pay,payable:pay+incentive};
 }
 function currentWeekoffRows(category){
  const distribution=new Map(currentDistributionRows(category).map(r=>[r.user_id,r]));
  return filtered(category).map(r=>{
  const d=distribution.get(r.user_id),saved=(state.weekoffIncentives||[]).find(i=>i.user_id===r.user_id),draft=weekoffDrafts.get(state.month+':'+r.user_id);
- const incentive=draft??saved?.incentive??0,gross=d?.actual_gross_earning??0,availed=d?.weekoff_availed??r.counts?.weekoff??0;
- return {...r,gross,incentive,monthly_incentive:saved?.source==='monthly',manual_override:!!saved?.manual_override,monthly_amount:saved?.monthly_amount,attendance_pending:d?.attendance_pending,weekoff_availed:availed,...weekoffValues(gross,availed,incentive)};
+ const incentive=draft??saved?.incentive??0,gross=d?.actual_gross_earning??0,earning=d?.total_earning??0,availed=d?.weekoff_availed??r.counts?.weekoff??0;
+ return {...r,gross,incentive,monthly_incentive:saved?.source==='monthly',manual_override:!!saved?.manual_override,monthly_amount:saved?.monthly_amount,attendance_pending:d?.attendance_pending,weekoff_availed:availed,...weekoffValues(earning,availed,incentive)};
  });
 }
 function renderWeekoffTotals(){

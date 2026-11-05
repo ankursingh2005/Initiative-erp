@@ -153,10 +153,10 @@ test('typing a new attendance code selects the old code for replacement',()=>{
 });
 
 
-test('weekoff uses distribution gross, four days and monthly incentive',()=>{
+test('weekoff credit pay uses total earning, four days and monthly incentive',()=>{
  const {context,nodes}=setup();
  vm.runInContext(`state.rows[0].counts={weekoff:1};state.weekoffIncentives=[{user_id:1,incentive:50000}];renderWeekoffTable();`,context);
- const expected=vm.runInContext('Math.round(currentDistributionRows()[0].actual_gross_earning*3/30)+50000',context);
+ const expected=vm.runInContext('Math.round(currentDistributionRows()[0].total_earning*3/30)+50000',context);
  assert.equal(vm.runInContext('currentWeekoffRows()[0].payable',context),expected);
  assert.match(nodes.get('weekoffRows').innerHTML,/value="500.00"/);
  assert.equal(vm.runInContext('currentWeekoffRows()[0].credit',context),3);
@@ -195,7 +195,7 @@ test('IDS shows phase 1 net and phase 2 stays separate on the same gross',()=>{
  const phase1=vm.runInContext('currentDistributionRows()[0]',context),phase2=vm.runInContext('currentWeekoffRows()[0]',context);
  assert.equal(phase1.net_amount,phase1.actual_gross_earning-phase1.total_deductions);
  assert.equal(phase2.gross,phase1.actual_gross_earning);
- assert.equal(phase2.pay,Math.round(phase1.actual_gross_earning*2/30));
+ assert.equal(phase2.pay,Math.round(phase1.total_earning*2/30));
  assert.equal(phase2.payable,phase2.pay+50000);
  assert.equal(nodes.get('idsNet').textContent,vm.runInContext('money(currentDistributionRows()[0].net_amount)',context));
  assert.match(nodes.get('idsNote').textContent,/Phase 1/);
@@ -225,7 +225,7 @@ test('A to CL recalculates IDS, distribution and phase 2 immediately and after r
  assert.equal(vm.runInContext('currentDistributionRows()[0].attendance_pending',context),false);
  context.input.value='WO';vm.runInContext('stageAttendanceCell(input)',context);
  assert.equal(vm.runInContext('currentWeekoffRows()[0].credit',context),3);
- assert.equal(vm.runInContext('currentWeekoffRows()[0].pay',context),vm.runInContext('Math.round(currentDistributionRows()[0].actual_gross_earning*3/30)',context));
+ assert.equal(vm.runInContext('currentWeekoffRows()[0].pay',context),vm.runInContext('Math.round(currentDistributionRows()[0].total_earning*3/30)',context));
  context.input.value='A';vm.runInContext('stageAttendanceCell(input)',context);
  assert.equal(vm.runInContext('currentDistributionRows()[0].absent',context),12);
  assert.equal(vm.runInContext('currentWeekoffRows()[0].credit',context),4);

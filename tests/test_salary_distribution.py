@@ -25,11 +25,13 @@ class DistributionCalculationTests(unittest.TestCase):
             self.assertEqual(row['esic_employee'], 0)
             self.assertEqual(row['total_deductions'], row['epf_employee'] + row['staff_advance'])
 
-    def test_unused_weekoffs_are_paid_on_gross(self):
-        base = calc(2000000, 0, 500000, 100000, 4)
-        result = calc(2000000, 0, 500000, 100000, 2)
+    def test_unused_weekoffs_are_paid_on_total_earning_without_bonus(self):
+        base = calc(1600000, 0, 0, 10000, 4)
+        result = calc(1600000, 0, 0, 10000, 2)
         self.assertEqual(result['weekoff_credit'], 2)
-        self.assertEqual(result['weekoff_pay'], 175000)
+        self.assertEqual(result['total_earning'], 1700000)
+        self.assertEqual(result['actual_gross_earning'], 1841610)
+        self.assertEqual(result['weekoff_pay'], 113333)
         self.assertEqual(result['net_amount'], base['net_amount'])
         self.assertEqual(calc(2000000, 0, 0, 0, 5)['weekoff_pay'], 0)
 

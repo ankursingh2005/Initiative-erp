@@ -36,10 +36,11 @@ test('all absent yields zero earnings and retains a fixed advance deduction',()=
 });
 test('paise are rounded half up consistently',()=>{const r=calc(100,15,100,0);assert.equal(r.actual_basic,50);assert.equal(r.actual_oa,50);assert.equal(r.actual_vda,3);});
 
-test('unused weekoff pay stays in phase 2 without changing phase 1 net',()=>{
- const base=calc(2000000,0,500000,100000,4);
- const r=calc(2000000,0,500000,100000,2);
- assert.equal(r.weekoff_credit,2);assert.equal(r.weekoff_pay,175000);
+test('unused weekoff pay uses total earning without bonus and stays in phase 2',()=>{
+ const base=calc(1600000,0,0,10000,4);
+ const r=calc(1600000,0,0,10000,2);
+ assert.equal(r.weekoff_credit,2);assert.equal(r.total_earning,1700000);
+ assert.equal(r.actual_gross_earning,1841610);assert.equal(r.weekoff_pay,113333);
  assert.equal(r.net_amount,base.net_amount);
  assert.equal(calc(2000000,0,500000,100000,5).weekoff_pay,0);
  assert.equal(calc(2000000,30,0,0,0).weekoff_pay,0);
