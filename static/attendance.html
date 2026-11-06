@@ -930,7 +930,7 @@ function attendanceStatusCount(status, label) {
 </script>
 <script>
 (function enableServiceManagerAttendance(){
-  function canMarkFromAnywhere(){return ['Service Manager A','Service Manager B','AC Technician A','AC Technician B','AC Helper A','AC Helper B','HR'].includes(profile?.role)}
+  function canMarkFromAnywhere(){return profile?.store_id==null||['Service Manager A','Service Manager B','AC Technician A','AC Technician B','AC Helper A','AC Helper B','HR'].includes(profile?.role)}
   function nearestServiceOutlet(p){
     if(!p)return null;
     const candidates=(liveStores||[]).filter(store=>store.status==='Active'&&store.latitude!=null&&store.longitude!=null&&Number.isFinite(Number(store.latitude))&&Number.isFinite(Number(store.longitude)));

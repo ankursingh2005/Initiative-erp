@@ -39,24 +39,6 @@ def outlet_abbreviation(store):
     return re.sub(r"[^A-Z0-9]", "", (store.code or "").upper())[:15] or f"OUT{store.id}"
 
 
-def migrate_legacy_outlet_employee_id(db, card, abbreviation):
-    if not card or abbreviation != "RBL":
-        return False
-    match = re.fullmatch(r"IDS-BR006-(\d{2}\d{3,})", card.employee_id or "")
-    if not match:
-        return False
-    replacement = f"IDS-RBL-{match.group(1)}"
-    exists = db.query(models.IdentityCard).filter(
-        models.IdentityCard.employee_id == replacement,
-        models.IdentityCard.user_id != card.user_id,
-    ).first()
-    if exists:
-        return False
-    card.employee_id = replacement
-    db.flush()
-    return True
-
-
 def issue_year():
     return datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%y")
 
@@ -112,7 +94,7 @@ def assign_employee_id(db, user):
 
 
 def ensure_employee_ids(db):
-    """Assign stable IDs and migrate legacy IDs without touching card corrections."""
+    """Assign IDs only to users who do not already have an identity card."""
     for attempt in range(3):
         try:
             rows = (db.query(models.User, models.IdentityCard, models.Store)
@@ -121,19 +103,14 @@ def ensure_employee_ids(db):
                     .order_by(models.User.id).all())
             changed = False
             for user, card, store in rows:
-                abbreviation = outlet_abbreviation(store)
-                if migrate_legacy_outlet_employee_id(db, card, abbreviation):
-                    changed = True
-                # A year rollover does not renumber a card. Outlet transfers do.
-                prefix = f"IDS-{abbreviation + '-' if abbreviation else ''}"
-                if card and re.fullmatch(rf"{re.escape(prefix)}\d{{2}}\d{{3,}}", card.employee_id):
+                if card:
                     continue
+                abbreviation = outlet_abbreviation(store)
                 number = next_employee_id(db, abbreviation)
-                if card is None:
-                    card = models.IdentityCard(user_id=user.id, employee_name=user.full_name or user.username,
-                                              designation=re.sub(r"(?<=[a-z])(?=[A-Z])", " ", user.role), mobile="")
-                    db.add(card)
-                card.employee_id = number
+                card = models.IdentityCard(user_id=user.id, employee_id=number,
+                    employee_name=user.full_name or user.username,
+                    designation=re.sub(r"(?<=[a-z])(?=[A-Z])", " ", user.role), mobile="")
+                db.add(card)
                 db.flush()
                 changed = True
             if changed:

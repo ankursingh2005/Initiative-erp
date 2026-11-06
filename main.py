@@ -563,7 +563,7 @@ if DATABASE_READY:
         DATABASE_READY = False
         logger.exception("Default data seeding failed. Check Render DATABASE_URL and database status.")
 
-from identity_cards import assign_employee_id, ensure_employee_ids, migrate_legacy_outlet_employee_id, outlet_abbreviation
+from identity_cards import assign_employee_id, ensure_employee_ids
 if DATABASE_READY:
     try:
         with SessionLocal() as employee_id_db:
@@ -3472,7 +3472,7 @@ ATTENDANCE_ANYWHERE_ROLES = {"Service Manager A", "Service Manager B", "AC Techn
 
 
 def attendance_reference_store(db, user, distance_to_store):
-    if user.role in ATTENDANCE_ANYWHERE_ROLES:
+    if user.role in ATTENDANCE_ANYWHERE_ROLES or user.store_id is None:
         stores = db.query(models.Store).filter(
             models.Store.status == "Active", models.Store.latitude.isnot(None),
             models.Store.longitude.isnot(None),
@@ -3504,7 +3504,7 @@ def save_attendance(
     store = attendance_reference_store(db, current_user, distance_to_store)
     actual_distance = distance_to_store(store)
     allowed_radius = store.geofence_radius_m or 100
-    if current_user.role not in ATTENDANCE_ANYWHERE_ROLES and actual_distance > allowed_radius:
+    if current_user.role not in ATTENDANCE_ANYWHERE_ROLES and current_user.store_id is not None and actual_distance > allowed_radius:
         raise HTTPException(status_code=403, detail=f"Attendance blocked: you are {round(actual_distance)} m from {store.name}; maximum allowed distance is {round(allowed_radius)} m")
     captured_at = india_datetime(attendance.captured_at)
     record = db.query(models.AttendanceRecord).filter(
@@ -3585,9 +3585,6 @@ def attendance_user_history(
     ).filter(models.UserBrand.user_id == user.id).distinct().order_by(models.Brand.name).all()]
     card = db.query(models.IdentityCard).filter(models.IdentityCard.user_id == user.id).first()
     outlet = db.query(models.Store).filter(models.Store.id == user.store_id).first() if user.store_id else None
-    if card and migrate_legacy_outlet_employee_id(db, card, outlet_abbreviation(outlet)):
-        db.commit()
-        db.refresh(card)
     return {"user_id": user.id, "username": user.username, "role": user.role,
             "employee_id": card.employee_id if card else None,
             "display_name": card.employee_name if card else user.full_name or user.username,
@@ -3912,7 +3909,7 @@ def attendance_admin_summary(
                 last_at = latest_record.checkout_at
                 distance = latest_record.checkout_distance_m if latest_record.checkout_distance_m is not None else distance
                 tracking_status = "Completed"
-        if user.role in ATTENDANCE_ANYWHERE_ROLES:
+        if user.role in ATTENDANCE_ANYWHERE_ROLES or user.store_id is None:
             outlet, distance = nearest_attendance_outlet(list(stores_by_id.values()), latest_record, latest_point)
             outlet_name = outlet.name if outlet else None
             outlet_abbreviation = outlet_abbreviations.get(
@@ -4035,12 +4032,14 @@ def update_attendance_outlet(
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(404, "User not found")
-    store = db.query(models.Store).filter(models.Store.id == payload.store_id).first()
-    if not store or store.status != "Active":
-        raise HTTPException(400, "Select an active outlet")
-    if store.latitude is None or store.longitude is None:
-        raise HTTPException(400, "Selected outlet needs GPS coordinates before attendance can be assigned")
-    user.store_id = store.id
+    store = None
+    if payload.store_id is not None:
+        store = db.query(models.Store).filter(models.Store.id == payload.store_id).first()
+        if not store or store.status != "Active":
+            raise HTTPException(400, "Select an active outlet")
+        if store.latitude is None or store.longitude is None:
+            raise HTTPException(400, "Selected outlet needs GPS coordinates before attendance can be assigned")
+    user.store_id = store.id if store else None
     user.session_version = (user.session_version or 1) + 1
     db.commit()
     db.refresh(user)

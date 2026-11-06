@@ -134,11 +134,17 @@ class AnywhereAttendanceTests(unittest.TestCase):
             finally:
                 engine.dispose()
 
-    def test_regular_employee_still_requires_geofence(self):
+    def test_regular_employee_with_assignment_still_requires_geofence(self):
         self.employee.role = 'Employee'
         with self.assertRaises(HTTPException) as error:
             main.save_attendance(self.payload(), self.db, self.employee)
         self.assertEqual(error.exception.status_code, 403)
+
+    def test_regular_employee_without_assignment_can_mark_from_anywhere(self):
+        self.employee.role, self.employee.store_id = 'Employee', None
+        record = main.save_attendance(self.payload(), self.db, self.employee)
+        self.assertIn(record.store_id, [store.id for store in self.stores[:2]])
+        self.assertGreater(record.checkin_distance_m, 100)
 
     def test_history_skips_selfie_loading(self):
         self.employee.role = 'AC Technician A'

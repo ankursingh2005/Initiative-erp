@@ -167,23 +167,23 @@ class IdentityCardTests(unittest.TestCase):
         self.assertEqual(by_id[self.users[3].id], 'IDS-HZT-26001')
         self.assertEqual(by_id[new_user.id], 'IDS-HZT-27001')
 
-    def test_legacy_migration_preserves_details_and_transfer_renumbers(self):
+    def test_existing_employee_id_and_details_remain_stable_after_outlet_transfer(self):
         self.db.add(models.IdentityCard(user_id=self.users[3].id, employee_id='IDSPL-00004', employee_name='Saved Name', designation='Saved Title', mobile='1234567890', photo=None))
         self.db.commit()
         self.client.get('/api/identity-cards')
         card = self.db.get(models.IdentityCard, self.users[3].id)
-        self.assertEqual(card.employee_id, 'IDS-HZT-26001')
+        self.assertEqual(card.employee_id, 'IDSPL-00004')
         self.assertEqual(card.employee_name, 'Saved Name')
         self.assertEqual(card.mobile, '1234567890')
         self.users[3].store_id = self.ho.id
         self.db.commit()
         self.client.get('/api/identity-cards')
-        self.assertEqual(card.employee_id, 'IDS-HO-26004')
+        self.assertEqual(card.employee_id, 'IDSPL-00004')
         another = models.User(username='later', email='later@example.test', role='Employee', password_hash='x', store_id=self.hzt.id)
         self.db.add(another)
         self.db.commit()
         self.client.get('/api/identity-cards')
-        self.assertEqual(self.db.get(models.IdentityCard, another.id).employee_id, 'IDS-HZT-26004')
+        self.assertEqual(self.db.get(models.IdentityCard, another.id).employee_id, 'IDS-HZT-26003')
 
     def test_raibareli_store_code_uses_rbl_employee_id_prefix(self):
         raibareli = models.Store(name='Raibareli', code='BR006')
@@ -198,8 +198,8 @@ class IdentityCardTests(unittest.TestCase):
         self.db.add(newcomer)
         self.db.commit()
         self.client.get('/api/identity-cards')
-        self.assertEqual(self.db.get(models.IdentityCard, self.users[3].id).employee_id, 'IDS-RBL-26002')
-        self.assertEqual(self.db.get(models.IdentityCard, newcomer.id).employee_id, 'IDS-RBL-26003')
+        self.assertEqual(self.db.get(models.IdentityCard, self.users[3].id).employee_id, 'IDS-BR006-26002')
+        self.assertEqual(self.db.get(models.IdentityCard, newcomer.id).employee_id, 'IDS-RBL-26001')
 
     def test_unassigned_users_do_not_get_a_false_outlet(self):
         self.users[3].store_id = None
@@ -207,7 +207,7 @@ class IdentityCardTests(unittest.TestCase):
         self.client.get('/api/identity-cards')
         self.assertEqual(self.db.get(models.IdentityCard, self.users[3].id).employee_id, 'IDS-26001')
 
-    def test_unassigned_legacy_ids_migrate_and_remain_unique_and_stable(self):
+    def test_existing_unassigned_ids_remain_unchanged(self):
         for user in self.users[3::2]:
             user.store_id = None
         self.db.add(models.IdentityCard(user_id=self.users[3].id,
@@ -216,13 +216,13 @@ class IdentityCardTests(unittest.TestCase):
         self.db.commit()
         self.client.get('/api/identity-cards')
         card = self.db.get(models.IdentityCard, self.users[3].id)
-        self.assertEqual(card.employee_id, 'IDS-26001')
+        self.assertEqual(card.employee_id, 'IDS-UNASSIGNED-25001')
         self.assertEqual(card.employee_name, 'Saved Name')
         self.assertEqual(card.mobile, '1234567890')
-        self.assertEqual(self.db.get(models.IdentityCard, self.users[5].id).employee_id, 'IDS-26002')
+        self.assertEqual(self.db.get(models.IdentityCard, self.users[5].id).employee_id, 'IDS-26001')
         with patch('identity_cards.issue_year', return_value='27'):
             self.client.get('/api/identity-cards')
-        self.assertEqual(card.employee_id, 'IDS-26001')
+        self.assertEqual(card.employee_id, 'IDS-UNASSIGNED-25001')
 
     def test_invalid_data_and_photo_rejected(self):
         for change in [dict(employee_name='   '), dict(mobile='abc'), dict(employee_id='<bad>'), dict(photo='data:image/svg+xml;base64,xxx'), dict(photo='data:image/png;base64,YmFk'), dict(role='Admin')]:

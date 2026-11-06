@@ -890,16 +890,16 @@
     function userOutletDropdown(user) {
       const available = userManagementOutlets.filter(store => store.status === 'Active' && store.latitude != null && store.longitude != null);
       const current = String(user.store_id ?? '');
-      let options = '<option value="" disabled '+(!current?'selected':'')+'>Select outlet</option>';
+      let options = '<option value="" '+(!current?'selected':'')+'>Select outlet</option>';
       if (current && !available.some(store => String(store.id) === current)) options += '<option value="'+escapeOutletText(current)+'" selected disabled>'+escapeOutletText(user.outlet_name || 'Current outlet')+'</option>';
       options += available.map(store => '<option value="'+store.id+'" '+(String(store.id)===current?'selected':'')+'>'+escapeOutletText(store.name)+'</option>').join('');
-      return '<select class="um-outlet-select" aria-label="Assign outlet for '+escapeOutletText(user.username)+'" onchange="changeUserOutlet('+user.id+', this)" '+(!['Admin','HR'].includes(role)||!available.length||outletUpdates.has(user.id)?'disabled':'')+'>'+options+'</select>';
+      return '<select class="um-outlet-select" aria-label="Assign outlet for '+escapeOutletText(user.username)+'" onchange="changeUserOutlet('+user.id+', this)" '+(!['Admin','HR'].includes(role)||outletUpdates.has(user.id)?'disabled':'')+'>'+options+'</select>';
     }
     async function changeUserOutlet(userId, select) {
       const user = userManagementUsers.find(item => item.id === userId);
       if (!user || outletUpdates.has(userId)) return;
-      const previous = String(user.store_id ?? ''), next = Number(select.value);
-      if (!next || String(next) === previous) return;
+      const previous = String(user.store_id ?? ''), next = select.value ? Number(select.value) : null;
+      if (String(next ?? '') === previous) return;
       const msg = document.getElementById('userManagementMsg');
       msg.classList.remove('success');
       msg.textContent = 'Updating outlet...';
@@ -914,7 +914,9 @@
         user.store_id = data.store_id; user.outlet_name = data.outlet_name; user.outlet_code = data.outlet_code;
         msg.classList.add('success');
         const outlet = userManagementOutlets.find(store=>store.id===next);
-        msg.textContent = user.username+' assigned to '+(outlet?.name || data.outlet_name)+'. Attendance will use the new outlet location.';
+        msg.textContent = next == null
+          ? user.username+' has no assigned outlet. Attendance can be marked from anywhere.'
+          : user.username+' assigned to '+(outlet?.name || data.outlet_name)+'. Attendance will use the new outlet location.';
       } catch (error) {
         select.value = previous;
         msg.classList.remove('success');

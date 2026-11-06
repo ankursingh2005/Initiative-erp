@@ -1,4 +1,5 @@
 """Isolated API coverage; never modifies the application's user database."""
+from datetime import datetime
 import unittest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -100,6 +101,29 @@ class AttendanceOutletTests(unittest.TestCase):
             self.assertEqual(response.json()['store_id'], self.stores[1].id)
             reference = main.attendance_reference_store(self.db, self.employee, lambda store: 0)
             self.assertEqual(reference.id, self.stores[1].id)
+
+    def test_admin_can_clear_assignment_without_changing_employee_id_or_old_attendance(self):
+        card = models.IdentityCard(user_id=self.employee.id, employee_id='IDS-OLD-26001',
+                                   employee_name='Saved Name', designation='Sales', mobile='')
+        date = main.india_today()
+        historical = models.AttendanceRecord(
+            user_id=self.employee.id, attendance_date=date, store_id=self.stores[0].id,
+            checkin_at=datetime.combine(date, datetime.min.time()).replace(hour=9),
+        )
+        self.db.add_all([card, historical])
+        self.db.commit()
+        old_history = (historical.id, historical.attendance_date, historical.store_id, historical.checkin_at)
+        response = self.client.patch(f'/users/{self.employee.id}/outlet', json={'store_id': None})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertIsNone(self.employee.store_id)
+        self.assertEqual(card.employee_id, 'IDS-OLD-26001')
+        self.db.refresh(historical)
+        self.assertEqual(
+            (historical.id, historical.attendance_date, historical.store_id, historical.checkin_at),
+            old_history,
+        )
+        reference = main.attendance_reference_store(self.db, self.employee, lambda store: 0)
+        self.assertEqual(reference.id, self.stores[0].id)
 
     def test_other_roles_cannot_reassign(self):
         for role in ('Employee', 'BrandPartner', 'Owner'):

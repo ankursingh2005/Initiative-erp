@@ -431,7 +431,7 @@ class UserAssignmentUpdate(BaseModel):
 
 
 class AttendanceOutletUpdate(BaseModel):
-    store_id: int = Field(gt=0)
+    store_id: Optional[int] = Field(..., gt=0)
 
 class UserRoleUpdate(BaseModel):
     role: str = Field(min_length=1, max_length=50)
