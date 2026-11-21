@@ -217,6 +217,7 @@ def ensure_database_schema():
     # Lets Ageing Stock Analysis search by Model No. as well as Item
     # Details - see AGEING_HEADER_ALIASES / parse_ageing_stock_workbook.
     ensure_column("ageing_stock_items", "model_no", "VARCHAR(150)")
+    ensure_column("ageing_stock_items", "qty_rbl", "FLOAT DEFAULT 0")
 
 
 if DATABASE_READY:
@@ -6760,7 +6761,6 @@ def daily_profitability_download(
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
-
 @app.get("/api/daily-profitability/daily-report")
 def daily_profitability_daily_report(
     start_date: Optional[date] = Query(None),
@@ -6802,8 +6802,6 @@ def daily_profitability_daily_report(
 @app.get("/daily-profitability.html")
 def daily_profitability_page():
     return serve_html("static/daily_profitability.html")
-
-
 
 
 # ============================================================
@@ -7244,8 +7242,6 @@ def build_analytics_dashboard(rows: List[models.AnalyticsSalesRow]) -> dict:
         "recommendations": recommendations,
     }
 
-
-
 # ------------------------------------------------------------------
 # DIVISION / BRAND AUTO-DETECTION + AC INDOOR/OUTDOOR MERGE
 # ------------------------------------------------------------------
@@ -7332,7 +7328,6 @@ def detect_division_code(item_text: str) -> str:
                 return code
     return "UNCATEGORIZED"
 
-
 def detect_brand(item_text: str) -> Optional[str]:
     for brand in BRAND_LIST:
         if re.search(r"\b" + re.escape(brand) + r"\b", item_text, re.IGNORECASE):
@@ -7349,7 +7344,6 @@ def detect_ac_role(item_text: str) -> Optional[str]:
         return None
     token = match.group(1).upper()
     return "ID" if token in ("ID", "INDOOR") else "OD"
-
 
 def ac_merge_key(row: dict) -> tuple:
     """Groups an AC indoor row with its matching outdoor row. Prefers the
@@ -7618,6 +7612,7 @@ AGEING_LOCATION_DEFINITIONS = {
     "ASH": {"name": "Ashiyana", "aliases": {"ash", "ashiyana"}},
     "GNG": {"name": "Gomtinagar", "aliases": {"gng", "gomtinagar"}},
     "VKN": {"name": "Vikas Nagar", "aliases": {"vkn", "vikasnagar"}},
+    "RBL": {"name": "RBL", "aliases": {"rbl"}},
     "MWH": {"name": "Warehouse", "aliases": {"mwh", "mwh1", "warehouse", "mainwarehouse"}},
     # PWH and Vault are intentionally NOT listed here - they're handled by
     # AGEING_EXCLUDED_LOCATION_ALIASES below instead of being tracked as a
@@ -7693,7 +7688,6 @@ def ageing_canonical_column(normalized_header: str) -> Optional[str]:
             return canonical
     return None
 
-
 # A handful of brands get written inconsistently across sheets (e.g. "Blue
 # Star" vs "Bluestar"). Collapsing these to one canonical spelling here -
 # before classification AND before location-sheet matching - means both
@@ -7703,7 +7697,6 @@ def ageing_canonical_column(normalized_header: str) -> Optional[str]:
 AGEING_BRAND_TEXT_ALIASES = {
     r"\bBLUE STAR\b": "BLUESTAR",
 }
-
 
 def normalize_ageing_item_key(value) -> str:
     """Normalizes an Item Details string for cross-sheet matching: upper-
@@ -7996,7 +7989,6 @@ AGEING_ACCESSORY_KEYWORDS = [
     "GLASS BOWL", "BOWL", "DUFFEL", "DUFFLE", "COUPON",
 ]
 
-
 def _is_ram_memory_module(padded: str) -> bool:
     """True only for an actual RAM/memory module (e.g. "RAM DDR3 8GB
     Laptop", "8GB DDR4 RAM"), which is a component, not the appliance/
@@ -8007,8 +7999,6 @@ def _is_ram_memory_module(padded: str) -> bool:
     "Akabishi SAC ID 1.5T RAM-AE18VG-X1-KT" -> "... RAM AE18VG X1 KT"),
     and those are real Home Appliances/AC units, not memory modules."""
     return " RAM " in padded and ("DDR" in padded or "GB" in padded)
-
-
 
 # Guard applied ONLY to items that would otherwise land in "MH" (Mobile /
 # Handset) - keeps that category strictly to actual mobile phone units,
@@ -8066,7 +8056,6 @@ def _enforce_mobile_category_is_phones_only(result: dict, padded: str, brand_loo
         fixed["classification_source"] = "Mobile Guard"
         return fixed
     return result
-
 
 # LED items default to Home Entertainment (TVs) via the " LED "/"LED "
 # keyword rule above. However HP, Dell, and Lenovo's LED-branded lineup
@@ -8474,7 +8463,6 @@ def _classify_ageing_item_raw(
         "classification_source": "Unclassified",
     }
 
-
 def parse_ageing_stock_workbook(content: bytes, db: Session) -> tuple:
     """Returns (item_rows, location_sheets_found, unclassified_count) or
     raises HTTPException on a workbook that doesn't look right."""
@@ -8578,7 +8566,7 @@ def parse_ageing_stock_workbook(content: bytes, db: Session) -> tuple:
     category_master_lookup = build_ageing_category_master_lookup(db)
     location_columns = {
         "ALM": "qty_alm", "HZT": "qty_hzt", "ASH": "qty_ash", "GNG": "qty_gng",
-        "VKN": "qty_vkn", "MWH": "qty_mwh",
+        "VKN": "qty_vkn", "MWH": "qty_mwh", "RBL": "qty_rbl",
     }
 
     item_rows = []
@@ -8635,7 +8623,7 @@ def parse_ageing_stock_workbook(content: bytes, db: Session) -> tuple:
             "brand_name": classification["brand_name"],
             "classification_source": classification["classification_source"],
             "qty_alm": 0.0, "qty_hzt": 0.0, "qty_ash": 0.0, "qty_gng": 0.0,
-            "qty_vkn": 0.0, "qty_mwh": 0.0,
+            "qty_vkn": 0.0, "qty_mwh": 0.0, "qty_rbl": 0.0,
         }
 
         present_at = []
@@ -8779,7 +8767,7 @@ AGEING_AGE_LABELS = {
     "age_181_365": "181-365 Days",
     "age_366_plus": "\u2265 366 Days",
 }
-AGEING_LOCATION_FIELDS = ["qty_alm", "qty_hzt", "qty_ash", "qty_gng", "qty_vkn", "qty_mwh"]
+AGEING_LOCATION_FIELDS = ["qty_alm", "qty_hzt", "qty_ash", "qty_gng", "qty_vkn", "qty_mwh", "qty_rbl"]
 
 # Product-type classification (LED, Cooler, AC, etc.) used by the Item
 # Category filter on the Ageing Stock Analysis page. This list MUST stay in
@@ -8943,7 +8931,7 @@ def compute_ageing_stock_report(
             "age_181_365": item.age_181_365,
             "age_366_plus": item.age_366_plus,
             "qty_alm": item.qty_alm, "qty_hzt": item.qty_hzt, "qty_ash": item.qty_ash,
-            "qty_gng": item.qty_gng, "qty_vkn": item.qty_vkn, "qty_mwh": item.qty_mwh,
+            "qty_gng": item.qty_gng, "qty_vkn": item.qty_vkn, "qty_mwh": item.qty_mwh, "qty_rbl": item.qty_rbl,
             "locations_present": item.locations_present,
             "location_age_buckets_json": item.location_age_buckets_json,
             "classification_source": item.classification_source,
@@ -8996,7 +8984,7 @@ def ageing_stock_report(
     brand: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
     item_category: Optional[str] = Query(None),
-    locations: Optional[str] = Query(None, description="Comma-separated branch codes (ALM,HZT,ASH,GNG,VKN,MWH) - keeps items with stock at ANY of them. Omit for all branches."),
+    locations: Optional[str] = Query(None, description="Comma-separated branch codes (ALM,HZT,ASH,GNG,VKN,MWH,RBL) - keeps items with stock at ANY of them. Omit for all branches."),
     current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -9072,7 +9060,7 @@ def build_ageing_export_dataset(report: dict, active_age_fields: List[str], acti
     branches still checked instead of always showing all six. Omit (or
     pass None) to show every branch, matching "all branches selected"."""
     loc_labels = {"qty_alm": "ALM", "qty_hzt": "HZT", "qty_ash": "ASH",
-                  "qty_gng": "GNG", "qty_vkn": "VKN", "qty_mwh": "MWH"}
+                  "qty_gng": "GNG", "qty_vkn": "VKN", "qty_mwh": "MWH", "qty_rbl": "RBL"}
 
     location_fields = active_location_fields if active_location_fields else list(AGEING_LOCATION_FIELDS)
 
@@ -9805,7 +9793,7 @@ def ageing_stock_export(
     brand: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
     item_category: Optional[str] = Query(None, description="Item-type filter code (e.g. LED, COOLER, AC) matching the on-screen Item Category picker. Omit for all types."),
-    locations: Optional[str] = Query(None, description="Comma-separated branch codes (ALM,HZT,ASH,GNG,VKN,MWH) matching the on-screen Branch picker - keeps items with stock at ANY of them. Omit for all branches."),
+    locations: Optional[str] = Query(None, description="Comma-separated branch codes (ALM,HZT,ASH,GNG,VKN,MWH,RBL) matching the on-screen Branch picker - keeps items with stock at ANY of them. Omit for all branches."),
     durations: Optional[str] = Query(None, description="Comma-separated age bucket keys to include, e.g. age_0_60,age_181_365. Omit for all."),
     format: str = Query("xlsx", description="Download format: xlsx, pdf, or jpg."),
     current_user: models.User = Depends(auth.get_current_user),

@@ -242,6 +242,7 @@
               <label class="duration-item"><input type="checkbox" data-branch-key="qty_gng" checked onchange="onBranchCheckboxChange(this)" /> GNG</label>
               <label class="duration-item"><input type="checkbox" data-branch-key="qty_vkn" checked onchange="onBranchCheckboxChange(this)" /> VKN</label>
               <label class="duration-item"><input type="checkbox" data-branch-key="qty_mwh" checked onchange="onBranchCheckboxChange(this)" /> MWH</label>
+              <label class="duration-item"><input type="checkbox" data-branch-key="qty_rbl" checked onchange="onBranchCheckboxChange(this)" /> RBL</label>
               <div class="duration-menu-actions">
                 <button type="button" class="btn-light" onclick="setAllBranches(true)">Select all</button>
                 <button type="button" class="btn-light" onclick="setAllBranches(false)">Clear</button>
@@ -331,7 +332,7 @@
       window.addEventListener('load', () => navigator.serviceWorker.register(appUrl('/sw.js')).catch(() => {}));
     }
 
-    const LOC_LABELS = { qty_alm: 'ALM', qty_hzt: 'HZT', qty_ash: 'ASH', qty_gng: 'GNG', qty_vkn: 'VKN', qty_mwh: 'MWH' };
+    const LOC_LABELS = { qty_alm: 'ALM', qty_hzt: 'HZT', qty_ash: 'ASH', qty_gng: 'GNG', qty_vkn: 'VKN', qty_mwh: 'MWH', qty_rbl: 'RBL' };
     const AGE_COLS = [
       ['age_0_60', '0-60 Days'], ['age_61_90', '61-90 Days'], ['age_91_150', '91-150 Days'],
       ['age_151_180', '151-180 Days'], ['age_181_365', '181-365 Days'], ['age_366_plus', '\u2265 366 Days'],
@@ -355,7 +356,7 @@
     let ALL_BRANDS = [];
     let selectedBrand = '';
 
-    // Branch picker state: which location columns (ALM/HZT/ASH/GNG/VKN/MWH)
+    // Branch picker state: which location columns (ALM/HZT/ASH/GNG/VKN/MWH/RBL)
     // are currently checked in the "Branch" picker. Starts with all six on
     // (matches the old "show everything" behaviour). Unchecking a branch
     // both hides its qty_xxx column from every table (same as the Date
@@ -900,7 +901,7 @@
       }
       if (data.has_data) {
         const lu = data.last_upload;
-        const missing = ['ALM','HZT','ASH','GNG','VKN','MWH'].filter(c => !(lu.location_sheets_found || []).includes(c));
+        const missing = ['ALM','HZT','ASH','GNG','VKN','MWH','RBL'].filter(c => !(lu.location_sheets_found || []).includes(c));
         let html = `Last upload: <strong>${lu.file_name}</strong> by ${lu.uploaded_by || '-'} on ${new Date(lu.uploaded_at).toLocaleString()} - ${lu.item_count} items.`;
         if (missing.length) html += ` <span class="pill pill-warn">Missing sheets: ${missing.join(', ')}</span>`;
         if (lu.unclassified_count) html += ` <span class="pill pill-warn">${lu.unclassified_count} item(s) need category review</span>`;
@@ -1002,7 +1003,7 @@
     // <colgroup> (paired with table-layout:fixed in the CSS) forces every
     // table on the page to use identical column widths, so headers and
     // totals always line up in the same vertical columns.
-    function colgroupHtml() {
+    function colgroupHtml() { 
       const ageCols = activeAgeCols().length;
       const locCols = activeLocCols().length;
       const cols = [

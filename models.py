@@ -708,6 +708,7 @@ class AgeingStockItem(Base):
     qty_gng = Column(Float, default=0)
     qty_vkn = Column(Float, default=0)
     qty_mwh = Column(Float, default=0)
+    qty_rbl = Column(Float, default=0)
     qty_pwh = Column(Float, default=0)
     qty_vault = Column(Float, default=0)
     locations_present = Column(String(150), nullable=True)  # e.g. "ALM, HZT, Vault"

@@ -53,5 +53,25 @@ class AgeingStockWorkbookTests(unittest.TestCase):
         )
 
 
+    def test_rbl_sheet_quantities_and_age_buckets_are_imported(self):
+        workbook = Workbook()
+        workbook.remove(workbook.active)
+        self.make_sheet(workbook, 'All Data', '--All--', 10)
+        self.make_sheet(workbook, 'RBL', 'RBL', 4)
+        output = BytesIO()
+        workbook.save(output)
+
+        rows, locations, _ = main.parse_ageing_stock_workbook(output.getvalue(), self.db)
+
+        self.assertEqual(locations, ['RBL'])
+        self.assertEqual(rows[0]['qty_rbl'], 4)
+        self.assertIn('RBL', rows[0]['locations_present'])
+        buckets = main.json.loads(rows[0]['location_age_buckets_json'])
+        self.assertEqual(buckets['qty_rbl']['age_0_60'], 4)
+        item = models.AgeingStockItem(**rows[0])
+        self.db.add(item)
+        self.db.commit()
+        self.assertEqual(self.db.query(models.AgeingStockItem).one().qty_rbl, 4)
+
 if __name__ == '__main__':
     unittest.main()

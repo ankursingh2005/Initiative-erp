@@ -38,7 +38,7 @@ This part is for the person responsible for stock uploads. If data is already av
 1. Ask the stock or accounts team for the latest complete stock ageing workbook.
 2. Use an Excel **.xlsx** workbook. The file picker also lists .xls, but the current reader may reject older .xls files; save a genuine .xlsx copy in Excel if needed.
 3. Check that it contains an **All Data** sheet.
-4. Check the branch sheets for **ALM, HZT, ASH, GNG, VKN, and MWH**.
+4. Check the branch sheets for **ALM, HZT, ASH, GNG, VKN, MWH, and RBL**.
 5. Check item details, units, closing quantities, and the six ageing groups.
 6. Keep the original file so you can check the report against it later.
 
@@ -67,7 +67,7 @@ Upload and main data-clearing actions are available to Admin accounts and the in
 5. Wait while the button says **Processing...**.
 6. Read the message below the buttons.
 
-**You should see:** a message such as **Loaded 120 items from sheets: ALM, HZT, ASH, GNG, VKN, MWH.** The number will depend on your file.
+**You should see:** a message such as **Loaded 120 items from sheets: ALM, HZT, ASH, GNG, VKN, MWH, RBL.** The number will depend on your file.
 
 ### Read every part of the message
 
@@ -116,7 +116,7 @@ The choices are **HA, HE, COMPUTER, MOBILE, DIGITAL CAMERA, and ACCESSORIES**. A
 ### Choose the branch columns
 
 1. Tap **Branch**.
-2. Tick the branches you want to inspect: **ALM, HZT, ASH, GNG, VKN, MWH**.
+2. Tick the branches you want to inspect: **ALM, HZT, ASH, GNG, VKN, MWH, RBL**.
 3. Untick the other branches and close the menu.
 4. Read the selected branch columns and **Present At**.
 
