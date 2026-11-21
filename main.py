@@ -8820,6 +8820,27 @@ def classify_ageing_item_category(text_value: Optional[str]) -> Optional[str]:
     return None
 
 
+def scope_ageing_item_to_locations(item: dict, location_fields: List[str]) -> dict:
+    """Count only quantities whose age is recorded at a selected location."""
+    scoped = dict(item)
+    try:
+        buckets = json.loads(item.get("location_age_buckets_json") or "{}")
+    except (TypeError, ValueError):
+        buckets = {}
+    if not isinstance(buckets, dict):
+        buckets = {}
+    for field in AGEING_AGE_FIELDS:
+        scoped[field] = sum(
+            (buckets.get(location) or {}).get(field, 0.0) or 0.0
+            for location in location_fields
+        )
+    scoped["closing_qty"] = sum(scoped[field] for field in AGEING_AGE_FIELDS)
+    for location in AGEING_LOCATION_FIELDS:
+        scoped[location] = sum((buckets.get(location) or {}).get(field, 0.0) or 0.0
+                               for field in AGEING_AGE_FIELDS)
+    return scoped
+
+
 def compute_ageing_stock_report(
     db: Session,
     category: Optional[str],
@@ -8876,6 +8897,14 @@ def compute_ageing_stock_report(
             location_fields.append(field)
         if location_fields:
             items = [it for it in items if any((getattr(it, f) or 0) > 0 for f in location_fields)]
+
+    selected_locations = ([f"qty_{code.strip().lower()}" for code in locations.split(",") if code.strip()]
+                          if locations else AGEING_LOCATION_FIELDS)
+    items = [SimpleNamespace(**scope_ageing_item_to_locations(
+        {column.name: getattr(item, column.name) for column in models.AgeingStockItem.__table__.columns},
+        selected_locations,
+    )) for item in items]
+    items = [item for item in items if item.closing_qty > 0]
 
     reconciliation_mismatch_count = sum(
         1
@@ -8992,23 +9021,8 @@ def ageing_stock_report(
 
 
 def location_qty_for_durations(item: dict, location_field: str, active_age_fields: List[str]) -> float:
-    """This item's quantity at one branch (qty_alm, qty_hzt, etc.), scoped
-    to only the selected duration bucket(s) - fixes branch columns showing
-    a branch's ALL-TIME total next to a Closing Qty/duration column that's
-    already scoped to the selected duration(s), which could make the
-    branch columns sum to more than Closing Qty (e.g. an item aged 91-150
-    days at one branch was still being counted when the report was
-    filtered to only ">= 366 Days").
-
-    Uses the per-branch age-bucket breakdown captured at upload time
-    (location_age_buckets_json). Falls back to the branch's raw all-time
-    total when every duration bucket is selected (no filtering needed - the
-    two are equivalent) or when the item predates this fix and has no
-    bucket breakdown recorded (re-upload the workbook to get exact
-    branch-level duration filtering for it)."""
-    raw_total = item.get(location_field) or 0.0
-    if len(active_age_fields) >= len(AGEING_AGE_FIELDS):
-        return raw_total
+    """Sum recorded branch age buckets; missing branch ageing contributes zero."""
+    raw_total = 0.0
     buckets_json = item.get("location_age_buckets_json")
     if not buckets_json:
         return raw_total
@@ -9083,7 +9097,8 @@ def build_ageing_export_dataset(report: dict, active_age_fields: List[str], acti
         brands_out = []
         cat_totals = zero_totals()
         for brand_bucket in cat["brands"]:
-            filtered_items = [it for it in brand_bucket["items"]
+            scoped_items = [scope_ageing_item_to_locations(it, location_fields) for it in brand_bucket["items"]]
+            filtered_items = [it for it in scoped_items
                               if item_qty_in_active_durations(it) > 0
                               and (not report["filters"].get("locations")
                                    or any(location_qty_for_durations(it, f, active_age_fields) > 0 for f in location_fields))]

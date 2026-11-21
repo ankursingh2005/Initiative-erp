@@ -73,5 +73,19 @@ class AgeingStockWorkbookTests(unittest.TestCase):
         self.db.commit()
         self.assertEqual(self.db.query(models.AgeingStockItem).one().qty_rbl, 4)
 
+    def test_report_quantities_only_include_selected_location_ageing(self):
+        item = dict(closing_qty=17, age_366_plus=17, qty_alm=3, qty_hzt=2,
+                    location_age_buckets_json=main.json.dumps({
+                        'qty_alm': {'age_366_plus': 3, 'age_0_60': 1},
+                        'qty_hzt': {'age_366_plus': 2},
+                    }))
+        scoped = main.scope_ageing_item_to_locations(item, ['qty_alm', 'qty_hzt'])
+        self.assertEqual(scoped['closing_qty'], 6)
+        self.assertEqual(scoped['age_366_plus'], 5)
+        self.assertEqual(main.location_qty_for_durations(scoped, 'qty_alm', ['age_366_plus']), 3)
+        self.assertEqual(main.scope_ageing_item_to_locations(item, ['qty_hzt'])['closing_qty'], 2)
+        self.assertEqual(main.scope_ageing_item_to_locations(item, ['qty_rbl'])['closing_qty'], 0)
+        self.assertEqual(main.scope_ageing_item_to_locations({'qty_alm': 9}, ['qty_alm'])['closing_qty'], 0)
+
 if __name__ == '__main__':
     unittest.main()

@@ -686,6 +686,15 @@
         }
       });
     }
+    function scopedItem(item) {
+      let buckets = {};
+      try { buckets = JSON.parse(item.location_age_buckets_json || '{}') || {}; } catch (e) {}
+      const scoped = { ...item };
+      AGE_COLS.forEach(([age]) => {
+        scoped[age] = activeLocCols().reduce((sum, [location]) => sum + (Number((buckets[location] || {})[age]) || 0), 0);
+      });
+      return scoped;
+    }
     function itemQtyInActiveDurations(item) {
       return activeAgeCols().reduce((sum, [key]) => sum + (Number(item[key]) || 0), 0);
     }
@@ -701,8 +710,7 @@
     // total when every duration is selected (no filtering needed) or when
     // the item predates this fix and has no breakdown recorded.
     function locationQtyForDurations(item, key) {
-      const rawTotal = Number(item[key]) || 0;
-      if (activeAgeCols().length >= AGE_COLS.length) return rawTotal;
+      const rawTotal = 0;
       const bucketsJson = item.location_age_buckets_json;
       if (!bucketsJson) return rawTotal;
       let bucketsByLocation;
@@ -737,7 +745,7 @@
         let catItems = 0;
 
         for (const brand of cat.brands) {
-          const items = brand.items.filter(it =>
+          const items = brand.items.map(scopedItem).filter(it =>
             itemQtyInActiveDurations(it) > 0 &&
             (ACTIVE_BRANCH_KEYS.size === Object.keys(LOC_LABELS).length ||
               activeLocCols().some(([key]) => locationQtyForDurations(it, key) > 0)) &&
@@ -933,7 +941,7 @@
         let text = `Loaded ${data.items_loaded} items from sheets: ${data.location_sheets_found.join(', ') || 'none'}.`;
         if (data.location_sheets_missing.length) text += ` Missing: ${data.location_sheets_missing.join(', ')}.`;
         if (data.unclassified_count) text += ` ${data.unclassified_count} item(s) need manual category review.`;
-        if (data.reconciliation_mismatch_count) text += ` Age totals differ from branch totals for ${data.reconciliation_mismatch_count} item(s); the dashboard uses the All Data sheet for age quantities.`;
+        if (data.reconciliation_mismatch_count) text += ` Age totals differ from branch totals for ${data.reconciliation_mismatch_count} item(s); quantities include only recorded outlet and warehouse ageing.`;
         msg.textContent = text;
         try {
           await loadMeta();
@@ -1183,7 +1191,7 @@
       const dashHtml = renderDashboard(filtered);
       const catsHtml = filtered.categories.map((c, i) => renderCategory(c, i)).join('');
       const reconciliationWarning = data.reconciliation_mismatch_count
-        ? `<div class="report-warning" role="status">Age quantities come from the All Data sheet. Branch totals differ for ${data.reconciliation_mismatch_count} item(s); check for missing or incomplete location sheets.</div>`
+        ? `<div class="report-warning" role="status">Quantities include only stock with ageing recorded in the selected outlet and warehouse sheets.</div>`
         : '';
       const grandHtml = `
         <div class="scroll-wrap app-table-scroll">
