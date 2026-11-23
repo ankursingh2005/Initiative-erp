@@ -343,3 +343,9 @@ button[data-delete-ems],#excludedEmployeeRows button[data-delete-ems]{color:#a33
 
 #monthlyIncentive .monthly-incentive-dashboard>.scroll{position:relative;isolation:isolate;max-height:62vh;overflow:auto;overscroll-behavior:contain}
 #monthlyIncentiveDashboard thead{position:sticky;inset-block-start:0;z-index:10;box-shadow:0 2px 0 #39baa6;background:#194e60}
+
+/* Freeze the attendance header above the horizontally frozen employee column. */
+#attendanceRecord .attendance-sheet-scroll{position:relative;isolation:isolate;overscroll-behavior:contain}
+#attendanceSheet thead{position:sticky;top:0;z-index:10;background:#e7eef3;box-shadow:0 1px 0 #bdcbd4}
+#attendanceSheet thead th{position:relative;top:auto}
+#attendanceSheet thead .attendance-employee{position:sticky;left:0;z-index:4}
