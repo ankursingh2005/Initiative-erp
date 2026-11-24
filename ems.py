@@ -1041,7 +1041,7 @@ def permanently_delete_ems_employee(user_id: int, payload: EMSPermanentDeletion,
     # Remove employee-specific audit payloads which duplicate salary/profile details.
     audit_groups = [
         (['salary_profile_saved', 'employee_excluded_from_salary', 'employee_restored_to_salary',
-          'manual_employee_created', 'manual_attendance_saved', 'salary_distribution_inputs_saved', 'ems_salary_name_saved'], [user_id]),
+          'manual_employee_created', 'manual_attendance_saved', 'salary_distribution_inputs_saved', 'ems_salary_name_saved', 'employee_reference_salary_saved'], [user_id]),
         (['payroll_published', 'payroll_marked_paid', 'salary_published_from_attendance'], payroll_ids),
         (['earning_approved', 'earning_voided'], earning_ids),
         (['leave_requested', 'leave_approved', 'leave_rejected'], leave_ids),
@@ -1049,7 +1049,7 @@ def permanently_delete_ems_employee(user_id: int, payload: EMSPermanentDeletion,
     for actions, targets in audit_groups:
         db.query(M.EMSAudit).filter(M.EMSAudit.action.in_(actions),
             M.EMSAudit.target.in_([str(value) for value in targets])).delete(synchronize_session=False)
-    for model in (M.EMSMonthlyIncentiveAddition, M.EMSWeekoffIncentiveOverride, M.EMSMonthlyIncentivePercentage, M.EMSMonthlyNonSalesSelection, M.EMSMonthlySalesSelection, M.EMSMonthlyIncentiveType, M.EMSEmployeeName, M.EMSManualMonthlyAttendance, M.EMSAttendanceTotals, M.EMSWeekoffIncentive, M.EMSDistributionInput, M.EMSManualAttendance, M.EMSExcludedEmployee, M.EMSLeaveRequest,
+    for model in (M.EMSEmployeeReferenceSalary, M.EMSMonthlyIncentiveAddition, M.EMSWeekoffIncentiveOverride, M.EMSMonthlyIncentivePercentage, M.EMSMonthlyNonSalesSelection, M.EMSMonthlySalesSelection, M.EMSMonthlyIncentiveType, M.EMSEmployeeName, M.EMSManualMonthlyAttendance, M.EMSAttendanceTotals, M.EMSWeekoffIncentive, M.EMSDistributionInput, M.EMSManualAttendance, M.EMSExcludedEmployee, M.EMSLeaveRequest,
                   M.EMSEarning, M.EMSSalaryProfile, M.EMSPayroll):
         db.query(model).filter_by(user_id=user_id).delete(synchronize_session=False)
     # Tombstone prevents an ERP account from automatically reappearing in EMS.
@@ -1288,6 +1288,34 @@ def save_attendance_totals(user_id: int, payload: AttendanceTotalsInput,
     record(db, user, 'manual_monthly_attendance_saved', user_id, payload.model_dump_json())
     db.commit()
     return {'message': 'Manual attendance totals saved; EMS salary reports recalculated'}
+
+class EmployeeReferenceSalary(Input):
+    salary: Decimal = Field(ge=0, le=10000000, decimal_places=2)
+
+
+@router.get('/employee-reference-salaries')
+def employee_reference_salaries(db: Session = Depends(get_db), user=Depends(manager)):
+    return [serialize(row) for row in db.query(M.EMSEmployeeReferenceSalary).join(
+        models.User, models.User.id == M.EMSEmployeeReferenceSalary.user_id).filter(
+        ~models.User.role.in_(EMS_EXCLUDED_ROLES), models.User.ems_deleted.is_(False)).all()]
+
+
+@router.put('/employee-reference-salaries/{user_id}')
+def save_employee_reference_salary(user_id: int, payload: EmployeeReferenceSalary,
+                                   db: Session = Depends(get_db), user=Depends(manager)):
+    lock_employee(db, user_id)
+    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+    from sqlalchemy.dialects.postgresql import insert as postgres_insert
+    insert = postgres_insert if db.bind.dialect.name == 'postgresql' else sqlite_insert
+    values = dict(user_id=user_id, salary=int(payload.salary * 100),
+                  updated_by=user.id, updated_at=datetime.utcnow())
+    statement = insert(M.EMSEmployeeReferenceSalary).values(**values)
+    db.execute(statement.on_conflict_do_update(index_elements=['user_id'], set_={
+        key: value for key, value in values.items() if key != 'user_id'}))
+    record(db, user, 'employee_reference_salary_saved', user_id, payload.model_dump_json())
+    db.commit()
+    return {'message': 'Employee reference salary saved.', 'user_id': user_id, 'salary': values['salary']}
+
 
 class EmployeeSalaryName(Input):
     display_name: str = Field(min_length=2, max_length=150, pattern=r'^[^\x00-\x1f\x7f]+$')

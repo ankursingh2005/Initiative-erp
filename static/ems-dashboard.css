@@ -349,3 +349,15 @@ button[data-delete-ems],#excludedEmployeeRows button[data-delete-ems]{color:#a33
 #attendanceSheet thead{position:sticky;top:0;z-index:10;background:#e7eef3;box-shadow:0 1px 0 #bdcbd4}
 #attendanceSheet thead th{position:relative;top:auto}
 #attendanceSheet thead .attendance-employee{position:sticky;left:0;z-index:4}
+
+/* Full monthly employee salary, independent of attendance. */
+#empSalaryTable{width:480px;max-width:100%;table-layout:fixed;border-collapse:separate;border-spacing:0;border:1px solid #d6e3eb;border-radius:10px;overflow:hidden}
+#empSalaryTable th{background:#19475a;color:#fff;text-transform:none;text-align:left;padding:24px 18px}
+#empSalaryTable td{padding:28px 18px;border-bottom:1px solid #d6e3eb;background:#fff}
+#empSalaryTable tbody tr:last-child td{border-bottom:0}
+#empSalaryTable td:first-child b{display:block;color:#008579;font-size:14px}
+#empSalaryTable td:first-child small{display:block;color:#72899a;margin-top:8px;font-size:12px}
+#empSalaryTable th:first-child,#empSalaryTable td:first-child{width:52%;overflow-wrap:anywhere}
+#empSalaryTable th:last-child,#empSalaryTable td:last-child{border-left:1px solid #d6e3eb;text-align:left;font-variant-numeric:tabular-nums}
+
+#empSalaryTable form{display:flex;align-items:center;justify-content:flex-start;gap:10px;flex-wrap:wrap}#empSalaryTable input{width:180px;max-width:100%;text-align:right}#empSalaryTable form small{flex-basis:100%;font-size:12px;color:#72899a}

@@ -14,6 +14,23 @@ from ems import router, pages
 
 
 class SalaryTests(unittest.TestCase):
+    def test_reference_salary_is_separate_from_all_other_employee_data(self):
+        uid = self.users[2].id
+        self.assertEqual(self.setup_salary(uid).status_code, 200)
+        tables = [t for t in Base.metadata.sorted_tables if t.name not in {
+            'ems_employee_reference_salaries', 'ems_audit'}]
+        before = {t.name: self.db.execute(t.select()).all() for t in tables}
+        path = f'/api/ems/employee-reference-salaries/{uid}'
+        for amount, paise in [('35000.50', 3500050), ('0', 0)]:
+            response = self.client.put(path, json={'salary': amount})
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(response.json()['salary'], paise)
+            rows = self.client.get('/api/ems/employee-reference-salaries').json()
+            self.assertEqual(next(row for row in rows if row['user_id'] == uid)['salary'], paise)
+            self.assertEqual({t.name: self.db.execute(t.select()).all() for t in tables}, before)
+        for invalid in ['-1', '1.001', '10000001']:
+            self.assertEqual(self.client.put(path, json={'salary': invalid}).status_code, 422)
+
     def test_half_day_saved_and_prorated_without_changing_shared_records(self):
         uid = self.users[2].id
         self.assertEqual(self.setup_salary(uid).status_code, 200)

@@ -49,6 +49,7 @@ load_dotenv()  # reads a local .env file (if present) into os.environ before
                 # anything below calls os.getenv() - e.g. SMTP_*, SECRET_KEY.
 
 import models
+import ems_models
 import schemas
 import scheme_engine
 import auth

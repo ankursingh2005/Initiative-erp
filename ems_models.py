@@ -211,6 +211,15 @@ class EMSManualMonthlyAttendance(Base):
     updated_by = Column(Integer, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+class EMSEmployeeReferenceSalary(Base):
+    """Manually maintained reference amount, never used in payroll calculations."""
+    __tablename__ = 'ems_employee_reference_salaries'
+    user_id = Column(Integer, ForeignKey('users.id'), primary_key=True)
+    salary = Column(BigInteger, nullable=False)
+    updated_by = Column(Integer, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
 class EMSEmployeeName(Base):
     """Salary display name; never changes the registered account or identity card."""
     __tablename__ = 'ems_employee_names'
