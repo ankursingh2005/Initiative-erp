@@ -71,7 +71,7 @@ assert not any(row["category"] == "ALL" for row in rows), rows
 
 namespace["parse_incentive_upload"] = lambda file: rows
 report = namespace["calculate_incentive_report"](None, 7, 2.5)
-assert report["report_version"] == 7
+assert report["report_version"] == 8
 assert report["summary"], report
 assert all(row["exact_incentive"] is not None for row in report["exact_summary"]), report["exact_summary"]
 alm_acc = next(row for row in report["exact_summary"] if row["outlet"] == "ALM" and row["group"] == "MOB + DC + ACC")
@@ -126,3 +126,23 @@ assert fallback["totals"]["ids_fund"] is not None, fallback
 assert fallback["non_sales_report"]["totals"][1] is not None, fallback
 assert [row["outlet"] for row in fallback["summary"]] == ["ALM"], fallback
 print("Incentive grouped parser and exact incentive fallback passed.")
+
+# RBL uses standard category rates and contributes to non-sales and warehouse totals.
+for alias in ('RBL', 'Raibareli', 'Raebareli', 'Rae Bareli'):
+    rbl_rows = namespace['_parse_incentive_sheet']([
+        ['Outlet', 'Category', 'Total Sales'],
+        [alias, 'MOB', 100000], [alias, 'ACC', 100000], [alias, 'COM', 100000],
+    ], 'NOVEMBER')
+    namespace['parse_incentive_upload'] = lambda file: rbl_rows
+    rbl_report = namespace['calculate_incentive_report'](None, 7, 2.5)
+    assert rbl_report['summary'][0]['outlet'] == 'RBL'
+    assert rbl_report['totals']['total_sales'] == 300000
+    fund = rbl_report['ids_fund_report']
+    assert fund['totals']['total_incentive'] == 1375
+    assert fund['totals']['ids_fund'] == 337.5
+    non_sales = fund['non_sales_report']
+    rbl = next(row for row in non_sales['rows'] if row['outlet'] == 'RBL')
+    assert rbl['rates'] == [35, None, 12, 15, 10]
+    assert rbl['values'] == [118, None, 40, 51, 34]
+    assert non_sales['totals'] == [118, 54, 40, 51, 34]
+print('RBL upload, category rates, IDS Fund and non-sales calculations passed.')

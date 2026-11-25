@@ -1179,7 +1179,7 @@ def incentive_page():
 
 INCENTIVE_ACCESS_ROLES = ("Admin", "Owner", "HR", "Accounts", "MISExecutive", "CEO", "Director")
 INCENTIVE_CATEGORIES = ["HA", "HE", "MOB", "COM", "DC", "ACC"]
-INCENTIVE_OUTLETS = {"ALM", "ASH", "HZT", "GNG", "VKN"}
+INCENTIVE_OUTLETS = {"ALM", "ASH", "HZT", "GNG", "VKN", "RBL"}
 IDS_FUND_SHARES = {"MOB": 30, "COM": 20, "DC": 25, "HA": 20, "HE": 25, "ACC COM": 25, "ACC": 25}
 
 
@@ -1583,7 +1583,7 @@ def _ids_incentive_rate(outlet: str, category: str) -> Optional[float]:
     if category in {"ACC", "ACC COM"}:
         if outlet_code == "HZT":
             return .5 if category == "ACC" else .25
-        if outlet_code in {"ALM", "ASH", "GNG", "VKN"}:
+        if outlet_code in {"ALM", "ASH", "GNG", "VKN", "RBL"}:
             return 1
         return 1
     return None
@@ -1686,7 +1686,7 @@ def calculate_incentive_report(file: UploadFile, profit_rate: float, incentive_r
                        for (outlet, group), total in sorted(grouped_totals.items())]
     exact_summary = build_sales_incentive_summary(grouped_totals, outlet_totals, profit_rate, incentive_rate)
     totals = _incentive_calc(sum(outlet_totals.values()), profit_rate, incentive_rate)
-    return {"report_version": 7, "totals": totals, "summary": summary, "category_summary": category_summary,
+    return {"report_version": 8, "totals": totals, "summary": summary, "category_summary": category_summary,
             "grouped_summary": grouped_summary, "exact_summary": exact_summary,
             "ids_fund_report": build_ids_fund_report(source_rows)}
 
@@ -1733,7 +1733,7 @@ def calculate_incentive_endpoint(
         file_data=raw,
         profit_rate=profit_rate,
         incentive_rate=incentive_rate,
-        report_version=report.get("report_version") or 7,
+        report_version=report.get("report_version") or 8,
         report_json=json.dumps(report),
         uploaded_by=current_user.id,
         uploaded_by_username=current_user.username,
@@ -1853,19 +1853,24 @@ def build_incentive_workbook(report: dict) -> bytes:
         staff.cell(1, col).font = Font(bold=True, color="FFFFFF")
         staff.cell(1, col).fill = PatternFill("solid", fgColor="17365D")
     fund_by_outlet = {row["outlet"]: row for row in report["ids_fund_report"]["summary"]}
-    fund_summary = [fund_by_outlet.get(outlet, {"outlet": outlet, "ids_fund": None}) for outlet in ["ALM", "ASH", "HZT", "GNG", "VKN"]]
+    staff_outlets = ["ALM", "ASH", "HZT", "GNG", "VKN"]
+    if "RBL" in fund_by_outlet:
+        staff_outlets.append("RBL")
+    fund_summary = [fund_by_outlet.get(outlet, {"outlet": outlet, "ids_fund": None}) for outlet in staff_outlets]
     for idx, row in enumerate(fund_summary, 2):
         staff.cell(idx, 1, row["outlet"])
-        staff.cell(idx, 2, f"='IDS Fund Outlet Summary'!B{idx + 1}")
+        source_row = next((i for i, item in enumerate(report["ids_fund_report"]["summary"], 3)
+                           if item["outlet"] == row["outlet"]), None)
+        staff.cell(idx, 2, f"='IDS Fund Outlet Summary'!B{source_row}" if source_row else 'Pending')
         staff.cell(idx, 3, .35)
         staff.cell(idx, 5, .12)
         staff.cell(idx, 6, .15)
         staff.cell(idx, 7, .15 if row["outlet"] == "ALM" else .12 if row["outlet"] == "HZT" else .10)
         for column in (3, 5, 6, 7):
             staff.cell(idx, column).number_format = "0%"
-    mwh_row = 7
+    mwh_row = len(fund_summary) + 2
     staff.cell(mwh_row, 1, "MWH")
-    staff.cell(mwh_row, 2, f"=IF(COUNT(B2:B{mwh_row - 1})=5,SUM(B2:B{mwh_row - 1}),\"Pending\")")
+    staff.cell(mwh_row, 2, f"=IF(COUNT(B2:B{mwh_row - 1})={len(fund_summary)},SUM(B2:B{mwh_row - 1}),\"Pending\")")
     staff.cell(mwh_row, 4, .16)
     staff.cell(mwh_row, 4).number_format = "0%"
     calc_start = 11
