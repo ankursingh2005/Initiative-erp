@@ -193,6 +193,7 @@
       .mobile-brand strong { font-size:28px; }
     }
   </style>
+  <script src="static/nov-incentive.js?v=20261125"></script>
 </head>
 <body>
   <div class="brand-panel">
@@ -319,7 +320,7 @@
         const role = user.role || localStorage.getItem('role') || '';
         localStorage.setItem('role', role);
         localStorage.setItem('username', user.username || localStorage.getItem('username') || '');
-        window.location.replace(appUrl(role === 'BrandPartner' ? '/attendance' : '/home'));
+        window.location.replace(appUrl(role === 'BrandPartner' && !window.novIncentiveActive() ? '/attendance' : '/home'));
       } catch (error) {
         // Stay on the login page when offline or the server is temporarily unavailable.
       }
@@ -454,7 +455,7 @@
         localStorage.setItem('username', data.username);
         sessionStorage.setItem('activeLoginSession', '1');
         sessionStorage.setItem('showLoginSuccess', '1');
-        window.location.replace(appUrl(data.role === 'BrandPartner' ? '/attendance' : '/home'));
+        window.location.replace(appUrl(data.role === 'BrandPartner' && !window.novIncentiveActive() ? '/attendance' : '/home'));
       } catch (error) {
         msg.textContent = 'Unable to sign in. Check your connection and try again.';
       } finally {

@@ -4,6 +4,17 @@ from datetime import datetime
 from database import Base
 
 
+class HomeAdvertisement(Base):
+    __tablename__ = "home_advertisement"
+    id = Column(Integer, primary_key=True)
+    title = Column(String(160), nullable=False, default="")
+    message = Column(Text, nullable=False, default="")
+    visible = Column(Boolean, nullable=False, default=False)
+    media = Column(LargeBinary, nullable=True)
+    media_type = Column(String(80), nullable=True)
+    version = Column(String(40), nullable=True)
+
+
 # ============================================================
 # SIMPLE MASTER TABLES
 # (Just enough to test the scheme engine realistically.

@@ -588,6 +588,8 @@ if DATABASE_READY:
         logger.exception("Employee ID startup maintenance failed. Check Render DATABASE_URL and database status.")
 
 app = FastAPI(title="IDSPL Scheme Management ERP")
+from home_ads import router as home_ads_router
+app.include_router(home_ads_router)
 
 
 @app.middleware("http")
@@ -603,6 +605,7 @@ async def brand_promotor_limited_access(request: Request, call_next):
                 allowed = {
                     "/attendance", "/attendance.html", "/home", "/home.html",
                     "/api/me", "/api/me/weekoff", "/api/me/attendance-status", "/stores", "/auth/login", "/openapi.json", "/docs",
+                    "/api/home-ad", "/api/home-ad/media",
                 }
                 static_html = request.url.path.startswith("/static/") and request.url.path.endswith(".html")
                 attendance_request = request.url.path == "/api/attendance" or request.url.path.startswith("/api/attendance/")

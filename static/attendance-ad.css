@@ -1,0 +1,18 @@
+.attendance-ad{overflow:hidden;min-width:0;max-width:100%;margin:12px 0;border:1px solid #ebcda9;border-radius:10px;padding:9px 0;background:linear-gradient(100deg,#f9e5bc,#ffdac8 55%,#f6e6bf);color:#492336;box-shadow:0 3px 10px #49233606;font-size:13px;font-weight:700;line-height:1.5}
+.attendance-ad[hidden]{display:none!important}
+.attendance-ad{padding:0;background:linear-gradient(110deg,#201831,#492942);border-color:#d8b783;border-radius:14px}
+.attendance-ad-heading{display:flex;align-items:center;gap:12px;padding:13px 18px;background:radial-gradient(ellipse at 95% 0%,#79365a66,transparent 65%)}
+.attendance-ad-badge{display:inline-block;flex-shrink:0;white-space:nowrap;padding:4px 9px;border:1px solid #ffc9a64d;border-radius:999px;background:#f5907b1a;color:#ffd4b3;font-size:9px;font-weight:800;letter-spacing:1.5px;line-height:1.4}
+.attendance-ad-heading .attendance-ad-title{min-width:0;overflow-wrap:anywhere;margin:0;font-size:18px;font-weight:800;line-height:1.4;letter-spacing:.2px;color:#fff3dc}
+.attendance-ad-track{overflow:hidden;padding:9px 0;border-top:1px solid #fff4d7;background:linear-gradient(100deg,#f9e5bc,#ffdac8 55%,#f6e6bf)}
+.attendance-ad [hidden]{display:none!important}
+.attendance-ad-message{display:inline-block;white-space:nowrap;animation:attendance-ad-scroll 26s linear infinite;will-change:transform}
+.attendance-ad:hover .attendance-ad-message,.attendance-ad:focus .attendance-ad-message{animation-play-state:paused}
+@keyframes attendance-ad-scroll{from{transform:translateX(var(--attendance-ad-width,100vw))}to{transform:translateX(-100%)}}
+@media(max-width:600px){.attendance-ad{font-size:12px;margin:10px 0;border-radius:10px}.attendance-ad-heading{padding:11px 14px}.attendance-ad-heading .attendance-ad-title{font-size:16px}.attendance-ad-track{padding:8px 0}}
+@media(prefers-reduced-motion:reduce){.attendance-ad-message{animation:none;white-space:normal;overflow-wrap:anywhere;padding:0 12px;will-change:auto}}
+
+.attendance-ad-heading .attendance-ad-title{flex:1}
+.attendance-ad-thumbnail{flex:0 0 100px;width:100px;height:48px;margin-left:auto;overflow:hidden;border:1px solid #f6d39b55;border-radius:7px;background:#171323;box-shadow:0 3px 10px #0003}
+.attendance-ad-thumbnail img,.attendance-ad-thumbnail video{display:block;width:100%;height:100%;object-fit:contain}
+@media(max-width:600px){.attendance-ad-heading{gap:8px}.attendance-ad-thumbnail{flex-basis:70px;width:70px;height:40px}.attendance-ad-heading .attendance-ad-title{font-size:14px}.attendance-ad-badge{font-size:8px;letter-spacing:.6px;padding:4px 6px}}
